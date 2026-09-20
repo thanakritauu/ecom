@@ -1,0 +1,58 @@
+import { DropdownMenu } from "@kobalte/core/dropdown-menu";
+import { Show } from "solid-js";
+import { useNavigate } from "@solidjs/router";
+import { MoreIcon } from "~/components/admin/icons";
+
+/**
+ * Same Kobalte dropdown shell as `PromotionPageRowActionsMenu`, but simpler:
+ * Collections don't have Promotion Pages' Publish/Unpublish toggle (enabling
+ * or disabling a Collection is just editing its Status field in the form),
+ * so this menu only ever offers ดูรายละเอียด / แก้ไข / ลบ.
+ */
+export function CollectionRowActionsMenu(props: {
+  id: string;
+  name: string;
+  onDelete: () => void;
+  hideView?: boolean;
+  triggerClass?: string;
+}) {
+  const navigate = useNavigate();
+  const basePath = "/admin/content/product-collections";
+
+  return (
+    <DropdownMenu placement="bottom-end" gutter={4}>
+      <DropdownMenu.Trigger
+        aria-label={`จัดการ ${props.name}`}
+        onClick={(e: MouseEvent) => e.stopPropagation()}
+        class={props.triggerClass ?? "flex size-9 shrink-0 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-surface-pink"}
+      >
+        <MoreIcon class="size-5" />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content class="z-50 w-48 rounded-card border border-surface-gray bg-white p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+          <Show when={!props.hideView}>
+            <DropdownMenu.Item
+              onSelect={() => navigate(`${basePath}/${props.id}`)}
+              class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
+            >
+              ดูรายละเอียด
+            </DropdownMenu.Item>
+          </Show>
+          <DropdownMenu.Item
+            onSelect={() => navigate(`${basePath}/${props.id}/edit`)}
+            class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
+          >
+            แก้ไข
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator class="my-1 h-px bg-surface-gray" />
+          <DropdownMenu.Item
+            onSelect={props.onDelete}
+            class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm font-medium text-system-red outline-none transition-colors duration-150 hover:bg-danger-soft data-[highlighted]:bg-danger-soft"
+          >
+            ลบ
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu>
+  );
+}

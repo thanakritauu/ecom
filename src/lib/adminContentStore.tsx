@@ -1,0 +1,140 @@
+import { createContext, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
+import { isServer } from "solid-js/web";
+import {
+  type PromotionPage,
+  type PromotionPageStatus,
+  type PromotionPageFormValues,
+  buildMockPromotionPages,
+  normalizePromotionPage,
+  isSlugTaken,
+} from "./adminContent";
+
+const STORAGE_KEY = "charmiss:admin:content:promotionPages";
+const TODAY_LABEL = "17 ก.ย. 2569";
+let nextId = 1000;
+
+type AdminContentContextValue = {
+  pages: Accessor<PromotionPage[]>;
+  getById: (id: string) => PromotionPage | undefined;
+  add: (input: PromotionPageFormValues) => Promise<PromotionPage>;
+  update: (id: string, input: PromotionPageFormValues) => Promise<PromotionPage>;
+  remove: (id: string) => Promise<void>;
+  setStatus: (id: string, status: PromotionPageStatus) => Promise<void>;
+  duplicate: (id: string) => Promise<PromotionPage>;
+};
+
+const AdminContentContext = createContext<AdminContentContextValue>();
+
+/**
+ * Same SSR-safe shape as `adminProductStore.tsx`/`adminMarketingStore.tsx` —
+ * pure baseline on server + first client render, real `localStorage` read
+ * deferred to `onMount`, every write path re-normalized before it can
+ * persist a malformed `PromotionPage` back out.
+ */
+export function AdminContentProvider(props: { children: JSX.Element }) {
+  const [pages, setPages] = createSignal<PromotionPage[]>(buildMockPromotionPages());
+
+  onMount(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) setPages((JSON.parse(raw) as PromotionPage[]).map(normalizePromotionPage));
+    } catch {
+      // storage unavailable — stays in-memory for this tab.
+    }
+  });
+
+  const persist = (list: PromotionPage[]) => {
+    if (isServer) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    } catch {}
+  };
+
+  const mutate = (fn: (list: PromotionPage[]) => PromotionPage[]) => {
+    setPages((list) => {
+      const next = fn(list).map(normalizePromotionPage);
+      persist(next);
+      return next;
+    });
+  };
+
+  const simulateDelay = () => new Promise<void>((resolve) => setTimeout(resolve, 400 + Math.random() * 250));
+  const getById = (id: string) => pages().find((p) => p.id === id);
+
+  const add: AdminContentContextValue["add"] = async (input) => {
+    await simulateDelay();
+    if (Math.random() < 0.08) throw new Error("SAVE_FAILED");
+    const created: PromotionPage = { ...input, id: `promo-page-${nextId++}`, createdAt: TODAY_LABEL, updatedAt: TODAY_LABEL };
+    mutate((list) => [created, ...list]);
+    return created;
+  };
+
+  const update: AdminContentContextValue["update"] = async (id, input) => {
+    await simulateDelay();
+    if (Math.random() < 0.08) throw new Error("SAVE_FAILED");
+    let updated: PromotionPage | undefined;
+    mutate((list) =>
+      list.map((p) => {
+        if (p.id !== id) return p;
+        updated = { ...p, ...input, updatedAt: TODAY_LABEL };
+        return updated;
+      }),
+    );
+    if (!updated) throw new Error("NOT_FOUND");
+    return updated;
+  };
+
+  const remove: AdminContentContextValue["remove"] = async (id) => {
+    await simulateDelay();
+    mutate((list) => list.filter((p) => p.id !== id));
+  };
+
+  const setStatus: AdminContentContextValue["setStatus"] = async (id, status) => {
+    await simulateDelay();
+    mutate((list) => list.map((p) => (p.id === id ? { ...p, status, updatedAt: TODAY_LABEL } : p)));
+  };
+
+  /**
+   * §25 — new id, unique slug, Status→Draft, Navigation→Hidden (opt-in
+   * again, never auto-carried over), Sections copied by value. Every
+   * Product/Collection/Campaign *reference* inside those sections
+   * (`products`, `collectionId`, `campaignId`) is copied as plain data —
+   * still pointing at the exact same original entities — never a new copy
+   * of the entity itself, same "reference, don't duplicate" rule §33
+   * enforces everywhere else.
+   */
+  const duplicate: AdminContentContextValue["duplicate"] = async (id) => {
+    await simulateDelay();
+    const source = getById(id);
+    if (!source) throw new Error("NOT_FOUND");
+    let base = `${source.slug}-copy`;
+    let candidate = base;
+    let n = 2;
+    while (isSlugTaken(pages(), candidate)) {
+      candidate = `${base}-${n}`;
+      n += 1;
+    }
+    const created: PromotionPage = {
+      ...source,
+      id: `promo-page-${nextId++}`,
+      name: `${source.name} (สำเนา)`,
+      slug: candidate,
+      status: "draft",
+      navigation: { ...source.navigation, enabled: false },
+      sections: source.sections.map((s) => ({ ...s })),
+      products: source.products.map((ref) => ({ ...ref })),
+      createdAt: TODAY_LABEL,
+      updatedAt: TODAY_LABEL,
+    };
+    mutate((list) => [created, ...list]);
+    return created;
+  };
+
+  return <AdminContentContext.Provider value={{ pages, getById, add, update, remove, setStatus, duplicate }}>{props.children}</AdminContentContext.Provider>;
+}
+
+export function useAdminContent() {
+  const ctx = useContext(AdminContentContext);
+  if (!ctx) throw new Error("useAdminContent must be used within AdminContentProvider");
+  return ctx;
+}

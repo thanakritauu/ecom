@@ -1,0 +1,74 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: "IBM Plex Sans Thai", sans-serif;
+  }
+
+  body {
+    @apply text-ink bg-white;
+  }
+
+  /* Visible, on-brand focus ring everywhere instead of relying on the browser default. */
+  :focus-visible {
+    outline: 2px solid theme("colors.brand.pink");
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  /* Horizontal scroll-snap rail shared by every "grid on desktop -> scroll on mobile" section. */
+  .scroll-rail {
+    @apply flex gap-4 overflow-x-auto snap-x snap-mandatory scroll-px-4 px-4 -mx-4;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scroll-rail::-webkit-scrollbar {
+    display: none;
+  }
+  .scroll-rail > * {
+    @apply snap-start shrink-0;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  /* Dual-handle price slider (FilterPanel): two overlapping native range
+     inputs, transparent track (the visible track is drawn separately),
+     only the thumb is styled — each thumb re-enables pointer events so the
+     wrapper can stay `pointer-events-none` and not block clicks between
+     the two handles. */
+  .range-thumb::-webkit-slider-thumb {
+    @apply size-4 appearance-none rounded-pill border-2 border-brand-pink bg-brand-pink pointer-events-auto;
+    -webkit-appearance: none;
+  }
+  .range-thumb::-moz-range-thumb {
+    @apply size-4 appearance-none rounded-pill border-2 border-brand-pink bg-brand-pink pointer-events-auto;
+  }
+  .range-thumb::-webkit-slider-runnable-track {
+    @apply bg-transparent;
+  }
+  .range-thumb::-moz-range-track {
+    @apply bg-transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

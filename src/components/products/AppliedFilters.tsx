@@ -1,0 +1,48 @@
+import { For, Show } from "solid-js";
+import { CATEGORY_FACETS, getPriceBounds, type ProductFilters } from "~/lib/productListing";
+import type { Product } from "~/lib/types";
+
+export function AppliedFilters(props: { products: Product[]; filters: ProductFilters; onChange: (next: ProductFilters) => void; onClearAll: () => void }) {
+  const categoryChips = () =>
+    props.filters.categories.map((key) => ({ key, label: CATEGORY_FACETS.find((f) => f.key === key)?.label ?? key }));
+
+  const hasPriceChip = () => props.filters.minPrice != null || props.filters.maxPrice != null;
+  const priceLabel = () => {
+    const bounds = getPriceBounds(props.products);
+    return `${props.filters.minPrice ?? bounds.min} ถึง ${props.filters.maxPrice ?? bounds.max}`;
+  };
+
+  const hasSearchChip = () => props.filters.search.trim() !== "";
+
+  const removeCategory = (key: string) => props.onChange({ ...props.filters, categories: props.filters.categories.filter((k) => k !== key) });
+  const removePrice = () => props.onChange({ ...props.filters, minPrice: null, maxPrice: null });
+  const removeSearch = () => props.onChange({ ...props.filters, search: "" });
+
+  return (
+    <div class="flex flex-wrap items-center gap-2 pb-4">
+      <Show when={hasSearchChip()}>
+        <Chip label={`"${props.filters.search}"`} onRemove={removeSearch} />
+      </Show>
+      <For each={categoryChips()}>{(chip) => <Chip label={chip.label} onRemove={() => removeCategory(chip.key)} />}</For>
+      <Show when={hasPriceChip()}>
+        <Chip label={priceLabel()} onRemove={removePrice} />
+      </Show>
+      <button type="button" onClick={props.onClearAll} class="flex min-h-[32px] items-center px-1.5 py-1 text-xs font-medium text-ink-gray underline">
+        ล้างทั้งหมด
+      </button>
+    </div>
+  );
+}
+
+function Chip(props: { label: string; onRemove: () => void }) {
+  return (
+    <span class="flex h-[31px] items-center gap-1.5 rounded-pill border border-brand-pink bg-surface-pink px-3 text-xs font-semibold text-brand-pink">
+      {props.label}
+      <button type="button" onClick={props.onRemove} aria-label={`ลบตัวกรอง ${props.label}`} class="flex size-4 shrink-0 items-center justify-center">
+        <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
+        </svg>
+      </button>
+    </span>
+  );
+}

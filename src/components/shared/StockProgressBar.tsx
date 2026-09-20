@@ -1,0 +1,21 @@
+export function StockProgressBar(props: { stockLeft: number; stockTotal: number }) {
+  const percent = () => Math.max(4, Math.min(100, (props.stockLeft / props.stockTotal) * 100));
+  return (
+    <div class="flex w-full flex-col gap-2">
+      <div
+        class="h-1.5 w-full overflow-hidden rounded-pill bg-surface-gray"
+        role="progressbar"
+        aria-valuenow={props.stockLeft}
+        aria-valuemin={0}
+        aria-valuemax={props.stockTotal}
+        aria-label={`เหลือสินค้า ${props.stockLeft} จาก ${props.stockTotal} ชิ้น`}
+      >
+        <div
+          class="h-full rounded-pill bg-brand-yellow transition-[width] duration-500 ease-out"
+          style={{ width: `${percent()}%` }}
+        />
+      </div>
+      <p class="text-base text-system-red">เหลืออีก {props.stockLeft} ชิ้น</p>
+    </div>
+  );
+}
