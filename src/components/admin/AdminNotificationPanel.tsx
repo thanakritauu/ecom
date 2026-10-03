@@ -28,8 +28,8 @@ export function AdminNotificationPanel() {
         </Show>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content class="z-50 w-80 max-w-[calc(100vw-2rem)] rounded-card border border-surface-gray bg-white shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
-          <div class="flex items-center justify-between gap-3 border-b border-surface-gray px-4 py-3">
+        <Popover.Content class="z-50 w-80 max-w-[calc(100vw-2rem)] rounded-card border border-border bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+          <div class="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <Popover.Title class="text-sm font-semibold text-ink">การแจ้งเตือน</Popover.Title>
             <Show when={store.unreadCount() > 0}>
               <button
@@ -54,7 +54,7 @@ export function AdminNotificationPanel() {
                       <button
                         type="button"
                         onClick={() => store.markAsRead(n.id)}
-                        class="flex w-full items-start gap-2.5 border-b border-surface-gray px-4 py-3 text-left transition-colors duration-150 last:border-b-0 hover:bg-surface-pink/40"
+                        class="font-normal flex w-full items-start gap-2.5 border-b border-border px-4 py-3 text-left transition-colors duration-150 last:border-b-0 hover:bg-surface-pink/40"
                       >
                         <span
                           class={`mt-1.5 size-2 shrink-0 rounded-full ${n.read ? "bg-transparent" : "bg-brand-pink"}`}

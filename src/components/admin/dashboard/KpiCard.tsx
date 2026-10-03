@@ -12,7 +12,7 @@ export function KpiCard(props: {
   const isPositive = () => (props.changePercent ?? 0) >= 0;
 
   return (
-    <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <div class="flex items-center justify-between gap-2">
         <p class="text-sm font-medium text-ink-gray">{props.label}</p>
         <div class="flex size-9 shrink-0 items-center justify-center rounded-pill bg-surface-pink text-brand-pink">{props.icon}</div>
@@ -33,7 +33,7 @@ export function KpiCard(props: {
 
 export function KpiCardSkeleton() {
   return (
-    <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <div class="flex items-center justify-between">
         <Skeleton class="h-4 w-20" />
         <Skeleton class="size-9 rounded-pill" />

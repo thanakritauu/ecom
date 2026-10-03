@@ -2,6 +2,7 @@ import { createMemo, createSignal, For, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
+import { ChevronDownIcon } from "~/components/admin/icons";
 import { ProductSelector } from "./ProductSelector";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
@@ -107,22 +108,25 @@ export function BundleForm(props: {
                   disabled={saving()}
                   onInput={(e) => setDescription(e.currentTarget.value)}
                   rows={2}
-                  class="rounded-card border border-surface-gray bg-white px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+                  class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
                 />
               </label>
               <TextField label="ราคาเซ็ต (฿)" required type="number" min="0" step="0.01" value={bundlePrice()} onInput={(e) => setBundlePrice(e.currentTarget.value)} error={errors().bundlePrice} disabled={saving()} />
               <label class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">สถานะ</span>
-                <select
-                  value={status()}
-                  disabled={saving()}
-                  onChange={(e) => setStatus(e.currentTarget.value as MarketingStatus)}
-                  class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                >
-                  {STATUS_OPTIONS.map((opt) => (
-                    <option value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                <div class="relative">
+                  <select
+                    value={status()}
+                    disabled={saving()}
+                    onChange={(e) => setStatus(e.currentTarget.value as MarketingStatus)}
+                    class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+                  >
+                    {STATUS_OPTIONS.map((opt) => (
+                      <option value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+                </div>
               </label>
             </div>
           </Section>
@@ -150,7 +154,7 @@ export function BundleForm(props: {
                   {(item) => {
                     const product = () => productStore.getById(item.productId);
                     return (
-                      <div class="flex items-center gap-3 rounded-card border border-surface-gray p-3">
+                      <div class="flex items-center gap-3 rounded-card border border-border p-3">
                         <img src={product()?.image} alt="" class="size-10 shrink-0 rounded-media object-cover" />
                         <p class="min-w-0 flex-1 truncate text-sm text-ink">{product()?.name}</p>
                         <label class="flex items-center gap-2 text-xs font-medium text-ink-gray">
@@ -160,7 +164,7 @@ export function BundleForm(props: {
                             min="1"
                             value={item.qty}
                             onInput={(e) => updateQty(item.productId, Number(e.currentTarget.value))}
-                            class="h-9 w-16 rounded-card border border-surface-gray px-2 text-center text-sm text-ink outline-none focus:border-brand-pink"
+                            class="h-9 w-16 rounded-card border border-border px-2 text-center text-sm text-ink outline-none focus:border-brand-pink"
                           />
                         </label>
                       </div>
@@ -183,7 +187,7 @@ export function BundleForm(props: {
                 <span class="text-ink-gray">ราคาเซ็ต</span>
                 <span class="font-semibold text-ink">{formatAdminCurrency(Number(bundlePrice()) || 0)}</span>
               </div>
-              <div class="flex items-center justify-between border-t border-surface-gray pt-2 text-base font-bold text-ink">
+              <div class="flex items-center justify-between border-t border-border pt-2 text-base font-bold text-ink">
                 <span>ประหยัด</span>
                 <span>{formatAdminCurrency(savings())}</span>
               </div>
@@ -223,7 +227,7 @@ export function BundleForm(props: {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-4 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

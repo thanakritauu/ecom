@@ -45,10 +45,6 @@ export function CategoryQuickView(props: { category: AdminCategory }) {
           <span class="text-ink-gray">จำนวนสินค้า</span>
           <span class="font-medium text-ink">{classifiedCount()} รายการ</span>
         </div>
-        <div class="flex items-center justify-between">
-          <span class="text-ink-gray">ลำดับการแสดงผล</span>
-          <span class="font-medium text-ink">{c().sortOrder}</span>
-        </div>
       </div>
 
       <div class="flex flex-col gap-2">

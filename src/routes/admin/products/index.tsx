@@ -14,7 +14,10 @@ import { AdminBulkActionBar } from "~/components/admin/AdminBulkActionBar";
 import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
 import { ProductRowActionsMenu } from "~/components/admin/products/ProductRowActionsMenu";
 import { ProductQuickView } from "~/components/admin/products/ProductQuickView";
-import { RefreshIcon, CatalogIcon, PlusIcon } from "~/components/admin/icons";
+import { RefreshIcon, CatalogIcon, PlusIcon, UploadIcon } from "~/components/admin/icons";
+import { ExportMenu } from "~/components/admin/ExportMenu";
+import { ImportExcelDialog, type ImportRowResult } from "~/components/admin/ImportExcelDialog";
+import type { ExportColumn } from "~/lib/adminExport";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import {
   useAdminProducts,
@@ -24,14 +27,41 @@ import {
   type AdminProduct,
   type AdminProductStatus,
   type StockStatus,
+  type ProductFormValues,
 } from "~/lib/adminProductStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { useAdminBrands } from "~/lib/adminBrandStore";
+import { useAdminCollections } from "~/lib/adminCollectionStore";
+import { useAdminContent } from "~/lib/adminContentStore";
+import { useAdminNavigation } from "~/lib/adminNavigationStore";
+import { findNavigationReferences, describeNavigationReference, type NavigationItem } from "~/lib/adminNavigation";
+import { collectionsContainingProduct, findProductReferencesInPromotionPages, type PromotionPageSectionReference } from "~/lib/masterDataRelations";
+import type { ProductCollection } from "~/lib/adminCollections";
 import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
 
 /** Fallback only for products saved before `categoryId` existed (see `normalizeAdminProduct`). */
 const LEGACY_CATEGORY_LABELS: Record<string, string> = { eye: "ตา", cheek: "แก้ม", lip: "ปาก" };
+
+/** §08-11 — Import Excel template/columns/validation for Products, the flagship module named explicitly in the spec. */
+const PRODUCT_IMPORT_COLUMNS = [
+  { key: "name", label: "Product Name" },
+  { key: "sku", label: "SKU" },
+  { key: "category", label: "Category" },
+  { key: "brand", label: "Brand" },
+  { key: "price", label: "Price" },
+  { key: "stock", label: "Stock" },
+  { key: "status", label: "Status" },
+];
+
+const PRODUCT_STATUS_LABELS: Record<string, AdminProductStatus> = {
+  active: "active",
+  "เปิดขาย": "active",
+  draft: "draft",
+  "แบบร่าง": "draft",
+  disabled: "disabled",
+  "ปิดการขาย": "disabled",
+};
 
 const SORT_OPTIONS = [
   { value: "name-asc", label: "ชื่อสินค้า A–Z" },
@@ -47,6 +77,9 @@ export default function AdminProductListPage() {
   const store = useAdminProducts();
   const categoryStore = useAdminCategories();
   const brandStore = useAdminBrands();
+  const collectionStore = useAdminCollections();
+  const contentStore = useAdminContent();
+  const navigation = useAdminNavigation();
   const navigate = useNavigate();
 
   const [search, setSearchRaw] = createSignal("");
@@ -63,9 +96,97 @@ export default function AdminProductListPage() {
   const [confirmDelete, setConfirmDelete] = createSignal<AdminProduct | null>(null);
   const [confirmToggle, setConfirmToggle] = createSignal<AdminProduct | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = createSignal(false);
+  type ProductDependencies = { collections: ProductCollection[]; navRefs: NavigationItem[]; pageRefs: PromotionPageSectionReference[] };
+  const [blockedDelete, setBlockedDelete] = createSignal<{ product: AdminProduct; deps: ProductDependencies } | null>(null);
   const [actionLoading, setActionLoading] = createSignal(false);
   const [quickViewId, setQuickViewId] = createSignal<string | null>(null);
   const quickViewProduct = createMemo(() => (quickViewId() ? store.getById(quickViewId()!) : undefined));
+  const [importOpen, setImportOpen] = createSignal(false);
+
+  /** §11 — required fields, duplicate SKU, invalid price/quantity, and unresolved Category/Brand/Status references are all checked here, per row, before anything is written to the Product Store. */
+  const parseProductImportRow = (raw: Record<string, string>, rowIndex: number): ImportRowResult<ProductFormValues> => {
+    const messages: string[] = [];
+    let status: "ready" | "warning" | "error" = "ready";
+    const flag = (msg: string, level: "warning" | "error" = "error") => {
+      messages.push(msg);
+      if (level === "error") status = "error";
+      else if (status === "ready") status = "warning";
+    };
+    const cell = (...keys: string[]) => keys.map((k) => (raw[k] ?? "").toString().trim()).find((v) => v !== "") ?? "";
+
+    const name = cell("Product Name", "name");
+    const sku = cell("SKU", "sku");
+    const categoryName = cell("Category", "category");
+    const brandName = cell("Brand", "brand");
+    const priceRaw = cell("Price", "price");
+    const stockRaw = cell("Stock", "stock");
+    const statusRaw = cell("Status", "status");
+
+    if (!name) flag("ไม่มีชื่อสินค้า");
+    if (!sku) flag("ไม่มี SKU");
+    else if (store.products().some((p) => p.sku.toLowerCase() === sku.toLowerCase())) flag(`SKU "${sku}" ซ้ำกับสินค้าที่มีอยู่แล้ว`);
+
+    const price = Number(priceRaw);
+    if (!priceRaw || Number.isNaN(price) || price <= 0) flag("ราคาไม่ถูกต้อง");
+
+    const stock = stockRaw === "" ? 0 : Number(stockRaw);
+    if (Number.isNaN(stock) || stock < 0) flag("จำนวนสต๊อกไม่ถูกต้อง");
+
+    const category = categoryName ? categoryStore.categories().find((c) => c.name.trim().toLowerCase() === categoryName.toLowerCase()) : undefined;
+    if (categoryName && !category) flag(`ไม่พบหมวดหมู่ "${categoryName}" — จะบันทึกโดยไม่ระบุหมวดหมู่`, "warning");
+
+    const brand = brandName ? brandStore.brands().find((b) => b.name.trim().toLowerCase() === brandName.toLowerCase()) : undefined;
+    if (brandName && !brand) flag(`ไม่พบแบรนด์ "${brandName}" — จะบันทึกโดยไม่ระบุแบรนด์`, "warning");
+
+    const resolvedStatus = statusRaw ? PRODUCT_STATUS_LABELS[statusRaw.toLowerCase()] : "draft";
+    if (statusRaw && !resolvedStatus) flag(`สถานะ "${statusRaw}" ไม่ถูกต้อง (ใช้ active/draft/disabled) — จะบันทึกเป็น Draft`, "warning");
+
+    return {
+      row: rowIndex,
+      status,
+      messages,
+      preview: { name: name || "-", sku: sku || "-", category: categoryName || "-", brand: brandName || "-", price: priceRaw || "-", stock: stockRaw || "-", status: statusRaw || "-" },
+      data: {
+        name: name || `สินค้านำเข้า #${rowIndex}`,
+        sku: sku || `IMPORT-${rowIndex}`,
+        brand: brand?.name ?? brandName,
+        brandId: brand?.id ?? "",
+        categoryId: category?.id ?? "",
+        price: Number.isFinite(price) && price > 0 ? price : 0,
+        stockLeft: Number.isFinite(stock) && stock >= 0 ? stock : 0,
+        lowStockThreshold: 5,
+        status: resolvedStatus ?? "draft",
+        images: [],
+        adminVariants: [],
+      },
+    };
+  };
+
+  /** Each row retries the Product Store's own simulated ~8% random save failure up to 3 times, so a large import doesn't visibly fail just from that per-save flakiness compounding across many rows. */
+  const handleProductImport = async (rows: ProductFormValues[]) => {
+    for (const row of rows) {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await store.addProduct(row);
+          break;
+        } catch {
+          if (attempt >= 3) throw new Error("IMPORT_ROW_FAILED");
+        }
+      }
+    }
+  };
+
+  const productExportColumns: ExportColumn<AdminProduct>[] = [
+    { header: "SKU", value: (p) => p.sku },
+    { header: "Product Name", value: (p) => p.name },
+    { header: "Category", value: (p) => categoryStore.getById(p.categoryId)?.name ?? "" },
+    { header: "Brand", value: (p) => brandStore.getById(p.brandId)?.name ?? p.brand ?? "" },
+    { header: "Price", value: (p) => p.price },
+    { header: "Stock", value: (p) => p.stockLeft ?? 0 },
+    { header: "Sold", value: (p) => p.soldCount ?? 0 },
+    { header: "Status", value: (p) => ADMIN_PRODUCT_STATUS_META[p.status].label },
+    { header: "Updated", value: (p) => p.updatedAt },
+  ];
 
   const loadList = () => {
     setListStatus("loading");
@@ -157,7 +278,19 @@ export default function AdminProductListPage() {
     });
   const clearSelection = () => setSelectedIds(new Set<string>());
 
-  const requestDelete = (product: AdminProduct) => setConfirmDelete(product);
+  /** §21/§46 dependency guard — a Product must never be deleted while a Collection still curates it, a NavigationItem still targets it, or a Promotion Page/Homepage Section's CTA (or legacy flat product list) still references it. */
+  const getProductDependencies = (product: AdminProduct): ProductDependencies => ({
+    collections: collectionsContainingProduct(product.id, collectionStore.collections()),
+    navRefs: findNavigationReferences(navigation.items(), "product", product.id),
+    pageRefs: findProductReferencesInPromotionPages(product.id, contentStore.pages()),
+  });
+  const hasBlockingDependencies = (deps: ProductDependencies) => deps.collections.length > 0 || deps.navRefs.length > 0 || deps.pageRefs.length > 0;
+
+  const requestDelete = (product: AdminProduct) => {
+    const deps = getProductDependencies(product);
+    if (hasBlockingDependencies(deps)) setBlockedDelete({ product, deps });
+    else setConfirmDelete(product);
+  };
   const confirmDeleteAction = async () => {
     const product = confirmDelete();
     if (!product) return;
@@ -191,14 +324,22 @@ export default function AdminProductListPage() {
     navigate(`/admin/products/${duplicate.id}/edit`);
   };
 
+  /** §47 — bulk delete must use the exact same dependency guard as single delete. */
   const confirmBulkDeleteAction = async () => {
     const ids = [...selectedIds()];
+    const targets = store.products().filter((p) => ids.includes(p.id));
+    const blocked = targets.filter((p) => hasBlockingDependencies(getProductDependencies(p)));
+    const ok = targets.filter((p) => !blocked.includes(p));
     setActionLoading(true);
-    await Promise.all(ids.map((id) => store.deleteProduct(id)));
+    await Promise.all(ok.map((p) => store.deleteProduct(p.id)));
     setActionLoading(false);
     setConfirmBulkDelete(false);
     clearSelection();
-    pushToast(`ลบสินค้า ${ids.length} รายการเรียบร้อยแล้ว`, "error");
+    if (blocked.length > 0) {
+      pushToast(`ลบไม่สำเร็จ ${blocked.length} รายการ (มีการใช้งานอยู่) — ลบสำเร็จ ${ok.length} รายการ`, "warning");
+    } else {
+      pushToast(`ลบสินค้า ${ok.length} รายการเรียบร้อยแล้ว`, "error");
+    }
   };
 
   const bulkSetStatus = async (status: AdminProductStatus) => {
@@ -308,9 +449,15 @@ export default function AdminProductListPage() {
         title="สินค้า"
         description="จัดการสินค้า ราคา สต็อก และข้อมูลผลิตภัณฑ์ของ Charmiss"
         actions={
-          <Button href="/admin/products/new" variant="primary">
-            <PlusIcon class="size-4" /> เพิ่มสินค้า
-          </Button>
+          <div class="flex flex-wrap items-center gap-2">
+            <ExportMenu filenameBase="products-report" columns={productExportColumns} rows={sorted()} />
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <UploadIcon class="size-4" /> นำเข้าสินค้า
+            </Button>
+            <Button href="/admin/products/new" variant="primary">
+              <PlusIcon class="size-4" /> เพิ่มสินค้า
+            </Button>
+          </div>
         }
       />
 
@@ -367,7 +514,7 @@ export default function AdminProductListPage() {
               description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง"
               actionLabel="ลองอีกครั้ง"
               onAction={loadList}
-              class="bg-white shadow-card"
+              class="bg-surface-card shadow-card"
             />
           }
         >
@@ -380,7 +527,7 @@ export default function AdminProductListPage() {
                 description={hasActiveFilters() ? undefined : "เริ่มเพิ่มสินค้าแรกของคุณ"}
                 actionLabel={hasActiveFilters() ? "ล้างการค้นหา" : "+ เพิ่มสินค้า"}
                 onAction={hasActiveFilters() ? clearFilters : () => navigate("/admin/products/new")}
-                class="bg-white shadow-card"
+                class="bg-surface-card shadow-card"
               />
             }
           >
@@ -397,7 +544,7 @@ export default function AdminProductListPage() {
               renderMobileCard={(row) => {
                 const stockStatus = getStockStatus(row);
                 return (
-                  <div class="flex gap-3 rounded-card bg-white p-3 shadow-card">
+                  <div class="flex gap-3 rounded-card bg-surface-card p-3 shadow-card">
                     <input
                       type="checkbox"
                       aria-label={`เลือก ${row.name}`}
@@ -406,11 +553,11 @@ export default function AdminProductListPage() {
                       onChange={() => toggleSelect(row.id)}
                       class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
                     />
-                    <button type="button" onClick={() => setQuickViewId(row.id)} class="flex flex-1 gap-3 text-left">
+                    <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 gap-3 text-left">
                       <img src={row.image} alt="" class="size-16 shrink-0 rounded-media object-cover" />
                       <div class="min-w-0 flex-1">
                         <p class="truncate text-sm font-medium text-ink">{row.name}</p>
-                        <p class="text-xs text-ink-gray">{row.sku}</p>
+                        <p class="truncate text-xs text-ink-gray">{row.sku}</p>
                         <p class="mt-1 text-sm font-semibold text-ink">{formatAdminCurrency(row.price)}</p>
                         <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <span class="flex items-center gap-1.5 whitespace-nowrap text-sm text-ink-gray">
@@ -475,6 +622,24 @@ export default function AdminProductListPage() {
       />
 
       <ConfirmDialog
+        open={blockedDelete() !== null}
+        onOpenChange={(open) => !open && setBlockedDelete(null)}
+        title="ไม่สามารถลบได้"
+        description={(() => {
+          const b = blockedDelete();
+          if (!b) return "";
+          const parts: string[] = [];
+          if (b.deps.collections.length > 0) parts.push(`ถูกใช้งานใน Collection: ${b.deps.collections.map((c) => c.name).join(", ")}`);
+          if (b.deps.navRefs.length > 0) parts.push(`ถูกใช้งานใน Navigation: ${b.deps.navRefs.map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
+          if (b.deps.pageRefs.length > 0) parts.push(`ถูกใช้งานใน Promotion Page: ${b.deps.pageRefs.map((r) => (r.isHomepage ? "Homepage" : r.pageName)).join(", ")}`);
+          return `"${b.product.name}" — ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบสินค้านี้`;
+        })()}
+        confirmLabel="เข้าใจแล้ว"
+        cancelLabel="ปิด"
+        onConfirm={() => setBlockedDelete(null)}
+      />
+
+      <ConfirmDialog
         open={confirmToggle() !== null}
         onOpenChange={(open) => !open && setConfirmToggle(null)}
         title={confirmToggle()?.status === "disabled" ? "เปิดการขายสินค้านี้?" : "ปิดการขายสินค้านี้?"}
@@ -494,6 +659,16 @@ export default function AdminProductListPage() {
         loading={actionLoading()}
         onConfirm={confirmBulkDeleteAction}
       />
+
+      <ImportExcelDialog
+        open={importOpen()}
+        onOpenChange={setImportOpen}
+        title="นำเข้าสินค้าจาก Excel"
+        description="เลือกไฟล์ Excel/CSV ที่มีคอลัมน์ Product Name, SKU, Category, Brand, Price, Stock, Status ระบบจะตรวจสอบข้อมูลก่อนนำเข้าจริง"
+        templateColumns={PRODUCT_IMPORT_COLUMNS}
+        parseRow={parseProductImportRow}
+        onConfirm={handleProductImport}
+      />
     </div>
   );
 }
@@ -504,7 +679,7 @@ function ListSkeleton() {
       <Skeleton class="h-11 w-full rounded-pill" />
       <For each={[0, 1, 2, 3, 4, 5]}>
         {() => (
-          <div class="flex items-center gap-3 rounded-card bg-white p-3 shadow-card">
+          <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
             <Skeleton class="size-11 shrink-0 rounded-media" />
             <div class="flex flex-1 flex-col gap-1.5">
               <Skeleton class="h-4 w-1/2" />

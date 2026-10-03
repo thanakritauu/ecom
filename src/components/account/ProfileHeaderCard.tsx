@@ -1,4 +1,5 @@
 import { A } from "@solidjs/router";
+import { ChevronIcon } from "~/components/shared/ChevronIcon";
 import type { User } from "~/lib/types";
 
 export function ProfileHeaderCard(props: { user: User }) {
@@ -16,8 +17,8 @@ export function ProfileHeaderCard(props: { user: User }) {
         class="flex items-center gap-2 rounded-pill bg-[#fff4e6] p-2 pr-3 transition-colors duration-150 hover:bg-[#ffe9cc]"
       >
         <CoinIcon />
-        <span class="whitespace-nowrap text-sm font-semibold text-ink">คุณมี {props.user.coinBalance.toLocaleString("th-TH")} คอยน์</span>
-        <ChevronIcon />
+        <span class="whitespace-nowrap text-sm font-medium text-ink">คุณมี {props.user.coinBalance.toLocaleString("th-TH")} คอยน์</span>
+        <ChevronIcon direction="right" class="size-5 text-ink" />
       </A>
     </div>
   );
@@ -34,10 +35,3 @@ function CoinIcon() {
   );
 }
 
-function ChevronIcon() {
-  return (
-    <svg viewBox="0 0 24 24" class="size-4 shrink-0 -rotate-90 text-ink" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  );
-}

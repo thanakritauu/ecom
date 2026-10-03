@@ -21,7 +21,7 @@ export default function AdminProductCollectionNewPage() {
       <Breadcrumb
         items={[
           { label: "แดชบอร์ด", href: "/admin" },
-          { label: "เนื้อหา", href: "/admin/content" },
+          { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
           { label: "Product Collections", href: "/admin/content/product-collections" },
           { label: "สร้างใหม่" },
         ]}

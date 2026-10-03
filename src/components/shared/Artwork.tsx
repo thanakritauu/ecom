@@ -26,19 +26,38 @@ type VideoArtworkProps = CommonProps & {
   fallbackImage: string;
 };
 
+/** Hero Banner — Multi-Asset Support. `src` is an embeddable `https://www.youtube.com/embed/<id>` URL (see `getYoutubeEmbedUrl`) — never a raw watch/share URL, so this component never has to parse one. */
+type YoutubeArtworkProps = CommonProps & {
+  kind: "youtube";
+  src: string;
+};
+
 /**
- * A Figma "Hero"/promo frame is one flattened piece of artwork (image or, in
- * the future, video) — not a text layer we should be pulling apart. This
- * component is the single place that knows how to render that artwork
+ * A Figma "Hero"/promo frame is one flattened piece of artwork (image,
+ * video, or a YouTube embed) — not a text layer we should be pulling apart.
+ * This component is the single place that knows how to render that artwork
  * responsively, so Hero/PromoCarousel/Membership just point it at an asset.
  */
-export function Artwork(props: ImageArtworkProps | VideoArtworkProps) {
+export function Artwork(props: ImageArtworkProps | VideoArtworkProps | YoutubeArtworkProps) {
   const fit = props.objectFit ?? "cover";
   const style = () => ({
     "aspect-ratio": props.aspectRatio,
     "object-fit": fit,
     "object-position": props.objectPosition ?? "center",
   });
+
+  if (props.kind === "youtube") {
+    return (
+      <iframe
+        class={`size-full border-0 ${props.class ?? ""}`}
+        style={style()}
+        src={props.src}
+        title={props.alt}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen
+      />
+    );
+  }
 
   if (props.kind === "video") {
     return (

@@ -1,16 +1,11 @@
 import { createSignal, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
+import { Toggle } from "~/components/admin/Toggle";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
-import { SingleImageUploader } from "~/components/admin/SingleImageUploader";
 import { slugifyBrand, type AdminBrand, type BrandFormValues, type BrandStatus } from "~/lib/adminBrands";
 
-const STATUS_OPTIONS: { value: BrandStatus; label: string }[] = [
-  { value: "active", label: "เปิดใช้งาน" },
-  { value: "inactive", label: "ปิดใช้งาน" },
-];
-
-/** One Create/Edit form shared by `/new` and `/:id/edit` — identical shape to `CategoryForm`, just "โลโก้" instead of "รูปหมวดหมู่" in the copy. */
+/** One Create/Edit form shared by `/new` and `/:id/edit` — identical shape to `CategoryForm`, just "โลโก้" instead of "รูปหมวดหมู่" in the copy. Status is a Toggle (§4); no Display Order field (§5). */
 export function BrandForm(props: {
   initial?: AdminBrand;
   mode: "create" | "edit";
@@ -22,9 +17,12 @@ export function BrandForm(props: {
   const [slug, setSlugRaw] = createSignal(props.initial?.slug ?? "");
   const [slugTouched, setSlugTouched] = createSignal(!!props.initial);
   const [description, setDescription] = createSignal(props.initial?.description ?? "");
-  const [logo, setLogo] = createSignal(props.initial?.logo ?? "");
+  // CMS Final Admin UX Refinement §09 — Brand is Product Classification /
+  // Brand Master Data only, so its Logo field has no admin UI anymore; the
+  // value itself is still preserved and resubmitted unchanged (never reset
+  // to "") so legacy mock data with a logo doesn't silently lose it.
+  const [logo] = createSignal(props.initial?.logo ?? "");
   const [status, setStatus] = createSignal<BrandStatus>(props.initial?.status ?? "active");
-  const [sortOrder, setSortOrder] = createSignal(props.initial?.sortOrder ?? 0);
 
   const [errors, setErrors] = createSignal<Record<string, string>>({});
   const [saving, setSaving] = createSignal(false);
@@ -61,7 +59,6 @@ export function BrandForm(props: {
       description: description().trim(),
       logo: logo(),
       status: status(),
-      sortOrder: sortOrder(),
     };
 
     setSaving(true);
@@ -105,34 +102,20 @@ export function BrandForm(props: {
               placeholder="แบรนด์หลักของ Charmiss ครอบคลุมสกินแคร์และเครื่องสำอางทุกไลน์"
               onInput={(e) => setDescription(e.currentTarget.value)}
               rows={3}
-              class="rounded-card border border-surface-gray bg-white px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+              class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
             />
           </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium text-ink">สถานะ</span>
-            <select
-              value={status()}
-              disabled={saving()}
-              onChange={(e) => setStatus(e.currentTarget.value as BrandStatus)}
-              class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <option value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </label>
-          <TextField
-            label="ลำดับการแสดงผล"
-            type="number"
-            value={String(sortOrder())}
-            onInput={(e) => setSortOrder(Number(e.currentTarget.value) || 0)}
-            disabled={saving()}
-          />
+          {/* CMS + Frontend Refinement §1 — Status only appears on Edit; Create
+              uses the existing default ("active", same as `normalizeBrand`)
+              with no picker at all, so a brand-new Brand can't be created
+              disabled by accident. */}
+          <Show when={props.mode === "edit"}>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
+              <Toggle checked={status() === "active"} onChange={(checked) => setStatus(checked ? "active" : "inactive")} disabled={saving()} />
+            </label>
+          </Show>
         </div>
-      </Section>
-
-      <Section title="โลโก้">
-        <SingleImageUploader label="โลโก้แบรนด์" hint="แนะนำสัดส่วน 1:1" value={logo()} onChange={setLogo} />
       </Section>
 
       <Show when={submitError()}>
@@ -158,7 +141,7 @@ export function BrandForm(props: {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-4 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

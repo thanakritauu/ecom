@@ -21,12 +21,12 @@ export default function AdminCategoryNewPage() {
       <Breadcrumb
         items={[
           { label: "แดชบอร์ด", href: "/admin" },
-          { label: "แคตตาล็อก", href: "/admin/products" },
+          { label: "สินค้า", href: "/admin/products" },
           { label: "หมวดหมู่", href: "/admin/categories" },
           { label: "สร้างใหม่" },
         ]}
       />
-      <PageHeader title="สร้างหมวดหมู่" description="กำหนดชื่อ, Slug, รูปภาพ, สถานะ และสินค้าที่จะอยู่ในหมวดหมู่นี้" />
+      <PageHeader title="สร้างหมวดหมู่" description="กำหนดชื่อและ Slug ของหมวดหมู่นี้" />
       <CategoryForm
         mode="create"
         isSlugTaken={(slug) => isCategorySlugTaken(store.categories(), slug)}

@@ -5,6 +5,7 @@ import { type HomepageCta, normalizeHomepageDestination } from "./adminHomepage"
 import heroBanner1 from "~/assets/images/hero/hero-banner-1.png";
 import heroBanner2 from "~/assets/images/hero/hero-banner-2.png";
 import heroBanner3 from "~/assets/images/hero/hero-banner-3.png";
+import { upgradeSeedBanners } from "./seedBanners";
 
 /**
  * Campaign Management — structurally the same "content bundle" shape as
@@ -74,11 +75,11 @@ export function normalizeCampaign(c: Partial<Campaign> & { id: string }): Campai
     name: c.name ?? "",
     slug: c.slug ?? "",
     status: c.status ?? "draft",
-    banners: {
+    banners: upgradeSeedBanners({
       desktop: c.banners?.desktop ?? "",
       tablet: c.banners?.tablet ?? "",
       mobile: c.banners?.mobile ?? "",
-    },
+    }),
     title: c.title ?? "",
     description: c.description ?? "",
     cta: {

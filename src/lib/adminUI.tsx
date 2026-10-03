@@ -2,18 +2,23 @@ import { createContext, createSignal, onMount, useContext, type JSX } from "soli
 import { isServer } from "solid-js/web";
 
 export type AdminLanguage = "th" | "en";
+export type AdminThemeMode = "light" | "dark";
 
 type AdminUIContextValue = {
   sidebarCollapsed: () => boolean;
   toggleSidebarCollapsed: () => void;
   language: () => AdminLanguage;
   setLanguage: (lang: AdminLanguage) => void;
+  themeMode: () => AdminThemeMode;
+  setThemeMode: (mode: AdminThemeMode) => void;
 };
 
 const AdminUIContext = createContext<AdminUIContextValue>();
 
 const COLLAPSED_KEY = "charmiss:admin:ui:sidebarCollapsed";
 const LANGUAGE_KEY = "charmiss:admin:ui:language";
+/** CMS + Frontend Final Refinement §9 — Charmiss CMS only, never read/written by the Customer Frontend. */
+const THEME_KEY = "charmiss:admin:ui:themeMode";
 
 /**
  * Global Admin UI preferences (Global UI Correction #5/#8) — sidebar
@@ -26,12 +31,15 @@ const LANGUAGE_KEY = "charmiss:admin:ui:language";
 export function AdminUIProvider(props: { children: JSX.Element }) {
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
   const [language, setLanguageSignal] = createSignal<AdminLanguage>("th");
+  const [themeMode, setThemeModeSignal] = createSignal<AdminThemeMode>("light");
 
   onMount(() => {
     try {
       if (localStorage.getItem(COLLAPSED_KEY) === "1") setSidebarCollapsed(true);
       const storedLang = localStorage.getItem(LANGUAGE_KEY);
       if (storedLang === "th" || storedLang === "en") setLanguageSignal(storedLang);
+      const storedTheme = localStorage.getItem(THEME_KEY);
+      if (storedTheme === "light" || storedTheme === "dark") setThemeModeSignal(storedTheme);
     } catch {
       // storage can be unavailable (private mode / quota) — preferences just stay in-memory for this tab.
     }
@@ -58,8 +66,19 @@ export function AdminUIProvider(props: { children: JSX.Element }) {
     }
   };
 
+  const setThemeMode = (mode: AdminThemeMode) => {
+    setThemeModeSignal(mode);
+    if (!isServer) {
+      try {
+        localStorage.setItem(THEME_KEY, mode);
+      } catch {}
+    }
+  };
+
   return (
-    <AdminUIContext.Provider value={{ sidebarCollapsed, toggleSidebarCollapsed, language, setLanguage }}>
+    <AdminUIContext.Provider
+      value={{ sidebarCollapsed, toggleSidebarCollapsed, language, setLanguage, themeMode, setThemeMode }}
+    >
       {props.children}
     </AdminUIContext.Provider>
   );

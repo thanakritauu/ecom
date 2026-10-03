@@ -2,17 +2,23 @@ import type { Product } from "./types";
 import { isNewArrival } from "./products";
 
 /**
- * Figma (node 146:13795) shows a "ประเภทการใช้งาน" filter group with 6
- * options, but `Product.category` (types.ts) only ever takes 3 real values
- * (`"eye" | "cheek" | "lip"`) — the other 3 Figma labels (foundation,
- * bronzer, tools) have no corresponding attribute anywhere in the product
- * data and no product in the catalog belongs to them. Per the rule against
- * inventing new Product Dataset fields just to satisfy a mockup, those 3
- * facets are kept here (so the filter UI still matches Figma visually) but
- * `matches` always returns false — their real, honest count is 0, and the
- * UI disables them rather than pretending they filter anything.
+ * Product / Category / Brand / Collection Source-of-Truth Cleanup (§4/§8/§26)
+ * — this used to be a fixed 6-key union matched against the legacy
+ * `Product.category` 3-value enum. Category is now the one live
+ * classification relationship (`Product.categoryId` → `AdminCategory.id`),
+ * so the real facets are built from whatever Categories are actually active
+ * (`buildCategoryFacets`, below) — every real, active Category is filterable
+ * here, not just the 3 that happened to have a legacy enum value. `key` is
+ * the Category's own `slug` (matches `categoryListHref`'s URL shape, so
+ * `/products?category=<slug>` from Navigation/a Promotion Page CTA/the
+ * Header's category row all resolve here identically).
+ *
+ * Figma (node 146:13795) additionally shows 3 more "ประเภทการใช้งาน" labels
+ * (foundation, bronzer, tools) with no corresponding Category in the catalog
+ * at all — kept as inert, always-false, disabled placeholders purely so the
+ * filter list still matches Figma's visual, same reasoning as before.
  */
-export type CategoryFacetKey = "lip" | "foundation" | "eye" | "cheek" | "bronzer" | "tools";
+export type CategoryFacetKey = string;
 
 export type CategoryFacet = {
   key: CategoryFacetKey;
@@ -20,14 +26,21 @@ export type CategoryFacet = {
   matches: (product: Product) => boolean;
 };
 
-export const CATEGORY_FACETS: CategoryFacet[] = [
-  { key: "lip", label: "ลิป", matches: (p) => p.category === "lip" },
+const PLACEHOLDER_FACETS: CategoryFacet[] = [
   { key: "foundation", label: "รองพื้น / คุมมัน", matches: () => false },
-  { key: "eye", label: "อายแชโดว์", matches: (p) => p.category === "eye" },
-  { key: "cheek", label: "บลัชออน / ไฮไลท์", matches: (p) => p.category === "cheek" },
   { key: "bronzer", label: "บอนเซอร์ / เฉดสี", matches: () => false },
   { key: "tools", label: "อุปกรณ์แต่งหน้า", matches: () => false },
 ];
+
+/** Real Category facets first (in the order the caller passes them, i.e. storage order — Category has no Display Order field), then the 3 inert Figma-only placeholders. */
+export function buildCategoryFacets(activeCategories: { id: string; slug: string; name: string }[]): CategoryFacet[] {
+  const real = activeCategories.map((c) => ({
+    key: c.slug,
+    label: c.name,
+    matches: (p: Product) => p.categoryId === c.id,
+  }));
+  return [...real, ...PLACEHOLDER_FACETS];
+}
 
 /**
  * Figma's "เหมาะกับผิว" (skin type) filter group has zero corresponding
@@ -40,9 +53,9 @@ export const CATEGORY_FACETS: CategoryFacet[] = [
  */
 export const SKIN_TYPE_LABELS = ["ผิวมัน", "ผิวแห้ง", "ผิวผสม", "ผิวแพ้ง่าย"] as const;
 
-/** Architecture Cleanup & Source of Truth — takes the live product list from the caller (`useProductCatalog().products()`/`useAdminProducts().products()`) instead of reading a static `allProducts` import, so the count reacts to Admin edits. */
-export function categoryCount(key: CategoryFacetKey, products: Product[]): number {
-  const facet = CATEGORY_FACETS.find((f) => f.key === key);
+/** Architecture Cleanup & Source of Truth — takes the live product list from the caller (`useProductCatalog().products()`/`useAdminProducts().products()`) instead of reading a static `allProducts` import, so the count reacts to Admin edits. Facets are likewise supplied by the caller (`buildCategoryFacets()` over the live Category store), never read from a module-level constant. */
+export function categoryCount(key: CategoryFacetKey, products: Product[], facets: CategoryFacet[]): number {
+  const facet = facets.find((f) => f.key === key);
   return facet ? products.filter(facet.matches).length : 0;
 }
 
@@ -71,29 +84,41 @@ export type ProductFilters = {
    * phase does not add a dedicated Collection landing page.
    */
   collectionProductIds: string[] | null;
+  /**
+   * §25/§26 — set when arriving via `/products?brand=<slug>` (a Brand
+   * resolver → Product Catalog flow, same shape as Category/Collection
+   * above). This module has no store access, so the caller resolves the
+   * Brand's id via `useBrandContent()` and passes it in here; `null` means
+   * no brand filter is active. There is still no dedicated `/brand/:slug`
+   * page — this is the same existing Product Listing page every other
+   * destination resolves to.
+   */
+  brandId: string | null;
 };
 
-export const EMPTY_FILTERS: ProductFilters = { search: "", categories: [], minPrice: null, maxPrice: null, collectionProductIds: null };
+export const EMPTY_FILTERS: ProductFilters = { search: "", categories: [], minPrice: null, maxPrice: null, collectionProductIds: null, brandId: null };
 
 export function hasActiveFilters(filters: ProductFilters): boolean {
   return (
     filters.search.trim() !== "" ||
     filters.categories.length > 0 ||
+    filters.brandId != null ||
     filters.minPrice != null ||
     filters.maxPrice != null ||
     filters.collectionProductIds != null
   );
 }
 
-export function filterProducts(products: Product[], filters: ProductFilters): Product[] {
+export function filterProducts(products: Product[], filters: ProductFilters, facets: CategoryFacet[]): Product[] {
   const query = filters.search.trim().toLowerCase();
   return products.filter((product) => {
     if (query && !product.name.toLowerCase().includes(query)) return false;
     if (filters.categories.length > 0) {
-      const matchesCategory = filters.categories.some((key) => CATEGORY_FACETS.find((f) => f.key === key)?.matches(product));
+      const matchesCategory = filters.categories.some((key) => facets.find((f) => f.key === key)?.matches(product));
       if (!matchesCategory) return false;
     }
     if (filters.collectionProductIds && !filters.collectionProductIds.includes(product.id)) return false;
+    if (filters.brandId != null && product.brandId !== filters.brandId) return false;
     if (filters.minPrice != null && product.price < filters.minPrice) return false;
     if (filters.maxPrice != null && product.price > filters.maxPrice) return false;
     return true;

@@ -13,13 +13,17 @@ import { PromotionPageView, PromotionPageLoading, PromotionPageNotFound } from "
  * or the not-found state. A page that exists but isn't currently visible
  * (Draft/Unpublished, or Scheduled before its start time) 404s the same as a
  * slug that doesn't exist at all — a link nobody should be able to use yet.
+ *
+ * §18/§35 — the Homepage's own `PromotionPage` record never resolves here
+ * even if its slug happens to match, so `/promotion/:slug` can never become
+ * a second URL for `/` — Homepage is reached only via `/`.
  */
 export default function PromotionPageRoute() {
   const params = useParams();
   const store = usePromotionPages();
   const visiblePage = createMemo(() => {
     const found = store.getBySlug(params.slug ?? "");
-    return found && isPromotionPageVisible(found) ? found : undefined;
+    return found && !found.isHomepage && isPromotionPageVisible(found) ? found : undefined;
   });
 
   return (

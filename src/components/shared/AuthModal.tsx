@@ -115,7 +115,7 @@ export function AuthModal() {
                 type="button"
                 onClick={() => authenticate("line")}
                 disabled={pending() !== null}
-                class="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-pill bg-[#06c755] px-4 py-2.5 text-base font-bold text-white transition-opacity duration-150 disabled:cursor-not-allowed disabled:opacity-60"
+                class="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-pill bg-[#06c755] px-4 py-2.5 text-base font-medium text-white transition-opacity duration-150 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Show when={pending() === "line"} fallback={<img src={lineIcon} alt="" class="size-5 shrink-0" />}>
                   <span class="loading loading-spinner loading-sm" aria-hidden="true" />
@@ -127,7 +127,7 @@ export function AuthModal() {
                 type="button"
                 onClick={() => authenticate("google")}
                 disabled={pending() !== null}
-                class="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-pill border border-surface-gray bg-white px-4 py-2.5 text-base font-semibold text-ink transition-colors duration-150 hover:bg-surface-gray disabled:cursor-not-allowed disabled:opacity-60"
+                class="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-pill border border-surface-gray bg-white px-4 py-2.5 text-base font-medium text-ink transition-colors duration-150 hover:bg-surface-gray disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Show when={pending() === "google"} fallback={<img src={googleIcon} alt="" class="size-5 shrink-0" />}>
                   <span class="loading loading-spinner loading-sm" aria-hidden="true" />
@@ -172,7 +172,7 @@ export function AuthModal() {
                 type="button"
                 onClick={requestOtp}
                 disabled={pending() !== null}
-                class="flex min-h-[44px] w-full items-center justify-center rounded-pill bg-surface-gray px-4 py-2.5 text-base font-semibold text-ink-gray transition-opacity duration-150 disabled:cursor-not-allowed disabled:opacity-60"
+                class="flex min-h-[44px] w-full items-center justify-center rounded-pill bg-surface-gray px-4 py-2.5 text-base font-medium text-ink-gray transition-opacity duration-150 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Show when={pending() === "phone"} fallback="ขอรหัส OTP">
                   <span class="loading loading-spinner loading-sm" aria-hidden="true" />

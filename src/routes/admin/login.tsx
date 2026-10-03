@@ -1,6 +1,7 @@
 import { createSignal, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { useAdminAuth } from "~/lib/adminAuth";
+import { useAdminDocumentTitle } from "~/lib/adminDocumentTitle";
 import { pushToast } from "~/lib/toast";
 import { Button } from "~/components/shared/Button";
 import { TextField } from "~/components/shared/TextField";
@@ -20,6 +21,7 @@ import logo from "~/assets/icons/logo-charmiss-pink.svg";
 export default function AdminLoginPage() {
   const admin = useAdminAuth();
   const navigate = useNavigate();
+  useAdminDocumentTitle();
 
   const [email, setEmail] = createSignal("");
   const [password, setPassword] = createSignal("");
@@ -43,7 +45,7 @@ export default function AdminLoginPage() {
 
   return (
     <div class="flex min-h-screen items-center justify-center bg-surface-gray/60 px-4 py-10">
-      <div class="w-full max-w-sm rounded-card bg-white p-6 text-center shadow-card sm:p-8">
+      <div class="w-full max-w-sm rounded-card bg-surface-card p-6 text-center shadow-card sm:p-8">
         <img src={logo} alt="Charmiss" class="mx-auto h-8 w-auto" />
         <h1 class="mt-5 text-lg font-semibold text-ink">เข้าสู่ระบบผู้ดูแลระบบ</h1>
         <p class="mt-1 text-sm text-ink-gray">กรอกอีเมล์และรหัสผ่านเพื่อเข้าสู่ระบบ</p>
@@ -76,8 +78,6 @@ export default function AdminLoginPage() {
             เข้าสู่ระบบ
           </Button>
         </form>
-
-        <p class="mt-4 text-xs text-ink-placeholder">Prototype เท่านั้น — กรอกอีเมล/รหัสผ่านใดก็ได้เพื่อทดสอบ</p>
       </div>
     </div>
   );

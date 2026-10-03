@@ -55,7 +55,7 @@ export function ProductSelector(props: { selectedIds: string[]; onChange: (ids: 
         </label>
         <span class="font-medium text-ink">เลือกแล้ว {props.selectedIds.length} รายการ</span>
       </div>
-      <div class="flex max-h-80 flex-col gap-1 overflow-y-auto rounded-card border border-surface-gray p-2">
+      <div class="flex max-h-80 flex-col gap-1 overflow-y-auto rounded-card border border-border p-2">
         <Show when={filtered().length > 0} fallback={<p class="p-4 text-center text-sm text-ink-gray">ไม่พบสินค้า</p>}>
           <For each={filtered()}>
             {(product) => (
@@ -67,7 +67,7 @@ export function ProductSelector(props: { selectedIds: string[]; onChange: (ids: 
                   onChange={() => toggle(product.id)}
                   class="size-4 shrink-0 rounded accent-brand-pink"
                 />
-                <button type="button" onClick={() => setQuickViewId(product.id)} class="flex min-w-0 flex-1 items-center gap-3 text-left">
+                <button type="button" onClick={() => setQuickViewId(product.id)} class="font-normal flex min-w-0 flex-1 items-center gap-3 text-left">
                   <img src={product.image} alt="" class="size-10 shrink-0 rounded-media object-cover" />
                   <div class="min-w-0 flex-1">
                     <p class="truncate text-sm font-medium text-ink">{product.name}</p>

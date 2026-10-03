@@ -30,7 +30,7 @@ export const ORDER_STATUS_META: Record<OrderStatus, { label: string; tone: Statu
   confirmed: { label: "ยืนยันแล้ว", tone: "info" },
   processing: { label: "กำลังเตรียมสินค้า", tone: "info" },
   packed: { label: "แพ็กแล้ว", tone: "info" },
-  shipped: { label: "จัดส่งแล้ว", tone: "info" },
+  shipped: { label: "อยู่ระหว่างการขนส่ง", tone: "info" },
   delivered: { label: "ส่งสำเร็จ", tone: "success" },
   cancelled: { label: "ยกเลิกแล้ว", tone: "neutral" },
   refunded: { label: "คืนเงินแล้ว", tone: "neutral" },
@@ -47,7 +47,7 @@ export const FULFILLMENT_STATUS_META: Record<FulfillmentStatus, { label: string;
   pending: { label: "รอดำเนินการ", tone: "neutral" },
   preparing: { label: "กำลังเตรียมสินค้า", tone: "info" },
   packed: { label: "แพ็กแล้ว", tone: "info" },
-  shipped: { label: "จัดส่งแล้ว", tone: "info" },
+  shipped: { label: "อยู่ระหว่างการขนส่ง", tone: "info" },
   delivered: { label: "ส่งสำเร็จ", tone: "success" },
   delivery_failed: { label: "จัดส่งไม่สำเร็จ", tone: "danger" },
 };
@@ -173,7 +173,14 @@ function totalsFor(items: OrderLineItem[], shippingFee: number): OrderTotals {
   return { subtotal, discount, shippingFee, grandTotal: subtotal - discount + shippingFee };
 }
 
-const CUSTOMERS: OrderCustomer[] = [
+/**
+ * Phase 05 — Customer Management — exported so `adminCustomers.ts`'s mock
+ * Customer seed can be built from these exact same 6 records (same id/name/
+ * email/phone) instead of a second, independently-typed hand-copy that could
+ * drift. This array itself is untouched — still only `OrderCustomer`
+ * (order-snapshot) shaped, still only used here to seed `ORDER_SEEDS`.
+ */
+export const CUSTOMERS: OrderCustomer[] = [
   { id: "cust-1", name: "Thanakrit P.", email: "thanakrit.p@example.com", phone: "089-111-2222" },
   { id: "cust-2", name: "Nutcha S.", email: "nutcha.s@example.com", phone: "089-123-4567" },
   { id: "cust-3", name: "ปาล์มมี่ ก.", email: "palmmy.k@example.com", phone: "081-222-3333" },
@@ -336,7 +343,7 @@ const TIMELINE_LABELS: Record<(typeof HAPPY_PATH)[number], string> = {
   confirmed: "ยืนยันการชำระเงิน",
   processing: "กำลังเตรียมสินค้า",
   packed: "แพ็กสินค้าแล้ว",
-  shipped: "จัดส่งแล้ว",
+  shipped: "อยู่ระหว่างการขนส่ง",
   delivered: "จัดส่งสำเร็จ",
 };
 

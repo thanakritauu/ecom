@@ -20,7 +20,7 @@ export function MarketingStatusSummary(props: {
               onClick={() => props.onChange(tab)}
               aria-pressed={active()}
               class={`flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill px-4 text-sm font-medium transition-colors duration-150 ${
-                active() ? "bg-brand-pink text-white" : "border border-surface-gray bg-white text-ink-gray hover:bg-surface-pink/40"
+                active() ? "bg-brand-pink text-white" : "border border-border bg-surface-card text-ink-gray hover:bg-surface-pink/40"
               }`}
             >
               {tab === "all" ? "ทั้งหมด" : MARKETING_STATUS_META[tab].label}

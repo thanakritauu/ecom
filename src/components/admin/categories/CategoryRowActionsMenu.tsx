@@ -24,7 +24,7 @@ export function CategoryRowActionsMenu(props: {
         <MoreIcon class="size-5" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content class="z-50 w-48 rounded-card border border-surface-gray bg-white p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+        <DropdownMenu.Content class="z-50 w-48 rounded-card border border-border bg-surface-card p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
           <Show when={!props.hideView}>
             <DropdownMenu.Item
               onSelect={() => navigate(`${basePath}/${props.id}`)}
@@ -39,7 +39,7 @@ export function CategoryRowActionsMenu(props: {
           >
             แก้ไข
           </DropdownMenu.Item>
-          <DropdownMenu.Separator class="my-1 h-px bg-surface-gray" />
+          <DropdownMenu.Separator class="my-1 h-px bg-border" />
           <DropdownMenu.Item
             onSelect={props.onDelete}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm font-medium text-system-red outline-none transition-colors duration-150 hover:bg-danger-soft data-[highlighted]:bg-danger-soft"

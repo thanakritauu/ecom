@@ -22,7 +22,7 @@ export function SearchInput(props: {
         disabled={props.disabled}
         placeholder={props.placeholder ?? "ค้นหา..."}
         onInput={(e) => props.onInput(e.currentTarget.value)}
-        class="h-11 w-full rounded-pill border border-surface-gray bg-white py-2 pl-10 pr-10 text-sm text-ink outline-none transition-colors duration-150 placeholder:text-ink-placeholder focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray disabled:text-ink-gray"
+        class="h-11 w-full rounded-pill border border-border bg-surface-card py-2 pl-10 pr-10 text-sm text-ink outline-none transition-colors duration-150 placeholder:text-ink-placeholder focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray disabled:text-ink-gray"
       />
       <Show when={props.value.length > 0 && !props.disabled}>
         <button

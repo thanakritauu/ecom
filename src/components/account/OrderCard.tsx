@@ -1,74 +1,94 @@
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import { A } from "@solidjs/router";
 import type { Order } from "~/lib/types";
 import { ORDER_STATUS_META } from "~/lib/accountData";
+import { CARRIERS } from "~/lib/carriers";
+import { formatOrderDate, getShipmentStatus, SHIPMENT_STATUS_META } from "~/lib/orderTracking";
+import { computeCoinsEarned } from "~/lib/cartSelectors";
 import { formatTHB } from "../shared/PriceDisplay";
 
+const MAX_ITEMS_SHOWN = 2;
+
 /**
- * "ดูรายละเอียด" / "สั่งซ้ำ" both route to a real Order Detail path — Figma
- * only shows the buttons on this list, never the detail screen itself, so
- * per PART 15 this lands on OutOfScopePage (via the existing catch-all)
- * rather than inventing a detail layout or wiring a fake "reorder" against
- * historical line items that don't map to any real catalog product.
+ * One order in Purchase History. Order Status (payment/order lifecycle) and
+ * Shipping Status (where the parcel is) are shown as two separate labelled
+ * lines so they're never confused. Whole detail lives on
+ * `/account/orders/:id`.
  */
 export function OrderCard(props: { order: Order }) {
   const meta = () => ORDER_STATUS_META[props.order.status];
+  const shipmentStatus = () => getShipmentStatus(props.order.shipment);
+  const shipmentMeta = () => SHIPMENT_STATUS_META[shipmentStatus()];
   const itemCount = () => props.order.items.reduce((sum, item) => sum + item.qty, 0);
+  const showShipping = () => !["pending_payment", "cancelled"].includes(props.order.status);
+  const detailHref = () => `/account/orders/${props.order.id}`;
 
   return (
-    <div class="flex w-full flex-col gap-3 rounded-2xl border border-surface-gray p-4">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="flex flex-col gap-1">
-          <div class="flex flex-wrap items-center gap-2">
-            <p class="text-base font-semibold text-ink">#{props.order.id}</p>
-            <span class={`rounded-pill px-2.5 py-0.5 text-xs font-semibold ${meta().badgeClass}`}>{meta().label}</span>
-          </div>
+    <article class="flex w-full flex-col gap-3 rounded-2xl border border-surface-gray p-4">
+      <div class="flex flex-wrap items-start justify-between gap-2">
+        <div class="flex flex-col gap-0.5">
+          <p class="text-base font-semibold text-ink">คำสั่งซื้อ #{props.order.id}</p>
           <p class="text-sm text-ink-gray">
-            {props.order.date} · {itemCount()} ชิ้น
+            {formatOrderDate(props.order.placedAt)} · {itemCount()} ชิ้น
           </p>
         </div>
-
-        <div class="flex flex-col items-end gap-2">
-          <p class="text-xl font-bold text-ink">{formatTHB(props.order.total)}</p>
-          <div class="flex items-center gap-2">
-            <A
-              href={`/account/orders/${props.order.id}`}
-              class="flex min-h-[44px] items-center justify-center rounded-pill border border-surface-gray px-4 text-sm font-semibold text-ink transition-colors duration-150 hover:border-brand-pink"
-            >
-              ดูรายละเอียด
-            </A>
-            {props.order.status === "cancelled" ? (
-              <span class="flex min-h-[44px] cursor-not-allowed items-center justify-center rounded-pill bg-surface-gray px-4 text-sm font-semibold text-ink-gray">
-                สินค้าเลิกจำหน่าย
-              </span>
-            ) : (
-              <A
-                href={`/account/orders/${props.order.id}`}
-                class="flex min-h-[44px] items-center justify-center rounded-pill bg-brand-pink px-4 text-sm font-semibold text-white transition-colors duration-150 hover:bg-brand-pink/90"
-              >
-                สั่งซ้ำ
-              </A>
-            )}
-          </div>
-        </div>
+        <span class={`rounded-pill px-2.5 py-0.5 text-xs font-semibold ${meta().badgeClass}`}>{meta().label}</span>
       </div>
 
-      <div class="flex flex-col gap-2">
-        <For each={props.order.items}>
+      <A href={detailHref()} class="flex flex-col gap-2" aria-label={`ดูรายละเอียดคำสั่งซื้อ #${props.order.id}`}>
+        <For each={props.order.items.slice(0, MAX_ITEMS_SHOWN)}>
           {(item) => (
-            <div class="flex items-center gap-2">
-              <img src={item.image} alt={item.name} loading="lazy" class="size-[66px] shrink-0 rounded-2xl border border-surface-gray object-cover" />
+            <div class="flex items-center gap-3">
+              <img src={item.image} alt="" loading="lazy" class="size-[60px] shrink-0 rounded-2xl border border-surface-gray object-cover" />
               <div class="min-w-0 flex-1">
                 <p class="line-clamp-1 text-sm font-medium text-ink">{item.name}</p>
                 <p class="text-xs text-ink-gray">
-                  เฉดสี {item.variantLabel} · x{item.qty}
+                  {item.variantLabel} · x{item.qty}
                 </p>
               </div>
-              <p class="shrink-0 text-base font-semibold text-ink">{formatTHB(item.price)}</p>
+              <p class="shrink-0 text-sm font-semibold text-ink">{formatTHB(item.price * item.qty)}</p>
             </div>
           )}
         </For>
+        <Show when={props.order.items.length > MAX_ITEMS_SHOWN}>
+          <p class="text-xs text-ink-gray">และสินค้าอีก {props.order.items.length - MAX_ITEMS_SHOWN} รายการ</p>
+        </Show>
+      </A>
+
+      {/* Shipping status — its own line, separate from the order status badge above */}
+      <Show when={showShipping()}>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-surface-gray/60 px-3 py-2 text-sm">
+          <span class="text-ink-gray">การจัดส่ง:</span>
+          <span class={`rounded-pill px-2 py-0.5 text-xs font-semibold ${shipmentMeta().badgeClass}`}>{shipmentMeta().label}</span>
+          <Show when={props.order.shipment.trackingNumber}>
+            {(n) => (
+              <span class="text-xs text-ink-gray">
+                {CARRIERS[props.order.shipment.carrier].name} · <span class="font-medium text-ink">{n()}</span>
+              </span>
+            )}
+          </Show>
+        </div>
+      </Show>
+      <Show when={props.order.returnRequest}>
+        <p class="rounded-2xl bg-[#fff4e6] px-3 py-2 text-sm text-ink">ส่งคำขอคืนสินค้าแล้ว · รอตรวจสอบ</p>
+      </Show>
+
+      <div class="flex flex-wrap items-center justify-between gap-3 border-t border-surface-gray pt-3">
+        <div class="flex flex-col">
+          <p class="text-xs text-ink-gray">ยอดรวม</p>
+          <p class="text-lg font-bold text-ink">{formatTHB(props.order.total)}</p>
+          {/* Display-only mockup — no loyalty backend; cancelled orders never earned anything. */}
+          <Show when={props.order.status !== "cancelled"}>
+            <p class="text-xs font-medium text-success">+{computeCoinsEarned(props.order.total).toLocaleString("th-TH")} คอยน์</p>
+          </Show>
+        </div>
+        <A
+          href={detailHref()}
+          class="flex min-h-[44px] items-center justify-center rounded-pill border border-brand-pink px-5 text-sm font-medium text-brand-pink transition-colors duration-150 hover:bg-surface-pink"
+        >
+          {["shipping", "preparing", "paid"].includes(props.order.status) ? "ติดตามพัสดุ" : "ดูรายละเอียด"}
+        </A>
       </div>
-    </div>
+    </article>
   );
 }

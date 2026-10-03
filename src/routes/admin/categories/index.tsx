@@ -18,15 +18,17 @@ import { RefreshIcon, CatalogIcon, PlusIcon, ImageIcon } from "~/components/admi
 import { CATEGORY_STATUS_META, type AdminCategory, type CategoryStatus } from "~/lib/adminCategories";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { useAdminProducts } from "~/lib/adminProductStore";
-import { productsInCategory } from "~/lib/masterDataRelations";
+import { useAdminContent } from "~/lib/adminContentStore";
+import { productsInCategory, findCategoryReferencesInPromotionPages, type PromotionPageSectionReference } from "~/lib/masterDataRelations";
+import { useAdminNavigation } from "~/lib/adminNavigationStore";
+import { findNavigationReferences, describeNavigationReference, type NavigationItem } from "~/lib/adminNavigation";
 import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
 
 const SORT_OPTIONS = [
-  { value: "sort-asc", label: "ลำดับการแสดงผล" },
-  { value: "updated-desc", label: "แก้ไขล่าสุด" },
   { value: "name-asc", label: "ชื่อ A→Z" },
   { value: "name-desc", label: "ชื่อ Z→A" },
+  { value: "updated-desc", label: "แก้ไขล่าสุด" },
 ];
 
 const STATUS_FILTER_OPTIONS: SelectFilterConfig = {
@@ -44,12 +46,14 @@ const STATUS_FILTER_OPTIONS: SelectFilterConfig = {
 export default function AdminCategoriesListPage() {
   const store = useAdminCategories();
   const productStore = useAdminProducts();
+  const contentStore = useAdminContent();
+  const navigation = useAdminNavigation();
   const navigate = useNavigate();
   const categoryProductCount = (categoryId: string) => productsInCategory(categoryId, productStore.products()).length;
 
   const [search, setSearchRaw] = createSignal("");
   const [statusFilter, setStatusFilterRaw] = createSignal<"all" | CategoryStatus>("all");
-  const [sort, setSortRaw] = createSignal("sort-asc");
+  const [sort, setSortRaw] = createSignal("name-asc");
   const [page, setPage] = createSignal(1);
   const [pageSize, setPageSizeRaw] = createSignal(10);
   const [listStatus, setListStatus] = createSignal<AsyncStatus>("loading");
@@ -57,6 +61,8 @@ export default function AdminCategoriesListPage() {
   const [quickViewId, setQuickViewId] = createSignal<string | null>(null);
   const [confirmDelete, setConfirmDelete] = createSignal<AdminCategory | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = createSignal(false);
+  type CategoryDependencies = { productCount: number; navRefs: NavigationItem[]; pageRefs: PromotionPageSectionReference[] };
+  const [blockedDelete, setBlockedDelete] = createSignal<{ category: AdminCategory; deps: CategoryDependencies } | null>(null);
   const [actionLoading, setActionLoading] = createSignal(false);
   const quickViewCategory = createMemo(() => (quickViewId() ? store.getById(quickViewId()!) : undefined));
 
@@ -105,7 +111,7 @@ export default function AdminCategoriesListPage() {
       case "updated-desc":
         return list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
       default:
-        return list.sort((a, b) => a.sortOrder - b.sortOrder);
+        return list.sort((a, b) => a.name.localeCompare(b.name));
     }
   });
 
@@ -129,7 +135,35 @@ export default function AdminCategoriesListPage() {
     });
   const clearSelection = () => setSelectedIds(new Set<string>());
 
-  const requestDelete = (c: AdminCategory) => setConfirmDelete(c);
+  /**
+   * Category/Brand Action + Dark Mode Refinement §2 — Table status changes now
+   * go exclusively through this bulk action (Floating Action Bar), same
+   * `store.setStatus` the Edit page's own Toggle writes through, mirroring
+   * `products/index.tsx`'s own `bulkSetStatus` byte-for-byte (same shape,
+   * same toast copy) rather than inventing a second bulk-action pattern. No
+   * per-row Toggle/Status column control in the table anymore (§1B) — a
+   * read-only `StatusBadge` is still shown so the table stays informative.
+   */
+  const bulkSetStatus = async (status: CategoryStatus) => {
+    const ids = [...selectedIds()];
+    await Promise.all(ids.map((id) => store.setStatus(id, status)));
+    clearSelection();
+    pushToast(status === "active" ? `เปิดใช้งาน ${ids.length} รายการแล้ว` : `ปิดใช้งาน ${ids.length} รายการแล้ว`, "success");
+  };
+
+  /** §10/§43 dependency guard — a Category must never be deleted while Products still classify themselves under it, a Promotion Page/Homepage Section still sources from it, or a NavigationItem still targets it. */
+  const getCategoryDependencies = (c: AdminCategory): CategoryDependencies => ({
+    productCount: productsInCategory(c.id, productStore.products()).length,
+    navRefs: findNavigationReferences(navigation.items(), "category", c.id),
+    pageRefs: findCategoryReferencesInPromotionPages(c.id, contentStore.pages()),
+  });
+  const hasBlockingDependencies = (deps: CategoryDependencies) => deps.productCount > 0 || deps.navRefs.length > 0 || deps.pageRefs.length > 0;
+
+  const requestDelete = (c: AdminCategory) => {
+    const deps = getCategoryDependencies(c);
+    if (hasBlockingDependencies(deps)) setBlockedDelete({ category: c, deps });
+    else setConfirmDelete(c);
+  };
   const confirmDeleteAction = async () => {
     const c = confirmDelete();
     if (!c) return;
@@ -140,14 +174,22 @@ export default function AdminCategoriesListPage() {
     pushToast(`ลบ "${c.name}" เรียบร้อยแล้ว`, "error");
   };
 
+  /** §47 — bulk delete must use the exact same dependency guard as single delete, never a raw unguarded loop. */
   const confirmBulkDeleteAction = async () => {
     const ids = [...selectedIds()];
+    const targets = store.categories().filter((c) => ids.includes(c.id));
+    const blocked = targets.filter((c) => hasBlockingDependencies(getCategoryDependencies(c)));
+    const ok = targets.filter((c) => !blocked.includes(c));
     setActionLoading(true);
-    await Promise.all(ids.map((id) => store.remove(id)));
+    await Promise.all(ok.map((c) => store.remove(c.id)));
     setActionLoading(false);
     setConfirmBulkDelete(false);
     clearSelection();
-    pushToast(`ลบหมวดหมู่ ${ids.length} รายการเรียบร้อยแล้ว`, "error");
+    if (blocked.length > 0) {
+      pushToast(`ลบไม่สำเร็จ ${blocked.length} รายการ (มีการใช้งานอยู่) — ลบสำเร็จ ${ok.length} รายการ`, "warning");
+    } else {
+      pushToast(`ลบหมวดหมู่ ${ok.length} รายการเรียบร้อยแล้ว`, "error");
+    }
   };
 
   const columns: DataTableColumn<AdminCategory>[] = [
@@ -186,7 +228,6 @@ export default function AdminCategoriesListPage() {
       ),
     },
     { key: "products", label: "จำนวนสินค้า", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{categoryProductCount(row.id)} สินค้า</span> },
-    { key: "sortOrder", label: "ลำดับ", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.sortOrder}</span> },
     { key: "status", label: "Status", render: (row) => <StatusBadge tone={CATEGORY_STATUS_META[row.status].tone}>{CATEGORY_STATUS_META[row.status].label}</StatusBadge> },
     { key: "updated", label: "Updated", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.updatedAt}</span> },
     {
@@ -199,7 +240,7 @@ export default function AdminCategoriesListPage() {
 
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
-      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "แคตตาล็อก", href: "/admin/products" }, { label: "หมวดหมู่" }]} />
+      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สินค้า", href: "/admin/products" }, { label: "หมวดหมู่" }]} />
       <PageHeader
         title="หมวดหมู่สินค้า"
         description="จัดการหมวดหมู่สินค้าที่ใช้แสดงในหน้าร้านและตัวกรองสินค้า"
@@ -221,7 +262,7 @@ export default function AdminCategoriesListPage() {
         <Show
           when={listStatus() === "success"}
           fallback={
-            <EmptyState tone="error" icon={<RefreshIcon />} title="ไม่สามารถโหลดรายการหมวดหมู่ได้" description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง" actionLabel="ลองอีกครั้ง" onAction={loadList} class="bg-white shadow-card" />
+            <EmptyState tone="error" icon={<RefreshIcon />} title="ไม่สามารถโหลดรายการหมวดหมู่ได้" description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง" actionLabel="ลองอีกครั้ง" onAction={loadList} class="bg-surface-card shadow-card" />
           }
         >
           <Show
@@ -233,7 +274,7 @@ export default function AdminCategoriesListPage() {
                 description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "สร้างหมวดหมู่แรกของคุณเพื่อเริ่มต้น"}
                 actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "สร้างหมวดหมู่"}
                 onAction={hasActiveFilters() ? clearFilters : () => navigate("/admin/categories/new")}
-                class="bg-white shadow-card"
+                class="bg-surface-card shadow-card"
               />
             }
           >
@@ -248,7 +289,7 @@ export default function AdminCategoriesListPage() {
               getRowKey={(row) => row.id}
               onRowClick={(row) => setQuickViewId(row.id)}
               renderMobileCard={(row) => (
-                <div class="flex gap-3 rounded-card bg-white p-4 shadow-card">
+                <div class="flex gap-3 rounded-card bg-surface-card p-4 shadow-card">
                   <input
                     type="checkbox"
                     aria-label={`เลือก ${row.name}`}
@@ -257,7 +298,7 @@ export default function AdminCategoriesListPage() {
                     onChange={() => toggleSelect(row.id)}
                     class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
                   />
-                  <button type="button" onClick={() => setQuickViewId(row.id)} class="flex flex-1 flex-col gap-2 text-left">
+                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-2 text-left">
                     <div class="flex items-start gap-3">
                       <div class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
                         <Show when={row.image} fallback={<ImageIcon class="size-4" />}>
@@ -269,10 +310,10 @@ export default function AdminCategoriesListPage() {
                           <p class="truncate font-semibold text-ink">{row.name}</p>
                           <StatusBadge tone={CATEGORY_STATUS_META[row.status].tone}>{CATEGORY_STATUS_META[row.status].label}</StatusBadge>
                         </div>
-                        <p class="text-xs text-ink-gray">/{row.slug} · {categoryProductCount(row.id)} สินค้า</p>
+                        <p class="truncate text-xs text-ink-gray">/{row.slug} · {categoryProductCount(row.id)} สินค้า</p>
                       </div>
                     </div>
-                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-surface-gray text-sm font-medium text-ink">ดูรายละเอียด</span>
+                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>
                   </button>
                 </div>
               )}
@@ -286,7 +327,11 @@ export default function AdminCategoriesListPage() {
       <AdminBulkActionBar
         count={selectedIds().size}
         onClear={clearSelection}
-        actions={[{ label: "ลบ", tone: "danger", onClick: () => setConfirmBulkDelete(true) }]}
+        actions={[
+          { label: "เปิดใช้งาน", onClick: () => bulkSetStatus("active") },
+          { label: "ปิดใช้งาน", onClick: () => bulkSetStatus("inactive") },
+          { label: "ลบ", tone: "danger", onClick: () => setConfirmBulkDelete(true) },
+        ]}
       />
 
       <QuickViewDrawer
@@ -323,6 +368,24 @@ export default function AdminCategoriesListPage() {
         loading={actionLoading()}
         onConfirm={confirmBulkDeleteAction}
       />
+
+      <ConfirmDialog
+        open={blockedDelete() !== null}
+        onOpenChange={(open) => !open && setBlockedDelete(null)}
+        title="ไม่สามารถลบได้"
+        description={(() => {
+          const b = blockedDelete();
+          if (!b) return "";
+          const parts: string[] = [];
+          if (b.deps.productCount > 0) parts.push(`มีสินค้า ${b.deps.productCount} รายการที่ใช้หมวดหมู่นี้`);
+          if (b.deps.navRefs.length > 0) parts.push(`ถูกใช้งานใน Navigation: ${b.deps.navRefs.map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
+          if (b.deps.pageRefs.length > 0) parts.push(`ถูกใช้งานใน Promotion Page: ${b.deps.pageRefs.map((r) => (r.isHomepage ? "Homepage" : r.pageName)).join(", ")}`);
+          return `"${b.category.name}" — ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบหมวดหมู่นี้`;
+        })()}
+        confirmLabel="เข้าใจแล้ว"
+        cancelLabel="ปิด"
+        onConfirm={() => setBlockedDelete(null)}
+      />
     </div>
   );
 }
@@ -331,7 +394,7 @@ function ListSkeleton() {
   return (
     <div class="flex flex-col gap-3">
       {Array.from({ length: 5 }).map(() => (
-        <div class="flex items-center gap-3 rounded-card bg-white p-3 shadow-card">
+        <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
           <Skeleton class="size-11 shrink-0 rounded-media" />
           <div class="flex flex-1 flex-col gap-1.5">
             <Skeleton class="h-4 w-1/3" />

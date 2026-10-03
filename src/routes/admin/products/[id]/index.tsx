@@ -20,6 +20,13 @@ import {
 } from "~/lib/adminProductStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { useAdminBrands } from "~/lib/adminBrandStore";
+import { useAdminCollections } from "~/lib/adminCollectionStore";
+import { useAdminContent } from "~/lib/adminContentStore";
+import { useAdminNavigation } from "~/lib/adminNavigationStore";
+import { findNavigationReferences, describeNavigationReference } from "~/lib/adminNavigation";
+import { collectionsContainingProduct, findProductReferencesInPromotionPages } from "~/lib/masterDataRelations";
+import { STOCK_STATUS_META as INVENTORY_STOCK_STATUS_META, getAvailableStock } from "~/lib/adminInventoryStock";
+import { useAdminInventoryStock } from "~/lib/adminInventoryStockStore";
 import { pushToast } from "~/lib/toast";
 
 /** Fallback only for products saved before `categoryId` existed (see `normalizeAdminProduct`). */
@@ -30,13 +37,37 @@ export default function AdminProductDetailPage() {
   const store = useAdminProducts();
   const categoryStore = useAdminCategories();
   const brandStore = useAdminBrands();
+  const collectionStore = useAdminCollections();
+  const contentStore = useAdminContent();
+  const navigation = useAdminNavigation();
+  const inventoryStore = useAdminInventoryStock();
   const navigate = useNavigate();
 
   const product = createMemo(() => store.getById(params.id));
+  const inventoryStock = createMemo(() => inventoryStore.getByProductId(params.id));
 
   const [confirmDelete, setConfirmDelete] = createSignal(false);
   const [confirmToggle, setConfirmToggle] = createSignal(false);
+  const [blockedDelete, setBlockedDelete] = createSignal(false);
   const [actionLoading, setActionLoading] = createSignal(false);
+
+  /** §21/§46 dependency guard — a Product must never be deleted while a Collection still curates it, a NavigationItem still targets it, or a Promotion Page/Homepage Section's CTA (or legacy flat product list) still references it. */
+  const collectionRefs = createMemo(() => {
+    const current = product();
+    return current ? collectionsContainingProduct(current.id, collectionStore.collections()) : [];
+  });
+  const navigationRefs = createMemo(() => {
+    const current = product();
+    return current ? findNavigationReferences(navigation.items(), "product", current.id) : [];
+  });
+  const pageRefs = createMemo(() => {
+    const current = product();
+    return current ? findProductReferencesInPromotionPages(current.id, contentStore.pages()) : [];
+  });
+  const requestDelete = () => {
+    if (collectionRefs().length > 0 || navigationRefs().length > 0 || pageRefs().length > 0) setBlockedDelete(true);
+    else setConfirmDelete(true);
+  };
 
   const handleDuplicate = async () => {
     const current = product();
@@ -74,7 +105,7 @@ export default function AdminProductDetailPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สินค้า", href: "/admin/products" }]} />
-          <EmptyState icon={<CatalogIcon />} title="ไม่พบสินค้านี้" description="สินค้าอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าสินค้า" onAction={() => navigate("/admin/products")} class="bg-white shadow-card" />
+          <EmptyState icon={<CatalogIcon />} title="ไม่พบสินค้านี้" description="สินค้าอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าสินค้า" onAction={() => navigate("/admin/products")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -114,8 +145,8 @@ export default function AdminProductDetailPage() {
                     hideView
                     onDuplicate={handleDuplicate}
                     onToggleStatus={() => setConfirmToggle(true)}
-                    onDelete={() => setConfirmDelete(true)}
-                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-surface-gray text-ink-gray hover:bg-surface-pink"
+                    onDelete={requestDelete}
+                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
                   />
                 </div>
               }
@@ -123,7 +154,7 @@ export default function AdminProductDetailPage() {
 
             <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div class="flex flex-col gap-6 lg:col-span-2">
-                <div class="flex flex-col gap-2 rounded-card bg-white p-4 shadow-card sm:p-5">
+                <div class="flex flex-col gap-2 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">รูปภาพสินค้า (Product Gallery)</h2>
                   <div class="flex gap-3 overflow-x-auto">
                     <For each={galleryImages()}>{(src) => <img src={src} alt="" class="size-40 shrink-0 rounded-media object-cover" />}</For>
@@ -131,7 +162,7 @@ export default function AdminProductDetailPage() {
                 </div>
 
                 <Show when={p().adminVariants.length > 0}>
-                  <div class="flex flex-col gap-4 rounded-card bg-white p-4 shadow-card sm:p-5">
+                  <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                     <h2 class="text-base font-semibold text-ink">ตัวเลือกสินค้า (Variants)</h2>
                     <ProductVariantImages
                       variants={p().adminVariants}
@@ -142,7 +173,7 @@ export default function AdminProductDetailPage() {
                         block, visually separate from the Product Gallery card
                         above — these photos come only from the selected
                         variant's own `images`, never the Gallery. */}
-                    <div class="border-t border-surface-gray pt-4">
+                    <div class="border-t border-border pt-4">
                       <h3 class="mb-2 text-sm font-semibold text-ink">
                         รูปภาพของตัวเลือกนี้ (Variant Images){selectedVariant() ? ` — ${selectedVariant()!.label}` : ""}
                       </h3>
@@ -158,18 +189,18 @@ export default function AdminProductDetailPage() {
                   </div>
                 </Show>
 
-                <div class="flex flex-col gap-2 rounded-card bg-white p-4 shadow-card sm:p-5">
+                <div class="flex flex-col gap-2 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">คำอธิบายสินค้า</h2>
                   <p class="text-sm text-ink-gray">{p().description ?? "ยังไม่มีคำอธิบายสินค้า"}</p>
                 </div>
 
-                <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-5">
+                <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">ข้อมูลตัวเลือกสินค้า</h2>
                   <Show when={p().adminVariants.length > 0} fallback={<p class="text-sm text-ink-gray">สินค้านี้ไม่มีตัวเลือก</p>}>
                     <div class="overflow-x-auto">
                       <table class="w-full text-left text-sm">
                         <thead>
-                          <tr class="border-b border-surface-gray text-xs uppercase text-ink-placeholder">
+                          <tr class="border-b border-border text-xs uppercase text-ink-placeholder">
                             <th class="py-2 pr-3">ชื่อตัวเลือก</th>
                             <th class="py-2 pr-3">SKU</th>
                             <th class="py-2 pr-3">ราคา</th>
@@ -179,7 +210,7 @@ export default function AdminProductDetailPage() {
                         <tbody>
                           <For each={p().adminVariants}>
                             {(v) => (
-                              <tr class="border-b border-surface-gray last:border-0">
+                              <tr class="border-b border-border last:border-0">
                                 <td class="py-2 pr-3 text-ink">{v.label}</td>
                                 <td class="py-2 pr-3 text-ink-gray">{v.sku}</td>
                                 <td class="py-2 pr-3 text-ink-gray">{v.price !== undefined ? formatAdminCurrency(v.price) : "-"}</td>
@@ -195,7 +226,7 @@ export default function AdminProductDetailPage() {
               </div>
 
               <div class="flex flex-col gap-6">
-                <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-5">
+                <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">ราคา</h2>
                   <div class="flex items-baseline gap-2">
                     <p class="text-2xl font-bold text-ink">{formatAdminCurrency(displayPrice())}</p>
@@ -206,7 +237,7 @@ export default function AdminProductDetailPage() {
                   <Show when={selectedVariant()}>{(v) => <p class="text-xs text-ink-placeholder">ตัวเลือก: {v().label}</p>}</Show>
                 </div>
 
-                <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-5">
+                <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">สต๊อกสินค้า</h2>
                   <p class="text-2xl font-bold text-ink">{displayStock()}</p>
                   <StatusBadge tone={STOCK_STATUS_META[displayStockStatus()].tone} class="w-fit">
@@ -214,14 +245,36 @@ export default function AdminProductDetailPage() {
                   </StatusBadge>
                 </div>
 
-                <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-5">
+                {/* Inventory (Phase 06) — read-only Inventory System snapshot, additive to the Product-owned "สต๊อกสินค้า" card above (never replaces it, never a place to edit stock — §4 of the phase spec). */}
+                <Show when={inventoryStock()}>
+                  {(stock) => (
+                    <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+                      <div class="flex items-center justify-between gap-2">
+                        <h2 class="text-base font-semibold text-ink">คลังสินค้า (Inventory System)</h2>
+                        <StatusBadge tone={INVENTORY_STOCK_STATUS_META[stock().status].tone}>{INVENTORY_STOCK_STATUS_META[stock().status].label}</StatusBadge>
+                      </div>
+                      <dl class="flex flex-col gap-1.5 text-sm">
+                        <Row label="Available" value={String(getAvailableStock(stock()))} />
+                        <Row label="Reserved" value={String(stock().reserved)} />
+                        <Row label="On Hand" value={String(stock().onHand)} />
+                        <Row label="Source" value={stock().source} />
+                        <Row label="Last Sync" value={stock().syncedAt} />
+                      </dl>
+                      <Button variant="outline" size="sm" href={`/admin/inventory/items/${stock().id}`}>
+                        ดูรายละเอียดคลังสินค้า
+                      </Button>
+                    </div>
+                  )}
+                </Show>
+
+                <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">สถานะ</h2>
                   <StatusBadge tone={ADMIN_PRODUCT_STATUS_META[p().status].tone} class="w-fit">
                     {ADMIN_PRODUCT_STATUS_META[p().status].label}
                   </StatusBadge>
                 </div>
 
-                <div class="flex flex-col gap-2 rounded-card bg-white p-4 shadow-card sm:p-5">
+                <div class="flex flex-col gap-2 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">ข้อมูลสินค้า</h2>
                   <dl class="flex flex-col gap-1.5 text-sm">
                     <Row label="SKU" value={p().sku} />
@@ -252,6 +305,22 @@ export default function AdminProductDetailPage() {
               tone="danger"
               loading={actionLoading()}
               onConfirm={confirmDeleteAction}
+            />
+
+            <ConfirmDialog
+              open={blockedDelete()}
+              onOpenChange={setBlockedDelete}
+              title="ไม่สามารถลบได้"
+              description={(() => {
+                const parts: string[] = [];
+                if (collectionRefs().length > 0) parts.push(`ถูกใช้งานใน Collection: ${collectionRefs().map((c) => c.name).join(", ")}`);
+                if (navigationRefs().length > 0) parts.push(`ถูกใช้งานใน Navigation: ${navigationRefs().map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
+                if (pageRefs().length > 0) parts.push(`ถูกใช้งานใน Promotion Page: ${pageRefs().map((r) => (r.isHomepage ? "Homepage" : r.pageName)).join(", ")}`);
+                return `"${p().name}" — ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบสินค้านี้`;
+              })()}
+              confirmLabel="เข้าใจแล้ว"
+              cancelLabel="ปิด"
+              onConfirm={() => setBlockedDelete(false)}
             />
           </div>
         );

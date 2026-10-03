@@ -15,6 +15,8 @@ import { DateRangeSelector } from "~/components/admin/dashboard/DateRangeSelecto
 import { OrderStatusSummary } from "~/components/admin/orders/OrderStatusSummary";
 import { OrderQuickView } from "~/components/admin/orders/OrderQuickView";
 import { RefreshIcon, OrdersIcon } from "~/components/admin/icons";
+import { ExportMenu } from "~/components/admin/ExportMenu";
+import type { ExportColumn } from "~/lib/adminExport";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import type { DashboardPeriodKey } from "~/lib/adminDashboard";
 import {
@@ -126,7 +128,7 @@ export default function AdminOrderListPage() {
       if (bucket && (order.totals.grandTotal < bucket.min || order.totals.grandTotal >= bucket.max)) return false;
       if (!withinPeriod(order.createdAt, period)) return false;
       if (q) {
-        const haystack = `${order.orderNumber} ${order.customer.name} ${order.customer.email} ${order.items
+        const haystack = `${order.orderNumber} ${order.customer.name} ${order.customer.email} ${order.customer.phone} ${order.items
           .map((i) => `${i.sku} ${i.name}`)
           .join(" ")}`.toLowerCase();
         if (!haystack.includes(q)) return false;
@@ -150,6 +152,17 @@ export default function AdminOrderListPage() {
         return list.sort((a, b) => dayOf(b.createdAt) - dayOf(a.createdAt));
     }
   });
+
+  const orderExportColumns: ExportColumn<AdminOrder>[] = [
+    { header: "Order Number", value: (o) => o.orderNumber },
+    { header: "Customer Name", value: (o) => o.customer.name },
+    { header: "Date", value: (o) => o.createdAt },
+    { header: "Items", value: (o) => o.items.length },
+    { header: "Total", value: (o) => o.totals.grandTotal },
+    { header: "Order Status", value: (o) => ORDER_STATUS_META[o.orderStatus].label },
+    { header: "Payment Status", value: (o) => PAYMENT_STATUS_META[o.paymentStatus].label },
+    { header: "Fulfillment Status", value: (o) => FULFILLMENT_STATUS_META[o.fulfillmentStatus].label },
+  ];
 
   const totalPages = createMemo(() => Math.max(1, Math.ceil(sorted().length / pageSize())));
   const currentPage = createMemo(() => Math.min(page(), totalPages()));
@@ -266,7 +279,7 @@ export default function AdminOrderListPage() {
             e.stopPropagation();
             navigate(`/admin/orders/${row.id}`);
           }}
-          class="rounded-pill border border-surface-gray px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-pink/40"
+          class="rounded-pill border border-border px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-pink/40"
         >
           ดู
         </button>
@@ -277,14 +290,18 @@ export default function AdminOrderListPage() {
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "คำสั่งซื้อ" }]} />
-      <PageHeader title="คำสั่งซื้อ" description="ติดตามและจัดการคำสั่งซื้อของลูกค้า" />
+      <PageHeader
+        title="คำสั่งซื้อ"
+        description="ติดตามและจัดการคำสั่งซื้อของลูกค้า"
+        actions={<ExportMenu filenameBase="orders-report" columns={orderExportColumns} rows={sorted()} />}
+      />
 
       <OrderStatusSummary value={statusFilter()} counts={statusCounts()} onChange={setStatusFilter} />
 
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
         <div class="flex-1">
           <FilterBar
-            search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาเลขที่คำสั่งซื้อ, ลูกค้า, SKU..." }}
+            search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาเลขที่คำสั่งซื้อ, ลูกค้า, อีเมล, เบอร์โทร, SKU..." }}
             filters={[
               {
                 id: "payment",
@@ -327,7 +344,7 @@ export default function AdminOrderListPage() {
               description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง"
               actionLabel="ลองอีกครั้ง"
               onAction={loadList}
-              class="bg-white shadow-card"
+              class="bg-surface-card shadow-card"
             />
           }
         >
@@ -340,7 +357,7 @@ export default function AdminOrderListPage() {
                 description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : undefined}
                 actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : undefined}
                 onAction={hasActiveFilters() ? clearFilters : undefined}
-                class="bg-white shadow-card"
+                class="bg-surface-card shadow-card"
               />
             }
           >
@@ -361,7 +378,7 @@ export default function AdminOrderListPage() {
               getRowKey={(row) => row.id}
               onRowClick={(row) => setQuickViewId(row.id)}
               renderMobileCard={(row) => (
-                <div class="flex gap-3 rounded-card bg-white p-4 shadow-card">
+                <div class="flex gap-3 rounded-card bg-surface-card p-4 shadow-card">
                   <input
                     type="checkbox"
                     aria-label={`เลือก ${row.orderNumber}`}
@@ -370,15 +387,15 @@ export default function AdminOrderListPage() {
                     onChange={() => toggleSelect(row.id)}
                     class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
                   />
-                  <button type="button" onClick={() => setQuickViewId(row.id)} class="flex flex-1 flex-col gap-3 text-left">
+                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-3 text-left">
                     <div class="flex items-start justify-between gap-2">
-                      <div>
-                        <p class="font-semibold text-ink">{row.orderNumber}</p>
-                        <p class="text-xs text-ink-gray">{row.createdAt}</p>
+                      <div class="min-w-0">
+                        <p class="truncate font-semibold text-ink">{row.orderNumber}</p>
+                        <p class="truncate text-xs text-ink-gray">{row.createdAt}</p>
                       </div>
-                      <p class="font-semibold text-ink">{formatAdminCurrency(row.totals.grandTotal)}</p>
+                      <p class="shrink-0 font-semibold text-ink">{formatAdminCurrency(row.totals.grandTotal)}</p>
                     </div>
-                    <p class="text-sm text-ink-gray">
+                    <p class="truncate text-sm text-ink-gray">
                       {row.customer.name} · {row.items.length} รายการ
                     </p>
                     <div class="flex flex-wrap items-center gap-1.5">
@@ -386,7 +403,7 @@ export default function AdminOrderListPage() {
                       <StatusBadge tone={PAYMENT_STATUS_META[row.paymentStatus].tone}>{PAYMENT_STATUS_META[row.paymentStatus].label}</StatusBadge>
                       <StatusBadge tone={FULFILLMENT_STATUS_META[row.fulfillmentStatus].tone}>{FULFILLMENT_STATUS_META[row.fulfillmentStatus].label}</StatusBadge>
                     </div>
-                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-surface-gray text-sm font-medium text-ink">
+                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">
                       ดูรายละเอียด
                     </span>
                   </button>
@@ -437,7 +454,7 @@ function ListSkeleton() {
   return (
     <div class="flex flex-col gap-3">
       {Array.from({ length: 6 }).map(() => (
-        <div class="flex items-center gap-3 rounded-card bg-white p-3 shadow-card">
+        <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
           <div class="flex flex-1 flex-col gap-1.5">
             <Skeleton class="h-4 w-1/3" />
             <Skeleton class="h-3 w-1/4" />

@@ -92,7 +92,7 @@ export function PromotionPageProductPicker(props: { selected: PromotionPageProdu
         <span class="font-medium text-ink">เลือกแล้ว {props.selected.length} รายการ</span>
       </div>
 
-      <div class="flex max-h-72 flex-col gap-1 overflow-y-auto rounded-card border border-surface-gray p-2">
+      <div class="flex max-h-72 flex-col gap-1 overflow-y-auto rounded-card border border-border p-2">
         <Show when={filtered().length > 0} fallback={<p class="p-4 text-center text-sm text-ink-gray">ไม่พบสินค้าที่ค้นหา</p>}>
           <For each={filtered()}>
             {(product) => (
@@ -104,7 +104,7 @@ export function PromotionPageProductPicker(props: { selected: PromotionPageProdu
                   onChange={() => toggle(product.id)}
                   class="size-4 shrink-0 rounded accent-brand-pink"
                 />
-                <button type="button" onClick={() => setQuickViewId(product.id)} class="flex min-w-0 flex-1 items-center gap-3 text-left">
+                <button type="button" onClick={() => setQuickViewId(product.id)} class="font-normal flex min-w-0 flex-1 items-center gap-3 text-left">
                   <img src={product.image} alt="" class="size-10 shrink-0 rounded-media object-cover" />
                   <div class="min-w-0 flex-1">
                     <p class="truncate text-sm font-medium text-ink">{product.name}</p>
@@ -145,7 +145,7 @@ export function PromotionPageProductPicker(props: { selected: PromotionPageProdu
                       if (from !== null) reorder(from, index());
                       setDragIndex(null);
                     }}
-                    class="flex flex-col gap-2 rounded-card border border-surface-gray p-3"
+                    class="flex flex-col gap-2 rounded-card border border-border p-3"
                   >
                     <div class="flex items-center gap-3">
                       <span class="cursor-grab text-ink-placeholder" aria-hidden="true">
@@ -183,7 +183,7 @@ export function PromotionPageProductPicker(props: { selected: PromotionPageProdu
                     </div>
 
                     <Show when={product()?.adminVariants.length}>
-                      <div class="ml-16 flex flex-wrap gap-2 border-t border-surface-gray pt-2">
+                      <div class="ml-16 flex flex-wrap gap-2 border-t border-border pt-2">
                         <For each={product()!.adminVariants}>
                           {(variant) => {
                             const checked = () => ref.variantIds.includes(variant.id);
@@ -196,7 +196,7 @@ export function PromotionPageProductPicker(props: { selected: PromotionPageProdu
                               >
                                 <span
                                   class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-media border-2 bg-surface-gray/60 transition-colors duration-150"
-                                  classList={{ "border-brand-pink": checked(), "border-surface-gray": !checked() }}
+                                  classList={{ "border-brand-pink": checked(), "border-border": !checked() }}
                                 >
                                   <Show when={variant.images?.[0]} fallback={<ImageIcon class="size-4 text-ink-placeholder" />}>
                                     {(src) => <img src={src()} alt="" class="size-full object-cover" />}

@@ -1,8 +1,8 @@
 import { Show } from "solid-js";
 import { useCart } from "~/lib/cart";
-import { pushToast } from "~/lib/toast";
 import type { ResolvedCartLine } from "~/lib/cartSelectors";
 import { PriceDisplay } from "./PriceDisplay";
+import { getDiscountPercent } from "~/lib/products";
 import { QuantityStepper } from "./QuantityStepper";
 
 /**
@@ -21,10 +21,11 @@ export function CartItemRow(props: { entry: ResolvedCartLine; variant?: "drawer"
   const outOfStock = () => product.stockLeft !== undefined && product.stockLeft <= 0;
   const lowStock = () => !outOfStock() && product.stockLeft !== undefined && product.stockLeft <= 5;
   const image = () => variant?.image ?? product.image;
+  // Same derived % as ProductCard/PDP, against the price this line is actually charged at.
+  const discountPercent = () => getDiscountPercent({ price: props.entry.unitPrice, compareAtPrice: product.compareAtPrice });
 
   const remove = () => {
     cart.removeLine(product.id, line.variantId);
-    pushToast(`นำ "${product.name}" ออกจากตะกร้าแล้ว`);
   };
 
   return (
@@ -52,18 +53,18 @@ export function CartItemRow(props: { entry: ResolvedCartLine; variant?: "drawer"
 
         <Show when={variant}>
           <span class="inline-flex w-fit items-center gap-1 rounded-pill bg-surface-gray px-2 py-0.5 text-xs text-ink-gray">
-            เฉด: {variant!.label}
+            ตัวเลือกสินค้า: {variant!.label}
           </span>
         </Show>
 
         <div class="flex flex-wrap items-center gap-2">
-          <PriceDisplay price={product.price} compareAtPrice={product.compareAtPrice} size="sm" />
+          <PriceDisplay price={props.entry.unitPrice} compareAtPrice={product.compareAtPrice} size="sm" />
           <Show
             when={lowStock()}
             fallback={
-              <Show when={product.discountPercent}>
+              <Show when={discountPercent()}>
                 <span class="rounded-pill bg-danger-soft px-1.5 py-0.5 text-xs font-bold text-danger-strong">
-                  -{product.discountPercent}%
+                  -{discountPercent()}%
                 </span>
               </Show>
             }

@@ -66,7 +66,7 @@ export default function AdminPromotionDetailPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "โปรโมชั่น", href: "/admin/marketing/promotions" }]} />
-          <EmptyState icon={<MarketingIcon />} title="ไม่พบโปรโมชั่นนี้" description="โปรโมชั่นอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าโปรโมชั่น" onAction={() => navigate("/admin/marketing/promotions")} class="bg-white shadow-card" />
+          <EmptyState icon={<MarketingIcon />} title="ไม่พบโปรโมชั่นนี้" description="โปรโมชั่นอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าโปรโมชั่น" onAction={() => navigate("/admin/marketing/promotions")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -101,7 +101,7 @@ export default function AdminPromotionDetailPage() {
                     onDuplicate={handleDuplicate}
                     onToggleStatus={() => setConfirmToggle(true)}
                     onDelete={() => setConfirmDelete(true)}
-                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-surface-gray text-ink-gray hover:bg-surface-pink"
+                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
                   />
                 </div>
               }
@@ -189,7 +189,7 @@ export default function AdminPromotionDetailPage() {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

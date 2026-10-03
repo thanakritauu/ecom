@@ -41,7 +41,10 @@ export function StickyAddToCartBar(props: {
   return (
     <Show when={visible()}>
       <div
-        class="fixed inset-x-0 bottom-0 z-20 border-t border-surface-gray bg-white shadow-[0_-2px_12px_rgba(90,106,133,0.10)]"
+        // `bottom-16` on Tablet/Mobile clears BottomNav's own `min-h-16`
+        // (Global Responsive §4) — PDP's Header is never `minimal`, so this
+        // bar and BottomNav are always on-screen together there.
+        class="fixed inset-x-0 bottom-16 z-20 border-t border-surface-gray bg-white shadow-[0_-2px_12px_rgba(90,106,133,0.10)] lg:bottom-0"
         style={{ "padding-bottom": "env(safe-area-inset-bottom)" }}
       >
         <div class="mx-auto flex max-w-container-wide items-center gap-3 px-4 py-3 lg:gap-4 lg:px-[150px]">

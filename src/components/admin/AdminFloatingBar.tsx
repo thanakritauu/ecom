@@ -19,7 +19,7 @@ export function AdminFloatingBar(props: { children: JSX.Element; class?: string 
   return (
     <div
       classList={{
-        "fixed inset-x-0 bottom-0 z-30 border-t border-surface-gray bg-white/95 shadow-[0_-2px_12px_rgba(90,106,133,0.10)] backdrop-blur transition-[left] duration-200":
+        "fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface-card/95 shadow-[0_-2px_12px_rgba(90,106,133,0.10)] backdrop-blur transition-[left] duration-200":
           true,
         "lg:left-20": ui.sidebarCollapsed(),
         "lg:left-64": !ui.sidebarCollapsed(),

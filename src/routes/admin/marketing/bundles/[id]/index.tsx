@@ -61,7 +61,7 @@ export default function AdminBundleDetailPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "บันเดิล / เซ็ต", href: "/admin/marketing/bundles" }]} />
-          <EmptyState icon={<ReviewsIcon />} title="ไม่พบเซ็ตสินค้านี้" description="เซ็ตสินค้าอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าบันเดิล" onAction={() => navigate("/admin/marketing/bundles")} class="bg-white shadow-card" />
+          <EmptyState icon={<ReviewsIcon />} title="ไม่พบเซ็ตสินค้านี้" description="เซ็ตสินค้าอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าบันเดิล" onAction={() => navigate("/admin/marketing/bundles")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -90,7 +90,7 @@ export default function AdminBundleDetailPage() {
                     onDuplicate={handleDuplicate}
                     onToggleStatus={() => setConfirmToggle(true)}
                     onDelete={() => setConfirmDelete(true)}
-                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-surface-gray text-ink-gray hover:bg-surface-pink"
+                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
                   />
                 </div>
               }
@@ -176,7 +176,7 @@ export default function AdminBundleDetailPage() {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

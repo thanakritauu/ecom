@@ -2,6 +2,7 @@ import { createMemo, createSignal, For, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
+import { ChevronDownIcon } from "~/components/admin/icons";
 import { ProductSelector } from "./ProductSelector";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
@@ -98,16 +99,19 @@ export function FlashSaleForm(props: {
               <TextField label="ชื่อแคมเปญ" required value={name()} onInput={(e) => setName(e.currentTarget.value)} error={errors().name} disabled={saving()} class="sm:col-span-2" />
               <label class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">สถานะ</span>
-                <select
-                  value={status()}
-                  disabled={saving()}
-                  onChange={(e) => setStatus(e.currentTarget.value as MarketingStatus)}
-                  class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                >
-                  {STATUS_OPTIONS.map((opt) => (
-                    <option value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                <div class="relative">
+                  <select
+                    value={status()}
+                    disabled={saving()}
+                    onChange={(e) => setStatus(e.currentTarget.value as MarketingStatus)}
+                    class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+                  >
+                    {STATUS_OPTIONS.map((opt) => (
+                      <option value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+                </div>
               </label>
             </div>
           </Section>
@@ -135,14 +139,14 @@ export function FlashSaleForm(props: {
                   {(item) => {
                     const product = () => productStore.getById(item.productId);
                     return (
-                      <div class="grid grid-cols-2 gap-2 rounded-card border border-surface-gray p-3 sm:grid-cols-4 sm:items-end">
+                      <div class="grid grid-cols-2 gap-2 rounded-card border border-border p-3 sm:grid-cols-4 sm:items-end">
                         <div class="col-span-2 flex items-center gap-2 sm:col-span-1">
                           <img src={product()?.image} alt="" class="size-9 shrink-0 rounded-media object-cover" />
                           <p class="min-w-0 truncate text-sm text-ink">{product()?.name}</p>
                         </div>
                         <label class="flex flex-col gap-1 text-xs font-medium text-ink-gray">
                           ราคาปกติ
-                          <span class="flex h-10 items-center rounded-card border border-surface-gray bg-surface-gray/40 px-2.5 text-sm text-ink-gray">
+                          <span class="flex h-10 items-center rounded-card border border-border bg-surface-gray/40 px-2.5 text-sm text-ink-gray">
                             {formatAdminCurrency(product()?.price ?? 0)}
                           </span>
                         </label>
@@ -154,7 +158,7 @@ export function FlashSaleForm(props: {
                             step="0.01"
                             value={item.salePrice}
                             onInput={(e) => updateItem(item.productId, { salePrice: Number(e.currentTarget.value) })}
-                            class="h-10 rounded-card border border-surface-gray px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
+                            class="h-10 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                           />
                         </label>
                         <label class="flex flex-col gap-1 text-xs font-medium text-ink-gray">
@@ -164,7 +168,7 @@ export function FlashSaleForm(props: {
                             min="0"
                             value={item.saleLimit ?? ""}
                             onInput={(e) => updateItem(item.productId, { saleLimit: e.currentTarget.value === "" ? undefined : Number(e.currentTarget.value) })}
-                            class="h-10 rounded-card border border-surface-gray px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
+                            class="h-10 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                           />
                         </label>
                       </div>
@@ -217,7 +221,7 @@ export function FlashSaleForm(props: {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-4 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

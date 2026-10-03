@@ -11,6 +11,13 @@ export type Coupon = {
   expiryLabel: string;
 };
 
+/**
+ * Figma 124:6565 — 104px ticket. The ticket shape SVG carries its own notches
+ * and drop shadow, so it's drawn past the card box by the shadow's extent
+ * (-9.62% top, -13.46% bottom, -3.25% each side) and the card has no
+ * background/clipping of its own. % icon at (31, 20), dashed divider at
+ * x=100, content area from x=100 with 16px padding.
+ */
 export function CouponCard(props: { coupon: Coupon; collected: boolean; onCollect: () => Promise<void> }) {
   const [status, setStatus] = createSignal<"idle" | "loading" | "error">("idle");
 
@@ -25,21 +32,24 @@ export function CouponCard(props: { coupon: Coupon; collected: boolean; onCollec
   };
 
   return (
-    <div class="relative flex h-[104px] w-full overflow-hidden">
-      <img src={ticketShape} alt="" class="absolute inset-0 size-full" aria-hidden="true" />
-      <div class="relative flex w-[100px] shrink-0 items-center justify-center">
-        <img src={percentIcon} alt="" class="h-[63px] w-[43px]" aria-hidden="true" />
-      </div>
-      <img src={dashedLine} alt="" class="relative h-[88px] w-px self-center" aria-hidden="true" />
-      <div class="relative flex flex-1 items-center justify-between gap-3 p-4">
-        <div class="flex flex-col">
-          <p class="text-xl font-bold leading-7 text-system-red">{props.coupon.amountLabel}</p>
-          <p class="text-sm font-medium text-ink">{props.coupon.minSpendLabel}</p>
-          <p class="text-xs text-ink-gray">{props.coupon.expiryLabel}</p>
+    <div class="relative h-[104px] w-full">
+      <img
+        src={ticketShape}
+        alt=""
+        aria-hidden="true"
+        class="pointer-events-none absolute left-[-3.25%] top-[-9.62%] h-[123.08%] w-[106.5%] max-w-none"
+      />
+      <img src={percentIcon} alt="" aria-hidden="true" class="absolute left-[31px] top-[20px] h-[63px] w-[43px]" />
+      <img src={dashedLine} alt="" aria-hidden="true" class="absolute left-[99.5px] top-2 h-[88px] w-px" />
+      <div class="absolute inset-y-0 left-[100px] right-0 flex items-center justify-between gap-2 p-4">
+        <div class="flex min-w-0 flex-col">
+          <p class="whitespace-nowrap text-xl font-bold leading-7 text-system-red">{props.coupon.amountLabel}</p>
+          <p class="text-sm font-medium leading-5 text-ink">{props.coupon.minSpendLabel}</p>
+          <p class="whitespace-nowrap text-xs leading-[normal] text-ink-gray">{props.coupon.expiryLabel}</p>
         </div>
         <Button
-          size="sm"
           variant={props.collected ? "outline" : "primary"}
+          class="!min-h-0 shrink-0 !px-4 !py-2 !text-base !leading-[normal]"
           loading={status() === "loading"}
           disabled={props.collected}
           onClick={collect}

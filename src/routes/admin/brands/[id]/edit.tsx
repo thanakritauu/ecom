@@ -28,8 +28,8 @@ export default function AdminBrandEditPage() {
       when={brand()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "แคตตาล็อก", href: "/admin/products" }, { label: "แบรนด์", href: "/admin/brands" }]} />
-          <EmptyState icon={<LayersIcon />} title="ไม่พบแบรนด์นี้" description="แบรนด์นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/brands")} class="bg-white shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สินค้า", href: "/admin/products" }, { label: "แบรนด์", href: "/admin/brands" }]} />
+          <EmptyState icon={<LayersIcon />} title="ไม่พบแบรนด์นี้" description="แบรนด์นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/brands")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -38,7 +38,7 @@ export default function AdminBrandEditPage() {
           <Breadcrumb
             items={[
               { label: "แดชบอร์ด", href: "/admin" },
-              { label: "แคตตาล็อก", href: "/admin/products" },
+              { label: "สินค้า", href: "/admin/products" },
               { label: "แบรนด์", href: "/admin/brands" },
               { label: current().name },
               { label: "แก้ไข" },

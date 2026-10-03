@@ -20,7 +20,7 @@ export function Container(props: {
 }) {
   return (
     <div
-      class={`mx-auto w-full px-4 sm:px-6 lg:px-[clamp(1.5rem,6vw,100px)] ${
+      class={`mx-auto w-full px-4 sm:px-6 lg:px-[clamp(1.5rem,7vw,100px)] ${
         widthClass[props.width ?? "default"]
       } ${props.class ?? ""}`}
     >

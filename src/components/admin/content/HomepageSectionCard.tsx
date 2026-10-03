@@ -29,7 +29,7 @@ export function HomepageSectionCard(props: {
   const s = () => props.section;
 
   return (
-    <div class="flex flex-col rounded-card border border-surface-gray bg-white" draggable="true" onDragStart={props.onDragStart} onDragOver={props.onDragOver} onDrop={props.onDrop}>
+    <div class="flex flex-col rounded-card border border-border bg-surface-card" draggable="true" onDragStart={props.onDragStart} onDragOver={props.onDragOver} onDrop={props.onDrop}>
       <div class="flex items-center gap-3 p-3 sm:p-4">
         <span class="hidden cursor-grab text-ink-placeholder sm:block" aria-hidden="true">
           <DragHandleIcon class="size-4" />
@@ -71,7 +71,7 @@ export function HomepageSectionCard(props: {
             <span class="hidden text-xs text-ink-gray sm:inline">เปิดใช้งาน</span>
           </label>
 
-          <button type="button" onClick={props.onToggleExpand} class="min-h-9 rounded-pill border border-surface-gray px-3 text-sm font-medium text-ink hover:bg-surface-pink">
+          <button type="button" onClick={props.onToggleExpand} class="min-h-9 rounded-pill border border-border px-3 text-sm font-medium text-ink hover:bg-surface-pink">
             {props.expanded ? "ย่อ" : "แก้ไข"}
           </button>
 

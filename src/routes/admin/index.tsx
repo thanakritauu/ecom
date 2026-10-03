@@ -3,24 +3,33 @@ import { PageHeader } from "~/components/shared/PageHeader";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { DateRangeSelector } from "~/components/admin/dashboard/DateRangeSelector";
 import { KpiCard, KpiCardSkeleton } from "~/components/admin/dashboard/KpiCard";
-import { SalesTrendChart, SalesTrendChartSkeleton } from "~/components/admin/dashboard/SalesTrendChart";
+import { DailySalesChart } from "~/components/admin/dashboard/DailySalesChart";
 import { OrderOverview } from "~/components/admin/dashboard/OrderOverview";
 import { BestSellingProducts } from "~/components/admin/dashboard/BestSellingProducts";
 import { LowStockList } from "~/components/admin/dashboard/LowStockList";
 import { RecentOrdersTable } from "~/components/admin/dashboard/RecentOrdersTable";
 import { QuickActions } from "~/components/admin/dashboard/QuickActions";
+import { PeriodComparisonTable } from "~/components/admin/dashboard/PeriodComparisonTable";
+import { StatusDistribution } from "~/components/admin/dashboard/StatusDistribution";
+import { PerformancePanels } from "~/components/admin/dashboard/PerformancePanels";
+import { ComparisonPanel } from "~/components/admin/dashboard/ComparisonPanel";
 import { Skeleton } from "~/components/admin/Skeleton";
 import { RevenueIcon, OrdersIcon, AovIcon, CustomersIcon, RefreshIcon } from "~/components/admin/icons";
 import { formatAdminCurrency, DASHBOARD_PERIODS, type DashboardPeriodKey } from "~/lib/adminDashboard";
+import { useAdminCustomers } from "~/lib/adminCustomerStore";
 import type { AsyncStatus } from "~/lib/types";
 
 /**
- * PART 3 — sections stack top to bottom: KPIs → Sales/Orders overview → Best
- * Sellers/Low Stock → Recent Orders → Quick Actions. Only the KPI row + chart
- * react to the date-range selector (PART 22); everything else is a
- * current-state snapshot (see adminDashboard.ts's own comment on why).
+ * CMS Final Admin UX Refinement §14-17 — section order is now fixed to:
+ * KPI → Sales Chart → Performance (Category/Brand/Promotion) → Comparison
+ * (Period table + dataset Line Chart) → Order Overview → Recent Orders →
+ * Order Status Distribution → Best Selling Products → Low Stock → Quick
+ * Actions. This is the authoritative order at every breakpoint (a single
+ * `flex flex-col` — nothing here reorders itself per breakpoint), per the
+ * spec's explicit "ยึดตำแหน่งนี้เป็นหลัก ไม่ต้อง preserve order เดิม".
  */
 export default function AdminDashboardPage() {
+  const customerStore = useAdminCustomers();
   const [period, setPeriod] = createSignal<DashboardPeriodKey>("7d");
   const [salesStatus, setSalesStatus] = createSignal<AsyncStatus>("idle");
   const [sectionsReady, setSectionsReady] = createSignal(false);
@@ -38,7 +47,24 @@ export default function AdminDashboardPage() {
     setTimeout(() => setSectionsReady(true), 450);
   });
 
-  const data = () => DASHBOARD_PERIODS[period()];
+  /**
+   * Phase 05 §26 — "Customers" is the one KPI this Dashboard already had a
+   * slot for that a real Store now backs; every other KPI (revenue/orders/
+   * AOV) stays exactly the period-mocked value it always was — swapping
+   * those too would need real historical per-period order data this
+   * prototype doesn't track, which is a redesign this phase explicitly
+   * defers. Only `.value` is overridden (a live, accurate "how many
+   * customers exist right now" count from the real Customer Store);
+   * `changePercent` stays the existing mock, since an accurate period-over-
+   * period change needs historical customer snapshots this prototype has no
+   * source for. Overridden once here (not inside `KpiCard`/
+   * `PeriodComparisonTable` themselves) so both readers of `data()` can never
+   * disagree about what "Customers" means, per §30.
+   */
+  const data = () => {
+    const base = DASHBOARD_PERIODS[period()];
+    return { ...base, kpis: { ...base.kpis, customers: { ...base.kpis.customers, value: customerStore.customers().length } } };
+  };
 
   return (
     <div class="flex flex-col gap-6">
@@ -67,7 +93,7 @@ export default function AdminDashboardPage() {
               description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง"
               actionLabel="ลองอีกครั้ง"
               onAction={loadSales}
-              class="bg-white shadow-card"
+              class="bg-surface-card shadow-card"
             />
           }
         >
@@ -97,20 +123,33 @@ export default function AdminDashboardPage() {
               icon={<CustomersIcon />}
             />
           </div>
-
-          {/* Sales Overview */}
-          <div class="mt-3 rounded-card bg-white p-4 shadow-card sm:p-5">
-            <h2 class="mb-4 text-base font-semibold text-ink">ยอดขาย</h2>
-            <SalesTrendChart points={data().salesTrend} />
-          </div>
         </Show>
       </Show>
 
-      <Show when={salesStatus() === "loading"}>
-        <div class="rounded-card bg-white p-4 shadow-card sm:p-5">
-          <Skeleton class="mb-4 h-5 w-24" />
-          <SalesTrendChartSkeleton />
-        </div>
+      {/* กราฟยอดขาย — day-of-month Line Chart, own month picker */}
+      <DailySalesChart />
+
+      {/* ประสิทธิภาพตามหมวดหมู่ / แบรนด์ / โปรโมชั่น — §14, right after the Sales Chart */}
+      <div class="flex flex-col gap-3">
+        <h2 class="text-base font-semibold text-ink">ประสิทธิภาพตามหมวดหมู่ / แบรนด์ / โปรโมชั่น</h2>
+        <Show
+          when={sectionsReady()}
+          fallback={
+            <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <For each={[0, 1, 2, 3]}>{() => <Skeleton class="h-52 rounded-card" />}</For>
+            </div>
+          }
+        >
+          <PerformancePanels />
+        </Show>
+      </div>
+
+      {/* กราฟเปรียบเทียบข้อมูล — Period-over-period table + the dataset Line Chart, kept adjacent */}
+      <Show when={salesStatus() === "success"}>
+        <PeriodComparisonTable data={data()} />
+      </Show>
+      <Show when={sectionsReady()} fallback={<Skeleton class="h-72 rounded-card" />}>
+        <ComparisonPanel />
       </Show>
 
       {/* Order Overview */}
@@ -128,28 +167,43 @@ export default function AdminDashboardPage() {
         </Show>
       </div>
 
-      {/* Best Selling Products + Low Stock */}
-      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div class="rounded-card bg-white p-4 shadow-card sm:p-5">
-          <h2 class="mb-2 text-base font-semibold text-ink">สินค้าขายดี</h2>
-          <Show when={sectionsReady()} fallback={<SectionListSkeleton />}>
-            <BestSellingProducts />
-          </Show>
-        </div>
-        <div class="rounded-card bg-white p-4 shadow-card sm:p-5">
-          <h2 class="mb-2 text-base font-semibold text-ink">สินค้าใกล้หมด</h2>
-          <Show when={sectionsReady()} fallback={<SectionListSkeleton />}>
-            <LowStockList />
-          </Show>
-        </div>
-      </div>
-
-      {/* Recent Orders */}
+      {/* คำสั่งซื้อล่าสุด */}
       <div class="flex flex-col gap-3">
         <h2 class="text-base font-semibold text-ink">คำสั่งซื้อล่าสุด</h2>
         <Show when={sectionsReady()} fallback={<Skeleton class="h-64 rounded-card" />}>
           <RecentOrdersTable />
         </Show>
+      </div>
+
+      {/* การกระจายสถานะคำสั่งซื้อ — §15, right after Recent Orders */}
+      <div class="flex flex-col gap-3">
+        <h2 class="text-base font-semibold text-ink">การกระจายสถานะคำสั่งซื้อ</h2>
+        <Show
+          when={sectionsReady()}
+          fallback={
+            <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <For each={[0, 1, 2]}>{() => <Skeleton class="h-40 rounded-card" />}</For>
+            </div>
+          }
+        >
+          <StatusDistribution />
+        </Show>
+      </div>
+
+      {/* Best Selling Products + Low Stock */}
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div class="rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+          <h2 class="mb-2 text-base font-semibold text-ink">สินค้าขายดี</h2>
+          <Show when={sectionsReady()} fallback={<SectionListSkeleton />}>
+            <BestSellingProducts />
+          </Show>
+        </div>
+        <div class="rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+          <h2 class="mb-2 text-base font-semibold text-ink">สินค้าใกล้หมด</h2>
+          <Show when={sectionsReady()} fallback={<SectionListSkeleton />}>
+            <LowStockList />
+          </Show>
+        </div>
       </div>
 
       {/* Quick Actions */}

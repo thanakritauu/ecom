@@ -34,12 +34,15 @@ const faqItems = [
 
 export function FAQSection() {
   return (
-    <section aria-labelledby="faq-heading" class="py-10 lg:py-16">
-      <Container width="narrow" class="flex flex-col gap-6">
-        <h2 id="faq-heading" class="text-[22px] font-bold text-ink sm:text-2xl lg:text-[28px]">
-          คำถามที่พบบ่อย
-        </h2>
-        <Accordion items={faqItems} defaultValue={["faq3"]} />
+    <section aria-labelledby="faq-heading" class="pb-6 pt-0 sm:pb-8 lg:pb-10">
+      {/* Figma 124:7017 — 1140px content, 40px pink centered title, 16px title→list */}
+      <Container width="narrow" class="lg:max-w-container-wide">
+        <div class="mx-auto flex w-full flex-col gap-3 sm:gap-4 lg:max-w-[1140px]">
+          <h2 id="faq-heading" class="text-center text-[28px] font-bold leading-[normal] text-brand-pink sm:text-[34px] lg:text-[40px]">
+            คำถามที่พบบ่อย
+          </h2>
+          <Accordion items={faqItems} defaultValue={["faq3"]} />
+        </div>
       </Container>
     </section>
   );

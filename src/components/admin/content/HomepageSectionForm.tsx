@@ -1,17 +1,28 @@
 import { For, Show } from "solid-js";
+import { ChevronDownIcon } from "~/components/admin/icons";
 import { TextField } from "~/components/shared/TextField";
 import { BannerUploader } from "./BannerUploader";
 import { BannerLibraryPicker } from "./BannerLibraryPicker";
+import { HeroAssetsEditor } from "./HeroAssetsEditor";
 import { DestinationSelector } from "./DestinationSelector";
 import { PromotionPageProductPicker } from "./PromotionPageProductPicker";
 import { HOMEPAGE_PRODUCT_SOURCE_META, type HomepageContentLayout, type HomepageProductSource, type HomepageSection } from "~/lib/adminHomepage";
 import { useAdminCollections } from "~/lib/adminCollectionStore";
+import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { useAdminCampaigns } from "~/lib/adminCampaignStore";
 
-const PRODUCT_SOURCE_OPTIONS: { value: HomepageProductSource; label: string }[] = Object.entries(HOMEPAGE_PRODUCT_SOURCE_META).map(([value, meta]) => ({
-  value: value as HomepageProductSource,
-  label: meta.label,
-}));
+/**
+ * Product Section — Product Source Rule (§4/§22) — "เลือกสินค้าเอง" (manual)
+ * is deliberately left out of this list: a Product Section may only ever
+ * source from a Collection, a Category, or a Dynamic rule. `"manual"` still
+ * exists as a value (`HomepageProductSource`, `HOMEPAGE_PRODUCT_SOURCE_META`)
+ * purely so a section saved before this rule existed still renders and can
+ * be *migrated away from* — see the hint shown below when one is open in the
+ * editor — never as something a new/other section can be switched into.
+ */
+const PRODUCT_SOURCE_OPTIONS: { value: HomepageProductSource; label: string }[] = Object.entries(HOMEPAGE_PRODUCT_SOURCE_META)
+  .filter(([value]) => value !== "manual")
+  .map(([value, meta]) => ({ value: value as HomepageProductSource, label: meta.label }));
 
 const CONTENT_LAYOUT_OPTIONS: { value: HomepageContentLayout; label: string }[] = [
   { value: "image-text", label: "Image + Text (รูปซ้าย)" },
@@ -40,6 +51,7 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
   const s = () => props.section;
   const patch = (next: Partial<HomepageSection>) => props.onChange({ ...s(), ...next });
   const collectionsStore = useAdminCollections();
+  const categoriesStore = useAdminCategories();
   const campaignsStore = useAdminCampaigns();
 
   const isLinkedCampaign = () => s().type === "campaign" && s().campaignId !== "";
@@ -51,20 +63,23 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
   const hasEyebrow = () => (s().type === "hero" || s().type === "content" || s().type === "cta") && !isLinkedCampaign();
 
   return (
-    <div class="flex flex-col gap-4 border-t border-surface-gray p-4 sm:p-5">
+    <div class="flex flex-col gap-4 border-t border-border p-4 sm:p-5">
       <TextField label="Section Name" required value={s().name} onInput={(e) => patch({ name: e.currentTarget.value })} class="sm:max-w-md" />
 
       <Show when={s().type === "campaign"}>
         <label class="flex flex-col gap-1.5 sm:max-w-md">
           <span class="text-sm font-medium text-ink">เชื่อมกับ Campaign ที่มีอยู่ (ไม่บังคับ)</span>
-          <select
-            value={s().campaignId}
-            onChange={(e) => patch({ campaignId: e.currentTarget.value })}
-            class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink"
-          >
-            <option value="">-- กำหนดเนื้อหาเอง --</option>
-            <For each={campaignsStore.campaigns()}>{(c) => <option value={c.id}>{c.name}</option>}</For>
-          </select>
+          <div class="relative">
+            <select
+              value={s().campaignId}
+              onChange={(e) => patch({ campaignId: e.currentTarget.value })}
+              class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
+            >
+              <option value="">-- กำหนดเนื้อหาเอง --</option>
+              <For each={campaignsStore.campaigns()}>{(c) => <option value={c.id}>{c.name}</option>}</For>
+            </select>
+            <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+          </div>
         </label>
         <Show when={isLinkedCampaign()}>
           <p class="rounded-card bg-info-soft px-3 py-2 text-sm text-ink">
@@ -86,7 +101,7 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
               value={s().description}
               onInput={(e) => patch({ description: e.currentTarget.value })}
               rows={2}
-              class="rounded-card border border-surface-gray bg-white px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink"
+              class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink"
             />
           </label>
         </div>
@@ -95,20 +110,33 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
       <Show when={s().type === "content"}>
         <label class="flex flex-col gap-1.5 sm:max-w-md">
           <span class="text-sm font-medium text-ink">Layout</span>
-          <select
-            value={s().contentLayout}
-            onChange={(e) => patch({ contentLayout: e.currentTarget.value as HomepageContentLayout })}
-            class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink"
-          >
-            {CONTENT_LAYOUT_OPTIONS.map((opt) => (
-              <option value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+          <div class="relative">
+            <select
+              value={s().contentLayout}
+              onChange={(e) => patch({ contentLayout: e.currentTarget.value as HomepageContentLayout })}
+              class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
+            >
+              {CONTENT_LAYOUT_OPTIONS.map((opt) => (
+                <option value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+          </div>
         </label>
+      </Show>
+
+      <Show when={s().type === "hero"}>
+        <div class="flex flex-col gap-2">
+          <p class="text-sm font-semibold text-ink">Hero Banner Assets (รูปภาพ / วิดีโอ / YouTube)</p>
+          <HeroAssetsEditor assets={s().assets} onChange={(assets) => patch({ assets })} />
+        </div>
       </Show>
 
       <Show when={hasBanners()}>
         <div class="flex flex-col gap-2">
+          <Show when={s().type === "hero"}>
+            <p class="text-sm font-semibold text-ink">Banner เดี่ยว (เดิม — ใช้เมื่อไม่มี Hero Banner Assets ด้านบน)</p>
+          </Show>
           <BannerLibraryPicker onSelect={(banners) => patch({ banners })} />
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <BannerUploader label="Desktop Banner" hint="แนะนำ 1920×840px" value={s().banners.desktop} onChange={(v) => patch({ banners: { ...s().banners, desktop: v } })} />
@@ -119,32 +147,62 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
       </Show>
 
       <Show when={s().type === "product"}>
+        <Show when={s().productSource === "manual"}>
+          <p class="rounded-card bg-warning-soft px-3 py-2 text-sm text-ink">
+            Section นี้ยังใช้การเลือกสินค้าเอง (แบบเดิม) อยู่ — กรุณาสร้างหรือใช้ Product Collection แล้วเปลี่ยน Product Source ด้านล่างเป็น "Product Collection" เพื่อย้ายมาใช้รูปแบบปัจจุบัน
+          </p>
+        </Show>
         <label class="flex flex-col gap-1.5 sm:max-w-md">
           <span class="text-sm font-medium text-ink">Product Source</span>
-          <select
-            value={s().productSource}
-            onChange={(e) => patch({ productSource: e.currentTarget.value as HomepageProductSource })}
-            class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink"
-          >
-            {PRODUCT_SOURCE_OPTIONS.map((opt) => (
-              <option value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+          <div class="relative">
+            <select
+              value={s().productSource}
+              onChange={(e) => patch({ productSource: e.currentTarget.value as HomepageProductSource })}
+              class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
+            >
+              <Show when={s().productSource === "manual"}>
+                <option value="manual">{HOMEPAGE_PRODUCT_SOURCE_META.manual.label}</option>
+              </Show>
+              {PRODUCT_SOURCE_OPTIONS.map((opt) => (
+                <option value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+          </div>
         </label>
         <Show when={s().productSource === "collection"}>
           <label class="flex flex-col gap-1.5 sm:max-w-md">
             <span class="text-sm font-medium text-ink">Product Collection</span>
-            <select
-              value={s().collectionId}
-              onChange={(e) => patch({ collectionId: e.currentTarget.value })}
-              class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink"
-            >
-              <option value="">-- เลือก Collection --</option>
-              <For each={collectionsStore.collections()}>{(c) => <option value={c.id}>{c.name} ({c.products.length} สินค้า)</option>}</For>
-            </select>
+            <div class="relative">
+              <select
+                value={s().collectionId}
+                onChange={(e) => patch({ collectionId: e.currentTarget.value })}
+                class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
+              >
+                <option value="">-- เลือก Collection --</option>
+                <For each={collectionsStore.collections()}>{(c) => <option value={c.id}>{c.name} ({c.products.length} สินค้า)</option>}</For>
+              </select>
+              <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+            </div>
           </label>
         </Show>
-        <Show when={s().productSource !== "manual" && s().productSource !== "collection"}>
+        <Show when={s().productSource === "category"}>
+          <label class="flex flex-col gap-1.5 sm:max-w-md">
+            <span class="text-sm font-medium text-ink">หมวดหมู่สินค้า</span>
+            <div class="relative">
+              <select
+                value={s().categoryId}
+                onChange={(e) => patch({ categoryId: e.currentTarget.value })}
+                class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
+              >
+                <option value="">-- เลือกหมวดหมู่ --</option>
+                <For each={categoriesStore.categories()}>{(c) => <option value={c.id}>{c.name}</option>}</For>
+              </select>
+              <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+            </div>
+          </label>
+        </Show>
+        <Show when={s().productSource !== "manual" && s().productSource !== "collection" && s().productSource !== "category"}>
           <p class="text-sm text-ink-gray">แสดงสินค้าโดยอัตโนมัติจาก {HOMEPAGE_PRODUCT_SOURCE_META[s().productSource].label} — ไม่ต้องเลือกสินค้าเอง</p>
         </Show>
       </Show>

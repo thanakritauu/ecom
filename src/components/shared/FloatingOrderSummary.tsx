@@ -32,13 +32,16 @@ export function FloatingOrderSummary(props: {
   ctaLoading?: boolean;
   ctaDisabled?: boolean;
   error?: string;
+  /** Cart's Header is never `minimal`, so BottomNav (Global Responsive §4) shares the screen with this bar on Tablet/Mobile — set on that one caller to clear it. Checkout's `minimal` Header never mounts BottomNav, so it omits this and keeps sitting flush at `bottom-0` exactly as before. */
+  stackAboveBottomNav?: boolean;
 }) {
   const shippingLabel = () => (props.shippingFee === 0 ? "ฟรี" : formatTHB(props.shippingFee ?? 0));
   const ctaLabel = () => (props.ctaLoading ? (props.ctaLoadingLabel ?? "กำลังดำเนินการ...") : props.ctaLabel);
 
   return (
     <div
-      class="fixed inset-x-0 bottom-0 z-20 border-t border-surface-gray bg-white shadow-[0_-2px_12px_rgba(90,106,133,0.10)]"
+      class="fixed inset-x-0 z-20 border-t border-surface-gray bg-white shadow-[0_-2px_12px_rgba(90,106,133,0.10)]"
+      classList={{ "bottom-16 lg:bottom-0": props.stackAboveBottomNav, "bottom-0": !props.stackAboveBottomNav }}
       style={{ "padding-bottom": "env(safe-area-inset-bottom)" }}
     >
       <Show when={props.error}>

@@ -2,7 +2,7 @@ import type { StatusTone } from "~/components/admin/StatusBadge";
 
 /**
  * Brand Management — Phase 01 additional scope. Structurally identical to
- * `AdminCategory` (Name/Slug/Description/Image/Status/SortOrder) since a
+ * `AdminCategory` (Name/Slug/Description/Image/Status) since a
  * brand is the same kind of taxonomy entry a category is, just grouping
  * products by manufacturer/line instead of by type.
  *
@@ -27,7 +27,6 @@ export type AdminBrand = {
   description: string;
   logo: string;
   status: BrandStatus;
-  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -52,7 +51,6 @@ export function normalizeBrand(b: Partial<AdminBrand> & { id: string }): AdminBr
     description: b.description ?? "",
     logo: b.logo ?? "",
     status: b.status ?? "active",
-    sortOrder: typeof b.sortOrder === "number" ? b.sortOrder : 0,
     createdAt: b.createdAt ?? "",
     updatedAt: b.updatedAt ?? "",
   };
@@ -80,7 +78,6 @@ const BRAND_SEEDS: (Omit<AdminBrand, "createdAt" | "updatedAt"> & { id: string }
     description: "แบรนด์หลักของ Charmiss ครอบคลุมสกินแคร์และเครื่องสำอางทุกไลน์",
     logo: "",
     status: "active",
-    sortOrder: 1,
   },
   {
     id: "brand-002",
@@ -89,7 +86,6 @@ const BRAND_SEEDS: (Omit<AdminBrand, "createdAt" | "updatedAt"> & { id: string }
     description: "คอลเลกชันคอลแลบระหว่าง Charmiss และ Sanrio Character",
     logo: "",
     status: "active",
-    sortOrder: 2,
   },
   {
     id: "brand-003",
@@ -98,7 +94,6 @@ const BRAND_SEEDS: (Omit<AdminBrand, "createdAt" | "updatedAt"> & { id: string }
     description: "ไลน์ผลิตภัณฑ์เพื่อสุขภาพและความเป็นอยู่ที่ดี (เตรียมเปิดตัว)",
     logo: "",
     status: "inactive",
-    sortOrder: 3,
   },
 ];
 

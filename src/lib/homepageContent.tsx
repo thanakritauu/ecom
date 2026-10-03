@@ -1,28 +1,10 @@
-import { createContext, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
-import { isServer } from "solid-js/web";
-import { type HomepageSection, normalizeHomepageSection, buildHomepageSectionBaseline } from "./adminHomepage";
-
-/** Same key `adminHomepageStore.tsx` publishes to — read-only here, and only ever the *published* snapshot (§24: the storefront must never render draft-only edits). */
-const PUBLISHED_KEY = "charmiss:admin:content:homepage:published";
-
-/** Normalized (not the raw baseline literal) for the same reason `adminHomepageStore.tsx`'s `normalizedBaseline()` is — a consistent key order everywhere a `HomepageSection[]` can come from. */
-function fallbackSections(): HomepageSection[] {
-  return buildHomepageSectionBaseline().map(normalizeHomepageSection);
-}
-
-function readPublishedSections(): HomepageSection[] {
-  if (isServer) return fallbackSections();
-  try {
-    const raw = localStorage.getItem(PUBLISHED_KEY);
-    if (!raw) return fallbackSections();
-    return (JSON.parse(raw) as HomepageSection[]).map(normalizeHomepageSection);
-  } catch {
-    return fallbackSections();
-  }
-}
+import { createContext, createMemo, useContext, type Accessor, type JSX } from "solid-js";
+import { isPromotionPageVisible } from "./adminContent";
+import type { HomepageSection } from "./pageSections";
+import { useLandingPages } from "./promotionPages";
 
 type HomepageContentContextValue = {
-  /** `false` only for the one frame before `onMount`'s real read — SSR always renders the same baseline the client's first paint does, so there's no hydration mismatch to guard against here (unlike Promotion Pages' nav, this content must never be empty-by-default). */
+  /** `false` only for the one frame before the underlying Promotion Page provider's own real (client-only) read has happened. */
   ready: Accessor<boolean>;
   sections: Accessor<HomepageSection[]>;
 };
@@ -30,23 +12,29 @@ type HomepageContentContextValue = {
 const HomepageContentContext = createContext<HomepageContentContextValue>();
 
 /**
- * §23 — the storefront's one read path into the same Homepage content Admin
- * publishes; on the server (and the client's first paint) this is the exact
- * same `buildHomepageSectionBaseline()` `adminHomepageStore.tsx` starts
- * from, so a fresh browser's Home page already matches what Admin sees
- * before ever touching localStorage — never a second, independently
- * maintained "frontend homepage data set".
+ * Promotion Page / Homepage Architecture §8/§36/§37 — Homepage is not a
+ * separate store anymore. This provider is now a thin derived view over the
+ * exact same Promotion Page data every other page reads (`useLandingPages()`,
+ * the storefront's read-only mirror of `adminContentStore.tsx`): it finds
+ * the one page where `isHomepage` is `true` and exposes its `sections`. No
+ * `localStorage` key of its own, no separate draft/published snapshot — the
+ * one PromotionPage record IS the draft and the published copy, gated by the
+ * same `status` lifecycle every other Promotion Page uses (§13).
+ *
+ * `HeroBanner.tsx`/`routes/index.tsx` keep calling `useHomepageContent()`
+ * exactly as before — this file's public shape (`{ready, sections}`) is
+ * unchanged, so folding Homepage into the Promotion Page store required no
+ * changes at either of those call sites.
  */
 export function HomepageContentProvider(props: { children: JSX.Element }) {
-  const [sections, setSections] = createSignal<HomepageSection[]>(fallbackSections());
-  const [ready, setReady] = createSignal(false);
-
-  onMount(() => {
-    setSections(readPublishedSections());
-    setReady(true);
+  const landingPages = useLandingPages();
+  const homepage = () => landingPages.pages().find((p) => p.isHomepage);
+  const sections = createMemo<HomepageSection[]>(() => {
+    const page = homepage();
+    return page && isPromotionPageVisible(page) ? page.sections : [];
   });
 
-  return <HomepageContentContext.Provider value={{ ready, sections }}>{props.children}</HomepageContentContext.Provider>;
+  return <HomepageContentContext.Provider value={{ ready: landingPages.ready, sections }}>{props.children}</HomepageContentContext.Provider>;
 }
 
 export function useHomepageContent() {

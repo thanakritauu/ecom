@@ -6,7 +6,7 @@ import { MoreIcon } from "~/components/admin/icons";
 /**
  * Landing Page Architecture & Promotion Page Migration — was
  * `PromotionPageRowActionsMenu.tsx`, routes updated to
- * `/admin/content/landing-pages`. Same Kobalte dropdown shell as
+ * `/admin/promotion-pages`. Same Kobalte dropdown shell as
  * `MarketingRowActionsMenu`, with a Publish/Unpublish toggle instead of
  * Enable/Disable.
  *
@@ -23,10 +23,12 @@ export function LandingPageRowActionsMenu(props: {
   onDuplicate?: () => void;
   onDelete: () => void;
   hideView?: boolean;
+  /** §44 — the Homepage row hides the Delete action entirely (in addition to the store-level guard) rather than offering an action that always fails. */
+  hideDelete?: boolean;
   triggerClass?: string;
 }) {
   const navigate = useNavigate();
-  const basePath = "/admin/content/landing-pages";
+  const basePath = "/admin/promotion-pages";
 
   return (
     <DropdownMenu placement="bottom-end" gutter={4}>
@@ -38,7 +40,7 @@ export function LandingPageRowActionsMenu(props: {
         <MoreIcon class="size-5" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content class="z-50 w-48 rounded-card border border-surface-gray bg-white p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+        <DropdownMenu.Content class="z-50 w-48 rounded-card border border-border bg-surface-card p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
           <Show when={!props.hideView}>
             <DropdownMenu.Item
               onSelect={() => navigate(`${basePath}/${props.id}`)}
@@ -67,13 +69,15 @@ export function LandingPageRowActionsMenu(props: {
               ทำสำเนา
             </DropdownMenu.Item>
           </Show>
-          <DropdownMenu.Separator class="my-1 h-px bg-surface-gray" />
-          <DropdownMenu.Item
-            onSelect={props.onDelete}
-            class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm font-medium text-system-red outline-none transition-colors duration-150 hover:bg-danger-soft data-[highlighted]:bg-danger-soft"
-          >
-            ลบ
-          </DropdownMenu.Item>
+          <Show when={!props.hideDelete}>
+            <DropdownMenu.Separator class="my-1 h-px bg-border" />
+            <DropdownMenu.Item
+              onSelect={props.onDelete}
+              class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm font-medium text-system-red outline-none transition-colors duration-150 hover:bg-danger-soft data-[highlighted]:bg-danger-soft"
+            >
+              ลบ
+            </DropdownMenu.Item>
+          </Show>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu>

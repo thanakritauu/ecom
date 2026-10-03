@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import { ChevronRightIcon } from "./icons";
+import { ChevronRightIcon, ChevronDownIcon } from "./icons";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
@@ -29,13 +29,16 @@ export function Pagination(props: {
     <div class="flex flex-col items-center justify-between gap-3 sm:flex-row">
       <label class="flex items-center gap-2 text-sm text-ink-gray">
         แสดงต่อหน้า
-        <select
-          value={props.pageSize}
-          onChange={(e) => props.onPageSizeChange(Number(e.currentTarget.value))}
-          class="h-9 rounded-card border border-surface-gray bg-white px-2 text-sm text-ink outline-none focus:border-brand-pink"
-        >
-          <For each={PAGE_SIZE_OPTIONS}>{(size) => <option value={size}>{size}</option>}</For>
-        </select>
+        <div class="relative">
+          <select
+            value={props.pageSize}
+            onChange={(e) => props.onPageSizeChange(Number(e.currentTarget.value))}
+            class="h-9 w-full appearance-none rounded-card border border-border bg-surface-card py-1 pl-3 pr-8 text-sm text-ink outline-none focus:border-brand-pink"
+          >
+            <For each={PAGE_SIZE_OPTIONS}>{(size) => <option value={size}>{size}</option>}</For>
+          </select>
+          <ChevronDownIcon class="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-gray" />
+        </div>
       </label>
 
       <div class="flex items-center gap-1">

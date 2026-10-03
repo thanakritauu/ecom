@@ -28,7 +28,7 @@ export default function AdminBundleEditPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "บันเดิล / เซ็ต", href: "/admin/marketing/bundles" }]} />
-          <EmptyState icon={<ReviewsIcon />} title="ไม่พบเซ็ตสินค้านี้" actionLabel="กลับไปหน้าบันเดิล" onAction={() => navigate("/admin/marketing/bundles")} class="bg-white shadow-card" />
+          <EmptyState icon={<ReviewsIcon />} title="ไม่พบเซ็ตสินค้านี้" actionLabel="กลับไปหน้าบันเดิล" onAction={() => navigate("/admin/marketing/bundles")} class="bg-surface-card shadow-card" />
         </div>
       }
     >

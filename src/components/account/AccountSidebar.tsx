@@ -1,20 +1,20 @@
+import { Show } from "solid-js";
 import { A, useNavigate } from "@solidjs/router";
-import { HeartIcon, UserIcon } from "../shared/icons";
+import { HeartIcon, UserIcon, DocumentIcon } from "../shared/icons";
 import { useAuth } from "~/lib/auth";
 import { useWishlist } from "~/lib/wishlist";
 import { pushToast } from "~/lib/toast";
 import { MOCK_ADDRESSES } from "~/lib/checkoutData";
-import { MOCK_ORDERS } from "~/lib/accountData";
 
 /**
  * Shared Account Navigation — every entry routes to a real path (no
  * `href="#"`), matching PART 14's ACTIVE/OUT_OF_SCOPE/ACTION status per item.
- * Only "ประวัติคำสั่งซื้อ" is ACTIVE (this page's own content, see
+ * Only "ประวัติการซื้อ" is ACTIVE (this page's own content, see
  * routes/account.tsx) since Figma node 159:20695 only shows this one section
  * built out — the rest point at real routes that fall through to the
  * existing catch-all's OutOfScopePage until their own Figma is provided.
  */
-export function AccountSidebar() {
+export function AccountSidebar(props: { orderCount?: number }) {
   const auth = useAuth();
   const wishlist = useWishlist();
   const navigate = useNavigate();
@@ -32,8 +32,10 @@ export function AccountSidebar() {
     <nav aria-label="เมนูบัญชีของฉัน" class="flex w-full shrink-0 flex-col gap-1 rounded-card bg-white p-4 shadow-card lg:w-[264px]">
       <A href="/account" end class={itemClass} activeClass="bg-surface-pink text-brand-pink" inactiveClass="text-ink hover:bg-surface-gray">
         <DocumentIcon class="size-4 shrink-0" />
-        <span class="flex-1 text-left">ประวัติคำสั่งซื้อ</span>
-        <CountBadge count={MOCK_ORDERS.length} active />
+        <span class="flex-1 text-left">ประวัติการซื้อ</span>
+        <Show when={props.orderCount !== undefined}>
+          <CountBadge count={props.orderCount!} active />
+        </Show>
       </A>
 
       <A href="/account/address" class={itemClass} activeClass="bg-surface-pink text-brand-pink" inactiveClass="text-ink hover:bg-surface-gray">
@@ -79,16 +81,6 @@ function CountBadge(props: { count: number; active?: boolean }) {
     >
       {props.count}
     </span>
-  );
-}
-
-function DocumentIcon(props: { class?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" class={props.class} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <path d="M6 2.5h9l4.5 4.5v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-17a1 1 0 0 1 1-1Z" stroke-linejoin="round" />
-      <path d="M14.5 2.5V7a1 1 0 0 0 1 1h4.5" stroke-linejoin="round" />
-      <path d="M8 13h8M8 17h5" stroke-linecap="round" />
-    </svg>
   );
 }
 

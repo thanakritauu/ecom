@@ -49,10 +49,14 @@ export default function CartPage() {
           items), matching Checkout's `showFloatingBar()` gating. */}
       <main
         class="flex flex-col overflow-x-hidden"
-        classList={{ "pb-36 md:pb-24": resolvedLines().length > 0 }}
+        // +64px (BottomNav's own height) folded into the Tablet/Mobile steps
+        // only — `stackAboveBottomNav` shifts the floating bar up by exactly
+        // that much below `lg:`; `lg:pb-24` restores the original Desktop
+        // reservation, where the bar still sits flush at `bottom-0`.
+        classList={{ "pb-52 md:pb-40 lg:pb-24": resolvedLines().length > 0 }}
       >
-        <div class="bg-surface-gray/60 py-8">
-          <Container width="wide" class="flex flex-col gap-6">
+        <div class="bg-surface-gray/60 py-6 sm:py-8">
+          <Container width="wide" class="flex flex-col gap-4 sm:gap-5 lg:gap-6">
             <h1 class="text-2xl font-bold text-ink lg:text-[31px]">ตะกร้าสินค้า</h1>
 
             <Show when={resolvedLines().length > 0} fallback={<EmptyCartPage />}>
@@ -109,8 +113,8 @@ export default function CartPage() {
         </div>
 
         <Show when={recommended().length > 0}>
-          <section aria-labelledby="cart-recommended-heading" class="bg-gradient-to-b from-surface-pink to-white py-10">
-            <Container width="wide" class="flex flex-col gap-6">
+          <section aria-labelledby="cart-recommended-heading" class="bg-gradient-to-b from-surface-pink to-white py-6 sm:py-8 lg:py-10">
+            <Container width="wide" class="flex flex-col gap-4 sm:gap-5 lg:gap-6">
               <h2 id="cart-recommended-heading" class="text-xl font-bold text-ink lg:text-2xl">
                 ช็อปเพิ่มอีกนิด...ให้ครบดีล
               </h2>
@@ -133,6 +137,7 @@ export default function CartPage() {
           ctaLabel="ชำระเงิน"
           ctaHref="/checkout"
           ctaDisabled={hasUnavailableItem()}
+          stackAboveBottomNav
         />
       </Show>
 

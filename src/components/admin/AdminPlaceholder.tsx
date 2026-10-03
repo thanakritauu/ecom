@@ -20,7 +20,7 @@ export function AdminPlaceholder(props: {
     <div class="flex flex-col gap-6">
       <Breadcrumb items={props.breadcrumb} />
       <PageHeader title={props.title} description={props.description} />
-      <div class="flex flex-col items-center gap-3 rounded-card border border-dashed border-surface-gray bg-white px-6 py-16 text-center">
+      <div class="flex flex-col items-center gap-3 rounded-card border border-dashed border-border bg-surface-card px-6 py-16 text-center">
         <p class="text-base font-semibold text-ink">Coming in {props.comingPhase}</p>
         <p class="max-w-md text-sm text-ink-gray">
           หน้านี้จะพัฒนาเนื้อหาจริงในเฟสถัดไป ตอนนี้เป็นเพียง Placeholder เพื่อทดสอบ Navigation และ Layout ของระบบหลังบ้าน

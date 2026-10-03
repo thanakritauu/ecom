@@ -20,6 +20,9 @@ import { ImageIcon } from "~/components/admin/icons";
  * own shows a plain placeholder icon here, never the Product Gallery's
  * image — Gallery and Variant Images are a strictly separate collection,
  * with no fallback relationship between them in either direction.
+ *
+ * A variant with no photos yet shows its card swatch color instead of the
+ * generic placeholder icon (the icon is left for the rare no-color case).
  */
 export function ProductVariantImages(props: {
   variants: AdminVariant[];
@@ -45,10 +48,17 @@ export function ProductVariantImages(props: {
                 class="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-media border-2 bg-surface-gray/60 transition-colors duration-150"
                 classList={{
                   "border-brand-pink": props.selectedId === variant.id,
-                  "border-surface-gray": props.selectedId !== variant.id,
+                  "border-border": props.selectedId !== variant.id,
                 }}
               >
-                <Show when={variant.images?.[0]} fallback={<ImageIcon class="size-5 text-ink-placeholder" />}>
+                <Show
+                  when={variant.images?.[0]}
+                  fallback={
+                    <Show when={variant.color} fallback={<ImageIcon class="size-5 text-ink-placeholder" />}>
+                      {(color) => <span class="size-full" style={{ "background-color": color() }} aria-hidden="true" />}
+                    </Show>
+                  }
+                >
                   {(src) => <img src={src()} alt="" class="size-full object-cover" />}
                 </Show>
               </span>

@@ -24,7 +24,7 @@ export default function AdminBannerNewPage() {
       <Breadcrumb
         items={[
           { label: "แดชบอร์ด", href: "/admin" },
-          { label: "เนื้อหา", href: "/admin/content" },
+          { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
           { label: "Banners", href: "/admin/content/banners" },
           { label: "สร้างใหม่" },
         ]}

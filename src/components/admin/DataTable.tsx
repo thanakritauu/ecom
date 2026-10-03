@@ -34,10 +34,10 @@ export function DataTable<T>(props: {
 }) {
   return (
     <>
-      <div class="hidden overflow-x-auto rounded-card border border-surface-gray bg-white lg:block">
+      <div class="hidden overflow-x-auto rounded-card border border-border bg-surface-card lg:block">
         <table class="w-full text-left text-sm">
           <thead>
-            <tr class="border-b border-surface-gray">
+            <tr class="border-b border-border">
               <For each={props.columns}>
                 {(col) => (
                   <th
@@ -53,7 +53,7 @@ export function DataTable<T>(props: {
             <For each={props.rows}>
               {(row) => (
                 <tr
-                  class={`border-b border-surface-gray last:border-0 ${props.onRowClick ? "cursor-pointer transition-colors duration-150 hover:bg-surface-pink/40" : ""}`}
+                  class={`border-b border-border last:border-0 ${props.onRowClick ? "cursor-pointer transition-colors duration-150 hover:bg-surface-pink/40" : ""}`}
                   onClick={() => props.onRowClick?.(row)}
                 >
                   <For each={props.columns}>

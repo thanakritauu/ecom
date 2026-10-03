@@ -9,7 +9,7 @@ export function FeaturedCollection() {
         <h2 id="featured-collection-heading" class="text-[22px] font-bold text-ink sm:text-2xl lg:text-[28px]">
           คอลเลคชั่น Glow in motion
         </h2>
-        <ProductRail products={featuredCollectionProducts} columns={5} />
+        <ProductRail products={featuredCollectionProducts} columns={5} swipe />
       </Container>
     </section>
   );

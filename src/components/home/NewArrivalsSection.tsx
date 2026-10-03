@@ -9,10 +9,10 @@ export function NewArrivalsSection() {
   const newArrivalProducts = () => catalog.products().filter(isNewArrival);
 
   return (
-    <section aria-labelledby="new-arrivals-heading" class="py-10 lg:py-16">
-      <Container width="wide" class="flex flex-col gap-6">
+    <section aria-labelledby="new-arrivals-heading" class="pb-0 pt-6 sm:pt-8 lg:pt-10">
+      <Container width="wide" class="flex flex-col gap-2">
         <SectionHeader title="มาใหม่" href="/new" headingId="new-arrivals-heading" />
-        <ProductRail products={newArrivalProducts()} columns={5} />
+        <ProductRail products={newArrivalProducts()} rows={1} swipe />
       </Container>
     </section>
   );

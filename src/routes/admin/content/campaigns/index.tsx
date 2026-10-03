@@ -245,14 +245,16 @@ export default function AdminCampaignsListPage() {
 
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
-      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "เนื้อหา", href: "/admin/content" }, { label: "Campaigns" }]} />
+      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "Campaigns" }]} />
       <PageHeader
         title="Campaigns"
         description="จัดการแคมเปญสำหรับ Homepage และหน้า Landing Page"
         actions={
-          <Button href="/admin/content/campaigns/new" variant="primary">
-            <PlusIcon class="size-4" /> สร้าง Campaign
-          </Button>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button href="/admin/content/campaigns/new" variant="primary">
+              <PlusIcon class="size-4" /> สร้าง Campaign
+            </Button>
+          </div>
         }
       />
 
@@ -274,7 +276,7 @@ export default function AdminCampaignsListPage() {
         <Show
           when={listStatus() === "success"}
           fallback={
-            <EmptyState tone="error" icon={<RefreshIcon />} title="ไม่สามารถโหลดรายการ Campaigns ได้" description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง" actionLabel="ลองอีกครั้ง" onAction={loadList} class="bg-white shadow-card" />
+            <EmptyState tone="error" icon={<RefreshIcon />} title="ไม่สามารถโหลดรายการ Campaigns ได้" description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง" actionLabel="ลองอีกครั้ง" onAction={loadList} class="bg-surface-card shadow-card" />
           }
         >
           <Show
@@ -286,7 +288,7 @@ export default function AdminCampaignsListPage() {
                 description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "สร้าง Campaign แรกของคุณเพื่อเริ่มต้น"}
                 actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "สร้าง Campaign"}
                 onAction={hasActiveFilters() ? clearFilters : () => navigate("/admin/content/campaigns/new")}
-                class="bg-white shadow-card"
+                class="bg-surface-card shadow-card"
               />
             }
           >
@@ -301,7 +303,7 @@ export default function AdminCampaignsListPage() {
               getRowKey={(row) => row.id}
               onRowClick={(row) => setQuickViewId(row.id)}
               renderMobileCard={(row) => (
-                <div class="flex gap-3 rounded-card bg-white p-4 shadow-card">
+                <div class="flex gap-3 rounded-card bg-surface-card p-4 shadow-card">
                   <input
                     type="checkbox"
                     aria-label={`เลือก ${row.name}`}
@@ -310,7 +312,7 @@ export default function AdminCampaignsListPage() {
                     onChange={() => toggleSelect(row.id)}
                     class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
                   />
-                  <button type="button" onClick={() => setQuickViewId(row.id)} class="flex flex-1 flex-col gap-2 text-left">
+                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-2 text-left">
                     <div class="flex items-start gap-3">
                       <div class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
                         <Show when={row.banners.desktop} fallback={<ImageIcon class="size-4" />}>
@@ -326,7 +328,7 @@ export default function AdminCampaignsListPage() {
                       </div>
                     </div>
                     <p class="text-xs text-ink-gray">{row.products.length} สินค้า · แก้ไขล่าสุด {row.updatedAt}</p>
-                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-surface-gray text-sm font-medium text-ink">ดูรายละเอียด</span>
+                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>
                   </button>
                 </div>
               )}
@@ -400,7 +402,7 @@ function ListSkeleton() {
   return (
     <div class="flex flex-col gap-3">
       {Array.from({ length: 5 }).map(() => (
-        <div class="flex items-center gap-3 rounded-card bg-white p-3 shadow-card">
+        <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
           <Skeleton class="size-11 shrink-0 rounded-media" />
           <div class="flex flex-1 flex-col gap-1.5">
             <Skeleton class="h-4 w-1/3" />

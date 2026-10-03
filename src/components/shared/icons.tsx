@@ -127,3 +127,29 @@ export function SparkleIcon(props: { class?: string }) {
     </svg>
   );
 }
+
+/** Global Responsive + Navigation Foundation (Bottom Nav's "หน้าแรก"). */
+export function HomeIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M3.5 10.5 12 3.5l8.5 7" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M5.5 9v10a1 1 0 0 0 1 1H10v-5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V20h3.5a1 1 0 0 0 1-1V9" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+/**
+ * Receipt/document glyph — was local to `AccountSidebar.tsx` ("ประวัติการซื้อ");
+ * moved here so Global Top Navigation's own order-history link (Header.tsx)
+ * reuses the exact same mark instead of a second icon for the same
+ * destination/meaning.
+ */
+export function DocumentIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M6 2.5h9l4.5 4.5v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-17a1 1 0 0 1 1-1Z" stroke-linejoin="round" />
+      <path d="M14.5 2.5V7a1 1 0 0 0 1 1h4.5" stroke-linejoin="round" />
+      <path d="M8 13h8M8 17h5" stroke-linecap="round" />
+    </svg>
+  );
+}

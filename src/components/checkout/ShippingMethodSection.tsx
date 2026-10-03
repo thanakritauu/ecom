@@ -16,7 +16,7 @@ export function ShippingMethodSection(props: { selected: ShippingMethodId; onSel
               role="radio"
               aria-checked={props.selected === method.id}
               onClick={() => props.onSelect(method.id)}
-              class="flex flex-1 items-center gap-2 rounded-card border p-4 text-left transition-colors duration-150"
+              class="font-normal flex flex-1 items-center gap-2 rounded-card border p-4 text-left transition-colors duration-150"
               classList={{
                 "border-brand-pink bg-surface-pink": props.selected === method.id,
                 "border-surface-gray bg-white hover:border-brand-pink/50": props.selected !== method.id,

@@ -1,6 +1,6 @@
 import { createContext, createSignal, onMount, useContext, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
-import { allProducts } from "./products";
+import { allProducts, getDiscountPercent } from "./products";
 import type { Product } from "./types";
 import { buildMockCategories } from "./adminCategories";
 import { buildMockBrands } from "./adminBrands";
@@ -23,15 +23,24 @@ export type AdminVariant = {
   price?: number;
   stock: number;
   /**
-   * Variant → Image → Stock (Global UI Correction — Final Overrides #2/#3,
-   * and the Variant Image Upload — Final Override that hardened this further):
-   * variants are identified by their own photos, completely independent
-   * from the product's own Gallery (`AdminProduct.images`/`.image`) — never
-   * a reference into it, never copied from it, never falls back to it. Each
-   * variant's `images` is its own collection that Add/Remove/Replace only
-   * ever touches for that one variant.
+   * The variant's real product photos — what the Product Option Modal's
+   * square option tile (and the cart line) shows. Always independent of the
+   * Product Card swatch below (`mode`/`color`/`swatchImage`) and of the
+   * product's own Gallery: each variant's `images` is its own collection
+   * that Add/Remove/Replace only ever touches for that one variant.
    */
   images: string[];
+  /** Product Card shade-circle color — used when `mode` is `"color"`. Always kept (defaults to a neutral gray). */
+  color?: string;
+  /** Product Card shade-circle image — uploaded separately from `images`, used when `mode` is `"image"`. */
+  swatchImage?: string;
+  /**
+   * What the Product Card's shade circle shows: the flat `color` or the
+   * uploaded `swatchImage`. Only affects that circle — the modal always
+   * shows `images`. Variants persisted before this existed normalize to
+   * `"color"`.
+   */
+  mode: "color" | "image";
 };
 
 /**
@@ -136,6 +145,9 @@ function seedAdminVariants(product: Product, sku: string, productIndex: number):
       price: product.price,
       stock: v.soldOut ? 0 : (product.stockLeft ?? 20),
       images,
+      color: v.color || "#CCCCCC",
+      // The card circle stays the seeded shade color; the photos above are the modal's option photos.
+      mode: "color",
     };
   });
 }
@@ -202,6 +214,7 @@ export function buildAdminProductBaseline(): AdminProduct[] {
  * rely on `AdminVariant.images` always being a real (possibly empty) array.
  */
 function normalizeVariant(v: Partial<AdminVariant> & { id: string }): AdminVariant {
+  const mode: AdminVariant["mode"] = v.mode === "image" ? "image" : "color";
   return {
     id: v.id,
     label: v.label ?? "",
@@ -209,6 +222,9 @@ function normalizeVariant(v: Partial<AdminVariant> & { id: string }): AdminVaria
     price: v.price,
     stock: typeof v.stock === "number" && Number.isFinite(v.stock) ? v.stock : 0,
     images: Array.isArray(v.images) ? v.images : [],
+    color: v.color || "#CCCCCC",
+    swatchImage: typeof v.swatchImage === "string" && v.swatchImage ? v.swatchImage : undefined,
+    mode,
   };
 }
 
@@ -238,7 +254,11 @@ export type ProductFormValues = {
   lowStockThreshold: number;
   status: AdminProductStatus;
   images: string[];
+  /** CMS + Frontend Final Refinement §8 — explicit "รูปหลัก" pin; falls back to `images[0]` when unset. */
+  mainImage?: string;
   adminVariants: AdminVariant[];
+  /** REAL-TIME LIVE PREVIEW SYSTEM §4/§8 — epoch ms; unset/undefined = no Flash Sale. */
+  flashSaleEndsAt?: number;
 };
 
 type AdminProductContextValue = {
@@ -253,18 +273,91 @@ type AdminProductContextValue = {
 
 const AdminProductContext = createContext<AdminProductContextValue>();
 const STORAGE_KEY = "charmiss:admin:products";
+/**
+ * Seed-data version of what's persisted under `STORAGE_KEY`. Bumped when the
+ * seed catalog gains values a returning browser's stored copy can't have —
+ * v2: Product Card Refinement's `compareAtPrice`/`rating`/`soldCount` on the
+ * seed products. v3: the Lip Tint showcase SKU (`best-1`) is no longer a
+ * Flash Sale product. v4: every option has 3–4 mock reviews. v5: the
+ * Product Card swatch (`mode`/`color`/`swatchImage`) is split from the
+ * modal's option photos (`images`). Written
+ * alongside every persist, so once Admin has saved, anything it changed on
+ * purpose stays as Admin left it.
+ */
+const SEED_VERSION_KEY = "charmiss:admin:products:seed-version";
+const SEED_VERSION = 5;
 let nextId = 1000;
 
 function persist(products: AdminProduct[]) {
   if (isServer) return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+    localStorage.setItem(SEED_VERSION_KEY, String(SEED_VERSION));
   } catch {
     // storage can be unavailable (private mode / quota) — state just stays in-memory for this tab.
   }
 }
 
-function readPersisted(): AdminProduct[] | null {
+const SEED_BACKFILL_FIELDS = ["compareAtPrice", "rating", "soldCount"] as const;
+/** v3 — seed values that were taken out of the baseline; removed from a pre-v3 stored copy. */
+const SEED_REMOVED_FIELDS: Record<string, readonly (keyof AdminProduct)[]> = { "best-1": ["flashSaleEndsAt"] };
+
+/**
+ * Brings a stored copy saved under an older seed version up to date — only
+ * on seed products (matched by id). v2: fills missing seed values (never
+ * overwriting one Admin set) and re-derives `discountPercent` from the
+ * prices. v3: drops seed values that were removed from the baseline. v4:
+ * replaces the review data with the seed's (Admin never edits reviews, so
+ * there's nothing of Admin's to preserve there).
+ */
+function migrateSeedFields(list: AdminProduct[], fromVersion: number): AdminProduct[] {
+  const seedById = new Map(allProducts.map((p) => [p.id, p]));
+  return list.map((p) => {
+    const seed = seedById.get(p.id);
+    if (!seed) return p;
+    const next = { ...p };
+    if (fromVersion < 2) {
+      for (const key of SEED_BACKFILL_FIELDS) {
+        if (next[key] === undefined && seed[key] !== undefined) next[key] = seed[key];
+      }
+      next.discountPercent = getDiscountPercent(next);
+    }
+    if (fromVersion < 3) {
+      for (const key of SEED_REMOVED_FIELDS[p.id] ?? []) delete next[key];
+    }
+    if (fromVersion < 4) {
+      next.reviews = seed.reviews;
+      next.reviewCount = seed.reviewCount;
+      next.ratingBreakdown = seed.ratingBreakdown;
+    }
+    return next;
+  }).map((p) => (fromVersion < 5 ? splitSwatchFromPhotos(p, seedById.get(p.id)) : p));
+}
+
+/**
+ * v5 — before the split, `mode: "image"` meant "this variant's `images` are
+ * both its card circle and its photos". Seed products go back to their
+ * seeded shade color for the circle (what the card always showed); an
+ * Admin-created variant in Image mode keeps its look by using its first
+ * photo as the new, separate `swatchImage`.
+ */
+function splitSwatchFromPhotos(p: AdminProduct, seed: Product | undefined): AdminProduct {
+  return {
+    ...p,
+    adminVariants: p.adminVariants.map((v) => {
+      if (v.mode !== "image" || v.swatchImage) return v;
+      const seedColor = seed?.variants?.find((sv) => sv.id === v.id)?.color;
+      return seed ? { ...v, mode: "color", color: seedColor || v.color } : { ...v, swatchImage: v.images[0] };
+    }),
+  };
+}
+
+/**
+ * The one read path for persisted products — shared by this store and
+ * `productCatalog.tsx` (which reads the same key) so both see identical data.
+ * `null` when nothing is stored (callers fall back to the baseline).
+ */
+export function readPersistedAdminProducts(): AdminProduct[] | null {
   if (isServer) return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -273,7 +366,9 @@ function readPersisted(): AdminProduct[] | null {
     // predate fields the current `AdminVariant` contract relies on (see
     // `normalizeAdminProduct`'s own comment) — normalize before it ever
     // reaches a component.
-    return (JSON.parse(raw) as AdminProduct[]).map(normalizeAdminProduct);
+    const stored = (JSON.parse(raw) as AdminProduct[]).map(normalizeAdminProduct);
+    const version = Number(localStorage.getItem(SEED_VERSION_KEY) ?? 1);
+    return version < SEED_VERSION ? migrateSeedFields(stored, version) : stored;
   } catch {
     return null;
   }
@@ -293,7 +388,7 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
   const [products, setProducts] = createSignal<AdminProduct[]>(buildAdminProductBaseline());
 
   onMount(() => {
-    const persisted = readPersisted();
+    const persisted = readPersistedAdminProducts();
     if (persisted) setProducts(persisted);
   });
 
@@ -321,6 +416,7 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
       name: input.name,
       image: input.images[0] ?? "",
       images: input.images,
+      mainImage: input.mainImage,
       price: input.price,
       compareAtPrice: input.compareAtPrice,
       stockLeft: input.stockLeft,
@@ -335,6 +431,7 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
       lowStockThreshold: input.lowStockThreshold,
       updatedAt: TODAY_LABEL,
       adminVariants: input.adminVariants,
+      flashSaleEndsAt: input.flashSaleEndsAt,
     };
     mutate((list) => [created, ...list]);
     return created;
@@ -364,7 +461,9 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
           status: input.status,
           images: input.images,
           image: input.images[0] ?? p.image,
+          mainImage: input.mainImage,
           adminVariants: input.adminVariants,
+          flashSaleEndsAt: input.flashSaleEndsAt,
           updatedAt: TODAY_LABEL,
         };
         return updated;

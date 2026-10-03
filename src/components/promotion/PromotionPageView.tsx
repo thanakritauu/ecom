@@ -8,6 +8,7 @@ import { AdminHeroSlide } from "~/components/home/HeroBanner";
 import { HomepageSections } from "~/components/home/HomepageSections";
 import { useProductCatalog } from "~/lib/productCatalog";
 import type { PromotionPage } from "~/lib/adminContent";
+import { ResponsiveBanner } from "~/components/shared/ResponsiveBanner";
 
 /**
  * §14/§18/§20 — the real customer-facing Landing Page. Two rendering paths,
@@ -42,19 +43,11 @@ export function PromotionPageView(props: { page: PromotionPage }) {
           <>
             <Show when={p().banners.desktop || p().banners.tablet || p().banners.mobile}>
               <div class="w-full overflow-hidden bg-surface-gray/40">
-                <picture>
-                  <Show when={p().banners.mobile}>{(src) => <source media="(max-width: 767px)" srcset={src()} />}</Show>
-                  <Show when={p().banners.tablet}>{(src) => <source media="(max-width: 1023px)" srcset={src()} />}</Show>
-                  <img
-                    src={p().banners.desktop || p().banners.tablet || p().banners.mobile}
-                    alt={p().title || p().name}
-                    class="aspect-[16/9] w-full object-cover sm:aspect-[16/6]"
-                  />
-                </picture>
+                <ResponsiveBanner banners={p().banners} alt={p().title || p().name} loading="eager" />
               </div>
             </Show>
 
-            <Container width="wide" class="flex flex-col gap-8 py-10">
+            <Container width="wide" class="flex flex-col gap-6 py-6 sm:gap-8 sm:py-8 lg:py-10">
               <div class="flex flex-col gap-2 text-center">
                 <h1 class="text-2xl font-bold text-ink sm:text-3xl">{p().title || p().name}</h1>
                 <Show when={p().description}>

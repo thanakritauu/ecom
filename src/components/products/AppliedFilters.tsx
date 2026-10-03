@@ -1,10 +1,16 @@
 import { For, Show } from "solid-js";
-import { CATEGORY_FACETS, getPriceBounds, type ProductFilters } from "~/lib/productListing";
+import { getPriceBounds, type CategoryFacet, type ProductFilters } from "~/lib/productListing";
 import type { Product } from "~/lib/types";
 
-export function AppliedFilters(props: { products: Product[]; filters: ProductFilters; onChange: (next: ProductFilters) => void; onClearAll: () => void }) {
+export function AppliedFilters(props: {
+  products: Product[];
+  filters: ProductFilters;
+  facets: CategoryFacet[];
+  onChange: (next: ProductFilters) => void;
+  onClearAll: () => void;
+}) {
   const categoryChips = () =>
-    props.filters.categories.map((key) => ({ key, label: CATEGORY_FACETS.find((f) => f.key === key)?.label ?? key }));
+    props.filters.categories.map((key) => ({ key, label: props.facets.find((f) => f.key === key)?.label ?? key }));
 
   const hasPriceChip = () => props.filters.minPrice != null || props.filters.maxPrice != null;
   const priceLabel = () => {

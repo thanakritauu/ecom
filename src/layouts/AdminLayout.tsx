@@ -1,6 +1,7 @@
 import { clientOnly } from "@solidjs/start";
 import type { JSX } from "solid-js";
 import { createDialogOpenState } from "~/lib/focusRestore";
+import { useAdminDocumentTitle } from "~/lib/adminDocumentTitle";
 import { AdminSidebar } from "~/components/admin/AdminSidebar";
 import { AdminTopbar } from "~/components/admin/AdminTopbar";
 
@@ -19,15 +20,34 @@ const AdminMobileDrawer = clientOnly(() =>
  */
 export function AdminLayout(props: { children: JSX.Element }) {
   const [drawerOpen, setDrawerOpen] = createDialogOpenState();
+  useAdminDocumentTitle();
 
   return (
-    <div class="flex min-h-screen w-full bg-surface-gray/60">
-      <AdminSidebar />
-      <div class="flex min-w-0 flex-1 flex-col">
-        <AdminTopbar onMenuClick={() => setDrawerOpen(true)} />
-        <main class="flex-1 overflow-x-hidden p-4 lg:p-6">{props.children}</main>
+    // §17 — `admin-shell` scopes the Breadcrumb-alignment fix (app.css) to
+    // Admin only. `shared/Breadcrumb.tsx` itself stays byte-for-byte
+    // unchanged (its `scroll-rail` padding is load-bearing for the Customer
+    // Frontend's own Breadcrumb usage, e.g. the PDP) — fixing this at the
+    // shared-component level would have silently shifted that customer
+    // breadcrumb out of alignment with its own page content.
+    // Order + Receipt Phase §22 — Print Receipt must show only the receipt
+    // document, never the Sidebar/Topbar/Drawer chrome every other /admin/*
+    // page needs. `print:hidden` (on `contents` wrappers, so normal on-screen
+    // flex layout is completely untouched) is scoped here, once, at the
+    // layout every admin page already shares — never a per-page print
+    // stylesheet that could drift from this.
+    <div class="admin-shell flex min-h-screen w-full bg-surface-gray/60 print:block print:min-h-0 print:bg-white">
+      <div class="contents print:hidden">
+        <AdminSidebar />
       </div>
-      <AdminMobileDrawer open={drawerOpen()} onOpenChange={setDrawerOpen} />
+      <div class="flex min-w-0 flex-1 flex-col print:block">
+        <div class="contents print:hidden">
+          <AdminTopbar onMenuClick={() => setDrawerOpen(true)} />
+        </div>
+        <main class="flex-1 overflow-x-hidden p-4 lg:p-6 print:p-0">{props.children}</main>
+      </div>
+      <div class="contents print:hidden">
+        <AdminMobileDrawer open={drawerOpen()} onOpenChange={setDrawerOpen} />
+      </div>
     </div>
   );
 }

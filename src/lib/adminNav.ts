@@ -9,15 +9,36 @@ import {
   LoyaltyIcon,
   ReviewsIcon,
   ContentIcon,
+  NavigationIcon,
   SettingsIcon,
+  ProductBoxIcon,
+  CategoryGridIcon,
+  BrandBadgeIcon,
+  PromotionTagIcon,
+  CouponTicketIcon,
+  FlashBoltIcon,
+  BundleBoxIcon,
+  MemberBadgeIcon,
+  PointsCoinIcon,
+  MissionFlagIcon,
+  RewardGiftIcon,
+  PagesPanelIcon,
+  ImageIcon,
+  CampaignFlagIcon,
+  FolderIcon,
+  ShieldUserIcon,
+  KeyIcon,
+  BellIcon,
 } from "~/components/admin/icons";
 
 export type AdminNavItem = {
   label: string;
   /** Absent = not built yet in this phase; rendered as a disabled preview row instead of a link. */
   href?: string;
-  /** Only Dashboard needs exact matching — every other href is unique enough that a prefix match never falsely activates it. */
+  /** Exact matching — needed by any item whose own href is a prefix of a sibling item's href in the same group (Dashboard's `/admin`, Settings Overview's `/admin/settings`, Loyalty's `/admin/loyalty`), otherwise both light up "active" at once. Every other href is unique enough that a prefix match never falsely activates it. */
   end?: boolean;
+  /** CMS Backoffice Polish §18 — every item's own icon; falls back to the group's icon only when omitted (the group's "overview"/single item). No two items in the whole sidebar share an icon. */
+  icon?: Component<{ class?: string }>;
 };
 
 export type AdminNavGroup = {
@@ -44,12 +65,12 @@ export const adminNavGroups: AdminNavGroup[] = [
   },
   {
     id: "catalog",
-    label: "แคตตาล็อก",
+    label: "สินค้า",
     icon: CatalogIcon,
     items: [
-      { label: "สินค้า", href: "/admin/products" },
-      { label: "หมวดหมู่", href: "/admin/categories" },
-      { label: "แบรนด์", href: "/admin/brands" },
+      { label: "สินค้า", href: "/admin/products", icon: ProductBoxIcon },
+      { label: "หมวดหมู่", href: "/admin/categories", icon: CategoryGridIcon },
+      { label: "แบรนด์", href: "/admin/brands", icon: BrandBadgeIcon },
     ],
   },
   {
@@ -65,38 +86,41 @@ export const adminNavGroups: AdminNavGroup[] = [
     items: [{ label: "ลูกค้า", href: "/admin/customers" }],
   },
   {
-    id: "inventory",
-    label: "คลังสินค้า",
-    icon: InventoryIcon,
-    items: [
-      { label: "ภาพรวมคลังสินค้า", href: "/admin/inventory" },
-      { label: "สต๊อกสินค้า" },
-      { label: "ปรับปรุงสต๊อก" },
-    ],
-  },
-  {
     id: "marketing",
     label: "การตลาด",
     icon: MarketingIcon,
     items: [
       { label: "ภาพรวมการตลาด", href: "/admin/marketing", end: true },
-      { label: "โปรโมชั่น", href: "/admin/marketing/promotions" },
-      { label: "คูปอง", href: "/admin/marketing/coupons" },
-      { label: "แฟลชเซล", href: "/admin/marketing/flash-sale" },
-      { label: "บันเดิล", href: "/admin/marketing/bundles" },
+      { label: "โปรโมชั่น", href: "/admin/marketing/promotions", icon: PromotionTagIcon },
+      { label: "คูปอง", href: "/admin/marketing/coupons", icon: CouponTicketIcon },
+      { label: "แฟลชเซล", href: "/admin/marketing/flash-sale", icon: FlashBoltIcon },
+      { label: "บันเดิล", href: "/admin/marketing/bundles", icon: BundleBoxIcon },
     ],
   },
   {
-    id: "loyalty",
-    label: "สะสมแต้ม",
-    icon: LoyaltyIcon,
+    id: "content",
+    // CMS Backoffice Polish §21 — "ภาพรวมเนื้อหา" (the /admin/content overview
+    // route) is removed outright, not hidden: no menu item points at it and
+    // the route file itself is deleted, so it can't become an orphaned page.
+    // The group's first real destination is now Promotion Pages.
+    label: "จัดการเนื้อหา",
+    icon: ContentIcon,
     items: [
-      { label: "ภาพรวมสะสมแต้ม", href: "/admin/loyalty" },
-      { label: "สมาชิก" },
-      { label: "แต้มสะสม" },
-      { label: "ภารกิจ" },
-      { label: "ของรางวัล" },
+      { label: "หน้าโปรโมชั่น", href: "/admin/promotion-pages", icon: PagesPanelIcon },
+      { label: "แบนเนอร์", href: "/admin/content/banners", icon: ImageIcon },
+      { label: "แคมเปญ", href: "/admin/content/campaigns", icon: CampaignFlagIcon },
+      { label: "คอลเลกชันสินค้า", href: "/admin/content/product-collections", icon: FolderIcon },
+      // CMS Final Admin UX Refinement §02/§18 — "Notification" is no longer
+      // its own top-level sidebar group; it lives here, under "จัดการเนื้อหา",
+      // renamed to "โปรโมชั่นแถบ" (internal route/model name unchanged).
+      { label: "โปรโมชั่นแถบ", href: "/admin/notifications", icon: BellIcon },
     ],
+  },
+  {
+    id: "navigation",
+    label: "เมนูนำทาง",
+    icon: NavigationIcon,
+    items: [{ label: "จัดการเมนู", href: "/admin/navigation", end: true }],
   },
   {
     id: "reviews",
@@ -104,17 +128,29 @@ export const adminNavGroups: AdminNavGroup[] = [
     icon: ReviewsIcon,
     items: [{ label: "รีวิวสินค้า", href: "/admin/reviews" }],
   },
+  // CMS Dashboard & Admin UX Refinement §23-24 — "คลังสินค้า"/"สะสมแต้ม" moved
+  // here, directly before "ตั้งค่า", from their previous spot between
+  // "ลูกค้า" and "การตลาด". Single source of truth (this array) drives
+  // Desktop Sidebar, Collapsed Sidebar, and the Mobile/Tablet Drawer alike —
+  // reordering here is reordering everywhere, never a per-device list.
+  // "รีวิว" moved directly above so it sits right before "คลังสินค้า".
   {
-    id: "content",
-    label: "เนื้อหา",
-    icon: ContentIcon,
+    id: "inventory",
+    label: "คลังสินค้า",
+    icon: InventoryIcon,
     items: [
-      { label: "ภาพรวมเนื้อหา", href: "/admin/content", end: true },
-      { label: "หน้าแรก", href: "/admin/content/homepage" },
-      { label: "Landing Pages", href: "/admin/content/landing-pages" },
-      { label: "แบนเนอร์", href: "/admin/content/banners" },
-      { label: "แคมเปญ", href: "/admin/content/campaigns" },
-      { label: "คอลเลกชันสินค้า", href: "/admin/content/product-collections" },
+      { label: "จัดการคลังสินค้า", href: "/admin/inventory" },
+    ],
+  },
+  {
+    id: "loyalty",
+    label: "สะสมแต้ม",
+    icon: LoyaltyIcon,
+    items: [
+      { label: "สะสมคอยน์", href: "/admin/loyalty", end: true, icon: PointsCoinIcon },
+      { label: "สมาชิก", href: "/admin/loyalty/members", icon: MemberBadgeIcon },
+      { label: "ภารกิจ", href: "/admin/loyalty/missions", icon: MissionFlagIcon },
+      { label: "ของรางวัล", href: "/admin/loyalty/rewards", icon: RewardGiftIcon },
     ],
   },
   {
@@ -122,10 +158,9 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "ตั้งค่า",
     icon: SettingsIcon,
     items: [
-      { label: "ภาพรวมตั้งค่า", href: "/admin/settings" },
-      { label: "ทั่วไป" },
-      { label: "ผู้ดูแลระบบ" },
-      { label: "สิทธิ์การใช้งาน" },
+      { label: "ภาพรวมตั้งค่า", href: "/admin/settings", end: true },
+      { label: "ผู้ดูแลระบบ", href: "/admin/settings/admins", icon: ShieldUserIcon },
+      { label: "สิทธิ์การใช้งาน", href: "/admin/settings/permissions", icon: KeyIcon },
     ],
   },
 ];

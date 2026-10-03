@@ -1,4 +1,5 @@
 import { createSignal, For, Show, onCleanup, onMount, type JSX } from "solid-js";
+import { ChevronIcon } from "~/components/shared/ChevronIcon";
 
 /**
  * Native-scroll carousel: slides are laid out in a scroll-snap row, so touch
@@ -233,17 +234,17 @@ export function Carousel(props: {
             type="button"
             onClick={() => scrollToIndex(pendingIndex - 1)}
             aria-label="สไลด์ก่อนหน้า"
-            class="pointer-events-auto flex size-11 items-center justify-center rounded-pill bg-white/80 text-ink shadow-card transition-colors duration-200 hover:bg-white"
+            class="pointer-events-auto flex size-10 items-center justify-center rounded-pill bg-white/50 text-ink shadow-card backdrop-blur-sm transition-colors duration-200 hover:bg-white/80 sm:size-11"
           >
-            <span aria-hidden="true">‹</span>
+            <ChevronIcon direction="left" class="size-5 sm:size-6" />
           </button>
           <button
             type="button"
             onClick={() => scrollToIndex(pendingIndex + 1)}
             aria-label="สไลด์ถัดไป"
-            class="pointer-events-auto flex size-11 items-center justify-center rounded-pill bg-white/80 text-ink shadow-card transition-colors duration-200 hover:bg-white"
+            class="pointer-events-auto flex size-10 items-center justify-center rounded-pill bg-white/50 text-ink shadow-card backdrop-blur-sm transition-colors duration-200 hover:bg-white/80 sm:size-11"
           >
-            <span aria-hidden="true">›</span>
+            <ChevronIcon direction="right" class="size-5 sm:size-6" />
           </button>
         </div>
       </Show>

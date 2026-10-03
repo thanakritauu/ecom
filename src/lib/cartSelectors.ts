@@ -1,4 +1,5 @@
 import type { CartLine, Product, ProductVariant } from "./types";
+import { resolveVariantOption } from "./productVariants";
 
 /** Matches the free-shipping copy already used in TrustBadges/Home's Utility Bar — one real threshold, not a second number invented for the drawer. */
 export const FREE_SHIPPING_THRESHOLD = 990;
@@ -7,6 +8,8 @@ export type ResolvedCartLine = {
   line: CartLine;
   product: Product;
   variant?: ProductVariant;
+  /** Per-unit price for this line — the selected variant's own price when it has one, else `product.price` (see `productVariants.ts`). */
+  unitPrice: number;
 };
 
 /**
@@ -22,13 +25,16 @@ export function resolveCartLines(lines: CartLine[], products: Product[]): Resolv
   return lines.flatMap((line): ResolvedCartLine[] => {
     const product = products.find((p) => p.id === line.productId);
     if (!product) return [];
-    const variant = line.variantId ? product.variants?.find((v) => v.id === line.variantId) : undefined;
-    return [{ line, product, variant }];
+    const found = line.variantId ? product.variants?.find((v) => v.id === line.variantId) : undefined;
+    if (!found) return [{ line, product, variant: found, unitPrice: product.price }];
+    // Same resolver the Product Option Modal shows from, so the cart line's photo/price match the option the shopper picked.
+    const option = resolveVariantOption(product, found);
+    return [{ line, product, variant: { ...found, image: option.image }, unitPrice: option.price }];
   });
 }
 
 export function computeCartTotal(resolved: ResolvedCartLine[]): number {
-  return resolved.reduce((sum, { line, product }) => sum + product.price * line.qty, 0);
+  return resolved.reduce((sum, { line, unitPrice }) => sum + unitPrice * line.qty, 0);
 }
 
 /**
@@ -66,6 +72,19 @@ export const AVAILABLE_COUPONS: Coupon[] = [
 export const MOCK_COIN_BALANCE = 850;
 export const MAX_COIN_REDEMPTION = 800;
 export const COIN_TO_BAHT_RATE = 0.1; // 800 coins -> ฿80, matching the Figma example 1:1
+
+/**
+ * Earn side of the same mock Charmiss Coin program (no backend exists here
+ * either — same status as `COIN_TO_BAHT_RATE` above, just the other
+ * direction): ทุก ฿10 ที่ชำระจริง (ไม่รวมค่าจัดส่ง) ได้รับ 1 คอยน์, the same
+ * 10:1 ratio the redemption side already uses, rounded down so a partial
+ * ฿10 never earns a fractional coin.
+ */
+export const COIN_EARN_RATE = 0.1;
+
+export function computeCoinsEarned(amountPaid: number): number {
+  return Math.floor(Math.max(0, amountPaid) * COIN_EARN_RATE);
+}
 
 export type CheckoutTotals = {
   subtotal: number;

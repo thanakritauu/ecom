@@ -37,9 +37,10 @@ type CategoryContentContextValue = {
   /**
    * Global Frontend Navigation Architecture — the Top Navigation's category
    * row (Header/MobileMenu) reads from here instead of a hardcoded list:
-   * active-only, ordered by `sortOrder`, exactly what Admin's Category
-   * Management already controls. Never hardcode a category nav item outside
-   * this provider.
+   * active-only, in the same order Admin's Category Management stores them
+   * (CMS + Frontend Final Refinement §5 — Display Order field removed, no
+   * replacement; storage order is the order). Never hardcode a category nav
+   * item outside this provider.
    */
   navCategories: Accessor<AdminCategory[]>;
 };
@@ -57,7 +58,7 @@ export function CategoryContentProvider(props: { children: JSX.Element }) {
   });
 
   const getById = (id: string) => categories().find((c) => c.id === id);
-  const navCategories = () => categories().filter((c) => c.status === "active").sort((a, b) => a.sortOrder - b.sortOrder);
+  const navCategories = () => categories().filter((c) => c.status === "active");
 
   return <CategoryContentContext.Provider value={{ ready, categories, getById, navCategories }}>{props.children}</CategoryContentContext.Provider>;
 }

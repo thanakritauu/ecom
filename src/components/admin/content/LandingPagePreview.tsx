@@ -75,22 +75,22 @@ export function LandingPagePreviewDialog(props: {
       <Dialog.Portal>
         <Dialog.Overlay class="fixed inset-0 z-40 bg-ink/40 motion-reduce:animate-none data-[expanded]:animate-overlay-in data-[closed]:animate-overlay-out" />
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <Dialog.Content class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-card bg-white shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
-            <div class="flex shrink-0 items-center justify-between gap-3 border-b border-surface-gray px-5 py-4">
+          <Dialog.Content class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-card bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+            <div class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
               <Dialog.Title class="text-lg font-semibold text-ink">Preview หน้า Landing Page</Dialog.Title>
               <div class="flex items-center gap-3">
                 <div class="flex items-center gap-1 rounded-pill bg-surface-gray p-1">
                   <button
                     type="button"
                     onClick={() => setDevice("desktop")}
-                    class={`min-h-9 rounded-pill px-3 text-sm font-medium transition-colors duration-150 ${device() === "desktop" ? "bg-white text-ink shadow-sm" : "text-ink-gray"}`}
+                    class={`min-h-9 rounded-pill px-3 text-sm font-medium transition-colors duration-150 ${device() === "desktop" ? "bg-surface-card text-ink shadow-sm" : "text-ink-gray"}`}
                   >
                     Desktop
                   </button>
                   <button
                     type="button"
                     onClick={() => setDevice("mobile")}
-                    class={`min-h-9 rounded-pill px-3 text-sm font-medium transition-colors duration-150 ${device() === "mobile" ? "bg-white text-ink shadow-sm" : "text-ink-gray"}`}
+                    class={`min-h-9 rounded-pill px-3 text-sm font-medium transition-colors duration-150 ${device() === "mobile" ? "bg-surface-card text-ink shadow-sm" : "text-ink-gray"}`}
                   >
                     Mobile
                   </button>
@@ -101,7 +101,7 @@ export function LandingPagePreviewDialog(props: {
               </div>
             </div>
             <div class="flex-1 overflow-y-auto bg-surface-gray/40 p-5">
-              <div class="mx-auto overflow-hidden rounded-card bg-white shadow-card" classList={{ "max-w-3xl": device() === "desktop" }}>
+              <div class="mx-auto overflow-hidden rounded-card bg-surface-card shadow-card" classList={{ "max-w-3xl": device() === "desktop" }}>
                 <LandingPagePreviewContent banners={props.banners} title={props.title} description={props.description} products={props.products} device={device()} />
               </div>
             </div>

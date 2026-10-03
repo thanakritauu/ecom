@@ -6,11 +6,8 @@ import { useHomepageContent } from "~/lib/homepageContent";
 import { FlashSaleSection } from "~/components/home/FlashSaleSection";
 import { BestSellersSection } from "~/components/home/BestSellersSection";
 import { CouponSection } from "~/components/home/CouponSection";
-import { PromoCarousel } from "~/components/home/PromoCarousel";
-import { CategorySection } from "~/components/home/CategorySection";
 import { NewArrivalsSection } from "~/components/home/NewArrivalsSection";
 import { TrendingSection } from "~/components/home/TrendingSection";
-import { MembershipCTA } from "~/components/home/MembershipCTA";
 import { ReviewsSection } from "~/components/home/ReviewsSection";
 import { FAQSection } from "~/components/home/FAQSection";
 
@@ -20,7 +17,7 @@ export default function Home() {
     <>
       <a
         href="#main-content"
-        class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] focus:rounded-pill focus:bg-white focus:px-4 focus:py-2 focus:text-ink focus:shadow-card"
+        class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] font-medium focus:rounded-pill focus:bg-white focus:px-4 focus:py-2 focus:text-ink focus:shadow-card"
       >
         ข้ามไปยังเนื้อหาหลัก
       </a>
@@ -31,15 +28,12 @@ export default function Home() {
             with the same content, now driven by Admin's Homepage Content
             (published) state; every other section below stays exactly as it
             was (not part of the 5 admin-manageable section types). */}
-        <HomepageSections sections={homepage.sections()} />
+        <HomepageSections sections={homepage.sections()} productRows={1} swipe />
         <FlashSaleSection />
         <BestSellersSection />
         <CouponSection />
-        <PromoCarousel />
-        <CategorySection />
         <NewArrivalsSection />
         <TrendingSection />
-        <MembershipCTA />
         <ReviewsSection />
         <FAQSection />
       </main>

@@ -5,12 +5,102 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Light theme (default) — every value here is the exact static hex the
+       `ink`/`surface`/`*-soft` tokens used before CMS + Frontend Final
+       Refinement §9, as an R G B triplet (Tailwind's `<alpha-value>`
+       convention, no `rgb()` wrapper/commas) so opacity modifiers like
+       `bg-surface-gray/60` keep working. Nothing reads `--color-page-bg` as
+       a Tailwind color — it's only ever used directly on `body` below. */
+    --color-ink: 30 49 70; /* #1e3146 */
+    --color-ink-gray: 90 106 133; /* #5a6a85 */
+    --color-ink-placeholder: 179 186 199; /* #b3bac7 */
+    --color-surface-pink: 254 235 241; /* #feebf1 */
+    --color-surface-gray: 239 240 243; /* #eff0f3 */
+    --color-surface-card: 255 255 255; /* #ffffff */
+    /* Category/Brand Action + Dark Mode Refinement §4/§5 — `border`/
+       `border-strong` default to the exact same hex as `surface-gray`
+       (the token every `border-*` call site used before this), so Light
+       Mode's actual rendered color is unchanged; only Dark Mode gets a
+       genuinely different (lighter) value below. */
+    --color-border: 239 240 243; /* #eff0f3 */
+    --color-border-strong: 239 240 243; /* #eff0f3 */
+    --color-success-soft: 230 251 240; /* #e6fbf0 */
+    --color-danger-soft: 254 234 234; /* #feeaea */
+    --color-danger-strong: 218 43 43; /* #da2b2b */
+    --color-warning-soft: 255 244 230; /* #fff4e6 */
+    --color-info-soft: 241 238 255; /* #f1eeff */
+    --color-page-bg: 255 255 255; /* #ffffff */
+  }
+
+  /* CMS + Frontend Final Refinement §9 — Dark mode, scoped to a `data-theme`
+     attribute Admin's own theme toggle sets on `<html>` (see adminUI.tsx /
+     routes/admin.tsx). The Customer Frontend never sets this attribute, so
+     every one of these overrides is unreachable there — Light values above
+     are always what a customer page renders, regardless of any Admin
+     preference. `/admin/preview/*` (a real customer-page render inside
+     Admin) explicitly clears the attribute for the same reason. */
+  :root[data-theme="dark"] {
+    /* Dark Mode Refinement §4/§7 — native controls (a `<select>`'s own
+       dropdown popup, checkboxes, scrollbars) are drawn by the OS/browser,
+       not by our CSS, and default to light styling unless the page declares
+       otherwise. Scoped to this same attribute (never set outside Admin),
+       so it can never affect the Customer Frontend's own native controls. */
+    color-scheme: dark;
+    --color-ink: 238 241 246;
+    --color-ink-gray: 154 165 189;
+    /* Contrast audit §6 — bumped from 91 100 121 (~2.7:1 on Card, below the
+       ~3:1 floor for placeholder/disabled text) to a still-clearly-muted but
+       legible value (~3.1:1). */
+    --color-ink-placeholder: 100 110 134;
+    --color-surface-pink: 42 21 32;
+    --color-surface-gray: 23 26 36;
+    --color-surface-card: 30 33 44;
+    /* §4/§5 — the actual fix: `surface-gray` (23 26 36) and `surface-card`
+       (30 33 44) are so close in Dark Mode that a border using the old
+       shared token measured ~1.08:1 against either surface — invisible.
+       These two are picked to clear the ~3:1 (Default) / ~4:1 (Strong)
+       WCAG non-text-contrast floor against both `surface-card` and
+       `page-bg` while staying visibly darker than secondary text
+       (`ink-gray`, 154 165 189) per "border ห้ามสว่างเท่า text primary". */
+    --color-border: 100 108 128;
+    --color-border-strong: 122 130 152;
+    --color-success-soft: 15 43 30;
+    --color-danger-soft: 53 21 21;
+    /* Contrast audit §6 — `text-danger-strong` on `danger-soft` at the
+       static #da2b2b measured ~3.2:1; this Dark-Mode-only variant reaches
+       ~6.4:1. Light Mode keeps the original #da2b2b untouched. */
+    --color-danger-strong: 255 99 99;
+    --color-warning-soft: 51 35 10;
+    --color-info-soft: 36 31 61;
+    --color-page-bg: 16 18 25;
+  }
+
   html {
     font-family: "IBM Plex Sans Thai", sans-serif;
   }
 
   body {
-    @apply text-ink bg-white;
+    @apply text-ink;
+    background-color: rgb(var(--color-page-bg));
+  }
+
+  /*
+   * Design system rule — button text is always Medium (500), site-wide
+   * (storefront + Admin): `<button>`, Kobalte triggers (they render
+   * buttons), input buttons and anything with role="button". Preflight
+   * would otherwise make an unstyled button inherit the body's Regular.
+   * Links styled as buttons take `font-medium` explicitly (see Button.tsx).
+   * Don't put semibold/bold on button text. A whole card/row that is merely
+   * clickable (list rows, option tiles) isn't a button visually: it opts out
+   * with `font-normal` on the element and styles its own content.
+   */
+  button,
+  [role="button"],
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"] {
+    @apply font-medium;
   }
 
   /* Visible, on-brand focus ring everywhere instead of relying on the browser default. */
@@ -32,6 +122,19 @@
   }
   .scroll-rail > * {
     @apply snap-start shrink-0;
+  }
+
+  /* CMS Backoffice Polish §17 — Admin-only Breadcrumb alignment fix, scoped
+     by `.admin-shell` (AdminLayout.tsx) rather than changed on `.scroll-rail`
+     or `shared/Breadcrumb.tsx` itself: the Breadcrumb's own `px-4` (from
+     `.scroll-rail`, only partly cancelled by its `!mx-0`) is load-bearing on
+     the Customer Frontend (e.g. the PDP breadcrumb), where it exists to
+     match a `Container`'s own edge padding. In Admin, the page container
+     provides that padding itself (`AdminLayout`'s `<main>`), so the
+     Breadcrumb's own left padding is pure double-counting — this cancels it
+     there only. */
+  .admin-shell nav[aria-label="breadcrumb"] {
+    @apply !px-0;
   }
 
   .no-scrollbar::-webkit-scrollbar {

@@ -4,6 +4,7 @@ import { AdminUserMenu } from "./AdminUserMenu";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { AdminNotificationPanel } from "./AdminNotificationPanel";
 import { SearchIcon } from "./icons";
+import logo from "~/assets/icons/logo-charmiss-pink.svg";
 
 /**
  * PART 9 of the spec, as corrected by Global UI Correction — Final Overrides
@@ -16,7 +17,7 @@ import { SearchIcon } from "./icons";
  */
 export function AdminTopbar(props: { onMenuClick: () => void }) {
   return (
-    <header class="sticky top-0 z-20 flex min-h-16 shrink-0 items-center gap-3 border-b border-surface-gray bg-white px-4 lg:px-6">
+    <header class="sticky top-0 z-20 flex min-h-16 shrink-0 items-center gap-3 border-b border-border bg-surface-card px-4 lg:px-6">
       <button
         type="button"
         onClick={props.onMenuClick}
@@ -26,7 +27,10 @@ export function AdminTopbar(props: { onMenuClick: () => void }) {
         <HamburgerIcon class="size-6" />
       </button>
 
-      <p class="text-lg font-bold text-brand-pink lg:hidden">Charmiss Admin</p>
+      {/* §25 — Charmiss Pink Logo everywhere, on every device; "Charmiss CMS"
+          text never substitutes for it (it lives as this image's alt text /
+          the browser tab title instead). */}
+      <img src={logo} alt="Charmiss CMS" class="h-6 w-auto lg:hidden" />
 
       <button
         type="button"

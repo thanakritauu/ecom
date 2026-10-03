@@ -1,8 +1,12 @@
-import { createSignal, Show } from "solid-js";
+import { createMemo, createSignal, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
+import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
+import { ChevronDownIcon } from "~/components/admin/icons";
 import { PromotionPageProductPicker } from "./PromotionPageProductPicker";
+import { HomepageSections } from "~/components/home/HomepageSections";
+import { emptyBanners, emptyCta, type HomepageSection } from "~/lib/adminHomepage";
 import type { CollectionStatus, ProductCollection, ProductCollectionFormValues } from "~/lib/adminCollections";
 
 const STATUS_OPTIONS: { value: CollectionStatus; label: string }[] = [
@@ -63,8 +67,39 @@ export function ProductCollectionForm(props: {
     }
   };
 
-  return (
-    <form onSubmit={handleSubmit} class="flex flex-col gap-6">
+  /**
+   * REAL-TIME LIVE PREVIEW SYSTEM §12/§13 — Preview Adapter: a Collection
+   * has no page of its own on the real Frontend — it only ever appears as a
+   * Product Section whose source is this collection (see
+   * `ProductSectionBlock`'s `productSource === "collection"` path). This
+   * previews the manually-picked product list directly (`productSource:
+   * "manual"`) instead of by `collectionId`, since an unsaved/new Collection
+   * has no id yet for that lookup to resolve — same real `ProductCard`
+   * grid either way.
+   */
+  const previewSection = createMemo<HomepageSection>(() => ({
+    id: "collection-preview",
+    type: "product",
+    name: name() || "Collection",
+    enabled: true,
+    eyebrow: "คอลเลกชัน",
+    title: name(),
+    description: description(),
+    banners: emptyBanners(),
+    assets: [],
+    cta: emptyCta(),
+    contentLayout: "image-text",
+    productSource: "manual",
+    products: products(),
+    collectionId: "",
+    categoryId: "",
+    campaignId: "",
+    createdAt: "",
+    updatedAt: "",
+  }));
+
+  const collectionForm = (
+    <>
       <Section title="ข้อมูลพื้นฐาน">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
@@ -85,21 +120,24 @@ export function ProductCollectionForm(props: {
               placeholder="รวมสินค้าขายดีที่ลูกค้าซื้อซ้ำมากที่สุด"
               onInput={(e) => setDescription(e.currentTarget.value)}
               rows={3}
-              class="rounded-card border border-surface-gray bg-white px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+              class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
             />
           </label>
           <label class="flex flex-col gap-1.5">
             <span class="text-sm font-medium text-ink">สถานะ</span>
-            <select
-              value={status()}
-              disabled={saving()}
-              onChange={(e) => setStatus(e.currentTarget.value as CollectionStatus)}
-              class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <option value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+            <div class="relative">
+              <select
+                value={status()}
+                disabled={saving()}
+                onChange={(e) => setStatus(e.currentTarget.value as CollectionStatus)}
+                class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <option value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+            </div>
           </label>
         </div>
       </Section>
@@ -113,6 +151,20 @@ export function ProductCollectionForm(props: {
           {submitError()}
         </p>
       </Show>
+    </>
+  );
+
+  const collectionPreview = (
+    <div class="overflow-hidden p-4 sm:p-5">
+      <div class="overflow-hidden rounded-media border border-border">
+        <HomepageSections sections={[previewSection()]} />
+      </div>
+    </div>
+  );
+
+  return (
+    <form onSubmit={handleSubmit} class="flex flex-col gap-6">
+      <AdminFormPreviewLayout form={collectionForm} preview={collectionPreview} />
 
       <AdminFloatingBar>
         <div class="flex w-full flex-wrap justify-end gap-3">
@@ -131,7 +183,7 @@ export function ProductCollectionForm(props: {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-4 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

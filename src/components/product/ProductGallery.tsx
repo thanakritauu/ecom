@@ -1,4 +1,5 @@
 import { createEffect, createSignal, For, Show, onMount, onCleanup } from "solid-js";
+import { ChevronIcon } from "~/components/shared/ChevronIcon";
 import { isServer } from "solid-js/web";
 import type { Product } from "~/lib/types";
 import { useAuth } from "~/lib/auth";
@@ -6,8 +7,8 @@ import { useWishlist } from "~/lib/wishlist";
 import { pushToast } from "~/lib/toast";
 import { Badge } from "../shared/Badge";
 import { HeartIcon } from "../shared/icons";
-import flashSaleBolt from "~/assets/icons/flash-sale-bolt-mini.svg";
-import flashSaleWordmark from "~/assets/icons/flash-sale-wordmark-mini.svg";
+import { FlashSaleBar } from "~/components/shared/FlashSaleBar";
+import { getDiscountPercent } from "~/lib/products";
 
 /**
  * Figma (node 132:5139) shows a 5-photo gallery; this catalog product only
@@ -16,8 +17,8 @@ import flashSaleWordmark from "~/assets/icons/flash-sale-wordmark-mini.svg";
  * Below 2 images the thumbnail rail and prev/next arrows simply don't
  * render, the same rule already applied to Home's Hero carousel.
  *
- * Prev/next arrows reuse Carousel.tsx's exact visual pattern (`‹`/`›` glyphs
- * inside a `size-11 rounded-pill bg-white/80` button, not a drawn icon) —
+ * Prev/next arrows reuse Carousel.tsx's exact visual pattern (the shared
+ * `ChevronIcon` inside a `rounded-pill bg-white/50` button) —
  * the project's one existing carousel-arrow convention — but clamp at the
  * first/last image instead of Carousel's infinite wrap, per the boundary
  * behavior this gallery needs. Arrow clicks, thumbnail clicks, and
@@ -106,9 +107,9 @@ export function ProductGallery(props: { product: Product; forceOutOfStock?: bool
           loading="eager"
         />
 
-        <Show when={props.product.discountPercent && !outOfStock()}>
+        <Show when={getDiscountPercent(props.product) && !outOfStock()}>
           <Badge tone="red" class="absolute left-4 top-4">
-            -{props.product.discountPercent}%
+            -{getDiscountPercent(props.product)}%
           </Badge>
         </Show>
 
@@ -130,11 +131,8 @@ export function ProductGallery(props: { product: Product; forceOutOfStock?: bool
         </button>
 
         <Show when={props.product.flashSaleEndsAt && !outOfStock()}>
-          <div class="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-r from-[#f42b59] to-brand-yellow p-4">
-            <img src={flashSaleBolt} alt="" class="h-4 w-auto shrink-0" />
-            <img src={flashSaleWordmark} alt="Flash Sale" class="h-3 w-auto shrink-0" />
-            <GalleryCountdown endsAt={props.product.flashSaleEndsAt!} />
-          </div>
+          {/* Same FlashSaleBar + countdown as ProductCard's image overlay. */}
+          <FlashSaleBar endsAt={props.product.flashSaleEndsAt!} size="lg" class="absolute inset-x-0 bottom-0" />
         </Show>
 
         <Show when={outOfStock()}>
@@ -150,18 +148,18 @@ export function ProductGallery(props: { product: Product; forceOutOfStock?: bool
               onClick={() => goTo(active() - 1)}
               disabled={active() === 0}
               aria-label="ดูรูปก่อนหน้า"
-              class="pointer-events-auto flex size-11 items-center justify-center rounded-pill bg-white/80 text-ink shadow-card transition-colors duration-200 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+              class="pointer-events-auto flex size-10 items-center justify-center rounded-pill bg-white/50 text-ink shadow-card backdrop-blur-sm transition-colors duration-200 hover:bg-white/80 sm:size-11 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <span aria-hidden="true">‹</span>
+              <ChevronIcon direction="left" class="size-5 sm:size-6" />
             </button>
             <button
               type="button"
               onClick={() => goTo(active() + 1)}
               disabled={active() === images().length - 1}
               aria-label="ดูรูปถัดไป"
-              class="pointer-events-auto flex size-11 items-center justify-center rounded-pill bg-white/80 text-ink shadow-card transition-colors duration-200 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+              class="pointer-events-auto flex size-10 items-center justify-center rounded-pill bg-white/50 text-ink shadow-card backdrop-blur-sm transition-colors duration-200 hover:bg-white/80 sm:size-11 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <span aria-hidden="true">›</span>
+              <ChevronIcon direction="right" class="size-5 sm:size-6" />
             </button>
           </div>
         </Show>
@@ -191,37 +189,5 @@ export function ProductGallery(props: { product: Product; forceOutOfStock?: bool
         </div>
       </Show>
     </div>
-  );
-}
-
-/** Plain-text "X วัน HH:MM:SS" countdown per Figma — distinct enough from the
- * boxed-digit CountdownTimer (used elsewhere) that adapting that component
- * would need almost as many size/format overrides as writing this directly. */
-function GalleryCountdown(props: { endsAt: number }) {
-  const [remaining, setRemaining] = createSignal(props.endsAt - Date.now());
-  onMount(() => {
-    if (isServer) return;
-    const id = setInterval(() => setRemaining(props.endsAt - Date.now()), 1000);
-    onCleanup(() => clearInterval(id));
-  });
-
-  const parts = () => {
-    const total = Math.max(0, Math.floor(remaining() / 1000));
-    const days = Math.floor(total / 86400);
-    const h = Math.floor((total % 86400) / 3600);
-    const m = Math.floor((total % 3600) / 60);
-    const s = total % 60;
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return { days, hms: `${pad(h)}:${pad(m)}:${pad(s)}` };
-  };
-
-  return (
-    <p class="min-w-0 truncate text-sm text-white">
-      สิ้นสุดภายใน{" "}
-      <span class="font-semibold">
-        {parts().days > 0 ? `${parts().days} วัน ` : ""}
-        {parts().hms}
-      </span>
-    </p>
   );
 }

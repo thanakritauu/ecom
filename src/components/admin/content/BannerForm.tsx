@@ -2,11 +2,21 @@ import { createMemo, createSignal, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
+import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
+import { ChevronDownIcon } from "~/components/admin/icons";
 import { BannerUploader } from "./BannerUploader";
 import { DestinationSelector } from "./DestinationSelector";
 import { isValidDateRange } from "~/lib/adminMarketing";
 import { validateBannerPublish, BANNER_PLACEMENT_META, type Banner, type BannerFormValues, type BannerPlacement, type BannerStatus } from "~/lib/adminBanners";
-import type { HomepageDestination } from "~/lib/adminHomepage";
+import { emptyBanners, type HomepageDestination, type HomepageSection } from "~/lib/adminHomepage";
+import { HomepageSections } from "~/components/home/HomepageSections";
+import { AdminHeroSlide } from "~/components/home/HeroBanner";
+
+const PREVIEW_DEVICES: { value: "desktop" | "tablet" | "mobile"; label: string }[] = [
+  { value: "desktop", label: "Desktop" },
+  { value: "tablet", label: "Tablet" },
+  { value: "mobile", label: "Mobile" },
+];
 
 const PLACEMENT_OPTIONS: { value: BannerPlacement; label: string }[] = (
   Object.keys(BANNER_PLACEMENT_META) as BannerPlacement[]
@@ -59,8 +69,49 @@ export function BannerForm(props: {
   const [publishErrors, setPublishErrors] = createSignal<string[]>([]);
   const [saving, setSaving] = createSignal(false);
   const [submitError, setSubmitError] = createSignal<string>();
+  const [previewDevice, setPreviewDevice] = createSignal<"desktop" | "tablet" | "mobile">("desktop");
 
   const dateRangeValid = createMemo(() => isValidDateRange(startDate(), startTime(), endDate(), endTime()));
+
+  /**
+   * REAL-TIME LIVE PREVIEW SYSTEM §9/§12/§13 — Preview Adapter: reshapes
+   * this form's fields into a `HomepageSection` so the REAL renderer for
+   * this Banner's placement can render it — `AdminHeroSlide` (the real
+   * Hero Banner component) for `homepage_hero`, otherwise the real
+   * `HomepageSections`'s Promotion Banner block, the same one every other
+   * `promotion_banner` section on the real homepage renders through. The
+   * device selector works by feeding the chosen device's own uploaded image
+   * into every slot — `BannerPicture`'s own `<source media>` responsive
+   * logic is untouched, this only chooses which real image reaches it.
+   */
+  const previewDeviceUrl = createMemo(() => {
+    if (previewDevice() === "tablet") return bannerTablet();
+    if (previewDevice() === "mobile") return bannerMobile();
+    return bannerDesktop();
+  });
+  const previewSection = createMemo<HomepageSection>(() => {
+    const url = previewDeviceUrl();
+    return {
+      id: "banner-preview",
+      type: placement() === "homepage_hero" ? "hero" : "promotion_banner",
+      name: name() || "Banner",
+      enabled: true,
+      eyebrow: "",
+      title: "",
+      description: "",
+      banners: url ? { desktop: url, tablet: url, mobile: url } : emptyBanners(),
+      assets: [],
+      cta: { label: "", destination: destination() },
+      contentLayout: "image-text",
+      productSource: "manual",
+      products: [],
+      collectionId: "",
+      categoryId: "",
+      campaignId: "",
+      createdAt: "",
+      updatedAt: "",
+    };
+  });
 
   const buildValues = (targetStatus: BannerStatus): BannerFormValues => ({
     name: name().trim(),
@@ -121,11 +172,10 @@ export function BannerForm(props: {
 
   const statusOptions = props.mode === "create" ? CREATE_STATUS_OPTIONS : EDIT_STATUS_OPTIONS;
 
-  return (
-    <form onSubmit={handleSaveChanges} class="flex flex-col gap-6">
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div class="flex flex-col gap-6 lg:col-span-2">
-          <Section title="01 · Basic Information">
+  const bannerFieldsForm = (
+    <>
+      <div class="flex flex-col gap-6">
+        <Section title="01 · Basic Information">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <TextField
                 label="Banner Name"
@@ -139,29 +189,35 @@ export function BannerForm(props: {
               />
               <label class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">Placement</span>
-                <select
-                  value={placement()}
-                  disabled={saving()}
-                  onChange={(e) => setPlacement(e.currentTarget.value as BannerPlacement)}
-                  class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                >
-                  {PLACEMENT_OPTIONS.map((opt) => (
-                    <option value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                <div class="relative">
+                  <select
+                    value={placement()}
+                    disabled={saving()}
+                    onChange={(e) => setPlacement(e.currentTarget.value as BannerPlacement)}
+                    class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+                  >
+                    {PLACEMENT_OPTIONS.map((opt) => (
+                      <option value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+                </div>
               </label>
               <label class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">Status</span>
-                <select
-                  value={status()}
-                  disabled={saving()}
-                  onChange={(e) => setStatus(e.currentTarget.value as BannerStatus)}
-                  class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                >
-                  {statusOptions.map((opt) => (
-                    <option value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                <div class="relative">
+                  <select
+                    value={status()}
+                    disabled={saving()}
+                    onChange={(e) => setStatus(e.currentTarget.value as BannerStatus)}
+                    class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+                  >
+                    {statusOptions.map((opt) => (
+                      <option value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+                </div>
               </label>
             </div>
           </Section>
@@ -186,27 +242,6 @@ export function BannerForm(props: {
           <Section title="03 · Banner Link">
             <DestinationSelector value={destination()} onChange={setDestination} />
           </Section>
-        </div>
-
-        <div class="flex flex-col gap-6">
-          <Section title="Preview">
-            <div class="flex flex-col gap-3 text-sm">
-              <div class="aspect-[16/7] w-full overflow-hidden rounded-media bg-surface-gray/60">
-                <Show when={bannerDesktop()}>
-                  <img src={bannerDesktop()} alt="" class="size-full object-cover" />
-                </Show>
-              </div>
-              <Show when={startDate() && endDate()}>
-                <p class="text-ink-gray">
-                  {startDate()} {startTime()} — {endDate()} {endTime()}
-                </p>
-              </Show>
-              <Show when={startDate() && endDate() && !dateRangeValid()}>
-                <p class="text-system-red">ช่วงวันที่ไม่ถูกต้อง</p>
-              </Show>
-            </div>
-          </Section>
-        </div>
       </div>
 
       <Show when={publishErrors().length > 0}>
@@ -225,6 +260,53 @@ export function BannerForm(props: {
           {submitError()}
         </p>
       </Show>
+    </>
+  );
+
+  const bannerPreview = (
+    <div class="flex flex-col gap-3 p-4 sm:p-5">
+      <div class="flex items-center gap-1.5 rounded-pill bg-surface-gray/60 p-1 text-xs font-medium">
+        {PREVIEW_DEVICES.map((d) => (
+          <button
+            type="button"
+            onClick={() => setPreviewDevice(d.value)}
+            class="flex-1 rounded-pill px-2 py-1.5 transition-colors duration-150"
+            classList={{ "bg-surface-card text-ink shadow-card": previewDevice() === d.value, "text-ink-gray": previewDevice() !== d.value }}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
+
+      <Show
+        when={previewDeviceUrl()}
+        fallback={<p class="py-6 text-center text-sm text-ink-gray">ยังไม่ได้อัปโหลดรูปสำหรับ {PREVIEW_DEVICES.find((d) => d.value === previewDevice())?.label}</p>}
+      >
+        <div class="overflow-hidden rounded-media border border-border">
+          <Show when={placement() === "homepage_hero"} fallback={<HomepageSections sections={[previewSection()]} />}>
+            <AdminHeroSlide section={previewSection()} />
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={destination().type === "none"}>
+        <p class="text-xs text-ink-gray">ยังไม่ได้กำหนดปลายทางของ Banner นี้</p>
+      </Show>
+
+      <Show when={startDate() && endDate()}>
+        <p class="text-xs text-ink-gray">
+          {startDate()} {startTime()} — {endDate()} {endTime()}
+        </p>
+      </Show>
+      <Show when={startDate() && endDate() && !dateRangeValid()}>
+        <p class="text-xs text-system-red">ช่วงวันที่ไม่ถูกต้อง</p>
+      </Show>
+    </div>
+  );
+
+  return (
+    <form onSubmit={handleSaveChanges} class="flex flex-col gap-6">
+      <AdminFormPreviewLayout form={bannerFieldsForm} preview={bannerPreview} />
 
       <AdminFloatingBar>
         <div class="flex w-full flex-wrap justify-end gap-3">
@@ -253,7 +335,7 @@ export function BannerForm(props: {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-4 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

@@ -1,4 +1,5 @@
 import type { PromotionPageProductRef } from "./adminContent";
+import { upgradeSeedBanners } from "./seedBanners";
 
 /**
  * Landing Page Admin Management — moved out of `adminHomepage.ts` (which
@@ -26,15 +27,28 @@ export const HOMEPAGE_SECTION_TYPE_META: Record<HomepageSectionType, { label: st
   cta: { label: "CTA" },
 };
 
-export type HomepageProductSource = "manual" | "best_seller" | "new_arrival" | "trending" | "featured" | "collection";
+/**
+ * Product Section — Product Source Rule (Promotion Page / Homepage
+ * Architecture §4) — a Product Section may source products from exactly one
+ * of Collection, Category, or a Dynamic rule; it may never hold its own
+ * manually-picked `Product[]`. `"manual"` stays in this union (and the
+ * `products` field below stays populated for it) purely as a read path for
+ * data saved before this rule existed — `HomepageSectionForm.tsx`'s Product
+ * Source dropdown no longer offers it, so no new Product Section can be
+ * created in this state; an existing one can only be migrated away from it
+ * (create/use a Collection, then switch the section to `"collection"`),
+ * never further edited as manual picks.
+ */
+export type HomepageProductSource = "manual" | "best_seller" | "new_arrival" | "trending" | "featured" | "collection" | "category";
 
 export const HOMEPAGE_PRODUCT_SOURCE_META: Record<HomepageProductSource, { label: string }> = {
-  manual: { label: "เลือกสินค้าเอง" },
+  manual: { label: "เลือกสินค้าเอง (เดิม — ย้ายไปใช้ Collection แทน)" },
   best_seller: { label: "สินค้าขายดี (Best Seller)" },
   new_arrival: { label: "สินค้ามาใหม่ (New Arrival)" },
   trending: { label: "กำลังฮิต (Trending)" },
   featured: { label: "คอลเลกชันแนะนำ (Featured)" },
   collection: { label: "Product Collection" },
+  category: { label: "หมวดหมู่สินค้า (Category)" },
 };
 
 export type HomepageBanners = {
@@ -42,6 +56,98 @@ export type HomepageBanners = {
   tablet: string;
   mobile: string;
 };
+
+/**
+ * Hero Banner — Multi-Asset Support. `"hero"` sections used to render exactly
+ * one image (`HomepageSection.banners`, still kept below for backward
+ * compatibility with every already-saved section). A hero section can now
+ * additionally hold up to `MAX_HERO_ASSETS` of these — image, self-hosted
+ * video, or a YouTube URL — rendered as the carousel's own slide list
+ * (`HeroBanner.tsx`) instead of one static image per section. `source` is
+ * always the one raw value for that type: an uploaded/object-URL for
+ * `image`/`video`, or the admin-pasted watch URL for `youtube` (resolved to
+ * an embeddable URL at render time via `getYoutubeEmbedUrl`, never
+ * transformed before saving).
+ */
+export type HeroAssetType = "image" | "video" | "youtube";
+
+export type HeroAsset = {
+  id: string;
+  type: HeroAssetType;
+  /** The Desktop/default source — unchanged meaning for `video`/`youtube`; for `image` this is specifically the Desktop artwork. */
+  source: string;
+  /**
+   * Hero Banner — Responsive Artwork (Phase 01 Update). `"image"` only;
+   * optional Tablet/Mobile crops prepared for this standard's own aspect
+   * ratios (Tablet 4:3, Mobile 3:4 — see `HeroBanner.tsx`'s
+   * `HERO_ASPECT_CLASS`), never a resize of `source`. Both fall back to
+   * `source` when empty, so every asset saved before these fields existed
+   * (and the admin form, not yet extended to set them) keeps rendering
+   * exactly as before — one Desktop image at every breakpoint — rather than
+   * breaking or requiring a data migration.
+   */
+  tabletSource?: string;
+  mobileSource?: string;
+};
+
+export const HERO_ASSET_TYPE_META: Record<HeroAssetType, { label: string }> = {
+  image: { label: "รูปภาพ" },
+  video: { label: "วิดีโอ" },
+  youtube: { label: "YouTube" },
+};
+
+export const MAX_HERO_ASSETS = 10;
+
+let nextHeroAssetRuntimeId = 1;
+export const genHeroAssetId = () => `hero-asset-runtime-${Date.now()}-${nextHeroAssetRuntimeId++}`;
+
+export function emptyHeroAsset(type: HeroAssetType = "image"): HeroAsset {
+  return { id: genHeroAssetId(), type, source: "" };
+}
+
+/** Accepts youtube.com/watch?v=, youtu.be/, and youtube.com/embed/ forms — the shapes an admin is realistically going to paste. */
+const YOUTUBE_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
+
+export function extractYoutubeVideoId(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.replace(/^www\./, "");
+    let id: string | null = null;
+    if (host === "youtu.be") {
+      id = parsed.pathname.slice(1);
+    } else if (host === "youtube.com" || host === "m.youtube.com" || host === "music.youtube.com") {
+      if (parsed.pathname === "/watch") id = parsed.searchParams.get("v");
+      else if (parsed.pathname.startsWith("/embed/")) id = parsed.pathname.replace("/embed/", "");
+      else if (parsed.pathname.startsWith("/shorts/")) id = parsed.pathname.replace("/shorts/", "");
+    }
+    id = id?.split(/[?&]/)[0] ?? null;
+    return id && YOUTUBE_ID_PATTERN.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isValidYoutubeUrl(url: string): boolean {
+  return extractYoutubeVideoId(url) !== null;
+}
+
+export function getYoutubeEmbedUrl(url: string): string | null {
+  const id = extractYoutubeVideoId(url);
+  return id ? `https://www.youtube.com/embed/${id}` : null;
+}
+
+/** An incomplete asset (no file/URL yet, or an invalid YouTube URL) must never be allowed to save — called from `validatePublishRequirements` for every "hero" section. */
+export function validateHeroAssets(assets: HeroAsset[]): string[] {
+  const errors: string[] = [];
+  if (assets.length > MAX_HERO_ASSETS) errors.push(`Hero Banner รองรับสูงสุด ${MAX_HERO_ASSETS} รายการ`);
+  assets.forEach((asset, i) => {
+    if (!asset.source.trim()) errors.push(`Hero Banner รายการที่ ${i + 1}: ยังไม่ได้เพิ่มไฟล์หรือลิงก์`);
+    else if (asset.type === "youtube" && !isValidYoutubeUrl(asset.source)) errors.push(`Hero Banner รายการที่ ${i + 1}: ลิงก์ YouTube ไม่ถูกต้อง`);
+  });
+  return errors;
+}
 
 /**
  * One destination shape reused by every CTA/click-through in this system
@@ -99,6 +205,8 @@ export type HomepageSection = {
   title: string;
   description: string;
   banners: HomepageBanners;
+  /** "hero" only — optional multi-asset carousel content (image/video/YouTube, up to `MAX_HERO_ASSETS`). Empty array = fall back to `banners` (every pre-existing hero section), never a required field. */
+  assets: HeroAsset[];
   cta: HomepageCta;
   /** "content" only — Landing Page Frontend Polish §15. */
   contentLayout: HomepageContentLayout;
@@ -108,6 +216,8 @@ export type HomepageSection = {
   products: PromotionPageProductRef[];
   /** "product" only, when `productSource === "collection"` — id into `~/lib/adminCollections`'s `ProductCollection[]`. Resolved live at render time, never copied in. */
   collectionId: string;
+  /** "product" only, when `productSource === "category"` — id into `~/lib/adminCategories`'s `AdminCategory[]`. Resolved live at render time by filtering the Product Catalog on `categoryId`, never copied in — Category stays classification-only, never a page builder (§6). */
+  categoryId: string;
   /** "campaign" only, optional — id into `~/lib/adminCampaigns`'s `Campaign[]`. When set, Banner/Title/Description/CTA/Products are all derived live from that Campaign record instead of this section's own inline fields. */
   campaignId: string;
   createdAt: string;
@@ -162,11 +272,20 @@ export function normalizeHomepageSection(s: Partial<HomepageSection> & { id: str
     eyebrow: s.eyebrow ?? "",
     title: s.title ?? "",
     description: s.description ?? "",
-    banners: {
+    banners: upgradeSeedBanners({
       desktop: s.banners?.desktop ?? "",
       tablet: s.banners?.tablet ?? "",
       mobile: s.banners?.mobile ?? "",
-    },
+    }),
+    assets: Array.isArray(s.assets)
+      ? s.assets.slice(0, MAX_HERO_ASSETS).map((a) => ({
+          id: a.id ?? genHeroAssetId(),
+          type: a.type ?? "image",
+          source: a.source ?? "",
+          tabletSource: a.tabletSource || undefined,
+          mobileSource: a.mobileSource || undefined,
+        }))
+      : [],
     cta: {
       label: s.cta?.label ?? "",
       destination: normalizeHomepageDestination(s.cta?.destination),
@@ -177,6 +296,7 @@ export function normalizeHomepageSection(s: Partial<HomepageSection> & { id: str
       ? s.products.map((ref) => ({ productId: ref.productId, variantIds: Array.isArray(ref.variantIds) ? ref.variantIds : [] }))
       : [],
     collectionId: s.collectionId ?? "",
+    categoryId: s.categoryId ?? "",
     campaignId: s.campaignId ?? "",
     createdAt: s.createdAt ?? "",
     updatedAt: s.updatedAt ?? "",

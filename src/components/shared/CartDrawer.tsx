@@ -68,18 +68,18 @@ export function CartDrawer() {
                       rendered Drawer stays mounted (and visible) on top of
                       whatever page loads next. */}
                   <A
-                    href="/cart"
-                    onClick={() => cart.closeDrawer()}
-                    class="flex h-12 shrink-0 items-center justify-center rounded-pill border border-white px-5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-white/10"
-                  >
-                    ดูตะกร้า
-                  </A>
-                  <A
                     href="/checkout"
                     onClick={() => cart.closeDrawer()}
-                    class="flex h-12 flex-1 items-center justify-center rounded-pill bg-white px-2 text-sm font-semibold text-brand-pink transition-colors duration-150 hover:bg-white/90"
+                    class="flex h-12 flex-1 items-center justify-center rounded-pill bg-white px-2 text-sm font-medium text-brand-pink transition-colors duration-150 hover:bg-white/90"
                   >
-                    ดำเนินการชำระเงิน
+                    ชำระเงิน
+                  </A>
+                  <A
+                    href="/cart"
+                    onClick={() => cart.closeDrawer()}
+                    class="flex h-12 shrink-0 items-center justify-center rounded-pill border border-white px-5 text-sm font-medium text-white transition-colors duration-150 hover:bg-white/10"
+                  >
+                    ดูตะกร้า
                   </A>
                 </div>
               </div>

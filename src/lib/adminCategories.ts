@@ -4,8 +4,8 @@ import type { StatusTone } from "~/components/admin/StatusBadge";
  * Category Management — Phase 01 additional scope. A named, admin-curated
  * product taxonomy entry (e.g. "ปาก", "ตา") that the storefront's category
  * navigation and filters are built from, plus the taxonomy-specific fields a
- * real category needs: `slug` (its URL/filter key), `image` (a
- * native-upload thumbnail), and `sortOrder` (display order in menus/filters).
+ * real category needs: `slug` (its URL/filter key) and `image` (a
+ * native-upload thumbnail).
  *
  * Architecture Cleanup & Source of Truth — Category is Product
  * Classification only, never its own Product Collection: it used to also
@@ -31,7 +31,6 @@ export type AdminCategory = {
   description: string;
   image: string;
   status: CategoryStatus;
-  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -61,7 +60,6 @@ export function normalizeCategory(c: Partial<AdminCategory> & { id: string }): A
     description: c.description ?? "",
     image: c.image ?? "",
     status: c.status ?? "active",
-    sortOrder: typeof c.sortOrder === "number" ? c.sortOrder : 0,
     createdAt: c.createdAt ?? "",
     updatedAt: c.updatedAt ?? "",
   };
@@ -91,7 +89,6 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     description: "ลิปสติก ลิปทินท์ ลิปกลอส และผลิตภัณฑ์ดูแลริมฝีปาก",
     image: "",
     status: "active",
-    sortOrder: 1,
   },
   {
     id: "category-002",
@@ -100,7 +97,6 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     description: "อายแชโดว์ อายไลน์เนอร์ มาสคาร่า และผลิตภัณฑ์แต่งตา",
     image: "",
     status: "active",
-    sortOrder: 2,
   },
   {
     id: "category-003",
@@ -109,7 +105,6 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     description: "บลัชออน ไฮไลท์เตอร์ และผลิตภัณฑ์แต่งแก้ม",
     image: "",
     status: "active",
-    sortOrder: 3,
   },
   {
     id: "category-004",
@@ -118,7 +113,6 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     description: "ดินสอเขียนคิ้ว เจลเขียนคิ้ว และผลิตภัณฑ์แต่งคิ้ว",
     image: "",
     status: "active",
-    sortOrder: 4,
   },
   {
     id: "category-005",
@@ -127,7 +121,6 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     description: "รองพื้น คูชั่น แป้ง และผลิตภัณฑ์แต่งหน้าหน้า",
     image: "",
     status: "inactive",
-    sortOrder: 5,
   },
 ];
 

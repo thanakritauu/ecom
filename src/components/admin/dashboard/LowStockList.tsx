@@ -35,7 +35,7 @@ export function LowStockList() {
               <button
                 type="button"
                 onClick={() => setQuickViewId(entry.product.id)}
-                class="flex w-full items-center gap-3 rounded-card px-2 py-2.5 text-left transition-colors duration-150 hover:bg-surface-pink/40"
+                class="font-normal flex w-full items-center gap-3 rounded-card px-2 py-2.5 text-left transition-colors duration-150 hover:bg-surface-pink/40"
               >
                 <img src={entry.product.image} alt="" class="size-12 shrink-0 rounded-media object-cover" />
                 <div class="min-w-0 flex-1">

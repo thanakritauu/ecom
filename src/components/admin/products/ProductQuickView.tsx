@@ -41,11 +41,11 @@ export function ProductQuickView(props: { product: AdminProduct }) {
   const selectedVariant = () => p().adminVariants.find((v) => v.id === selectedVariantId());
   // Final UI & Regression Overrides #3: this overrides the previous
   // "swap to the selected variant's photo" behavior — the main image is
-  // always the Product Gallery's first photo (`images[0]`, falling back to
-  // `.image` — both product-level, never a variant's), regardless of which
-  // variant is selected. `images` can be empty/undefined without crashing;
-  // `.image` itself is always a real string on every product in this catalog.
-  const displayImage = () => p().images?.[0] ?? p().image;
+  // always the Product Gallery's photo (regardless of which variant is
+  // selected), never a variant's. CMS + Frontend Final Refinement §8: an
+  // explicit `mainImage` pin wins first, then `images[0]`, then `.image` —
+  // same fallback chain as the Live Preview and the real `ProductCard`.
+  const displayImage = () => p().mainImage ?? p().images?.[0] ?? p().image;
   const displayPrice = () => selectedVariant()?.price ?? p().price;
   const displayStock = () => selectedVariant()?.stock ?? p().stockLeft ?? 0;
 

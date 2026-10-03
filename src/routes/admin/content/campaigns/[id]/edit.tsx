@@ -28,8 +28,8 @@ export default function AdminCampaignEditPage() {
       when={campaign()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "เนื้อหา", href: "/admin/content" }, { label: "Campaigns", href: "/admin/content/campaigns" }]} />
-          <EmptyState icon={<ContentIcon />} title="ไม่พบ Campaign นี้" description="Campaign นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/content/campaigns")} class="bg-white shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "Campaigns", href: "/admin/content/campaigns" }]} />
+          <EmptyState icon={<ContentIcon />} title="ไม่พบ Campaign นี้" description="Campaign นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/content/campaigns")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -38,7 +38,7 @@ export default function AdminCampaignEditPage() {
           <Breadcrumb
             items={[
               { label: "แดชบอร์ด", href: "/admin" },
-              { label: "เนื้อหา", href: "/admin/content" },
+              { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
               { label: "Campaigns", href: "/admin/content/campaigns" },
               { label: current().name },
               { label: "แก้ไข" },

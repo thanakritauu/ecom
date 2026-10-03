@@ -28,7 +28,7 @@ export default function AdminFlashSaleEditPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "แฟลชเซล", href: "/admin/marketing/flash-sale" }]} />
-          <EmptyState icon={<LoyaltyIcon />} title="ไม่พบแฟลชเซลนี้" actionLabel="กลับไปหน้าแฟลชเซล" onAction={() => navigate("/admin/marketing/flash-sale")} class="bg-white shadow-card" />
+          <EmptyState icon={<LoyaltyIcon />} title="ไม่พบแฟลชเซลนี้" actionLabel="กลับไปหน้าแฟลชเซล" onAction={() => navigate("/admin/marketing/flash-sale")} class="bg-surface-card shadow-card" />
         </div>
       }
     >

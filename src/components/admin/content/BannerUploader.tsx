@@ -50,7 +50,7 @@ export function BannerUploader(props: { label: string; hint?: string; value: str
           <button
             type="button"
             onClick={openPicker}
-            class="flex aspect-[16/7] w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-surface-gray text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink"
+            class="flex aspect-[16/7] w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-border text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink"
           >
             <ImageIcon class="size-6" />
             <span class="text-sm font-medium">ยังไม่มี Banner</span>
@@ -58,7 +58,7 @@ export function BannerUploader(props: { label: string; hint?: string; value: str
           </button>
         }
       >
-        <div class="group relative aspect-[16/7] w-full overflow-hidden rounded-card border border-surface-gray">
+        <div class="group relative aspect-[16/7] w-full overflow-hidden rounded-card border border-border">
           <button type="button" onClick={openPicker} aria-label="เปลี่ยน Banner" class="block size-full">
             <img src={props.value} alt="" class="size-full object-cover" classList={{ "opacity-40": pending() }} />
           </button>

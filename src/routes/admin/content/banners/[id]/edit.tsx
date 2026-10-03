@@ -28,8 +28,8 @@ export default function AdminBannerEditPage() {
       when={banner()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "เนื้อหา", href: "/admin/content" }, { label: "Banners", href: "/admin/content/banners" }]} />
-          <EmptyState icon={<ContentIcon />} title="ไม่พบ Banner นี้" description="Banner นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/content/banners")} class="bg-white shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "Banners", href: "/admin/content/banners" }]} />
+          <EmptyState icon={<ContentIcon />} title="ไม่พบ Banner นี้" description="Banner นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/content/banners")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -38,7 +38,7 @@ export default function AdminBannerEditPage() {
           <Breadcrumb
             items={[
               { label: "แดชบอร์ด", href: "/admin" },
-              { label: "เนื้อหา", href: "/admin/content" },
+              { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
               { label: "Banners", href: "/admin/content/banners" },
               { label: current().name },
               { label: "แก้ไข" },

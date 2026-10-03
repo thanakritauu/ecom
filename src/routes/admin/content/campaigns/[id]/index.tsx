@@ -64,8 +64,8 @@ export default function AdminCampaignDetailPage() {
       when={campaign()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "เนื้อหา", href: "/admin/content" }, { label: "Campaigns", href: "/admin/content/campaigns" }]} />
-          <EmptyState icon={<ContentIcon />} title="ไม่พบ Campaign นี้" description="Campaign นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/content/campaigns")} class="bg-white shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "Campaigns", href: "/admin/content/campaigns" }]} />
+          <EmptyState icon={<ContentIcon />} title="ไม่พบ Campaign นี้" description="Campaign นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/content/campaigns")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -79,7 +79,7 @@ export default function AdminCampaignDetailPage() {
             <Breadcrumb
               items={[
                 { label: "แดชบอร์ด", href: "/admin" },
-                { label: "เนื้อหา", href: "/admin/content" },
+                { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
                 { label: "Campaigns", href: "/admin/content/campaigns" },
                 { label: c().name },
               ]}
@@ -99,7 +99,7 @@ export default function AdminCampaignDetailPage() {
                     hideView
                     onTogglePublish={() => setConfirmToggle(true)}
                     onDelete={() => setConfirmDelete(true)}
-                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-surface-gray text-ink-gray hover:bg-surface-pink"
+                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
                   />
                 </div>
               }
@@ -208,7 +208,7 @@ export default function AdminCampaignDetailPage() {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

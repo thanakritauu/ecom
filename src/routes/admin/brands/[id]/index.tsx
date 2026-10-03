@@ -7,7 +7,7 @@ import { StatusBadge } from "~/components/admin/StatusBadge";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { BrandRowActionsMenu } from "~/components/admin/brands/BrandRowActionsMenu";
-import { LayersIcon, ImageIcon } from "~/components/admin/icons";
+import { LayersIcon } from "~/components/admin/icons";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { BRAND_STATUS_META } from "~/lib/adminBrands";
@@ -24,7 +24,18 @@ export default function AdminBrandDetailPage() {
   const brand = createMemo(() => store.getById(params.id));
 
   const [confirmDelete, setConfirmDelete] = createSignal(false);
+  const [blockedDelete, setBlockedDelete] = createSignal(false);
   const [actionLoading, setActionLoading] = createSignal(false);
+
+  /** §14/§44 dependency guard — a Brand must never be deleted while Products still reference it. */
+  const dependencyProductCount = createMemo(() => {
+    const current = brand();
+    return current ? productsInBrand(current.id, productStore.products()).length : 0;
+  });
+  const requestDelete = () => {
+    if (dependencyProductCount() > 0) setBlockedDelete(true);
+    else setConfirmDelete(true);
+  };
 
   const confirmDeleteAction = async () => {
     const current = brand();
@@ -42,8 +53,8 @@ export default function AdminBrandDetailPage() {
       when={brand()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "แคตตาล็อก", href: "/admin/products" }, { label: "แบรนด์", href: "/admin/brands" }]} />
-          <EmptyState icon={<LayersIcon />} title="ไม่พบแบรนด์นี้" description="แบรนด์นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/brands")} class="bg-white shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สินค้า", href: "/admin/products" }, { label: "แบรนด์", href: "/admin/brands" }]} />
+          <EmptyState icon={<LayersIcon />} title="ไม่พบแบรนด์นี้" description="แบรนด์นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/brands")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -57,7 +68,7 @@ export default function AdminBrandDetailPage() {
             <Breadcrumb
               items={[
                 { label: "แดชบอร์ด", href: "/admin" },
-                { label: "แคตตาล็อก", href: "/admin/products" },
+                { label: "สินค้า", href: "/admin/products" },
                 { label: "แบรนด์", href: "/admin/brands" },
                 { label: b().name },
               ]}
@@ -75,8 +86,8 @@ export default function AdminBrandDetailPage() {
                     id={b().id}
                     name={b().name}
                     hideView
-                    onDelete={() => setConfirmDelete(true)}
-                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-surface-gray text-ink-gray hover:bg-surface-pink"
+                    onDelete={requestDelete}
+                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
                   />
                 </div>
               }
@@ -107,14 +118,6 @@ export default function AdminBrandDetailPage() {
               </div>
 
               <div class="flex flex-col gap-6">
-                <Section title="โลโก้">
-                  <div class="flex size-24 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
-                    <Show when={b().logo} fallback={<ImageIcon class="size-6" />}>
-                      <img src={b().logo} alt="" class="size-full object-cover" />
-                    </Show>
-                  </div>
-                </Section>
-
                 <Section title="สถานะ">
                   <StatusBadge tone={BRAND_STATUS_META[b().status].tone} class="w-fit">
                     {BRAND_STATUS_META[b().status].label}
@@ -126,7 +129,6 @@ export default function AdminBrandDetailPage() {
                 </Section>
 
                 <Section title="ข้อมูลเพิ่มเติม">
-                  <Row label="ลำดับการแสดงผล" value={String(b().sortOrder)} />
                   <Row label="สร้างเมื่อ" value={b().createdAt} />
                   <Row label="แก้ไขล่าสุด" value={b().updatedAt} />
                 </Section>
@@ -143,6 +145,16 @@ export default function AdminBrandDetailPage() {
               loading={actionLoading()}
               onConfirm={confirmDeleteAction}
             />
+
+            <ConfirmDialog
+              open={blockedDelete()}
+              onOpenChange={setBlockedDelete}
+              title="ไม่สามารถลบได้"
+              description={`"${b().name}" — มีสินค้า ${dependencyProductCount()} รายการที่กำลังใช้แบรนด์นี้ กรุณาเปลี่ยนแบรนด์ของสินค้าเหล่านั้นในหน้าแก้ไขสินค้าก่อนลบแบรนด์นี้`}
+              confirmLabel="เข้าใจแล้ว"
+              cancelLabel="ปิด"
+              onConfirm={() => setBlockedDelete(false)}
+            />
           </div>
         );
       }}
@@ -152,7 +164,7 @@ export default function AdminBrandDetailPage() {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

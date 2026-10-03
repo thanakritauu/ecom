@@ -2,12 +2,15 @@ import { createMemo, createSignal, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
+import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
+import { ChevronDownIcon } from "~/components/admin/icons";
 import { BannerUploader } from "~/components/admin/content/BannerUploader";
 import { PromotionPageProductPicker } from "~/components/admin/content/PromotionPageProductPicker";
 import { DestinationSelector } from "~/components/admin/content/DestinationSelector";
+import { HomepageSections } from "~/components/home/HomepageSections";
 import { isValidDateRange } from "~/lib/adminMarketing";
 import { slugify, validateCampaignPublish, type Campaign, type CampaignFormValues, type CampaignStatus } from "~/lib/adminCampaigns";
-import type { HomepageDestination } from "~/lib/adminHomepage";
+import type { HomepageDestination, HomepageSection } from "~/lib/adminHomepage";
 
 const CREATE_STATUS_OPTIONS: { value: CampaignStatus; label: string }[] = [
   { value: "draft", label: "แบบร่าง" },
@@ -137,10 +140,38 @@ export function CampaignForm(props: {
 
   const statusOptions = props.mode === "create" ? CREATE_STATUS_OPTIONS : EDIT_STATUS_OPTIONS;
 
-  return (
-    <form onSubmit={handleSaveChanges} class="flex flex-col gap-6">
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div class="flex flex-col gap-6 lg:col-span-2">
+  /**
+   * REAL-TIME LIVE PREVIEW SYSTEM §12/§13 — Preview Adapter: reshapes this
+   * form's fields into a `campaign`-type `HomepageSection` with `campaignId`
+   * left unlinked, so `CampaignSectionBlock` (the real renderer, via the
+   * real `HomepageSections`) uses the inline banners/title/description/cta/
+   * products fields directly — the exact same shape the real homepage's own
+   * "9.9 Beauty Sale" Campaign section already uses today.
+   */
+  const previewSection = createMemo<HomepageSection>(() => ({
+    id: "campaign-preview",
+    type: "campaign",
+    name: name() || "Campaign",
+    enabled: true,
+    eyebrow: "",
+    title: title(),
+    description: description(),
+    banners: { desktop: bannerDesktop(), tablet: bannerTablet(), mobile: bannerMobile() },
+    assets: [],
+    cta: { label: ctaLabel(), destination: ctaDestination() },
+    contentLayout: "image-text",
+    productSource: "manual",
+    products: products(),
+    collectionId: "",
+    categoryId: "",
+    campaignId: "",
+    createdAt: "",
+    updatedAt: "",
+  }));
+
+  const campaignForm = (
+    <>
+      <div class="flex flex-col gap-6">
           <Section title="01 · Basic Information">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <TextField
@@ -165,16 +196,19 @@ export function CampaignForm(props: {
               />
               <label class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">Status</span>
-                <select
-                  value={status()}
-                  disabled={saving()}
-                  onChange={(e) => setStatus(e.currentTarget.value as CampaignStatus)}
-                  class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                >
-                  {statusOptions.map((opt) => (
-                    <option value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                <div class="relative">
+                  <select
+                    value={status()}
+                    disabled={saving()}
+                    onChange={(e) => setStatus(e.currentTarget.value as CampaignStatus)}
+                    class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+                  >
+                    {statusOptions.map((opt) => (
+                      <option value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+                </div>
               </label>
             </div>
           </Section>
@@ -207,7 +241,7 @@ export function CampaignForm(props: {
                   placeholder="รวมไอเทมบำรุงผิวเปล่งประกาย ลดสูงสุด 40%"
                   onInput={(e) => setDescription(e.currentTarget.value)}
                   rows={3}
-                  class="rounded-card border border-surface-gray bg-white px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+                  class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
                 />
               </label>
             </div>
@@ -223,23 +257,6 @@ export function CampaignForm(props: {
               <DestinationSelector value={ctaDestination()} onChange={setCtaDestination} />
             </div>
           </Section>
-        </div>
-
-        <div class="flex flex-col gap-6">
-          <Section title="สรุป">
-            <div class="flex flex-col gap-3 text-sm">
-              <p class="text-ink-gray">Campaign คือชุดเนื้อหา (Banner + ข้อความ + สินค้า) ที่นำไปแสดงบน Homepage ได้ในภายหลัง</p>
-              <Show when={startDate() && endDate()}>
-                <p class="text-ink-gray">
-                  {startDate()} {startTime()} — {endDate()} {endTime()}
-                </p>
-              </Show>
-              <Show when={startDate() && endDate() && !dateRangeValid()}>
-                <p class="text-system-red">ช่วงวันที่ไม่ถูกต้อง</p>
-              </Show>
-            </div>
-          </Section>
-        </div>
       </div>
 
       <Show when={publishErrors().length > 0}>
@@ -258,6 +275,29 @@ export function CampaignForm(props: {
           {submitError()}
         </p>
       </Show>
+    </>
+  );
+
+  const campaignPreview = (
+    <div class="flex flex-col gap-3 p-4 sm:p-5">
+      <p class="text-xs text-ink-gray">Campaign คือชุดเนื้อหา (Banner + ข้อความ + สินค้า) ที่นำไปแสดงบน Homepage ได้ในภายหลัง</p>
+      <div class="overflow-hidden rounded-media border border-border">
+        <HomepageSections sections={[previewSection()]} />
+      </div>
+      <Show when={startDate() && endDate()}>
+        <p class="text-xs text-ink-gray">
+          {startDate()} {startTime()} — {endDate()} {endTime()}
+        </p>
+      </Show>
+      <Show when={startDate() && endDate() && !dateRangeValid()}>
+        <p class="text-xs text-system-red">ช่วงวันที่ไม่ถูกต้อง</p>
+      </Show>
+    </div>
+  );
+
+  return (
+    <form onSubmit={handleSaveChanges} class="flex flex-col gap-6">
+      <AdminFormPreviewLayout form={campaignForm} preview={campaignPreview} />
 
       <AdminFloatingBar>
         <div class="flex w-full flex-wrap justify-end gap-3">
@@ -286,7 +326,7 @@ export function CampaignForm(props: {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-4 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

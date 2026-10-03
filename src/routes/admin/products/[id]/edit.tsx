@@ -32,7 +32,7 @@ export default function AdminEditProductPage() {
             description="สินค้าอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง"
             actionLabel="กลับไปหน้าสินค้า"
             onAction={() => navigate("/admin/products")}
-            class="bg-white shadow-card"
+            class="bg-surface-card shadow-card"
           />
         </div>
       }

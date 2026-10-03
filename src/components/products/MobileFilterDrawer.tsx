@@ -1,5 +1,5 @@
 import { Dialog } from "@kobalte/core/dialog";
-import type { CategoryFacetKey, ProductFilters } from "~/lib/productListing";
+import type { CategoryFacet, CategoryFacetKey, ProductFilters } from "~/lib/productListing";
 import type { Product } from "~/lib/types";
 import { FilterPanel } from "./FilterPanel";
 
@@ -15,6 +15,7 @@ export function MobileFilterDrawer(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   draft: ProductFilters;
+  facets: CategoryFacet[];
   onChange: (next: ProductFilters) => void;
   onToggleCategory: (key: CategoryFacetKey) => void;
   onApply: () => void;
@@ -41,6 +42,7 @@ export function MobileFilterDrawer(props: {
               <FilterPanel
                 products={props.products}
                 draft={props.draft}
+                facets={props.facets}
                 onChange={props.onChange}
                 onToggleCategory={props.onToggleCategory}
                 onApply={props.onApply}

@@ -12,7 +12,10 @@ import productCushionMain from "~/assets/images/account/order-item-blush.png";
 // second real, correctly-matching photo of this product, not a different
 // product's marketing art.
 import productCushionHero from "~/assets/images/hero/hero-banner-1.png";
-import type { Product, ProductVariant } from "./types";
+// Mock review clip for prototype review UX — a 6s slow-zoom slideshow rendered
+// locally from the three UGC photos above (no external/stock footage).
+import reviewDemoVideo from "~/assets/videos/review-demo.mp4";
+import type { Product, ProductVariant, Review } from "./types";
 
 /**
  * The Figma export only shipped one real product photograph — every
@@ -61,7 +64,7 @@ const cushionShadeVariants = [
 const showcaseDescription =
   "ลิปทินท์เนื้อบางเบา เกลี่ยง่าย ให้สีชัดในปาดเดียว บำรุงริมฝีปากด้วย Hyaluronic Acid ลดปัญหาปากแห้ง คล้ำ แตก มาพร้อมพวงกุญแจคาแรกเตอร์ Sanrio ลิขสิทธิ์แท้";
 const showcaseReviewCount = 2146;
-const showcaseRatingBreakdown = [1759, 279, 64, 28, 16];
+const showcaseRatingBreakdown: [number, number, number, number, number] = [1759, 279, 64, 28, 16];
 const showcaseReviews = [
   {
     id: "review-1",
@@ -87,6 +90,138 @@ const showcaseReviews = [
     variantLabel: "05 Cherry Kiss",
     text: "สีสวยมากสำหรับคนผิวสองสี ติดทนดี แต่ต้องทาลิปบาล์มรองพื้นก่อนไม่งั้นจะเห็นเนื้อปากแห้งเป็นขุยนิดหน่อย โดยรวมยังประทับใจอยู่",
   },
+  {
+    id: "review-4",
+    name: "Kanyarat P.",
+    rating: 5,
+    date: "21 ก.ค. 2569",
+    text: "สั่งครั้งที่สองแล้วค่ะ แพ็กของมาดีมาก ส่งไว ใช้แล้วชอบจนต้องซื้อเผื่อเพื่อน คุ้มราคาสุด ๆ",
+  },
+];
+
+/**
+ * Option-level mock reviews — plain data, not special cases: each review
+ * names its product (`productId`) and the option bought (`variantId` →
+ * `ProductVariant.id`), the generic relation `lib/productReviews.ts` filters
+ * by for ANY product. These two SKUs carry hand-written reviews; every
+ * option is then topped up to 3–4 reviews by `topUpOptionReviews` below.
+ * Media reuse this project's own photos + the locally rendered demo clip.
+ */
+const lipTintReviews: Review[] = [
+  { ...showcaseReviews[1], id: "lt-review-1", productId: "best-1", variantId: "lip-tint-01", photos: [productLipTintUgc2] },
+  {
+    id: "lt-review-2",
+    productId: "best-1",
+    variantId: "lip-tint-01",
+    name: "Pimchanok R.",
+    rating: 5,
+    date: "30 ก.ค. 2569",
+    variantLabel: "01 Melody Pink",
+    text: "สีชมพูหวานใส่ทุกวันได้ ถ่ายคลิปสวอชมาให้ดูค่ะ ปาดเดียวสีขึ้นเลย",
+    videos: [{ src: reviewDemoVideo, poster: productLipTintUgc1 }],
+  },
+  {
+    id: "lt-review-3",
+    productId: "best-1",
+    variantId: "lip-tint-02",
+    name: "มายด์ ว.",
+    rating: 4,
+    date: "25 ก.ค. 2569",
+    variantLabel: "02 Kuromi Purple",
+    text: "สีม่วงอมชมพูแปลกตาดี ทาบาง ๆ แล้วเบลอขอบจะสวยมาก พวงกุญแจคุโรมิน่ารักสุด ๆ",
+    photos: [productLipTintUgc3, productLipTintMain],
+  },
+  { ...showcaseReviews[0], id: "lt-review-4", productId: "best-1", variantId: "lip-tint-04", photos: [productLipTintUgc1, productLipTintMain, productPhoto] },
+  {
+    ...showcaseReviews[2],
+    id: "lt-review-5",
+    productId: "best-1",
+    variantId: "lip-tint-05",
+    videos: [{ src: reviewDemoVideo, poster: productLipTintUgc3 }],
+    photos: [productLipTintUgc2],
+  },
+];
+
+/**
+ * Mock option-level reviews for ANY product with options — generated from the
+ * product's own data (its option ids/labels, its own gallery photos, its id),
+ * never from its name or a hardcoded id. Every option ends up with 3–4
+ * reviews in the Option Modal (alternating per option): reviews a product
+ * already has (the hand-written Cushion / Lip Tint sets) are kept and only
+ * the shortfall is generated, with photos (the very first one also a video).
+ * Deterministic, so SSR and the client render the same data.
+ */
+const MOCK_REVIEWERS = ["Ploy S.", "เบล ก.", "Natt P.", "มิ้นท์ ร.", "June K.", "ฟ้าใส ท.", "Bow W.", "แพรว ส."];
+const MOCK_REVIEW_TEXTS = [
+  (label: string) => `ตัวเลือกสินค้า ${label} สีสวยตรงปกมาก ใช้แล้วหน้าดูสดใสขึ้น จะซื้อซ้ำแน่นอน`,
+  (label: string) => `ลอง ${label} แล้วชอบเลย เนื้อสัมผัสดี ใช้ง่าย แพ็กเกจน่ารัก ส่งไวมาก`,
+  (label: string) => `${label} เข้ากับสีผิวดี ติดทนประมาณครึ่งวัน ระหว่างวันเติมนิดหน่อยก็สวยแล้ว`,
+  (label: string) => `ถ่ายรูปมาให้ดูค่ะ ${label} ของจริงสวยกว่าในรูป คุ้มราคามาก`,
+];
+const MOCK_REVIEW_DATES = ["22 ก.ย. 2569", "18 ก.ย. 2569", "13 ก.ย. 2569", "7 ก.ย. 2569", "1 ก.ย. 2569", "26 ส.ค. 2569"];
+
+const optionReviewTarget = (optionIndex: number) => 3 + (optionIndex % 2);
+
+function topUpOptionReviews(product: Product, existing: Review[]): Review[] {
+  const photos = (product.images?.length ? product.images : [product.image]).filter(Boolean);
+  const pickPhotos = (seed: number, count: number) => Array.from({ length: count }, (_, k) => photos[(seed + k) % photos.length]);
+  const reviews = [...existing];
+  (product.variants ?? []).forEach((variant, i) => {
+    const have = existing.filter((r) => r.variantId === variant.id).length;
+    for (let k = have; k < optionReviewTarget(i); k++) {
+      const n = i * 4 + k;
+      reviews.push({
+        id: `${product.id}-mock-review-${variant.id}-${k + 1}`,
+        productId: product.id,
+        variantId: variant.id,
+        name: MOCK_REVIEWERS[n % MOCK_REVIEWERS.length],
+        rating: n % 4 === 3 ? 4 : 5,
+        date: MOCK_REVIEW_DATES[n % MOCK_REVIEW_DATES.length],
+        variantLabel: variant.label,
+        text: MOCK_REVIEW_TEXTS[n % MOCK_REVIEW_TEXTS.length](variant.label),
+        photos: pickPhotos(n, (n % 3) + 1),
+        ...(n === 0 ? { videos: [{ src: reviewDemoVideo, poster: photos[0] }] } : {}),
+      });
+    }
+  });
+  return reviews;
+}
+
+const cushionReviews: Review[] = [
+  {
+    id: "cs-review-1",
+    productId: "feature-1",
+    variantId: "cushion-01",
+    name: "Kanokwan T.",
+    rating: 5,
+    date: "14 ก.ย. 2569",
+    variantLabel: "เบอร์ 01",
+    text: "ผิวขาวเหลืองใช้เบอร์ 01 พอดีมาก บางเบา ปกปิดรอยแดงได้ดี ไม่ดรอประหว่างวัน",
+    photos: [productCushionMain, productCushionHero],
+    videos: [{ src: reviewDemoVideo, poster: productCushionHero }],
+  },
+  {
+    id: "cs-review-2",
+    productId: "feature-1",
+    variantId: "cushion-02",
+    name: "ฟ้า ส.",
+    rating: 4,
+    date: "9 ก.ย. 2569",
+    variantLabel: "เบอร์ 02",
+    text: "สีกลางๆ เข้ากับผิวสองสี ฟินิชโกลว์สวย แต่คนผิวมันอาจต้องซับแป้งทับเล็กน้อย",
+    photos: [productCushionHero],
+  },
+  {
+    id: "cs-review-3",
+    productId: "feature-1",
+    variantId: "cushion-04",
+    name: "Jirapat K.",
+    rating: 5,
+    date: "2 ก.ย. 2569",
+    variantLabel: "เบอร์ 04",
+    text: "เบอร์ 04 สำหรับผิวแทนคือดีมาก ไม่ลอย ไม่เทา ตลับสวยพกง่าย",
+    photos: [productCushionMain],
+  },
 ];
 
 // Counts below were raised (per an explicit "more products to browse" request)
@@ -101,7 +236,7 @@ export const flashSaleProducts: Product[] = Array.from({ length: 12 }).map((_, i
   image: productPhoto,
   price: 199,
   compareAtPrice: 329,
-  discountPercent: 15,
+  discountPercent: 40,
   // index 1 is intentionally 0 — the one card in this catalog that exercises
   // the disabled "สินค้าหมด" (out of stock) state. Indexed with `% 8` so it
   // keeps cycling correctly now that this list is longer than 8.
@@ -136,7 +271,6 @@ Object.assign(flashSaleProducts[1], {
   ],
   reviewCount: showcaseReviewCount,
   ratingBreakdown: showcaseRatingBreakdown,
-  reviews: showcaseReviews,
 } satisfies Partial<Product>);
 
 const bestSellerCategories = ["eye", "cheek", "lip"] as const;
@@ -148,7 +282,7 @@ export const bestSellerProducts: Product[] = Array.from({ length: 12 }).map((_, 
   image: productPhoto,
   price: 199,
   compareAtPrice: 329,
-  discountPercent: 15,
+  discountPercent: 40,
   variants: i % 2 === 0 ? shadeVariants : undefined,
   category: bestSellerCategories[i % bestSellerCategories.length],
   rating: 4.7 + (i % 3) * 0.1,
@@ -210,9 +344,8 @@ Object.assign(bestSellerProducts[0], {
   soldCount: 18400,
   stockLeft: 20,
   stockTotal: 30,
-  flashSaleEndsAt: FLASH_SALE_ENDS_AT,
   ratingBreakdown: showcaseRatingBreakdown,
-  reviews: showcaseReviews,
+  reviews: lipTintReviews,
 } satisfies Partial<Product>);
 
 export const newArrivalProducts: Product[] = Array.from({ length: 10 }).map((_, i) => ({
@@ -221,11 +354,13 @@ export const newArrivalProducts: Product[] = Array.from({ length: 10 }).map((_, 
   name: "Charmiss x Sanrio Blooming Heart Lip Gloss",
   image: productPhoto,
   price: 249,
+  // Product Card Refinement — every card shows original price + discount
+  // and the rating/sold row, so the review mocks carry that data too.
+  compareAtPrice: 299,
+  discountPercent: 17,
   variants: shadeVariants,
-  // New arrivals are, well, new — most have few or no reviews yet, so only
-  // some of these show a rating row at all (Product.rating is optional).
-  rating: i % 2 === 0 ? 4.5 + (i % 3) * 0.1 : undefined,
-  soldCount: i % 2 === 0 ? 60 + i * 30 : undefined,
+  rating: 4.5 + (i % 3) * 0.1,
+  soldCount: 60 + i * 30,
 }));
 
 export const trendingProducts: Product[] = Array.from({ length: 10 }).map((_, i) => ({
@@ -235,7 +370,7 @@ export const trendingProducts: Product[] = Array.from({ length: 10 }).map((_, i)
   image: productPhoto,
   price: 219,
   compareAtPrice: 269,
-  discountPercent: 20,
+  discountPercent: 19,
   variants: undefined,
   rating: 4.8 + (i % 2) * 0.1,
   soldCount: 1500 + i * 300,
@@ -247,6 +382,8 @@ export const featuredCollectionProducts: Product[] = Array.from({ length: 10 }).
   name: "Charmiss Charming Iconic Glow Cushion SPF50+ PA++++",
   image: productPhoto,
   price: 590,
+  compareAtPrice: 790,
+  discountPercent: 25,
   variants: cushionShadeVariants,
   rating: 4.9,
   soldCount: 1000 + i * 180,
@@ -277,7 +414,7 @@ Object.assign(featuredCollectionProducts[0], {
   description: showcaseDescription,
   reviewCount: showcaseReviewCount,
   ratingBreakdown: showcaseRatingBreakdown,
-  reviews: showcaseReviews,
+  reviews: cushionReviews,
 } satisfies Partial<Product>);
 
 /**
@@ -324,10 +461,16 @@ for (const product of allProducts) {
   if (!product.description) {
     product.description = showcaseDescription;
   }
-  if (!product.reviewCount) {
+  // `reviews === undefined` (not "no reviewCount") so a product explicitly set to have no reviews keeps that.
+  if (product.reviews === undefined) {
     product.reviewCount = showcaseReviewCount;
     product.ratingBreakdown = showcaseRatingBreakdown;
-    product.reviews = showcaseReviews;
+    // Products without options keep the shared product-level reviews (4).
+    product.reviews = product.variants?.length ? [] : showcaseReviews;
+  }
+  // Every option gets 3–4 reviews — hand-written ones kept, the rest generated.
+  if (product.variants?.length) {
+    product.reviews = topUpOptionReviews(product, product.reviews ?? []);
   }
 }
 
@@ -356,9 +499,14 @@ export const isTrending = (p: Pick<Product, "id">): boolean => p.id.startsWith("
 export const isFeatured = (p: Pick<Product, "id">): boolean => p.id.startsWith("feature-");
 export const isFlashSale = (p: Pick<Product, "flashSaleEndsAt">): boolean => !!p.flashSaleEndsAt;
 
-export const productFilterTabs = [
-  { id: "all", label: "ทั้งหมด" },
-  { id: "eye", label: "ตา" },
-  { id: "cheek", label: "แก้ม" },
-  { id: "lip", label: "ปาก" },
-] as const;
+/**
+ * Discount badge % — always derived from the two real prices
+ * (`((compareAtPrice - price) / compareAtPrice) × 100`, rounded) rather than
+ * trusting the stored `discountPercent`, so the badge can never disagree
+ * with the prices shown next to it. Same formula Admin's ProductForm uses.
+ * `undefined` when the product isn't actually discounted.
+ */
+export function getDiscountPercent(p: Pick<Product, "price" | "compareAtPrice">): number | undefined {
+  if (!p.compareAtPrice || p.price <= 0 || p.compareAtPrice <= p.price) return undefined;
+  return Math.round(((p.compareAtPrice - p.price) / p.compareAtPrice) * 100) || undefined;
+}

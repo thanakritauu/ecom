@@ -23,10 +23,9 @@ import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
 
 const SORT_OPTIONS = [
-  { value: "sort-asc", label: "ลำดับการแสดงผล" },
-  { value: "updated-desc", label: "แก้ไขล่าสุด" },
   { value: "name-asc", label: "ชื่อ A→Z" },
   { value: "name-desc", label: "ชื่อ Z→A" },
+  { value: "updated-desc", label: "แก้ไขล่าสุด" },
 ];
 
 const STATUS_FILTER_OPTIONS: SelectFilterConfig = {
@@ -49,7 +48,7 @@ export default function AdminBrandsListPage() {
 
   const [search, setSearchRaw] = createSignal("");
   const [statusFilter, setStatusFilterRaw] = createSignal<"all" | BrandStatus>("all");
-  const [sort, setSortRaw] = createSignal("sort-asc");
+  const [sort, setSortRaw] = createSignal("name-asc");
   const [page, setPage] = createSignal(1);
   const [pageSize, setPageSizeRaw] = createSignal(10);
   const [listStatus, setListStatus] = createSignal<AsyncStatus>("loading");
@@ -57,6 +56,7 @@ export default function AdminBrandsListPage() {
   const [quickViewId, setQuickViewId] = createSignal<string | null>(null);
   const [confirmDelete, setConfirmDelete] = createSignal<AdminBrand | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = createSignal(false);
+  const [blockedDelete, setBlockedDelete] = createSignal<{ brand: AdminBrand; count: number } | null>(null);
   const [actionLoading, setActionLoading] = createSignal(false);
   const quickViewBrand = createMemo(() => (quickViewId() ? store.getById(quickViewId()!) : undefined));
 
@@ -105,7 +105,7 @@ export default function AdminBrandsListPage() {
       case "updated-desc":
         return list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
       default:
-        return list.sort((a, b) => a.sortOrder - b.sortOrder);
+        return list.sort((a, b) => a.name.localeCompare(b.name));
     }
   });
 
@@ -129,7 +129,26 @@ export default function AdminBrandsListPage() {
     });
   const clearSelection = () => setSelectedIds(new Set<string>());
 
-  const requestDelete = (b: AdminBrand) => setConfirmDelete(b);
+  /**
+   * Category/Brand Action + Dark Mode Refinement §2 — same bulk-action shape
+   * as `categories/index.tsx`'s own `bulkSetStatus` / `products/index.tsx`'s
+   * original. No per-row Toggle/Status column control in the table anymore
+   * (§1B) — a read-only `StatusBadge` is still shown so the table stays
+   * informative.
+   */
+  const bulkSetStatus = async (status: BrandStatus) => {
+    const ids = [...selectedIds()];
+    await Promise.all(ids.map((id) => store.setStatus(id, status)));
+    clearSelection();
+    pushToast(status === "active" ? `เปิดใช้งาน ${ids.length} รายการแล้ว` : `ปิดใช้งาน ${ids.length} รายการแล้ว`, "success");
+  };
+
+  /** §14/§44 dependency guard — a Brand must never be deleted while Products still reference it (leaving a dangling `brandId`), even though Brand is nullable on Product. Consistent with Category/Collection/Product's "block + direct the admin to resolve it manually" pattern rather than a silent auto-clear. */
+  const requestDelete = (b: AdminBrand) => {
+    const count = brandProductCount(b.id);
+    if (count > 0) setBlockedDelete({ brand: b, count });
+    else setConfirmDelete(b);
+  };
   const confirmDeleteAction = async () => {
     const b = confirmDelete();
     if (!b) return;
@@ -140,14 +159,22 @@ export default function AdminBrandsListPage() {
     pushToast(`ลบ "${b.name}" เรียบร้อยแล้ว`, "error");
   };
 
+  /** §47 — bulk delete must use the exact same dependency guard as single delete. */
   const confirmBulkDeleteAction = async () => {
     const ids = [...selectedIds()];
+    const targets = store.brands().filter((b) => ids.includes(b.id));
+    const blocked = targets.filter((b) => brandProductCount(b.id) > 0);
+    const ok = targets.filter((b) => !blocked.includes(b));
     setActionLoading(true);
-    await Promise.all(ids.map((id) => store.remove(id)));
+    await Promise.all(ok.map((b) => store.remove(b.id)));
     setActionLoading(false);
     setConfirmBulkDelete(false);
     clearSelection();
-    pushToast(`ลบแบรนด์ ${ids.length} รายการเรียบร้อยแล้ว`, "error");
+    if (blocked.length > 0) {
+      pushToast(`ลบไม่สำเร็จ ${blocked.length} รายการ (มีสินค้าใช้งานอยู่) — ลบสำเร็จ ${ok.length} รายการ`, "warning");
+    } else {
+      pushToast(`ลบแบรนด์ ${ok.length} รายการเรียบร้อยแล้ว`, "error");
+    }
   };
 
   const columns: DataTableColumn<AdminBrand>[] = [
@@ -186,7 +213,6 @@ export default function AdminBrandsListPage() {
       ),
     },
     { key: "products", label: "จำนวนสินค้า", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{brandProductCount(row.id)} สินค้า</span> },
-    { key: "sortOrder", label: "ลำดับ", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.sortOrder}</span> },
     { key: "status", label: "Status", render: (row) => <StatusBadge tone={BRAND_STATUS_META[row.status].tone}>{BRAND_STATUS_META[row.status].label}</StatusBadge> },
     { key: "updated", label: "Updated", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.updatedAt}</span> },
     {
@@ -199,7 +225,7 @@ export default function AdminBrandsListPage() {
 
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
-      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "แคตตาล็อก", href: "/admin/products" }, { label: "แบรนด์" }]} />
+      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สินค้า", href: "/admin/products" }, { label: "แบรนด์" }]} />
       <PageHeader
         title="แบรนด์สินค้า"
         description="จัดการแบรนด์สินค้าที่ใช้แสดงในหน้าร้านและตัวกรองสินค้า"
@@ -221,7 +247,7 @@ export default function AdminBrandsListPage() {
         <Show
           when={listStatus() === "success"}
           fallback={
-            <EmptyState tone="error" icon={<RefreshIcon />} title="ไม่สามารถโหลดรายการแบรนด์ได้" description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง" actionLabel="ลองอีกครั้ง" onAction={loadList} class="bg-white shadow-card" />
+            <EmptyState tone="error" icon={<RefreshIcon />} title="ไม่สามารถโหลดรายการแบรนด์ได้" description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง" actionLabel="ลองอีกครั้ง" onAction={loadList} class="bg-surface-card shadow-card" />
           }
         >
           <Show
@@ -233,7 +259,7 @@ export default function AdminBrandsListPage() {
                 description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "สร้างแบรนด์แรกของคุณเพื่อเริ่มต้น"}
                 actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "สร้างแบรนด์"}
                 onAction={hasActiveFilters() ? clearFilters : () => navigate("/admin/brands/new")}
-                class="bg-white shadow-card"
+                class="bg-surface-card shadow-card"
               />
             }
           >
@@ -248,7 +274,7 @@ export default function AdminBrandsListPage() {
               getRowKey={(row) => row.id}
               onRowClick={(row) => setQuickViewId(row.id)}
               renderMobileCard={(row) => (
-                <div class="flex gap-3 rounded-card bg-white p-4 shadow-card">
+                <div class="flex gap-3 rounded-card bg-surface-card p-4 shadow-card">
                   <input
                     type="checkbox"
                     aria-label={`เลือก ${row.name}`}
@@ -257,7 +283,7 @@ export default function AdminBrandsListPage() {
                     onChange={() => toggleSelect(row.id)}
                     class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
                   />
-                  <button type="button" onClick={() => setQuickViewId(row.id)} class="flex flex-1 flex-col gap-2 text-left">
+                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-2 text-left">
                     <div class="flex items-start gap-3">
                       <div class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
                         <Show when={row.logo} fallback={<ImageIcon class="size-4" />}>
@@ -269,10 +295,10 @@ export default function AdminBrandsListPage() {
                           <p class="truncate font-semibold text-ink">{row.name}</p>
                           <StatusBadge tone={BRAND_STATUS_META[row.status].tone}>{BRAND_STATUS_META[row.status].label}</StatusBadge>
                         </div>
-                        <p class="text-xs text-ink-gray">/{row.slug} · {brandProductCount(row.id)} สินค้า</p>
+                        <p class="truncate text-xs text-ink-gray">/{row.slug} · {brandProductCount(row.id)} สินค้า</p>
                       </div>
                     </div>
-                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-surface-gray text-sm font-medium text-ink">ดูรายละเอียด</span>
+                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>
                   </button>
                 </div>
               )}
@@ -286,7 +312,11 @@ export default function AdminBrandsListPage() {
       <AdminBulkActionBar
         count={selectedIds().size}
         onClear={clearSelection}
-        actions={[{ label: "ลบ", tone: "danger", onClick: () => setConfirmBulkDelete(true) }]}
+        actions={[
+          { label: "เปิดใช้งาน", onClick: () => bulkSetStatus("active") },
+          { label: "ปิดใช้งาน", onClick: () => bulkSetStatus("inactive") },
+          { label: "ลบ", tone: "danger", onClick: () => setConfirmBulkDelete(true) },
+        ]}
       />
 
       <QuickViewDrawer
@@ -323,6 +353,16 @@ export default function AdminBrandsListPage() {
         loading={actionLoading()}
         onConfirm={confirmBulkDeleteAction}
       />
+
+      <ConfirmDialog
+        open={blockedDelete() !== null}
+        onOpenChange={(open) => !open && setBlockedDelete(null)}
+        title="ไม่สามารถลบได้"
+        description={`"${blockedDelete()?.brand.name ?? ""}" — มีสินค้า ${blockedDelete()?.count ?? 0} รายการที่กำลังใช้แบรนด์นี้ กรุณาเปลี่ยนแบรนด์ของสินค้าเหล่านั้นในหน้าแก้ไขสินค้าก่อนลบแบรนด์นี้`}
+        confirmLabel="เข้าใจแล้ว"
+        cancelLabel="ปิด"
+        onConfirm={() => setBlockedDelete(null)}
+      />
     </div>
   );
 }
@@ -331,7 +371,7 @@ function ListSkeleton() {
   return (
     <div class="flex flex-col gap-3">
       {Array.from({ length: 5 }).map(() => (
-        <div class="flex items-center gap-3 rounded-card bg-white p-3 shadow-card">
+        <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
           <Skeleton class="size-11 shrink-0 rounded-media" />
           <div class="flex flex-1 flex-col gap-1.5">
             <Skeleton class="h-4 w-1/3" />

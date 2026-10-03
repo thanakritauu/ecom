@@ -55,19 +55,19 @@ export function RecentOrdersTable() {
           <button
             type="button"
             onClick={() => setQuickViewId(row.id)}
-            class="flex w-full flex-col gap-3 rounded-card bg-white p-4 text-left shadow-card"
+            class="font-normal flex w-full min-w-0 flex-col gap-3 rounded-card bg-surface-card p-4 text-left shadow-card"
           >
             <div class="flex items-start justify-between gap-2">
-              <div>
-                <p class="font-semibold text-ink">{row.orderNumber}</p>
-                <p class="text-sm text-ink-gray">{row.customer.name}</p>
+              <div class="min-w-0">
+                <p class="truncate font-semibold text-ink">{row.orderNumber}</p>
+                <p class="truncate text-sm text-ink-gray">{row.customer.name}</p>
               </div>
-              <p class="font-semibold text-ink">{formatAdminCurrency(row.totals.grandTotal)}</p>
+              <p class="shrink-0 font-semibold text-ink">{formatAdminCurrency(row.totals.grandTotal)}</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <StatusBadge tone={PAYMENT_STATUS_META[row.paymentStatus].tone}>{PAYMENT_STATUS_META[row.paymentStatus].label}</StatusBadge>
               <StatusBadge tone={ORDER_STATUS_META[row.orderStatus].tone}>{ORDER_STATUS_META[row.orderStatus].label}</StatusBadge>
-              <span class="text-xs text-ink-gray">
+              <span class="truncate text-xs text-ink-gray">
                 {row.items.length} รายการ · {row.createdAt}
               </span>
             </div>

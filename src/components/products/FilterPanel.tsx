@@ -1,10 +1,10 @@
 import { For } from "solid-js";
 import {
-  CATEGORY_FACETS,
   SKIN_TYPE_LABELS,
   getPriceBounds,
   categoryCount,
   type ProductFilters,
+  type CategoryFacet,
   type CategoryFacetKey,
 } from "~/lib/productListing";
 import type { Product } from "~/lib/types";
@@ -23,6 +23,7 @@ import { Button } from "../shared/Button";
 export function FilterPanel(props: {
   products: Product[];
   draft: ProductFilters;
+  facets: CategoryFacet[];
   onChange: (next: ProductFilters) => void;
   onToggleCategory: (key: CategoryFacetKey) => void;
   onApply: () => void;
@@ -47,9 +48,9 @@ export function FilterPanel(props: {
       <div class="flex flex-col gap-2">
         <p class="text-base font-semibold text-ink">ประเภทการใช้งาน</p>
         <div class="flex flex-col gap-1">
-          <For each={CATEGORY_FACETS}>
+          <For each={props.facets}>
             {(facet) => {
-              const count = () => categoryCount(facet.key, props.products);
+              const count = () => categoryCount(facet.key, props.products, props.facets);
               const disabled = () => count() === 0;
               const checked = () => props.draft.categories.includes(facet.key);
               return (

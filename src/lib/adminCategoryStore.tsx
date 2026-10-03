@@ -1,6 +1,6 @@
 import { createContext, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
-import { type AdminCategory, type CategoryFormValues, buildMockCategories, normalizeCategory } from "./adminCategories";
+import { type AdminCategory, type CategoryFormValues, type CategoryStatus, buildMockCategories, normalizeCategory } from "./adminCategories";
 
 const STORAGE_KEY = "charmiss:admin:catalog:categories";
 const TODAY_LABEL = "18 ก.ย. 2569";
@@ -16,6 +16,7 @@ type AdminCategoryContextValue = {
   add: (input: CategoryFormValues) => Promise<AdminCategory>;
   update: (id: string, input: CategoryFormValues) => Promise<AdminCategory>;
   remove: (id: string) => Promise<void>;
+  setStatus: (id: string, status: CategoryStatus) => Promise<void>;
 };
 
 const AdminCategoryContext = createContext<AdminCategoryContextValue>();
@@ -84,7 +85,21 @@ export function AdminCategoryProvider(props: { children: JSX.Element }) {
     mutate((list) => list.filter((c) => c.id !== id));
   };
 
-  return <AdminCategoryContext.Provider value={{ categories, getById, add, update, remove }}>{props.children}</AdminCategoryContext.Provider>;
+  /**
+   * CMS + Frontend Refinement §1 — the Category Table's own inline Toggle
+   * (same store, same `AdminCategory[]` signal as the Edit form's Toggle, so
+   * either one changing status is instantly visible from the other — no
+   * separate status system). Deliberately no `simulateDelay()`/failure
+   * chance like `add`/`update`: a bare Toggle should flip the instant it's
+   * clicked, the same UX `adminNotificationBarStore.tsx`'s on/off Toggle
+   * already established, not the multi-hundred-ms latency a save button
+   * with its own loading state can absorb.
+   */
+  const setStatus: AdminCategoryContextValue["setStatus"] = async (id, status) => {
+    mutate((list) => list.map((c) => (c.id === id ? { ...c, status, updatedAt: TODAY_LABEL } : c)));
+  };
+
+  return <AdminCategoryContext.Provider value={{ categories, getById, add, update, remove, setStatus }}>{props.children}</AdminCategoryContext.Provider>;
 }
 
 export function useAdminCategories() {

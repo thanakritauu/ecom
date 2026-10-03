@@ -23,7 +23,7 @@ export function ConfirmDialog(props: {
       <Dialog.Portal>
         <Dialog.Overlay class="fixed inset-0 z-40 bg-ink/40 motion-reduce:animate-none data-[expanded]:animate-overlay-in data-[closed]:animate-overlay-out" />
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <Dialog.Content class="w-full max-w-sm rounded-card bg-white p-5 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+          <Dialog.Content class="w-full max-w-sm rounded-card bg-surface-card p-5 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
             <Dialog.Title class="text-lg font-semibold text-ink">{props.title}</Dialog.Title>
             <Dialog.Description class="mt-2 text-sm text-ink-gray">{props.description}</Dialog.Description>
             <div class="mt-5 flex gap-3">

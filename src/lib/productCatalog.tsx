@@ -1,6 +1,5 @@
 import { createContext, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
-import { isServer } from "solid-js/web";
-import { buildAdminProductBaseline, normalizeAdminProduct, type AdminProduct } from "./adminProductStore";
+import { buildAdminProductBaseline, normalizeAdminProduct, readPersistedAdminProducts, type AdminProduct } from "./adminProductStore";
 
 /**
  * Architecture Cleanup & Source of Truth — the storefront's one read path
@@ -20,21 +19,12 @@ import { buildAdminProductBaseline, normalizeAdminProduct, type AdminProduct } f
  * mirror itself (same data, read-only, always in sync via the same
  * `localStorage` key), not a second reshaped dataset.
  */
-const STORAGE_KEY = "charmiss:admin:products";
-
 function fallbackProducts(): AdminProduct[] {
   return buildAdminProductBaseline().map(normalizeAdminProduct);
 }
 
 function readStoredProducts(): AdminProduct[] {
-  if (isServer) return fallbackProducts();
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return fallbackProducts();
-    return (JSON.parse(raw) as AdminProduct[]).map(normalizeAdminProduct);
-  } catch {
-    return fallbackProducts();
-  }
+  return readPersistedAdminProducts() ?? fallbackProducts();
 }
 
 type ProductCatalogContextValue = {

@@ -1,7 +1,10 @@
 import { For, Show } from "solid-js";
+import { A } from "@solidjs/router";
 import { StatusBadge } from "~/components/admin/StatusBadge";
+import { ReceiptIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { ORDER_STATUS_META, PAYMENT_STATUS_META, FULFILLMENT_STATUS_META, type AdminOrder } from "~/lib/adminOrders";
+import { computeCoinsEarned } from "~/lib/cartSelectors";
 import { OrderTimeline } from "./OrderTimeline";
 
 /**
@@ -40,7 +43,7 @@ export function OrderQuickView(props: { order: AdminOrder }) {
           <span class="text-ink-gray">สินค้า</span>
           <span class="font-medium text-ink">{o().items.length} รายการ</span>
         </div>
-        <div class="mt-1 flex flex-col gap-1 border-t border-surface-gray pt-2">
+        <div class="mt-1 flex flex-col gap-1 border-t border-border pt-2">
           <div class="flex items-center justify-between">
             <span class="text-ink-gray">ยอดรวมสินค้า</span>
             <span class="text-ink">{formatAdminCurrency(o().totals.subtotal)}</span>
@@ -59,6 +62,17 @@ export function OrderQuickView(props: { order: AdminOrder }) {
             <span>ยอดรวมทั้งหมด</span>
             <span>{formatAdminCurrency(o().totals.grandTotal)}</span>
           </div>
+          {/* Display-only mockup, same as `orders/[id]/index.tsx`'s own — no
+              loyalty-points backend exists, computed with the exact same
+              `computeCoinsEarned` formula, hidden for cancelled/refunded. */}
+          <Show when={o().orderStatus !== "cancelled" && o().orderStatus !== "refunded"}>
+            <div class="flex items-center justify-between">
+              <span class="text-ink-gray">คอยน์ที่ลูกค้าได้รับ</span>
+              <span class="font-semibold text-success">
+                +{computeCoinsEarned(o().totals.grandTotal - o().totals.shippingFee).toLocaleString("th-TH")} คอยน์
+              </span>
+            </div>
+          </Show>
         </div>
       </div>
 
@@ -67,6 +81,14 @@ export function OrderQuickView(props: { order: AdminOrder }) {
         <StatusBadge tone={PAYMENT_STATUS_META[o().paymentStatus].tone}>{PAYMENT_STATUS_META[o().paymentStatus].label}</StatusBadge>
         <StatusBadge tone={FULFILLMENT_STATUS_META[o().fulfillmentStatus].tone}>{FULFILLMENT_STATUS_META[o().fulfillmentStatus].label}</StatusBadge>
       </div>
+
+      {/* Order + Receipt Phase §25 — "ดูใบเสร็จ" alongside the drawer's own "ดูรายละเอียดทั้งหมด" footer button, so both actions the spec names are reachable straight from Quick View, in every place this component is reused (Order List, Customer Detail's Order History). */}
+      <A
+        href={`/admin/orders/${o().id}/receipt`}
+        class="flex min-h-11 items-center justify-center gap-2 rounded-pill border border-border text-sm font-medium text-ink transition-colors duration-150 hover:bg-surface-pink"
+      >
+        <ReceiptIcon class="size-4" /> ดูใบเสร็จ
+      </A>
 
       <div class="flex flex-col gap-3">
         <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">สินค้าในคำสั่งซื้อ</p>

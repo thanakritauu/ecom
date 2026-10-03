@@ -1,15 +1,24 @@
-import { For, Show } from "solid-js";
-import type { Product, Review } from "~/lib/types";
-import starGold from "~/assets/icons/star-gold-4.svg";
+import { createMemo, createSignal, For, Show } from "solid-js";
+import type { Product } from "~/lib/types";
+import { reviewsOfProduct } from "~/lib/productReviews";
+import { ReviewList, ReviewMediaViewer, type ReviewMediaViewerState } from "~/components/shared/ReviewList";
 
-/** Renders only when the product has curated review data — see products.ts for why not every catalog item does. */
+/**
+ * Renders only when the product has curated review data — see products.ts
+ * for why not every catalog item does. The list is the same `ReviewList`
+ * and the same combined reviews (`reviewsOfProduct`, never filtered by the
+ * picked shade) as the Product Option Modal, so the two never show
+ * different reviews or a different review layout.
+ */
 export function ProductReviews(props: { product: Product }) {
+  const reviews = createMemo(() => reviewsOfProduct(props.product));
+  const [viewer, setViewer] = createSignal<ReviewMediaViewerState | null>(null);
   const breakdown = () => props.product.ratingBreakdown;
   const total = () => breakdown()?.reduce((sum, n) => sum + n, 0) ?? 0;
 
   return (
     <Show when={props.product.rating && breakdown() && props.product.reviews?.length}>
-      <section aria-labelledby="reviews-heading" class="flex flex-col items-center gap-8">
+      <section aria-labelledby="reviews-heading" class="flex flex-col items-center gap-5 sm:gap-6 lg:gap-8">
         <div class="flex flex-col items-center gap-2 text-center">
           <h2 id="reviews-heading" class="text-3xl font-bold text-ink lg:text-[40px]">
             #CharmissReviews
@@ -40,38 +49,11 @@ export function ProductReviews(props: { product: Product }) {
           </div>
         </div>
 
-        <div class="grid w-full max-w-[600px] gap-4">
-          <For each={props.product.reviews}>{(review) => <ReviewCard review={review} />}</For>
+        <div class="w-full max-w-[600px]">
+          <ReviewList reviews={reviews()} onOpenMedia={(items, index, author) => setViewer({ items, index, author })} />
         </div>
+        <Show when={viewer()}>{(v) => <ReviewMediaViewer fixed state={v()} onChange={(index) => setViewer({ ...v(), index })} onClose={() => setViewer(null)} />}</Show>
       </section>
     </Show>
-  );
-}
-
-function ReviewCard(props: { review: Review }) {
-  const initial = () => props.review.name.trim().charAt(0);
-  return (
-    <article class="flex flex-col gap-3 rounded-card bg-surface-pink p-6">
-      <div class="flex items-center gap-3">
-        <div
-          class="flex size-10 shrink-0 items-center justify-center rounded-pill bg-brand-pink/20 text-sm font-semibold text-brand-pink"
-          aria-hidden="true"
-        >
-          {initial()}
-        </div>
-        <div class="min-w-0 flex-1">
-          <p class="text-base text-ink">{props.review.name}</p>
-          <p class="truncate text-sm text-ink-gray">
-            {props.review.variantLabel ? `เฉด ${props.review.variantLabel} · ` : ""}ซื้อจริงเมื่อ {props.review.date}
-          </p>
-        </div>
-        <div class="flex shrink-0 items-center gap-0.5" aria-label={`ให้คะแนน ${props.review.rating} จาก 5`}>
-          <For each={[0, 1, 2, 3, 4]}>
-            {(i) => <img src={starGold} alt="" class="size-4" classList={{ "opacity-25": i >= props.review.rating }} />}
-          </For>
-        </div>
-      </div>
-      <p class="text-base leading-relaxed text-ink">{props.review.text}</p>
-    </article>
   );
 }

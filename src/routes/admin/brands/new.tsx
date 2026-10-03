@@ -21,12 +21,12 @@ export default function AdminBrandNewPage() {
       <Breadcrumb
         items={[
           { label: "แดชบอร์ด", href: "/admin" },
-          { label: "แคตตาล็อก", href: "/admin/products" },
+          { label: "สินค้า", href: "/admin/products" },
           { label: "แบรนด์", href: "/admin/brands" },
           { label: "สร้างใหม่" },
         ]}
       />
-      <PageHeader title="สร้างแบรนด์" description="กำหนดชื่อ, Slug, โลโก้, สถานะ และสินค้าที่จะอยู่ในแบรนด์นี้" />
+      <PageHeader title="สร้างแบรนด์" description="กำหนดชื่อและ Slug ของแบรนด์นี้" />
       <BrandForm
         mode="create"
         isSlugTaken={(slug) => isBrandSlugTaken(store.brands(), slug)}

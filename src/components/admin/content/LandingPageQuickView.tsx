@@ -19,7 +19,8 @@ export function LandingPageQuickView(props: { page: LandingPage }) {
 
   /** §27 Hero preview — an enabled `hero` Section (Section Builder) takes precedence over the flat `banners` field, same precedence Preview/PromotionPageView use. */
   const heroSection = () => p().sections.find((s) => s.type === "hero" && s.enabled);
-  const heroImage = () => heroSection()?.banners.desktop || p().banners.desktop;
+  /** Prefers the first *image* asset (this is a static `<img>` thumbnail, not a player) — a video/YouTube-only Hero Banner falls back to its legacy `banners.desktop`, same as before this field existed. */
+  const heroImage = () => heroSection()?.assets.find((a) => a.type === "image")?.source || heroSection()?.banners.desktop || p().banners.desktop;
   const sectionTypeCounts = () => {
     const counts = new Map<string, number>();
     for (const s of p().sections) counts.set(s.type, (counts.get(s.type) ?? 0) + 1);
@@ -36,12 +37,14 @@ export function LandingPageQuickView(props: { page: LandingPage }) {
 
       <div>
         <p class="text-base font-semibold text-ink">{p().name}</p>
-        <p class="text-sm text-ink-gray">/{p().slug}</p>
+        <p class="text-sm text-ink-gray">{p().isHomepage ? "/" : `/${p().slug}`}</p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
         <StatusBadge tone={LANDING_PAGE_STATUS_META[p().status].tone}>{LANDING_PAGE_STATUS_META[p().status].label}</StatusBadge>
-        <StatusBadge tone={p().navigation.enabled ? "success" : "neutral"}>Navigation: {p().navigation.enabled ? "แสดง" : "ซ่อน"}</StatusBadge>
+        <Show when={p().isHomepage}>
+          <span class="rounded-pill bg-surface-pink px-2.5 py-1 text-xs font-medium text-brand-pink">★ Homepage</span>
+        </Show>
       </div>
 
       <div class="flex flex-col gap-1.5 rounded-card bg-surface-gray/60 p-3 text-sm">

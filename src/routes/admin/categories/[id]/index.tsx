@@ -7,12 +7,15 @@ import { StatusBadge } from "~/components/admin/StatusBadge";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { CategoryRowActionsMenu } from "~/components/admin/categories/CategoryRowActionsMenu";
-import { CatalogIcon, ImageIcon } from "~/components/admin/icons";
+import { CatalogIcon } from "~/components/admin/icons";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { CATEGORY_STATUS_META } from "~/lib/adminCategories";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
-import { productsInCategory } from "~/lib/masterDataRelations";
+import { useAdminContent } from "~/lib/adminContentStore";
+import { productsInCategory, findCategoryReferencesInPromotionPages } from "~/lib/masterDataRelations";
+import { useAdminNavigation } from "~/lib/adminNavigationStore";
+import { findNavigationReferences, describeNavigationReference } from "~/lib/adminNavigation";
 import { pushToast } from "~/lib/toast";
 
 /** Header / Products / Status / Description / Metadata — mirrors `product-collections/[id]/index.tsx`, plus the thumbnail/slug a taxonomy entry needs. */
@@ -20,11 +23,32 @@ export default function AdminCategoryDetailPage() {
   const params = useParams<{ id: string }>();
   const store = useAdminCategories();
   const productStore = useAdminProducts();
+  const contentStore = useAdminContent();
+  const navigation = useAdminNavigation();
   const navigate = useNavigate();
   const category = createMemo(() => store.getById(params.id));
 
   const [confirmDelete, setConfirmDelete] = createSignal(false);
+  const [blockedDelete, setBlockedDelete] = createSignal(false);
   const [actionLoading, setActionLoading] = createSignal(false);
+
+  /** §10/§43 dependency guard — a Category must never be deleted while Products still classify themselves under it, a Promotion Page/Homepage Section still sources from it, or a NavigationItem still targets it. */
+  const navigationRefs = createMemo(() => {
+    const current = category();
+    return current ? findNavigationReferences(navigation.items(), "category", current.id) : [];
+  });
+  const pageRefs = createMemo(() => {
+    const current = category();
+    return current ? findCategoryReferencesInPromotionPages(current.id, contentStore.pages()) : [];
+  });
+  const dependencyProductCount = createMemo(() => {
+    const current = category();
+    return current ? productsInCategory(current.id, productStore.products()).length : 0;
+  });
+  const requestDelete = () => {
+    if (dependencyProductCount() > 0 || navigationRefs().length > 0 || pageRefs().length > 0) setBlockedDelete(true);
+    else setConfirmDelete(true);
+  };
 
   const confirmDeleteAction = async () => {
     const current = category();
@@ -42,8 +66,8 @@ export default function AdminCategoryDetailPage() {
       when={category()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "แคตตาล็อก", href: "/admin/products" }, { label: "หมวดหมู่", href: "/admin/categories" }]} />
-          <EmptyState icon={<CatalogIcon />} title="ไม่พบหมวดหมู่นี้" description="หมวดหมู่นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/categories")} class="bg-white shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สินค้า", href: "/admin/products" }, { label: "หมวดหมู่", href: "/admin/categories" }]} />
+          <EmptyState icon={<CatalogIcon />} title="ไม่พบหมวดหมู่นี้" description="หมวดหมู่นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/categories")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -57,7 +81,7 @@ export default function AdminCategoryDetailPage() {
             <Breadcrumb
               items={[
                 { label: "แดชบอร์ด", href: "/admin" },
-                { label: "แคตตาล็อก", href: "/admin/products" },
+                { label: "สินค้า", href: "/admin/products" },
                 { label: "หมวดหมู่", href: "/admin/categories" },
                 { label: c().name },
               ]}
@@ -75,8 +99,8 @@ export default function AdminCategoryDetailPage() {
                     id={c().id}
                     name={c().name}
                     hideView
-                    onDelete={() => setConfirmDelete(true)}
-                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-surface-gray text-ink-gray hover:bg-surface-pink"
+                    onDelete={requestDelete}
+                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
                   />
                 </div>
               }
@@ -107,14 +131,6 @@ export default function AdminCategoryDetailPage() {
               </div>
 
               <div class="flex flex-col gap-6">
-                <Section title="รูปภาพ">
-                  <div class="flex size-24 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
-                    <Show when={c().image} fallback={<ImageIcon class="size-6" />}>
-                      <img src={c().image} alt="" class="size-full object-cover" />
-                    </Show>
-                  </div>
-                </Section>
-
                 <Section title="สถานะ">
                   <StatusBadge tone={CATEGORY_STATUS_META[c().status].tone} class="w-fit">
                     {CATEGORY_STATUS_META[c().status].label}
@@ -126,7 +142,6 @@ export default function AdminCategoryDetailPage() {
                 </Section>
 
                 <Section title="ข้อมูลเพิ่มเติม">
-                  <Row label="ลำดับการแสดงผล" value={String(c().sortOrder)} />
                   <Row label="สร้างเมื่อ" value={c().createdAt} />
                   <Row label="แก้ไขล่าสุด" value={c().updatedAt} />
                 </Section>
@@ -143,6 +158,22 @@ export default function AdminCategoryDetailPage() {
               loading={actionLoading()}
               onConfirm={confirmDeleteAction}
             />
+
+            <ConfirmDialog
+              open={blockedDelete()}
+              onOpenChange={setBlockedDelete}
+              title="ไม่สามารถลบได้"
+              description={(() => {
+                const parts: string[] = [];
+                if (dependencyProductCount() > 0) parts.push(`มีสินค้า ${dependencyProductCount()} รายการที่ใช้หมวดหมู่นี้`);
+                if (navigationRefs().length > 0) parts.push(`ถูกใช้งานใน Navigation: ${navigationRefs().map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
+                if (pageRefs().length > 0) parts.push(`ถูกใช้งานใน Promotion Page: ${pageRefs().map((r) => (r.isHomepage ? "Homepage" : r.pageName)).join(", ")}`);
+                return `"${c().name}" — ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบหมวดหมู่นี้`;
+              })()}
+              confirmLabel="เข้าใจแล้ว"
+              cancelLabel="ปิด"
+              onConfirm={() => setBlockedDelete(false)}
+            />
           </div>
         );
       }}
@@ -152,7 +183,7 @@ export default function AdminCategoryDetailPage() {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

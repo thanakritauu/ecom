@@ -28,7 +28,7 @@ export function OrderOverview() {
           return (
             <A
               href={`/admin/orders?status=${status}`}
-              class="flex flex-col gap-2 rounded-card bg-white p-4 shadow-card transition-colors duration-150 hover:bg-surface-pink/40"
+              class="flex flex-col gap-2 rounded-card bg-surface-card p-4 shadow-card transition-colors duration-150 hover:bg-surface-pink/40"
             >
               <StatusBadge tone={meta.tone} class="w-fit">
                 {meta.label}

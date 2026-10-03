@@ -2,7 +2,11 @@ import { createMemo, createSignal, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
+import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
+import { ChevronDownIcon } from "~/components/admin/icons";
 import { isValidDateRange, formatMarketingDate, formatCouponDiscount, type Coupon, type MarketingStatus } from "~/lib/adminMarketing";
+import { CouponCard, type Coupon as PreviewCoupon } from "~/components/shared/CouponCard";
+import { pushToast } from "~/lib/toast";
 
 const STATUS_OPTIONS: { value: MarketingStatus; label: string }[] = [
   { value: "draft", label: "แบบร่าง" },
@@ -37,6 +41,7 @@ export function CouponForm(props: {
   const [errors, setErrors] = createSignal<Record<string, string>>({});
   const [saving, setSaving] = createSignal(false);
   const [submitError, setSubmitError] = createSignal<string>();
+  const [previewCollected, setPreviewCollected] = createSignal(false);
 
   const dateRangeValid = createMemo(() => isValidDateRange(startDate(), startTime(), endDate(), endTime()));
 
@@ -67,6 +72,22 @@ export function CouponForm(props: {
     status: status(),
   });
 
+  /**
+   * REAL-TIME LIVE PREVIEW SYSTEM §7/§12/§13 — Preview Adapter: reshapes
+   * this form's in-progress values into the exact `{amountLabel,
+   * minSpendLabel, expiryLabel}` shape the real `CouponCard` (the same
+   * component the customer-facing homepage Coupon section renders) needs.
+   */
+  const previewCoupon = createMemo<PreviewCoupon>(() => {
+    const v = previewValues();
+    return {
+      id: props.initial?.id ?? "preview-draft",
+      amountLabel: formatCouponDiscount(v),
+      minSpendLabel: v.minSpend ? `ขั้นต่ำ ฿${v.minSpend.toLocaleString("th-TH")}` : "ไม่มีขั้นต่ำ",
+      expiryLabel: v.endDate ? `หมดอายุ ${formatMarketingDate(v.endDate)}` : "ยังไม่ระบุวันหมดอายุ",
+    };
+  });
+
   const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     const validationErrors = validate();
@@ -84,11 +105,10 @@ export function CouponForm(props: {
     }
   };
 
-  return (
-    <form onSubmit={handleSubmit} class="flex flex-col gap-6">
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div class="flex flex-col gap-6 lg:col-span-2">
-          <Section title="ข้อมูลคูปอง">
+  const couponForm = (
+    <>
+      <div class="flex flex-col gap-6">
+        <Section title="ข้อมูลคูปอง">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <TextField
                 label="รหัสคูปอง"
@@ -101,16 +121,19 @@ export function CouponForm(props: {
               />
               <label class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">สถานะ</span>
-                <select
-                  value={status()}
-                  disabled={saving()}
-                  onChange={(e) => setStatus(e.currentTarget.value as MarketingStatus)}
-                  class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                >
-                  {STATUS_OPTIONS.map((opt) => (
-                    <option value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                <div class="relative">
+                  <select
+                    value={status()}
+                    disabled={saving()}
+                    onChange={(e) => setStatus(e.currentTarget.value as MarketingStatus)}
+                    class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+                  >
+                    {STATUS_OPTIONS.map((opt) => (
+                      <option value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+                </div>
               </label>
               <label class="flex flex-col gap-1.5 sm:col-span-2">
                 <span class="text-sm font-medium text-ink">คำอธิบาย</span>
@@ -119,7 +142,7 @@ export function CouponForm(props: {
                   disabled={saving()}
                   onInput={(e) => setDescription(e.currentTarget.value)}
                   rows={2}
-                  class="rounded-card border border-surface-gray bg-white px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+                  class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
                 />
               </label>
             </div>
@@ -129,15 +152,18 @@ export function CouponForm(props: {
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">ประเภทส่วนลด</span>
-                <select
-                  value={discountType()}
-                  disabled={saving()}
-                  onChange={(e) => setDiscountType(e.currentTarget.value as "percentage" | "fixed")}
-                  class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                >
-                  <option value="percentage">เปอร์เซ็นต์ (%)</option>
-                  <option value="fixed">จำนวนเงิน (฿)</option>
-                </select>
+                <div class="relative">
+                  <select
+                    value={discountType()}
+                    disabled={saving()}
+                    onChange={(e) => setDiscountType(e.currentTarget.value as "percentage" | "fixed")}
+                    class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+                  >
+                    <option value="percentage">เปอร์เซ็นต์ (%)</option>
+                    <option value="fixed">จำนวนเงิน (฿)</option>
+                  </select>
+                  <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+                </div>
               </label>
               <TextField
                 label={discountType() === "percentage" ? "เปอร์เซ็นต์ส่วนลด" : "จำนวนเงินส่วนลด"}
@@ -165,31 +191,43 @@ export function CouponForm(props: {
               <TextField label="เวลาสิ้นสุด" type="time" value={endTime()} onInput={(e) => setEndTime(e.currentTarget.value)} disabled={saving()} />
             </div>
           </Section>
-        </div>
-
-        <div class="flex flex-col gap-6">
-          <Section title="ตัวอย่างคูปอง">
-            <div class="flex flex-col gap-2 text-sm">
-              <p class="font-mono text-base font-semibold text-ink">{code() || "COUPONCODE"}</p>
-              <p class="font-medium text-brand-pink">{formatCouponDiscount({ discountType: discountType(), discountValue: Number(discountValue()) || 0 })}</p>
-              <Show when={startDate() && endDate()}>
-                <p class="text-ink-gray">
-                  {formatMarketingDate(startDate())} {startTime()} — {formatMarketingDate(endDate())} {endTime()}
-                </p>
-              </Show>
-              <Show when={startDate() && endDate() && !dateRangeValid()}>
-                <p class="text-system-red">ช่วงวันที่ไม่ถูกต้อง</p>
-              </Show>
-            </div>
-          </Section>
-        </div>
       </div>
+
+      <Show when={startDate() && endDate() && !dateRangeValid()}>
+        <p role="alert" class="rounded-card bg-danger-soft px-4 py-3 text-sm font-medium text-danger-strong">
+          ช่วงวันที่ไม่ถูกต้อง
+        </p>
+      </Show>
 
       <Show when={submitError()}>
         <p role="alert" class="rounded-card bg-danger-soft px-4 py-3 text-sm font-medium text-danger-strong">
           {submitError()}
         </p>
       </Show>
+    </>
+  );
+
+  const couponPreview = (
+    <div class="p-4 sm:p-5">
+      <div class="overflow-hidden rounded-media border border-border">
+        <CouponCard
+          coupon={previewCoupon()}
+          collected={previewCollected()}
+          onCollect={async () => {
+            setPreviewCollected(true);
+            pushToast("นี่คือ Preview — ไม่มีการเก็บคูปองจริง", "success");
+          }}
+        />
+      </div>
+      <Show when={code()}>
+        <p class="mt-3 font-mono text-sm font-semibold text-ink">{code()}</p>
+      </Show>
+    </div>
+  );
+
+  return (
+    <form onSubmit={handleSubmit} class="flex flex-col gap-6">
+      <AdminFormPreviewLayout form={couponForm} preview={couponPreview} />
 
       <AdminFloatingBar>
         <div class="flex w-full justify-end gap-3">
@@ -208,7 +246,7 @@ export function CouponForm(props: {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-4 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

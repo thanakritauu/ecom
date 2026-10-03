@@ -1,3 +1,4 @@
+import { ChevronIcon } from "~/components/shared/ChevronIcon";
 /**
  * Small hand-authored `currentColor` line icons for the Admin nav/topbar —
  * same stroke-width-1.8 style as ~/components/shared/icons.tsx (no Figma
@@ -150,12 +151,9 @@ export function LogoutIcon(props: { class?: string }) {
   );
 }
 
+/** Same chevron as the storefront (DSL — see shared/ChevronIcon). */
 export function ChevronRightIcon(props: { class?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" class={props.class ?? "size-4"} fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <path d="m9 6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  );
+  return <ChevronIcon direction="right" class={props.class ?? "size-4"} />;
 }
 
 export function ChevronDownIcon(props: { class?: string }) {
@@ -314,6 +312,291 @@ export function DuplicateIcon(props: { class?: string }) {
     <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
       <rect x="8.5" y="8.5" width="12" height="12" rx="1.5" />
       <path d="M15.5 8.5V5.5A1.5 1.5 0 0 0 14 4H5.5A1.5 1.5 0 0 0 4 5.5V14a1.5 1.5 0 0 0 1.5 1.5h3" />
+    </svg>
+  );
+}
+
+/** Navigation Architecture — sitemap glyph (top bar = menu, branches = menu items resolving to pages), used for the standalone Navigation admin sidebar group. */
+export function NavigationIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <rect x="4" y="3.5" width="16" height="4" rx="1.2" />
+      <path d="M7 7.5V12M17 7.5V12" stroke-linecap="round" />
+      <path d="M7 12h10" stroke-linecap="round" />
+      <rect x="4" y="16.5" width="6" height="4" rx="1.2" />
+      <rect x="14" y="16.5" width="6" height="4" rx="1.2" />
+      <path d="M7 12v4.5M17 12v4.5" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+/* CMS Backoffice Polish §18 — one distinct icon per sidebar sub-item (previously only the first item in each group showed an icon at all). Same hand-authored stroke-width-1.8 style as the rest of this file. */
+
+export function ProductBoxIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M3.5 8 12 3.5 20.5 8 12 12.5 3.5 8Z" stroke-linejoin="round" />
+      <path d="M3.5 8v8L12 20.5 20.5 16V8" stroke-linejoin="round" />
+      <path d="M12 12.5v8" />
+    </svg>
+  );
+}
+
+export function CategoryGridIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.3" />
+      <rect x="13" y="3.5" width="7.5" height="7.5" rx="1.3" />
+      <rect x="3.5" y="13" width="7.5" height="7.5" rx="1.3" />
+      <rect x="13" y="13" width="7.5" height="7.5" rx="1.3" />
+    </svg>
+  );
+}
+
+export function BrandBadgeIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <circle cx="12" cy="9.5" r="6" />
+      <path d="m8.3 14.5-1.6 6 5.3-2.6 5.3 2.6-1.6-6" stroke-linejoin="round" />
+      <path d="m9.3 9.5 1.8 1.8 3.6-3.6" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function StackBoxesIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <rect x="3.5" y="12.5" width="7" height="7" rx="1.2" />
+      <rect x="13.5" y="12.5" width="7" height="7" rx="1.2" />
+      <rect x="8.5" y="4.5" width="7" height="7" rx="1.2" />
+    </svg>
+  );
+}
+
+export function StockAdjustIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M8 12h3M8 8.5h5M8 15.5h2" stroke-linecap="round" />
+      <path d="m15.2 11.3 2.3 2.3-4.2 4.2h-2.3v-2.3l4.2-4.2Z" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function PromotionTagIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M11.3 3.3a2 2 0 0 1 1.4-.6h5.4A2 2 0 0 1 20 4.6V10a2 2 0 0 1-.6 1.4l-8 8a2 2 0 0 1-2.8 0l-5.4-5.4a2 2 0 0 1 0-2.8l8-8Z" stroke-linejoin="round" />
+      <path d="m9.5 9.5 5 5" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+export function CouponTicketIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M3.5 9.5a2 2 0 0 1 0-3.8V5a1 1 0 0 1 1-1h15a1 1 0 0 1 1 1v.7a2 2 0 0 1 0 3.8v1.4a2 2 0 0 1 0 3.8V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-.7a2 2 0 0 1 0-3.8V9.5Z" stroke-linejoin="round" />
+      <path d="M15 4.5v15" stroke-dasharray="2.2 2.2" />
+    </svg>
+  );
+}
+
+export function FlashBoltIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M13 3 5 13.5h5.5L11 21l8-11.5h-5.5L13 3Z" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function BundleBoxIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <rect x="3.5" y="8" width="17" height="12" rx="1.5" stroke-linejoin="round" />
+      <path d="M3.5 12h17M12 8v12" />
+      <path d="M9 8c-1.5 0-2.5-1-2.5-2.2C6.5 4.6 7.5 4 8.3 4 9.6 4 11 5.5 12 8Zm6 0c1.5 0 2.5-1 2.5-2.2C17.5 4.6 16.5 4 15.7 4 14.4 4 13 5.5 12 8Z" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function MemberBadgeIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <circle cx="12" cy="8" r="3.3" />
+      <path d="M5.5 20c.8-3.2 3.2-5 6.5-5s5.7 1.8 6.5 5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="m9.6 12.6 1.6 1.6 3-3" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function PointsCoinIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5v9M9.3 15.2c.3.9 1.3 1.4 2.7 1.4 1.7 0 2.8-.8 2.8-2s-1-1.7-2.8-2c-1.8-.3-2.7-.8-2.7-1.9 0-1.1 1.1-1.9 2.7-1.9 1.3 0 2.3.5 2.6 1.4" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function MissionFlagIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M6 21V4" stroke-linecap="round" />
+      <path d="M6 4.5h11l-2.5 3.5L17 11.5H6" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function RewardGiftIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <rect x="3.5" y="9.5" width="17" height="10.5" rx="1.3" />
+      <path d="M3.5 13.5h17M12 9.5v10.5" />
+      <path d="M9 9.5c-1.7 0-3-1.1-3-2.5S7.3 4.5 8.3 4.5c1.4 0 2.9 1.7 3.7 5Zm6 0c1.7 0 3-1.1 3-2.5S16.7 4.5 15.7 4.5c-1.4 0-2.9 1.7-3.7 5Z" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function PagesPanelIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="1.5" />
+      <path d="M9 4v16" />
+      <path d="M13 8h5M13 11.5h5M13 15h3" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+export function CampaignFlagIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <rect x="3.5" y="4" width="17" height="16" rx="2" />
+      <path d="M3.5 9.5h17" />
+      <path d="m9 15 1.7 1.7L14.5 13" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function FolderIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4.4a1.5 1.5 0 0 1 1.2.6l1.2 1.6h7.7A1.5 1.5 0 0 1 21 8.7v9.8A1.5 1.5 0 0 1 19.5 20h-15A1.5 1.5 0 0 1 3 18.5v-12Z" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function SlidersIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M4 6h9M17 6h3M4 12h3M9 12h11M4 18h13M20 18h0" stroke-linecap="round" />
+      <circle cx="12" cy="6" r="2" />
+      <circle cx="6" cy="12" r="2" />
+      <circle cx="17" cy="18" r="2" />
+    </svg>
+  );
+}
+
+export function ShieldUserIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M12 3.5 19 6v6c0 4.5-3 7.5-7 8.5-4-1-7-4-7-8.5V6l7-2.5Z" stroke-linejoin="round" />
+      <circle cx="12" cy="10.3" r="2.1" />
+      <path d="M8.6 15.5c.6-1.7 1.8-2.5 3.4-2.5s2.8.8 3.4 2.5" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function KeyIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <circle cx="8" cy="15" r="4" />
+      <path d="m11 12 8.5-8.5M16.5 6.5l2.5 2.5M14 9l2 2" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+/** §05-11 — Export/Import affordances shared across every Admin table. */
+export function DownloadIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-4"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M12 3.5v11.5M7.5 10.5l4.5 4.5 4.5-4.5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M4.5 16.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function UploadIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-4"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M12 15.5V4M7.5 8.5 12 4l4.5 4.5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M4.5 16.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+/** CMS + Frontend Final Refinement §8 — the Product Gallery's "ตั้งเป็นรูปหลัก" (Set as Main Photo) pin affordance and its "รูปหลัก" badge. */
+export function StarIcon(props: { class?: string; filled?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-4"} fill={props.filled ? "currentColor" : "none"} stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="m12 3.5 2.66 5.52 6.09.86-4.4 4.32 1.04 6.06L12 17.35l-5.39 2.91 1.04-6.06-4.4-4.32 6.09-.86Z" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+/** Order + Receipt Phase §14/§15/§22 — "พิมพ์ใบเสร็จ" action. */
+export function PrintIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-4"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M7 8.5V4h10v4.5" stroke-linecap="round" stroke-linejoin="round" />
+      <rect x="4.5" y="8.5" width="15" height="8" rx="1.5" />
+      <path d="M7 15.5h10V20H7z" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+/** Order + Receipt Phase §15 — the "เอกสารคำสั่งซื้อ" section / "ดูใบเสร็จ" action. */
+export function ReceiptIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-4"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M6 3.5h12v17l-2.5-1.5-2.5 1.5-2.5-1.5L8 20.5 5.5 19V3.5Z" stroke-linejoin="round" />
+      <path d="M8.5 8h7M8.5 11.5h7M8.5 15h4" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+export function FileSpreadsheetIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-4"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M6 3.5h8l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1Z" stroke-linejoin="round" />
+      <path d="M8 12.5h8M8 16h8M11 12.5V20" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+export function CheckCircleIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-4"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8 12.5 2.5 2.5L16 9.5" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function WarningTriangleIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-4"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M12 4 3 19h18L12 4Z" stroke-linejoin="round" />
+      <path d="M12 10v4" stroke-linecap="round" />
+      <circle cx="12" cy="16.7" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function ErrorCircleIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-4"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9 9l6 6M15 9l-6 6" stroke-linecap="round" />
     </svg>
   );
 }

@@ -14,8 +14,11 @@ const isPathInGroup = (group: AdminNavGroup, pathname: string) =>
 /**
  * Desktop-only persistent sidebar (see AdminMobileDrawer for the mobile
  * equivalent — a Drawer, not a collapsed version of this). Active state
- * relies on @solidjs/router's own `.active` class on `<A>`; Dashboard passes
- * `end` since `/admin` would otherwise prefix-match every other admin route.
+ * relies on @solidjs/router's own `.active` class on `<A>`; Dashboard (`/admin`)
+ * and Settings Overview (`/admin/settings`) both pass `end` since either href
+ * would otherwise prefix-match every route nested under it, lighting up two
+ * sidebar items at once (Global Nav Fix — Settings sub-routes surfaced this
+ * the same way Dashboard's own routes already had).
  *
  * Global UI Correction #5-7: the sidebar can collapse to an icon rail, and
  * it now owns its own scroll container (`nav` below, `overflow-y-auto`)
@@ -83,13 +86,13 @@ export function AdminSidebar() {
   return (
     <aside
       classList={{
-        "hidden shrink-0 flex-col border-r border-surface-gray bg-white transition-[width] duration-200 lg:sticky lg:top-0 lg:flex lg:h-screen lg:self-start":
+        "hidden shrink-0 flex-col border-r border-border bg-surface-card transition-[width] duration-200 lg:sticky lg:top-0 lg:flex lg:h-screen lg:self-start":
           true,
         "lg:w-64": !ui.sidebarCollapsed(),
         "lg:w-20": ui.sidebarCollapsed(),
       }}
     >
-      <div class="flex h-16 shrink-0 items-center overflow-hidden border-b border-surface-gray px-4">
+      <div class="flex h-16 shrink-0 items-center overflow-hidden border-b border-border px-4">
         <Show
           when={!ui.sidebarCollapsed()}
           fallback={
@@ -118,7 +121,7 @@ export function AdminSidebar() {
                     type="button"
                     onClick={() => toggleGroup(group.id)}
                     aria-expanded={isGroupExpanded(group)}
-                    class={`flex items-center justify-between gap-2 rounded-card px-3 pb-1 text-xs font-semibold uppercase tracking-wide transition-colors duration-150 hover:text-ink-gray ${
+                    class={`flex items-center justify-between gap-2 rounded-card px-3 pb-1 text-xs font-medium uppercase tracking-wide transition-colors duration-150 hover:text-ink-gray ${
                       isPathInGroup(group, location.pathname) ? "text-ink" : "text-ink-placeholder"
                     }`}
                   >
@@ -129,7 +132,7 @@ export function AdminSidebar() {
               </Show>
               <Show when={isGroupExpanded(group) || ui.sidebarCollapsed()}>
                 <For each={group.items}>
-                  {(item, i) => (
+                  {(item) => (
                     <Show when={item.href || !ui.sidebarCollapsed()}>
                       {item.href ? (
                         <A
@@ -140,7 +143,10 @@ export function AdminSidebar() {
                             ui.sidebarCollapsed() ? "justify-center px-0" : "px-3"
                           }`}
                         >
-                          {i() === 0 ? <group.icon class="size-5 shrink-0" /> : <span class="size-5 shrink-0" aria-hidden="true" />}
+                          {(() => {
+                            const ItemIcon = item.icon ?? group.icon;
+                            return <ItemIcon class="size-5 shrink-0" />;
+                          })()}
                           <Show when={!ui.sidebarCollapsed()}>{item.label}</Show>
                         </A>
                       ) : (
@@ -149,7 +155,10 @@ export function AdminSidebar() {
                           disabled
                           class="flex min-h-11 cursor-not-allowed items-center gap-3 rounded-card px-3 text-sm font-medium text-ink-placeholder"
                         >
-                          <span class="size-5 shrink-0" aria-hidden="true" />
+                          {(() => {
+                            const ItemIcon = item.icon ?? group.icon;
+                            return <ItemIcon class="size-5 shrink-0" />;
+                          })()}
                           {item.label}
                         </button>
                       )}
@@ -162,7 +171,7 @@ export function AdminSidebar() {
         </For>
       </nav>
 
-      <div class="shrink-0 border-t border-surface-gray p-2">
+      <div class="shrink-0 border-t border-border p-2">
         <button
           type="button"
           onClick={ui.toggleSidebarCollapsed}

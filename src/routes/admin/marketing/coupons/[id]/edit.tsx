@@ -28,7 +28,7 @@ export default function AdminCouponEditPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "คูปอง", href: "/admin/marketing/coupons" }]} />
-          <EmptyState icon={<InventoryIcon />} title="ไม่พบคูปองนี้" actionLabel="กลับไปหน้าคูปอง" onAction={() => navigate("/admin/marketing/coupons")} class="bg-white shadow-card" />
+          <EmptyState icon={<InventoryIcon />} title="ไม่พบคูปองนี้" actionLabel="กลับไปหน้าคูปอง" onAction={() => navigate("/admin/marketing/coupons")} class="bg-surface-card shadow-card" />
         </div>
       }
     >

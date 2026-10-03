@@ -61,21 +61,42 @@ export default function AdminBannerDetailPage() {
       when={banner()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "เนื้อหา", href: "/admin/content" }, { label: "Banners", href: "/admin/content/banners" }]} />
-          <EmptyState icon={<ContentIcon />} title="ไม่พบ Banner นี้" description="Banner นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/content/banners")} class="bg-white shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "Banners", href: "/admin/content/banners" }]} />
+          <EmptyState icon={<ContentIcon />} title="ไม่พบ Banner นี้" description="Banner นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/content/banners")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
       {(current) => {
         const b = current;
         const destinationHref = () => resolveHomepageDestinationHref(b().destination, lookups);
+        /**
+         * CHARMISS CMS — ADMIN ONLY §4 — Full Page Preview for a Banner
+         * means opening the real page its Destination points to, rendered
+         * by the real Frontend (no synthetic "Banner page" invented). A
+         * Landing Page destination goes through the existing Admin preview
+         * route (`/admin/preview/promotion-pages/:id`, same one
+         * `promotion-pages/[id]/index.tsx` already uses) so Draft/Scheduled
+         * pages still preview correctly — the public `/promotion/:slug`
+         * route 404s anything not currently visible. Every other
+         * destination kind (product/category/collection/internal/external)
+         * has no draft state, so it opens the real resolved href directly.
+         */
+        const openDestinationPreview = () => {
+          const dest = b().destination;
+          if (dest.type === "landingPage") {
+            window.open(`/admin/preview/promotion-pages/${dest.landingPageId}`, "_blank");
+            return;
+          }
+          const href = destinationHref();
+          if (href) window.open(href, "_blank");
+        };
 
         return (
           <div class="flex flex-col gap-6">
             <Breadcrumb
               items={[
                 { label: "แดชบอร์ด", href: "/admin" },
-                { label: "เนื้อหา", href: "/admin/content" },
+                { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
                 { label: "Banners", href: "/admin/content/banners" },
                 { label: b().name },
               ]}
@@ -85,6 +106,11 @@ export default function AdminBannerDetailPage() {
               description={BANNER_PLACEMENT_META[b().placement].label}
               actions={
                 <div class="flex items-center gap-2">
+                  <Show when={b().destination.type !== "none"}>
+                    <Button variant="outline" onClick={openDestinationPreview}>
+                      ดูตัวอย่างหน้าปลายทาง
+                    </Button>
+                  </Show>
                   <Button variant="primary" href={`/admin/content/banners/${b().id}/edit`}>
                     แก้ไข
                   </Button>
@@ -95,7 +121,7 @@ export default function AdminBannerDetailPage() {
                     hideView
                     onTogglePublish={() => setConfirmToggle(true)}
                     onDelete={() => setConfirmDelete(true)}
-                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-surface-gray text-ink-gray hover:bg-surface-pink"
+                    triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
                   />
                 </div>
               }
@@ -171,7 +197,7 @@ export default function AdminBannerDetailPage() {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

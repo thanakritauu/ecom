@@ -18,7 +18,7 @@ export function QuickActions() {
         {(action) => (
           <A
             href={action.href}
-            class="flex min-h-11 flex-col items-center justify-center gap-2 rounded-card border border-surface-gray bg-white px-3 py-4 text-center transition-colors duration-150 hover:border-brand-pink hover:bg-surface-pink/40"
+            class="flex min-h-11 flex-col items-center justify-center gap-2 rounded-card border border-border bg-surface-card px-3 py-4 text-center transition-colors duration-150 hover:border-brand-pink hover:bg-surface-pink/40"
           >
             <span class="flex size-9 items-center justify-center rounded-pill bg-surface-pink text-brand-pink">
               <action.icon class="size-4" />

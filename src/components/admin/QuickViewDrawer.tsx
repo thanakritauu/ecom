@@ -30,8 +30,8 @@ export function QuickViewDrawer(props: {
       <Dialog.Portal>
         <Dialog.Overlay class="fixed inset-0 z-40 bg-ink/40 motion-reduce:animate-none data-[expanded]:animate-overlay-in data-[closed]:animate-overlay-out" />
         <div class="fixed inset-y-0 right-0 z-50 flex w-full sm:w-[480px]">
-          <Dialog.Content class="flex size-full flex-col overflow-hidden bg-white shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-drawer-in data-[closed]:animate-drawer-out">
-            <div class="flex shrink-0 items-start justify-between gap-3 border-b border-surface-gray px-5 py-4">
+          <Dialog.Content class="flex size-full flex-col overflow-hidden bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-drawer-in data-[closed]:animate-drawer-out">
+            <div class="flex shrink-0 items-start justify-between gap-3 border-b border-border px-5 py-4">
               <div class="min-w-0">
                 <Dialog.Title class="truncate text-lg font-semibold text-ink">{props.title}</Dialog.Title>
                 {props.subtitle ? <p class="truncate text-sm text-ink-gray">{props.subtitle}</p> : null}
@@ -46,7 +46,7 @@ export function QuickViewDrawer(props: {
 
             <div class="flex-1 overflow-y-auto p-5">{props.children}</div>
 
-            <div class="shrink-0 border-t border-surface-gray p-4" style={{ "padding-bottom": "max(1rem, env(safe-area-inset-bottom))" }}>
+            <div class="shrink-0 border-t border-border p-4" style={{ "padding-bottom": "max(1rem, env(safe-area-inset-bottom))" }}>
               <Button type="button" variant="primary" onClick={props.onViewFull} class="w-full">
                 ดูรายละเอียดทั้งหมด
               </Button>

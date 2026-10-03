@@ -45,14 +45,14 @@ export function BannerLibraryPicker(props: { onSelect: (banners: HomepageBanners
         <Dialog.Portal>
           <Dialog.Overlay class="fixed inset-0 z-40 bg-ink/40 motion-reduce:animate-none data-[expanded]:animate-overlay-in data-[closed]:animate-overlay-out" />
           <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <Dialog.Content class="flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-card bg-white shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
-              <div class="flex shrink-0 items-center justify-between gap-3 border-b border-surface-gray px-5 py-4">
+            <Dialog.Content class="flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-card bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+              <div class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
                 <Dialog.Title class="text-lg font-semibold text-ink">เลือก Banner</Dialog.Title>
                 <Dialog.CloseButton aria-label="ปิด" class="flex size-9 items-center justify-center rounded-pill text-ink-gray hover:bg-surface-pink">
                   <CloseXIcon />
                 </Dialog.CloseButton>
               </div>
-              <div class="flex flex-col gap-3 border-b border-surface-gray p-4">
+              <div class="flex flex-col gap-3 border-b border-border p-4">
                 <SearchInput value={search()} onInput={setSearch} placeholder="ค้นหา Banner..." />
               </div>
               <div class="flex-1 overflow-y-auto p-3">
@@ -63,7 +63,7 @@ export function BannerLibraryPicker(props: { onSelect: (banners: HomepageBanners
                         <button
                           type="button"
                           onClick={() => choose(banner.banners)}
-                          class="flex items-center gap-3 rounded-card p-2 text-left transition-colors duration-150 hover:bg-surface-pink/30"
+                          class="font-normal flex items-center gap-3 rounded-card p-2 text-left transition-colors duration-150 hover:bg-surface-pink/30"
                         >
                           <div class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
                             <Show when={banner.banners.desktop} fallback={<ImageIcon class="size-4" />}>

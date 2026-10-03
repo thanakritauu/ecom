@@ -12,9 +12,13 @@ import { QuantityStepper } from "~/components/shared/QuantityStepper";
 import { TrustBadges } from "~/components/product/TrustBadges";
 import { ProductTabs } from "~/components/product/ProductTabs";
 import { ProductReviews } from "~/components/product/ProductReviews";
+import { FeaturedReviews } from "~/components/product/FeaturedReviews";
 import { StickyAddToCartBar } from "~/components/product/StickyAddToCartBar";
 import { useProductCatalog } from "~/lib/productCatalog";
+import { useCategoryContent } from "~/lib/categoryContent";
+import { categoryListHref } from "~/lib/pageSections";
 import type { Product } from "~/lib/types";
+import { getDiscountPercent } from "~/lib/products";
 import { useCart } from "~/lib/cart";
 import { pushToast } from "~/lib/toast";
 import starGold from "~/assets/icons/star-gold-4.svg";
@@ -32,7 +36,11 @@ import { CartIcon } from "~/components/shared/icons";
 export function ProductDetailView(props: { product: Product; forceOutOfStock?: boolean }) {
   const cart = useCart();
   const catalog = useProductCatalog();
+  const categories = useCategoryContent();
   let addToCartRef: HTMLDivElement | undefined;
+
+  /** Product / Category / Brand / Collection Source-of-Truth Cleanup (§4/§8) — the breadcrumb's category crumb resolves through the real Category store by `categoryId`, not the legacy `.category` enum + a hardcoded `/category/:slug` link (a route this app has never had — Navigation/Promotion Page architecture deliberately routes category listings through `/products?category=<slug>` instead, see `categoryListHref`). */
+  const productCategory = () => (props.product.categoryId ? categories.getById(props.product.categoryId) : undefined);
 
   const outOfStock = () => props.forceOutOfStock || (props.product.stockLeft !== undefined && props.product.stockLeft <= 0);
   const hasVariants = () => (props.product.variants?.length ?? 0) > 0;
@@ -50,7 +58,7 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
   const relatedProducts = createMemo(() =>
     catalog
       .products()
-      .filter((p) => p.id !== props.product.id && (!props.product.category || p.category === props.product.category))
+      .filter((p) => p.id !== props.product.id && (!props.product.categoryId || p.categoryId === props.product.categoryId))
       .slice(0, 5),
   );
 
@@ -64,7 +72,6 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
     try {
       await cart.addLine(props.product.id, selectedVariantId(), quantity());
       setAddStatus("idle");
-      pushToast(`เพิ่ม "${props.product.name}" ลงตะกร้าแล้ว`);
     } catch {
       setAddStatus("error");
       pushToast("เพิ่มลงตะกร้าไม่สำเร็จ ลองอีกครั้ง", "error");
@@ -86,21 +93,20 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
   return (
     <>
       <Header />
-      <main class="flex flex-col overflow-x-hidden pb-8">
-        <Container width="wide" class="pt-6">
+      <main class="flex flex-col overflow-x-hidden pb-6 sm:pb-8 lg:pb-10">
+        <Container width="wide" class="pt-4 sm:pt-6">
           <Breadcrumb
             items={[
               { label: "หน้าแรก", href: "/" },
-              ...(props.product.category
-                ? [{ label: categoryLabel(props.product.category), href: `/category/${props.product.category}` }]
-                : []),
+              ...(productCategory() ? [{ label: productCategory()!.name, href: categoryListHref(productCategory()!.slug) }] : []),
               { label: props.product.name },
             ]}
           />
         </Container>
 
-        <Container width="wide" class="flex flex-col gap-10 pt-6">
-          <div class="flex flex-col gap-10 lg:flex-row lg:items-start">
+        {/* Section rhythm — 24 / 32 / 40px (mobile / tablet / desktop), same scale as Home. */}
+        <Container width="wide" class="flex flex-col gap-6 pt-4 sm:gap-8 sm:pt-6 lg:gap-10">
+          <div class="flex flex-col gap-6 sm:gap-8 lg:flex-row lg:items-start lg:gap-10">
             <div class="lg:w-1/2 lg:shrink-0">
               <ProductGallery product={props.product} forceOutOfStock={props.forceOutOfStock} />
             </div>
@@ -139,9 +145,9 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
               <div class="flex flex-col gap-2 rounded-card bg-surface-pink px-6 py-5">
                 <div class="flex flex-wrap items-center gap-2">
                   <PriceDisplay price={props.product.price} compareAtPrice={props.product.compareAtPrice} />
-                  <Show when={props.product.discountPercent}>
+                  <Show when={getDiscountPercent(props.product)}>
                     <span class="rounded-pill bg-danger-strong/90 px-1.5 py-0.5 text-xs font-semibold text-danger-soft">
-                      ลด {props.product.discountPercent}%
+                      ลด {getDiscountPercent(props.product)}%
                     </span>
                   </Show>
                 </div>
@@ -151,16 +157,16 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
                 <div class="flex flex-col gap-3">
                   <div class="flex flex-wrap items-center gap-2 text-base">
                     <span class="font-semibold text-ink">ตัวเลือก</span>
-                    <span class="text-ink-gray">{selectedVariant()?.label ?? "กรุณาเลือกเฉดสี"}</span>
+                    <span class="text-ink-gray">{selectedVariant()?.label ?? "กรุณาเลือกตัวเลือกสินค้า"}</span>
                   </div>
-                  <div role="radiogroup" aria-label="เฉดสี" class="flex flex-wrap gap-4">
+                  <div role="radiogroup" aria-label="ตัวเลือกสินค้า" class="flex flex-wrap gap-4">
                     <For each={props.product.variants}>
                       {(variant) => (
                         <button
                           type="button"
                           role="radio"
                           aria-checked={selectedVariantId() === variant.id}
-                          aria-label={`เฉดสี ${variant.label}${variant.soldOut ? " (สินค้าหมด)" : ""}`}
+                          aria-label={`ตัวเลือกสินค้า ${variant.label}${variant.soldOut ? " (สินค้าหมด)" : ""}`}
                           disabled={variant.soldOut}
                           onClick={() => {
                             setSelectedVariantId(variant.id);
@@ -179,7 +185,7 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
                   </div>
                   <Show when={shadeRequired()}>
                     <p class="text-sm text-system-red" role="alert">
-                      กรุณาเลือกเฉดสีก่อนเพิ่มลงตะกร้า
+                      กรุณาเลือกตัวเลือกสินค้าก่อนเพิ่มลงตะกร้า
                     </p>
                   </Show>
                 </div>
@@ -207,6 +213,8 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
             </div>
           </div>
 
+          {/* Phase 03 — Admin-curated Instagram/TikTok posts, right under the gallery + product info and above the detail tabs. Hidden when none are featured. */}
+          <FeaturedReviews product={props.product} />
           <TrustBadges />
           <ProductTabs product={props.product} />
           <ProductReviews product={props.product} />
@@ -251,8 +259,4 @@ export function NotFoundState(props: { slug: string }) {
       <Footer />
     </>
   );
-}
-
-function categoryLabel(category: "eye" | "cheek" | "lip") {
-  return { eye: "ตา", cheek: "แก้ม", lip: "ปาก" }[category];
 }

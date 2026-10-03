@@ -2,7 +2,7 @@ import { createMemo, createSignal, For, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { SearchInput } from "~/components/admin/SearchInput";
 import { StatusBadge } from "~/components/admin/StatusBadge";
-import { ImageIcon } from "~/components/admin/icons";
+import { ChevronDownIcon, ImageIcon } from "~/components/admin/icons";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
@@ -69,15 +69,18 @@ export function DestinationSelector(props: { value: HomepageDestination; onChang
     <div class="flex flex-col gap-3">
       <label class="flex flex-col gap-1.5">
         <span class="text-sm font-medium text-ink">Destination</span>
-        <select
-          value={props.value.type}
-          onChange={(e) => setType(e.currentTarget.value as HomepageDestination["type"])}
-          class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink"
-        >
-          {TYPE_OPTIONS.map((opt) => (
-            <option value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
+        <div class="relative">
+          <select
+            value={props.value.type}
+            onChange={(e) => setType(e.currentTarget.value as HomepageDestination["type"])}
+            class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
+          >
+            {TYPE_OPTIONS.map((opt) => (
+              <option value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+        </div>
       </label>
 
       <Show when={props.value.type === "internal"}>
@@ -120,14 +123,16 @@ export function DestinationSelector(props: { value: HomepageDestination; onChang
 function LandingPagePicker(props: { value: string; onChange: (id: string) => void }) {
   const store = useAdminContent();
   const [search, setSearch] = createSignal("");
+  // §18/§35 — Homepage never resolves through `/promotion/:slug`, so it's never a valid target for this destination kind; pick "หน้าแรก" (the `homepage`/`internal` destination) for that instead.
+  const pickable = () => store.pages().filter((p) => !p.isHomepage);
   const filtered = createMemo(() => {
     const q = search().trim().toLowerCase();
-    if (!q) return store.pages();
-    return store.pages().filter((p) => `${p.name} ${p.slug}`.toLowerCase().includes(q));
+    if (!q) return pickable();
+    return pickable().filter((p) => `${p.name} ${p.slug}`.toLowerCase().includes(q));
   });
 
   return (
-    <div class="flex flex-col gap-2 rounded-card border border-surface-gray p-3">
+    <div class="flex flex-col gap-2 rounded-card border border-border p-3">
       <SearchInput value={search()} onInput={setSearch} placeholder="ค้นหา Landing Page..." />
       <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
         <Show when={filtered().length > 0} fallback={<p class="p-3 text-center text-sm text-ink-gray">ไม่พบ Landing Page</p>}>
@@ -175,7 +180,7 @@ function SingleProductPicker(props: { value: string; onChange: (id: string) => v
   });
 
   return (
-    <div class="flex flex-col gap-2 rounded-card border border-surface-gray p-3">
+    <div class="flex flex-col gap-2 rounded-card border border-border p-3">
       <SearchInput value={search()} onInput={setSearch} placeholder="ค้นหาสินค้า, SKU..." />
       <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
         <Show when={filtered().length > 0} fallback={<p class="p-3 text-center text-sm text-ink-gray">ไม่พบสินค้า</p>}>
@@ -215,7 +220,7 @@ function CategoryPicker(props: { value: string; onChange: (id: string) => void }
   });
 
   return (
-    <div class="flex flex-col gap-2 rounded-card border border-surface-gray p-3">
+    <div class="flex flex-col gap-2 rounded-card border border-border p-3">
       <SearchInput value={search()} onInput={setSearch} placeholder="ค้นหาหมวดหมู่..." />
       <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
         <Show when={filtered().length > 0} fallback={<p class="p-3 text-center text-sm text-ink-gray">ไม่พบหมวดหมู่</p>}>
@@ -263,7 +268,7 @@ function CollectionPicker(props: { value: string; onChange: (id: string) => void
   });
 
   return (
-    <div class="flex flex-col gap-2 rounded-card border border-surface-gray p-3">
+    <div class="flex flex-col gap-2 rounded-card border border-border p-3">
       <SearchInput value={search()} onInput={setSearch} placeholder="ค้นหา Collection..." />
       <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
         <Show when={filtered().length > 0} fallback={<p class="p-3 text-center text-sm text-ink-gray">ไม่พบ Collection</p>}>

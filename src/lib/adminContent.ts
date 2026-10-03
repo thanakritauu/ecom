@@ -1,29 +1,32 @@
 import type { StatusTone } from "~/components/admin/StatusBadge";
 import { isValidDateRange } from "./adminMarketing";
-import { normalizeHomepageSection, type HomepageSection, type HomepageDestination } from "./pageSections";
+import { normalizeHomepageSection, validateHeroAssets, type HomepageSection, type HomepageDestination } from "./pageSections";
+import { buildHomepageSectionBaseline } from "./adminHomepage";
 import heroBanner1 from "~/assets/images/hero/hero-banner-1.png";
 import heroBanner2 from "~/assets/images/hero/hero-banner-2.png";
 import heroBanner3 from "~/assets/images/hero/hero-banner-3.png";
+import { upgradeSeedBanners } from "./seedBanners";
 
 /**
- * Landing Page Architecture & Promotion Page Migration — this file's
- * `PromotionPage*` names are the original, still-load-bearing implementation
- * (storage key, seed data, every existing route/import) and stay exactly as
- * they are: renaming them would touch every consumer for zero functional
- * gain and risk exactly the "blind rename" the migration spec warns against.
- * `LandingPage*` (type aliases here, value aliases at the bottom of this
- * file, after the real declarations exist) is the new *public* vocabulary —
- * plain aliases to the same type/functions, not a second parallel system —
- * so new code (the `/admin/content/landing-pages` routes, `LandingPageForm`,
- * etc.) can speak Landing Page terminology while reading and writing the
- * exact same `charmiss:admin:content:promotionPages` data every existing
- * Banner/Campaign/Homepage destination and every already-saved page still
- * relies on. There is one Source of Truth (this file); `LandingPage` is just
- * its new name.
+ * Landing Page Architecture & Promotion Page Migration, extended by
+ * Promotion Page / Homepage Architecture — this file's `PromotionPage*`
+ * names are the original, still-load-bearing implementation (storage key,
+ * seed data, the actual entity this whole architecture is named after) and
+ * stay exactly as they are: renaming them would touch every consumer for
+ * zero functional gain and risk exactly the "blind rename" the migration
+ * spec warns against. `LandingPage*` (type aliases here, value aliases at
+ * the bottom of this file, after the real declarations exist) is an older
+ * interim public vocabulary from before "Promotion Page" was settled on as
+ * the one customer-facing page entity's final name — plain aliases to the
+ * same type/functions, not a second parallel system — kept only so the
+ * `LandingPageForm`/`LandingPageQuickView`/... component names (and the
+ * `/admin/promotion-pages` routes built on them) don't need a pure-rename
+ * diff for zero functional gain. There is one Source of Truth (this file);
+ * `LandingPage` and `PromotionPage` are the same entity, `isHomepage: true`
+ * on it is Homepage — never a second entity of either kind.
  */
 export type LandingPage = PromotionPage;
 export type LandingPageStatus = PromotionPageStatus;
-export type LandingPageNavigation = PromotionPageNavigation;
 export type LandingPageFormValues = PromotionPageFormValues;
 
 /**
@@ -49,30 +52,6 @@ export type PromotionPageBanners = {
 };
 
 /**
- * Nav-integration add-on — whether/how this page surfaces as a Frontend Top
- * Navigation item. `icon` is a key into `PROMOTION_NAV_ICON_OPTIONS`
- * (`~/lib/promotionNavIcons`), never an uploaded asset — there is no "upload
- * an icon" system, by design (§3's own "Important"). `order` only ranks
- * *this* item among other nav-enabled Promotion Pages, not the whole nav.
- */
-export type PromotionPageNavigation = {
-  enabled: boolean;
-  label: string;
-  icon: string;
-  order: number;
-  /**
-   * §8 Navigation Settings — Parent. Optional and, for this phase, DATA ONLY:
-   * a dropdown in `LandingPageForm` lets an admin pick another nav-enabled
-   * page as this one's parent, but `Header.tsx`/`MobileMenu.tsx` keep
-   * rendering a single flat row per nav-enabled page exactly as before — no
-   * nested/mega-menu rendering is built against this field yet. Storing it
-   * now (rather than not at all) means adding that rendering later is
-   * additive, not a data-model change.
-   */
-  parentId?: string;
-};
-
-/**
  * One product entry on the page — `variantIds` lets an admin narrow which
  * variants of that product show on this specific page (§16), always a real
  * array so `.length`/`.includes()` never hits `undefined` the way a bare
@@ -88,11 +67,29 @@ export type PromotionPageProductRef = {
 export type PromotionPage = {
   id: string;
   name: string;
-  /** URL-safe, unique across pages — the future customer route (§31) is `/promotion/:slug`. */
+  /** URL-safe, unique across pages — the customer route is `/promotion/:slug` (ignored for the one page where `isHomepage` is true — see below). */
   slug: string;
+  /**
+   * Promotion Page / Homepage Architecture — Homepage is not a separate
+   * entity; it is the one `PromotionPage` where this is `true`. At most one
+   * page may have `isHomepage: true` at a time (enforced by
+   * `adminContentStore.tsx`'s `add`/`update`). That page's `slug` is kept
+   * for data hygiene only — the customer route `/` resolves it directly
+   * (see `homepageContent.tsx`), never `/promotion/:slug`.
+   */
+  isHomepage: boolean;
   status: PromotionPageStatus;
   banners: PromotionPageBanners;
-  navigation: PromotionPageNavigation;
+  /**
+   * Navigation Architecture (Blueprint v1 FINAL) — a Promotion Page owns no
+   * navigation data. It used to carry its own `navigation: {enabled, label,
+   * icon, order, parentId}` object; that field is removed outright (not
+   * deprecated-in-place, and never replaced by another nested navigation
+   * object on this type). Whether/how this page appears in a customer menu
+   * is decided entirely by a separate `NavigationItem` (`~/lib/adminNavigation`)
+   * whose `targetType` is `"promotion_page"` and `targetId` is this page's
+   * `id` — this page is only ever a navigation *target*.
+   */
   title: string;
   description: string;
   products: PromotionPageProductRef[];
@@ -129,30 +126,33 @@ export function slugify(input: string): string {
  * back out of `localStorage` may predate a field the current shape relies
  * on, so every page is normalized before a component ever reads it.
  */
+/**
+ * Seed section ids that have been removed from the baseline for good (the
+ * homepage "9.9 Beauty Sale" campaign section). A browser that saved Admin
+ * content before the removal still has them in localStorage — they're
+ * dropped here, on every read, so they disappear from Admin's Homepage
+ * editor and the storefront alike and aren't written back on the next save.
+ */
+const RETIRED_SECTION_IDS = new Set(["home-sec-campaign-99"]);
+
 export function normalizePromotionPage(p: Partial<PromotionPage> & { id: string }): PromotionPage {
   return {
     id: p.id,
     name: p.name ?? "",
     slug: p.slug ?? "",
+    isHomepage: p.isHomepage ?? false,
     status: p.status ?? "draft",
-    banners: {
+    banners: upgradeSeedBanners({
       desktop: p.banners?.desktop ?? "",
       tablet: p.banners?.tablet ?? "",
       mobile: p.banners?.mobile ?? "",
-    },
-    navigation: {
-      enabled: p.navigation?.enabled ?? false,
-      label: p.navigation?.label ?? "",
-      icon: p.navigation?.icon ?? "",
-      order: typeof p.navigation?.order === "number" && Number.isFinite(p.navigation.order) ? p.navigation.order : 0,
-      parentId: p.navigation?.parentId || undefined,
-    },
+    }),
     title: p.title ?? "",
     description: p.description ?? "",
     products: Array.isArray(p.products)
       ? p.products.map((ref) => ({ productId: ref.productId, variantIds: Array.isArray(ref.variantIds) ? ref.variantIds : [] }))
       : [],
-    sections: Array.isArray(p.sections) ? p.sections.map(normalizeHomepageSection) : [],
+    sections: Array.isArray(p.sections) ? p.sections.filter((sec) => !RETIRED_SECTION_IDS.has(sec?.id)).map(normalizeHomepageSection) : [],
     startDate: p.startDate ?? "",
     startTime: p.startTime ?? "00:00",
     endDate: p.endDate ?? "",
@@ -170,21 +170,47 @@ export function isSlugTaken(pages: PromotionPage[], slug: string, excludeId?: st
   return pages.some((p) => p.id !== excludeId && p.slug.trim().toLowerCase() === target);
 }
 
+/** §35 — a Promotion Page slug must never create routing ambiguity with an existing static route. Checked against the first path segment only (so `/products` blocks a page slugged `products`, and `/product/:slug` blocks one slugged `product`). */
+const RESERVED_SLUGS = ["products", "product", "cart", "checkout", "account", "login", "register", "admin"];
+export function isReservedSlug(slug: string): boolean {
+  return RESERVED_SLUGS.includes(slug.trim().toLowerCase());
+}
+
+/** §34 — at most one Promotion Page may be the Homepage at a time. `excludeId` lets Edit compare against every *other* page (so saving the Homepage's own record doesn't flag itself). */
+export function isHomepageAssigned(pages: PromotionPage[], excludeId?: string): boolean {
+  return pages.some((p) => p.id !== excludeId && p.isHomepage);
+}
+
 /**
- * §28 — a Draft can be saved with almost nothing filled in; only *Publish*
- * demands the page is actually presentable. Returns Thai messages ready to
- * show as-is (toast and/or inline), empty array = safe to publish.
+ * §28/§33 — a Draft can be saved with almost nothing filled in; only
+ * *Publish* demands the page is actually presentable. Returns Thai messages
+ * ready to show as-is (toast and/or inline), empty array = safe to publish.
+ *
+ * Promotion Page / Homepage Architecture §33 — a page composed with the
+ * Page Section Builder (`sections.length > 0`) renders entirely from its
+ * sections (`PromotionPageView`'s own render branch), so the legacy flat
+ * "Desktop Banner"/"at least 1 product" requirements only make sense for a
+ * page still using the flat fields — requiring them unconditionally would
+ * incorrectly block publishing a perfectly valid section-built page
+ * (including Homepage, which always uses sections).
  */
-export function validatePublishRequirements(values: Pick<PromotionPageFormValues, "name" | "slug" | "title" | "banners" | "navigation" | "products" | "startDate" | "startTime" | "endDate" | "endTime">): string[] {
+export function validatePublishRequirements(
+  values: Pick<PromotionPageFormValues, "name" | "slug" | "title" | "banners" | "products" | "sections" | "startDate" | "startTime" | "endDate" | "endTime" | "isHomepage">,
+): string[] {
   const errors: string[] = [];
   if (!values.name.trim()) errors.push("กรุณากรอกชื่อหน้า");
   if (!values.slug.trim()) errors.push("กรุณากรอก Slug");
-  if (!values.title.trim()) errors.push("กรุณากรอก Title");
-  if (!values.banners.desktop) errors.push("กรุณาอัปโหลด Desktop Banner");
-  if (values.products.length === 0) errors.push("กรุณาเลือกสินค้าอย่างน้อย 1 รายการ");
-  if (values.navigation.enabled && !values.navigation.label.trim()) errors.push("กรุณากรอก Menu Label สำหรับ Top Navigation");
+  else if (!values.isHomepage && isReservedSlug(values.slug)) errors.push("Slug นี้ตรงกับ Route ที่ระบบใช้งานอยู่แล้ว กรุณาเลือก Slug อื่น");
+  if (values.sections.length === 0) {
+    if (!values.title.trim()) errors.push("กรุณากรอก Title");
+    if (!values.banners.desktop) errors.push("กรุณาอัปโหลด Desktop Banner");
+    if (values.products.length === 0) errors.push("กรุณาเลือกสินค้าอย่างน้อย 1 รายการ");
+  }
   if (values.startDate && values.endDate && !isValidDateRange(values.startDate, values.startTime, values.endDate, values.endTime)) {
     errors.push("ช่วงวันที่ไม่ถูกต้อง");
+  }
+  for (const section of values.sections) {
+    if (section.type === "hero") errors.push(...validateHeroAssets(section.assets));
   }
   return errors;
 }
@@ -226,11 +252,6 @@ export function isPromotionPageVisible(p: Pick<PromotionPage, "status" | "startD
   return false;
 }
 
-/** Nav add-on §7 — visible in the nav needs both the opt-in toggle *and* the same live-visibility rule the page itself uses. */
-export function isPromotionPageInNav(p: Pick<PromotionPage, "status" | "startDate" | "startTime" | "endDate" | "endTime" | "navigation">, nowMs: number = Date.now()): boolean {
-  return p.navigation.enabled && p.navigation.label.trim() !== "" && isPromotionPageVisible(p, nowMs);
-}
-
 const TODAY_LABEL = "17 ก.ย. 2569";
 
 /**
@@ -253,11 +274,13 @@ function seedAutoProductSection(id: string, title: string, productSource: "new_a
     title,
     description: "",
     banners: { desktop: "", tablet: "", mobile: "" },
+    assets: [],
     cta: { label: "", destination: { type: "none" } },
     contentLayout: "image-text",
     productSource,
     products: [],
     collectionId: "",
+    categoryId: "",
     campaignId: "",
     createdAt: TODAY_LABEL,
     updatedAt: TODAY_LABEL,
@@ -280,11 +303,11 @@ function seedAutoProductSection(id: string, title: string, productSource: "new_a
 const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { id: string })[] = [
   {
     id: "promo-page-001",
+    isHomepage: false,
     name: "9.9 Beauty Sale",
     slug: "9-9-beauty-sale",
     status: "published",
     banners: { desktop: heroBanner1, tablet: heroBanner1, mobile: heroBanner1 },
-    navigation: { enabled: true, label: "9.9", icon: "tag", order: 1 },
     title: "Beauty Sale",
     description: "รวมไอเทมดูแลผิวและสุขภาพในราคาพิเศษ ลดสูงสุด 50% เฉพาะวันที่ 9.9 นี้เท่านั้น",
     products: [
@@ -301,11 +324,11 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
   },
   {
     id: "promo-page-002",
+    isHomepage: false,
     name: "แคมเปญวันหยุดยาว",
     slug: "long-weekend-campaign",
     status: "scheduled",
     banners: { desktop: heroBanner2, tablet: heroBanner2, mobile: "" },
-    navigation: { enabled: true, label: "วันหยุดยาว", icon: "gift", order: 2 },
     title: "Long Weekend Glow",
     description: "เตรียมผิวสวยก่อนวันหยุดยาว พร้อมส่วนลดพิเศษเฉพาะแคมเปญนี้",
     products: [
@@ -320,11 +343,11 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
   },
   {
     id: "promo-page-003",
+    isHomepage: false,
     name: "Charmiss x Sanrio Collection",
     slug: "charmiss-x-sanrio",
     status: "published",
     banners: { desktop: heroBanner3, tablet: heroBanner3, mobile: heroBanner3 },
-    navigation: { enabled: true, label: "Sanrio", icon: "star", order: 3 },
     title: "Charmiss x Sanrio",
     description: "คอลเลกชันลิขสิทธิ์แท้ Sanrio จำนวนจำกัด ช้อปก่อนหมด",
     products: [
@@ -340,11 +363,11 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
   },
   {
     id: "promo-page-004",
+    isHomepage: false,
     name: "แคมเปญร่างทดสอบ",
     slug: "draft-test-campaign",
     status: "draft",
     banners: { desktop: "", tablet: "", mobile: "" },
-    navigation: { enabled: true, label: "ร่าง", icon: "fire", order: 4 },
     title: "",
     description: "",
     products: [],
@@ -356,11 +379,11 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
   },
   {
     id: "promo-page-005",
+    isHomepage: false,
     name: "โปรปีใหม่ที่ผ่านมา",
     slug: "new-year-promo-2026",
     status: "unpublished",
     banners: { desktop: heroBanner2, tablet: "", mobile: "" },
-    navigation: { enabled: true, label: "ปีใหม่", icon: "sparkle", order: 5 },
     title: "New Year New Glow",
     description: "แคมเปญปีใหม่ที่ปิดไปแล้ว เก็บไว้เป็นข้อมูลอ้างอิง",
     products: [{ productId: "best-1", variantIds: [] }],
@@ -372,11 +395,11 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
   },
   {
     id: "promo-page-006",
+    isHomepage: false,
     name: "สินค้ามาใหม่",
     slug: "new-arrivals",
     status: "published",
     banners: { desktop: "", tablet: "", mobile: "" },
-    navigation: { enabled: true, label: "มาใหม่", icon: "sparkle", order: 6 },
     title: "สินค้ามาใหม่",
     description: "อัปเดตสินค้าใหม่ล่าสุดจาก Charmiss",
     products: [],
@@ -388,11 +411,11 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
   },
   {
     id: "promo-page-007",
+    isHomepage: false,
     name: "กำลังฮิต",
     slug: "trending",
     status: "published",
     banners: { desktop: "", tablet: "", mobile: "" },
-    navigation: { enabled: true, label: "กำลังฮิต", icon: "fire", order: 7 },
     title: "กำลังฮิตสัปดาห์นี้",
     description: "สินค้าที่กำลังเป็นที่นิยมในตอนนี้",
     products: [],
@@ -404,15 +427,43 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
   },
   {
     id: "promo-page-008",
+    isHomepage: false,
     name: "โปรโมชั่น",
     slug: "promotions",
     status: "published",
     banners: { desktop: "", tablet: "", mobile: "" },
-    navigation: { enabled: true, label: "โปรโมชั่น", icon: "tag", order: 8 },
     title: "โปรโมชั่นแนะนำ",
     description: "รวมสินค้าและโปรโมชั่นแนะนำจาก Charmiss",
     products: [],
     sections: [seedAutoProductSection("landing-sec-promotions-001", "สินค้าแนะนำ", "featured")],
+    startDate: "",
+    startTime: "00:00",
+    endDate: "",
+    endTime: "23:59",
+  },
+  /**
+   * Promotion Page / Homepage Architecture §8/§37 — the one Promotion Page
+   * with `isHomepage: true`. Its `sections` reproduce, byte-for-byte, the
+   * pre-migration `adminHomepage.ts`'s `buildHomepageSectionBaseline()` (the
+   * same baseline `adminHomepageStore.tsx`/`homepageContent.tsx` used to
+   * seed their own now-removed separate draft/published snapshots), so
+   * folding Homepage into this store is a pure architectural move — the
+   * actual rendered content on `/` does not change. `slug`/`banners`/
+   * `title`/`description`/`products` are unused by the customer route (`/`
+   * always renders via `sections`, never the legacy flat fields) but kept
+   * populated for data hygiene and so this row looks sane in the Admin list.
+   */
+  {
+    id: "promo-page-home",
+    isHomepage: true,
+    name: "หน้าแรก",
+    slug: "home",
+    status: "published",
+    banners: { desktop: "", tablet: "", mobile: "" },
+    title: "หน้าแรก",
+    description: "",
+    products: [],
+    sections: buildHomepageSectionBaseline(),
     startDate: "",
     startTime: "00:00",
     endDate: "",
@@ -427,22 +478,25 @@ export function buildMockPromotionPages(): PromotionPage[] {
 const linksToPage = (destination: HomepageDestination | undefined, pageId: string) => destination?.type === "landingPage" && destination.landingPageId === pageId;
 
 /**
- * §26 — before a Landing Page is deleted, this checks every other place a
- * `landingPage` `HomepageDestination` could point at it (a Banner's CTA, a
- * Campaign's CTA, a Homepage section's CTA/linked-Campaign CTA, or another
- * Landing Page's own Section CTA) and returns a human-readable list so the
- * delete confirmation can warn the admin instead of silently leaving a
- * dangling `/promotion/:slug` link behind. Structural parameter types (not
- * `Banner`/`Campaign` imports) keep this file's only dependency direction
- * intact — this module is depended on by `adminBanners.ts`/
- * `adminCampaigns.ts`, never the other way around.
+ * §26/§44 — before a Landing Page is deleted, this checks every other place
+ * a `landingPage` `HomepageDestination` could point at it (a Banner's CTA, a
+ * Campaign's CTA, or another Promotion Page's own Section CTA) and returns a
+ * human-readable list so the delete confirmation can warn the admin instead
+ * of silently leaving a dangling `/promotion/:slug` link behind. Structural
+ * parameter types (not `Banner`/`Campaign` imports) keep this file's only
+ * dependency direction intact — this module is depended on by
+ * `adminBanners.ts`/`adminCampaigns.ts`, never the other way around.
+ *
+ * Promotion Page / Homepage Architecture — Homepage is now just another row
+ * in `refs.allPages` (the `allPages` loop below already walks its
+ * `sections`), so there is no separate `homepageSections` param to pass
+ * anymore — one fewer thing every call site needed to assemble.
  */
 export function findLandingPageReferences(
   pageId: string,
   refs: {
     banners: { name: string; destination: HomepageDestination }[];
     campaigns: { name: string; cta: { destination: HomepageDestination } }[];
-    homepageSections: HomepageSection[];
     allPages: PromotionPage[];
   },
 ): string[] {
@@ -453,13 +507,10 @@ export function findLandingPageReferences(
   for (const c of refs.campaigns) {
     if (linksToPage(c.cta.destination, pageId)) hits.push(`Campaign "${c.name}"`);
   }
-  for (const s of refs.homepageSections) {
-    if (linksToPage(s.cta.destination, pageId)) hits.push(`Homepage Section "${s.name}"`);
-  }
   for (const p of refs.allPages) {
     if (p.id === pageId) continue;
     for (const s of p.sections) {
-      if (linksToPage(s.cta.destination, pageId)) hits.push(`Landing Page "${p.name}"`);
+      if (linksToPage(s.cta.destination, pageId)) hits.push(`${p.isHomepage ? "Homepage" : "Landing Page"} "${p.name}"`);
     }
   }
   return hits;
@@ -475,5 +526,4 @@ export function findLandingPageReferences(
 export const LANDING_PAGE_STATUS_META = PROMOTION_PAGE_STATUS_META;
 export const normalizeLandingPage = normalizePromotionPage;
 export const isLandingPageVisible = isPromotionPageVisible;
-export const isLandingPageInNav = isPromotionPageInNav;
 export const buildMockLandingPages = buildMockPromotionPages;

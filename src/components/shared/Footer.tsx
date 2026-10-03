@@ -7,10 +7,6 @@ import iconInstagram from "~/assets/icons/social-instagram.svg";
 import iconTiktok from "~/assets/icons/social-tiktok.svg";
 import iconFacebook from "~/assets/icons/social-facebook.svg";
 import iconYoutube from "~/assets/icons/social-youtube.svg";
-import payVisa from "~/assets/icons/pay-visa.svg";
-import payMastercard from "~/assets/icons/pay-mastercard.svg";
-import payUnionpay from "~/assets/icons/pay-unionpay.svg";
-import payJcb from "~/assets/icons/pay-jcb.svg";
 
 // `href` on every link so none of them fall back to a dead `href="#"` — items
 // that already have a real destination elsewhere in the nav (กำลังฮิต/มาใหม่/
@@ -81,8 +77,6 @@ const socialLinks = [
   { icon: iconYoutube, label: "YouTube", href: "/social/youtube" },
 ];
 
-const paymentIcons = [payVisa, payMastercard, payUnionpay, payJcb];
-
 export function Footer() {
   return (
     <footer class="flex flex-col gap-6 bg-brand-pink pt-12 text-white">
@@ -127,25 +121,10 @@ export function Footer() {
             />
           </div>
 
-          <NewsletterForm />
+          {/* Newsletter signup is hidden for now (NewsletterForm below is kept for when it comes back). */}
         </div>
 
-        <div class="flex flex-col-reverse items-center gap-4 border-b border-white/30 pb-6 sm:flex-row sm:justify-between">
-          <div class="flex items-center gap-6">
-            <For each={socialLinks}>
-              {(social) => (
-                <a href={social.href} aria-label={social.label} class="flex size-8 items-center justify-center">
-                  <img src={social.icon} alt="" class="size-6" />
-                </a>
-              )}
-            </For>
-          </div>
-          <div class="flex items-center gap-4">
-            <For each={paymentIcons}>{(icon) => <img src={icon} alt="" class="h-6 w-auto" />}</For>
-          </div>
-        </div>
-
-        <div class="flex flex-col items-center gap-2 pb-6 text-sm sm:flex-row sm:justify-between">
+        <div class="flex flex-col items-center gap-2 border-t border-white/30 pb-6 pt-6 text-sm sm:flex-row sm:justify-between">
           <p>© 2026 Charmiss. All Rights Reserved.</p>
           <div class="flex gap-6">
             <a href="/legal/terms" class="hover:underline">
@@ -157,6 +136,14 @@ export function Footer() {
           </div>
         </div>
       </Container>
+
+      {/* Global Responsive + Navigation Foundation §4 — reserves the Bottom
+          Nav's own height at the true end of the page (every page that
+          renders this Footer also renders Header/BottomNav), so the fixed
+          bar never overlaps this footer's last row once a visitor scrolls
+          all the way down. `lg:hidden` mirrors BottomNav's own Tablet+Mobile-
+          only visibility — nothing to reserve on Desktop. */}
+      <div class="h-16 shrink-0 lg:hidden" aria-hidden="true" />
     </footer>
   );
 }
@@ -168,11 +155,20 @@ function ContactDetails() {
       <p>(+66) 61 172 7257</p>
       <p>hello@charmiss.co</p>
       <p>จันทร์ - ศุกร์: 09:00 - 18:00 น.</p>
+      <div class="flex items-center gap-4">
+        <For each={socialLinks}>
+          {(social) => (
+            <a href={social.href} aria-label={social.label} class="-m-1 flex size-8 items-center justify-center">
+              <img src={social.icon} alt="" class="size-6" />
+            </a>
+          )}
+        </For>
+      </div>
     </div>
   );
 }
 
-function NewsletterForm() {
+export function NewsletterForm() {
   const [status, setStatus] = createSignal<"idle" | "loading" | "success" | "error">("idle");
   const [email, setEmail] = createSignal("");
 

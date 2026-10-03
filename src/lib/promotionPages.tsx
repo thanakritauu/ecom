@@ -1,6 +1,6 @@
-import { createContext, createMemo, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
+import { createContext, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
-import { normalizePromotionPage, isPromotionPageInNav, buildMockPromotionPages, type PromotionPage } from "./adminContent";
+import { normalizePromotionPage, buildMockPromotionPages, type PromotionPage } from "./adminContent";
 
 /** Same key `adminContentStore.tsx` (the Admin side's source of truth) persists to — read-only here, never written from the customer side. */
 const STORAGE_KEY = "charmiss:admin:content:promotionPages";
@@ -33,15 +33,11 @@ function readStoredPages(): PromotionPage[] {
   }
 }
 
-export type PromotionNavItem = { slug: string; label: string; icon: string; order: number; href: string };
-
 type PromotionPagesContextValue = {
   /** `false` until the real (client-only) read has happened — SSR and the client's first paint both render the same baseline (see `fallbackPages`), so there's no hydration mismatch. */
   ready: Accessor<boolean>;
   pages: Accessor<PromotionPage[]>;
   getBySlug: (slug: string) => PromotionPage | undefined;
-  /** Frontend Top Navigation add-on §6/§11 — derived from `pages()` on every read, never a second stored list, so Publish/Unpublish/Edit/Delete in Admin are reflected here for free. */
-  navItems: Accessor<PromotionNavItem[]>;
 };
 
 const PromotionPagesContext = createContext<PromotionPagesContextValue>();
@@ -57,15 +53,7 @@ export function PromotionPagesProvider(props: { children: JSX.Element }) {
 
   const getBySlug = (slug: string) => pages().find((p) => p.slug === slug);
 
-  const navItems = createMemo<PromotionNavItem[]>(() => {
-    const now = Date.now();
-    return pages()
-      .filter((p) => isPromotionPageInNav(p, now))
-      .map((p) => ({ slug: p.slug, label: p.navigation.label, icon: p.navigation.icon, order: p.navigation.order, href: `/promotion/${p.slug}` }))
-      .sort((a, b) => a.order - b.order);
-  });
-
-  return <PromotionPagesContext.Provider value={{ ready, pages, getBySlug, navItems }}>{props.children}</PromotionPagesContext.Provider>;
+  return <PromotionPagesContext.Provider value={{ ready, pages, getBySlug }}>{props.children}</PromotionPagesContext.Provider>;
 }
 
 export function usePromotionPages() {

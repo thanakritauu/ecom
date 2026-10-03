@@ -1,6 +1,6 @@
 import { createContext, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
-import { type AdminBrand, type BrandFormValues, buildMockBrands, normalizeBrand } from "./adminBrands";
+import { type AdminBrand, type BrandFormValues, type BrandStatus, buildMockBrands, normalizeBrand } from "./adminBrands";
 
 const STORAGE_KEY = "charmiss:admin:catalog:brands";
 const TODAY_LABEL = "18 ก.ย. 2569";
@@ -16,6 +16,7 @@ type AdminBrandContextValue = {
   add: (input: BrandFormValues) => Promise<AdminBrand>;
   update: (id: string, input: BrandFormValues) => Promise<AdminBrand>;
   remove: (id: string) => Promise<void>;
+  setStatus: (id: string, status: BrandStatus) => Promise<void>;
 };
 
 const AdminBrandContext = createContext<AdminBrandContextValue>();
@@ -79,7 +80,12 @@ export function AdminBrandProvider(props: { children: JSX.Element }) {
     mutate((list) => list.filter((b) => b.id !== id));
   };
 
-  return <AdminBrandContext.Provider value={{ brands, getById, add, update, remove }}>{props.children}</AdminBrandContext.Provider>;
+  /** CMS + Frontend Refinement §1 — same rationale as `adminCategoryStore.tsx`'s `setStatus`: an instant, no-delay Toggle flip shared by the Brand Table and Edit form. */
+  const setStatus: AdminBrandContextValue["setStatus"] = async (id, status) => {
+    mutate((list) => list.map((b) => (b.id === id ? { ...b, status, updatedAt: TODAY_LABEL } : b)));
+  };
+
+  return <AdminBrandContext.Provider value={{ brands, getById, add, update, remove, setStatus }}>{props.children}</AdminBrandContext.Provider>;
 }
 
 export function useAdminBrands() {

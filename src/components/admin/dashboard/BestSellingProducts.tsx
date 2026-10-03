@@ -33,12 +33,12 @@ export function BestSellingProducts() {
               <button
                 type="button"
                 onClick={() => setQuickViewId(entry.product.id)}
-                class="flex w-full items-center gap-3 rounded-card px-2 py-2.5 text-left transition-colors duration-150 hover:bg-surface-pink/40"
+                class="font-normal flex w-full items-center gap-3 rounded-card px-2 py-2.5 text-left transition-colors duration-150 hover:bg-surface-pink/40"
               >
                 <img src={entry.product.image} alt="" class="size-12 shrink-0 rounded-media object-cover" />
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-medium text-ink">{entry.product.name}</p>
-                  <p class="text-xs text-ink-gray">{entry.sku}</p>
+                  <p class="truncate text-xs text-ink-gray">{entry.sku}</p>
                 </div>
                 <div class="shrink-0 text-right">
                   <p class="text-sm font-semibold text-ink">{entry.sold.toLocaleString("th-TH")} sold</p>

@@ -26,6 +26,7 @@ export function CheckoutOrderSummary(props: {
   submitStatus: "idle" | "loading" | "error";
   submitError?: string;
   disabled?: boolean;
+  submitLabel?: string;
 }) {
   const [itemsExpanded, setItemsExpanded] = createSignal(true);
   const [couponPickerOpen, setCouponPickerOpen] = createSignal(false);
@@ -41,7 +42,7 @@ export function CheckoutOrderSummary(props: {
         type="button"
         onClick={() => setItemsExpanded((v) => !v)}
         aria-expanded={itemsExpanded()}
-        class="flex items-center justify-between px-4 pb-4 pt-4 lg:pt-6 text-left"
+        class="font-normal flex items-center justify-between px-4 pb-4 pt-4 lg:pt-6 text-left"
       >
         <p class="text-lg font-semibold text-ink">สรุปคำสั่งซื้อ</p>
         <span class="flex items-center gap-1 text-sm font-semibold text-ink">
@@ -54,7 +55,7 @@ export function CheckoutOrderSummary(props: {
       <Show when={itemsExpanded()}>
         <ul class="flex flex-col gap-4 p-4">
           <For each={props.lines}>
-            {({ line, product, variant }) => (
+            {({ line, product, variant, unitPrice }) => (
               <li class="flex list-none items-center gap-2">
                 <img
                   src={variant?.image ?? product.image}
@@ -65,10 +66,10 @@ export function CheckoutOrderSummary(props: {
                 <div class="min-w-0 flex-1">
                   <p class="line-clamp-1 text-sm font-medium text-ink">{product.name}</p>
                   <p class="text-xs text-ink-gray">
-                    {variant ? `เฉดสี ${variant.label} · ` : ""}x{line.qty}
+                    {variant ? `ตัวเลือกสินค้า ${variant.label} · ` : ""}x{line.qty}
                   </p>
                 </div>
-                <p class="shrink-0 text-base font-semibold text-ink">{formatTHB(product.price * line.qty)}</p>
+                <p class="shrink-0 text-base font-semibold text-ink">{formatTHB(unitPrice * line.qty)}</p>
               </li>
             )}
           </For>
@@ -84,7 +85,7 @@ export function CheckoutOrderSummary(props: {
             onClick={() => setCouponPickerOpen(true)}
             class="flex items-center justify-between rounded-card border border-dashed border-brand-pink bg-white p-4"
           >
-            <span class="flex items-center gap-2 text-sm font-semibold text-brand-pink">
+            <span class="flex items-center gap-2 text-sm font-medium text-brand-pink">
               <TagIcon /> {props.coupon ? `ใช้คูปอง ${props.coupon.code}` : "เลือกคูปองส่วนลด"}
             </span>
             <span class="text-xs font-medium text-brand-pink underline">ใช้ได้ {AVAILABLE_COUPONS.length} คูปอง</span>
@@ -143,7 +144,7 @@ export function CheckoutOrderSummary(props: {
             type="button"
             onClick={props.onToggleCoins}
             aria-pressed={props.coinsRedeemed > 0}
-            class="shrink-0 rounded-pill px-4 py-1.5 text-xs font-semibold text-white transition-colors duration-150"
+            class="shrink-0 rounded-pill px-4 py-1.5 text-xs font-medium text-white transition-colors duration-150"
             classList={{ "bg-system-yellow": props.coinsRedeemed === 0, "bg-ink-gray": props.coinsRedeemed > 0 }}
           >
             {props.coinsRedeemed > 0
@@ -204,7 +205,7 @@ export function CheckoutOrderSummary(props: {
           disabled={props.disabled}
           onClick={props.onSubmit}
         >
-          {props.submitStatus === "loading" ? "กำลังดำเนินการ..." : "ยืนยันการชำระเงิน"}
+          {props.submitStatus === "loading" ? "กำลังดำเนินการ..." : (props.submitLabel ?? "ยืนยันการชำระเงิน")}
         </Button>
         <p class="flex items-center justify-center gap-1.5 text-center text-xs text-ink-gray">
           <LockIcon /> ข้อมูลของคุณจะถูกเข้ารหัสและชำระเงินผ่านช่องทางที่ปลอดภัย

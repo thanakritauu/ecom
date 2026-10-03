@@ -2,6 +2,8 @@ import { createSignal, For, Show } from "solid-js";
 import { A } from "@solidjs/router";
 import { clientOnly } from "@solidjs/start";
 import type { Product } from "~/lib/types";
+import { getDiscountPercent } from "~/lib/products";
+import { resolveVariantOptions } from "~/lib/productVariants";
 import { useAuth } from "~/lib/auth";
 import { useCart } from "~/lib/cart";
 import { useWishlist } from "~/lib/wishlist";
@@ -12,15 +14,14 @@ import { Button } from "./Button";
 import { PriceDisplay } from "./PriceDisplay";
 import { ProductMeta } from "./ProductMeta";
 import { StockProgressBar } from "./StockProgressBar";
-import { CountdownTimer } from "./CountdownTimer";
+import { FlashSaleBar } from "./FlashSaleBar";
+import { ShadeSwatch } from "./ShadeSwatch";
 import { HeartIcon, DetailArrowIcon } from "./icons";
 
 // Same Kobalte Dialog SSR/hydration issue as Header's overlays — see the note there.
 const QuickAddSheet = clientOnly(() =>
   import("./QuickAddSheet").then((m) => ({ default: m.QuickAddSheet })),
 );
-import flashSaleWordmarkMini from "~/assets/icons/flash-sale-wordmark-mini.svg";
-import flashSaleBoltMini from "~/assets/icons/flash-sale-bolt-mini.svg";
 
 const MAX_SHADES_SHOWN = 5;
 
@@ -57,12 +58,17 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
   // apart. Routes to the dedicated Out of Stock PDP (`/product/:slug/out-of-stock`)
   // instead of the normal one only when this product itself has no stock.
   const productDetailHref = () => `/product/${props.product.slug}${outOfStock() ? "/out-of-stock" : ""}`;
+  const discountPercent = () => getDiscountPercent(props.product);
+  // Same sale state as before: shown while `flashSaleEndsAt` is set and the
+  // product is in stock; the countdown clamps at 00:00:00 on expiry.
+  const flashSaleActive = () => !!props.product.flashSaleEndsAt && !outOfStock();
   const selectedVariant = () => props.product.variants?.find((v) => v.id === selectedVariantId());
   // Falls back to the default photo whenever the selected shade has no photo
   // of its own — today that's every SKU (see products.ts), so this is wired
   // up and ready for the moment real per-shade photography lands.
   const displayImage = () => selectedVariant()?.image ?? props.product.image;
-  const visibleShades = () => (props.product.variants ?? []).slice(0, MAX_SHADES_SHOWN);
+  // Card circles read the Admin-managed swatch (color, or the separately uploaded swatch image) — never the modal's option photos.
+  const visibleShades = () => resolveVariantOptions(props.product).slice(0, MAX_SHADES_SHOWN);
   const shadeOverflowCount = () => Math.max(0, (props.product.variants?.length ?? 0) - MAX_SHADES_SHOWN);
 
   const selectShade = (id: string) => {
@@ -75,7 +81,6 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
     try {
       await cart.addLine(props.product.id, variantId);
       setAddStatus("idle");
-      pushToast(`เพิ่ม "${props.product.name}" ลงตะกร้าแล้ว`);
     } catch {
       setAddStatus("error");
       pushToast("เพิ่มลงตะกร้าไม่สำเร็จ ลองอีกครั้ง", "error");
@@ -119,7 +124,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
   // pixel-identical content between variants — only its container's size
   // changes (full-width square vs a fixed-size thumbnail), so it's one
   // function shared by both layouts below rather than copy-pasted twice.
-  const ImageBlock = (imgProps: { class: string }) => (
+  const ImageBlock = (imgProps: { class: string; flashSaleOverlay?: boolean }) => (
     <div class={imgProps.class}>
       <A href={productDetailHref()} class="block size-full">
         <img
@@ -147,10 +152,17 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
         </div>
       </Show>
 
-      <Show when={props.product.discountPercent && !outOfStock()}>
+      <Show when={discountPercent() && !outOfStock()}>
         <Badge tone="red" class="absolute left-[7px] top-[7px]">
-          -{props.product.discountPercent}%
+          -{discountPercent()}%
         </Badge>
+      </Show>
+
+      {/* Flash Sale bar overlays the photo's bottom edge (Figma 546:2698) —
+          absolutely positioned, so a Flash Sale card is exactly as tall as a
+          normal one and nothing below the image moves. */}
+      <Show when={imgProps.flashSaleOverlay && flashSaleActive()}>
+        <FlashSaleBar endsAt={props.product.flashSaleEndsAt!} class="absolute inset-x-0 bottom-0" />
       </Show>
 
       {/* Secondary action — quiet by default, revealed on card hover (desktop); always subtly visible on mobile since there's no hover there */}
@@ -175,28 +187,22 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
       <A
         href={productDetailHref()}
         aria-label={`ดูรายละเอียด ${props.product.name}`}
-        class="absolute bottom-2 right-2 hidden size-11 items-center justify-center rounded-pill bg-white/90 text-ink shadow-card transition-all duration-200 hover:bg-white active:scale-90 lg:flex lg:scale-90 lg:opacity-0 lg:group-hover:scale-100 lg:group-hover:opacity-100 lg:focus-visible:scale-100 lg:focus-visible:opacity-100"
-        classList={{ "lg:bottom-12": !!props.product.flashSaleEndsAt }}
+        class="absolute right-2 hidden size-11 items-center justify-center rounded-pill bg-white/90 text-ink shadow-card transition-all duration-200 hover:bg-white active:scale-90 lg:flex lg:scale-90 lg:opacity-0 lg:group-hover:scale-100 lg:group-hover:opacity-100 lg:focus-visible:scale-100 lg:focus-visible:opacity-100"
+        classList={{ "bottom-2": !(imgProps.flashSaleOverlay && flashSaleActive()), "bottom-12": !!imgProps.flashSaleOverlay && flashSaleActive() }}
       >
         <DetailArrowIcon class="size-4" />
       </A>
 
-      {/* Sized to survive the narrowest real card (~134px at the 6-column
-          desktop grid) without overflowing/clipping against this image
-          container's `overflow-hidden` — see ProductCard sizing notes.
-          The wordmark image already reads "Flash Sale" visually, so the
-          countdown's label stays screen-reader-only here instead of
-          duplicating it as visible text (which is what didn't fit). */}
-      <Show when={props.product.flashSaleEndsAt && !outOfStock()}>
-        <div class="absolute inset-x-0 bottom-0 flex items-center gap-1 bg-gradient-to-r from-[#f42b59] to-brand-yellow px-1.5 py-1">
-          <img src={flashSaleBoltMini} alt="" class="h-2 w-auto shrink-0" />
-          <img src={flashSaleWordmarkMini} alt="Flash Sale" class="h-[5px] w-auto shrink-0" />
-          <div class="ml-auto min-w-0">
-            <CountdownTimer endsAt={props.product.flashSaleEndsAt!} size="mini" label="สิ้นสุดภายใน" />
-          </div>
-        </div>
-      </Show>
     </div>
+  );
+
+  // List view only — its 96-150px thumbnail is too small to carry the bar
+  // over the photo, so the same FlashSaleBar sits at the top of the text
+  // column there instead. Grid cards overlay it on the image (see ImageBlock).
+  const FlashSaleStrip = () => (
+    <Show when={flashSaleActive()}>
+      <FlashSaleBar endsAt={props.product.flashSaleEndsAt!} class="overflow-hidden rounded-lg" />
+    </Show>
   );
 
   // Shade selector + Add to Cart CTA — identical content in both variants,
@@ -204,36 +210,15 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
   const ShadeSelector = () => (
     <Show when={hasVariants()}>
       <div class="flex flex-col gap-1.5">
-        <div role="radiogroup" aria-label="เฉดสี" class="flex flex-wrap items-center gap-1.5">
+        <div role="radiogroup" aria-label="ตัวเลือกสินค้า" class="flex flex-wrap items-center gap-1.5">
           <For each={visibleShades()}>
-            {(shade) => (
-              <button
-                type="button"
-                role="radio"
-                aria-checked={selectedVariantId() === shade.id}
-                aria-label={`เฉดสี ${shade.label}`}
-                onClick={() => selectShade(shade.id)}
-                class="group/shade relative flex size-7 shrink-0 items-center justify-center rounded-full transition-transform duration-150 ease-out hover:scale-110 focus-visible:scale-110"
-              >
-                <span class="size-full rounded-full border border-surface-gray" style={{ "background-color": shade.color }} aria-hidden="true" />
-                <Show when={selectedVariantId() === shade.id}>
-                  <span class="absolute inset-[-3px] rounded-full border-2 border-brand-pink transition-all duration-150" aria-hidden="true" />
-                </Show>
-                {/* Hover/focus tooltip — shade names aren't otherwise visible once the row is just colored dots */}
-                <span
-                  class="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[10px] font-medium text-white opacity-0 transition-opacity duration-150 group-hover/shade:opacity-100 group-focus-visible/shade:opacity-100"
-                  aria-hidden="true"
-                >
-                  {shade.label}
-                </span>
-              </button>
-            )}
+            {(shade) => <ShadeSwatch shade={shade} selected={selectedVariantId() === shade.id} onSelect={() => selectShade(shade.id)} />}
           </For>
           <Show when={shadeOverflowCount() > 0}>
             <button
               type="button"
               onClick={() => setSheetOpen(true)}
-              aria-label={`ดูเฉดสีเพิ่มเติมอีก ${shadeOverflowCount()} สี`}
+              aria-label={`ดูตัวเลือกสินค้าเพิ่มเติมอีก ${shadeOverflowCount()} ตัวเลือก`}
               class="flex h-7 shrink-0 items-center rounded-full px-1.5 text-xs font-medium text-ink-gray transition-colors duration-150 hover:text-brand-pink"
             >
               +{shadeOverflowCount()}
@@ -242,7 +227,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
         </div>
         <Show when={shadeRequired()}>
           <p class="text-xs text-system-red" role="alert">
-            กรุณาเลือกเฉดสีก่อนเพิ่มลงตะกร้า
+            กรุณาเลือกตัวเลือกสินค้าก่อนเพิ่มลงตะกร้า
           </p>
         </Show>
       </div>
@@ -268,15 +253,16 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
       <QuickAddSheet
         product={props.product}
         open={sheetOpen()}
+        initialVariantId={selectedVariantId()}
+        onSelect={selectShade}
         onOpenChange={(open) => {
           setSheetOpen(open);
           if (!open) setShadeRequired(false);
         }}
-        onConfirm={async (variantId) => {
-          await cart.addLine(props.product.id, variantId);
-          setSelectedVariantId(variantId);
+        onConfirm={async (variantId, quantity) => {
+          await cart.addLine(props.product.id, variantId, quantity);
+          setSelectedVariantId(variantId ?? null);
           setShadeRequired(false);
-          pushToast(`เพิ่ม "${props.product.name}" ลงตะกร้าแล้ว`);
         }}
       />
     </Show>
@@ -286,24 +272,23 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
     <Show
       when={variant() === "list"}
       fallback={
-        <div class="group flex h-full w-full flex-col gap-4 rounded-card bg-white p-4 shadow-card transition-all duration-200 ease-out hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)] lg:hover:-translate-y-1">
-          <ImageBlock class="relative aspect-square w-full overflow-hidden rounded-media border border-surface-gray" />
+        // Figma 545:6582 / 545:7248 — 8px padding, 8px gap between every
+        // block, 24px card radius, 16px image radius, 0 2px 6px shadow.
+        <div class="group flex h-full w-full flex-col gap-2 rounded-2xl bg-surface-card p-2 sm:rounded-[20px] lg:rounded-card shadow-[0_2px_6px_rgba(90,106,133,0.10)] transition-all duration-200 ease-out hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)] lg:hover:-translate-y-1">
+          <ImageBlock class="relative aspect-square w-full overflow-hidden rounded-xl border border-border lg:rounded-media" flashSaleOverlay />
 
-          <div class="flex flex-1 flex-col gap-3">
+          <div class="flex flex-1 flex-col gap-2">
             <A href={productDetailHref()} class="flex flex-col gap-2">
-              <p class="line-clamp-2 min-h-[3rem] text-base font-medium text-ink">{props.product.name}</p>
-              <PriceDisplay price={props.product.price} compareAtPrice={props.product.compareAtPrice} />
+              <p class="line-clamp-2 min-h-[3rem] text-base font-medium leading-6 text-ink">{props.product.name}</p>
+              <PriceDisplay price={props.product.price} compareAtPrice={props.product.compareAtPrice} size="card" />
             </A>
 
             <ShadeSelector />
 
             <ProductMeta rating={props.product.rating} soldCount={props.product.soldCount} />
 
-            <Show when={props.product.stockLeft && props.product.stockTotal}>
-              <StockProgressBar stockLeft={props.product.stockLeft!} stockTotal={props.product.stockTotal!} />
-            </Show>
-
-            <AddToCartButton class="mt-auto w-full" />
+            {/* Below sm the card is ~150px wide — the CTA scales with it (14px, tighter padding) instead of wrapping to two lines. */}
+            <AddToCartButton class="mt-auto w-full whitespace-nowrap !px-2 !text-sm sm:!px-6 sm:!text-base" />
           </div>
 
           {quickAddSheet}
@@ -314,13 +299,15 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
           data/state/handlers as the grid card above, only the arrangement
           changes. No Figma exists for this layout (grid view is what the
           audited node shows) — built to the explicit written spec instead. */}
-      <div class="group flex w-full gap-3 rounded-card bg-white p-3 shadow-card transition-all duration-200 ease-out hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)] sm:gap-4 sm:p-4">
-        <ImageBlock class="relative size-[96px] shrink-0 overflow-hidden rounded-media border border-surface-gray sm:size-[128px] lg:size-[150px]" />
+      <div class="group flex w-full gap-3 rounded-card bg-surface-card p-2 shadow-card transition-all duration-200 ease-out hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)] sm:gap-4">
+        <ImageBlock class="relative size-[96px] shrink-0 overflow-hidden rounded-media border border-border sm:size-[128px] lg:size-[150px]" />
 
         <div class="flex min-w-0 flex-1 flex-col gap-2 py-0.5">
+          <FlashSaleStrip />
+
           <A href={productDetailHref()} class="flex flex-col gap-1.5">
             <p class="line-clamp-2 text-sm font-medium text-ink sm:text-base">{props.product.name}</p>
-            <PriceDisplay price={props.product.price} compareAtPrice={props.product.compareAtPrice} />
+            <PriceDisplay price={props.product.price} compareAtPrice={props.product.compareAtPrice} size="card" />
           </A>
 
           <ProductMeta rating={props.product.rating} soldCount={props.product.soldCount} />

@@ -4,6 +4,7 @@ import { normalizeHomepageDestination, type HomepageBanners, type HomepageDestin
 import heroBanner1 from "~/assets/images/hero/hero-banner-1.png";
 import heroBanner2 from "~/assets/images/hero/hero-banner-2.png";
 import heroBanner3 from "~/assets/images/hero/hero-banner-3.png";
+import { upgradeSeedBanners } from "./seedBanners";
 
 /**
  * Banner Management — a standalone media/CTA entity: unlike Promotion Page
@@ -64,11 +65,11 @@ export function normalizeBanner(b: Partial<Banner> & { id: string }): Banner {
     name: b.name ?? "",
     placement: b.placement ?? "other",
     status: b.status ?? "draft",
-    banners: {
+    banners: upgradeSeedBanners({
       desktop: b.banners?.desktop ?? "",
       tablet: b.banners?.tablet ?? "",
       mobile: b.banners?.mobile ?? "",
-    },
+    }),
     destination: normalizeHomepageDestination(b.destination),
     startDate: b.startDate ?? "",
     startTime: b.startTime ?? "00:00",

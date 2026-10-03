@@ -29,7 +29,7 @@ export default function AdminMarketingOverviewPage() {
         {cards.map((card) => (
           <A
             href={card.href}
-            class="flex flex-col gap-3 rounded-card bg-white p-5 shadow-card transition-transform duration-150 hover:-translate-y-0.5"
+            class="flex flex-col gap-3 rounded-card bg-surface-card p-5 shadow-card transition-transform duration-150 hover:-translate-y-0.5"
           >
             <span class="flex size-11 items-center justify-center rounded-pill bg-surface-pink text-brand-pink">
               <card.icon class="size-5" />

@@ -2,9 +2,14 @@ import { DropdownMenu } from "@kobalte/core/dropdown-menu";
 import { useNavigate } from "@solidjs/router";
 import { useAdminAuth } from "~/lib/adminAuth";
 import { pushToast } from "~/lib/toast";
-import { UserIcon } from "~/components/shared/icons";
 import { LogoutIcon, ChevronDownIcon } from "./icons";
 import { ADMIN_TOPBAR_CONTROL_CLASS } from "./adminTopbarControls";
+
+/** §20 — the pink circle shows the admin's own first initial, not a generic person icon. */
+function initialOf(name: string | undefined): string {
+  const trimmed = (name ?? "").trim();
+  return trimmed ? trimmed[0]!.toUpperCase() : "A";
+}
 
 /**
  * Profile / Settings / Logout menu for the signed-in mock admin. Logout is a
@@ -30,15 +35,15 @@ export function AdminUserMenu() {
           exact same padding/height/radius/surface token as the Language
           control, not a bespoke exception. */}
       <DropdownMenu.Trigger aria-label="เมนูผู้ใช้" class={ADMIN_TOPBAR_CONTROL_CLASS}>
-        <span class="flex size-8 shrink-0 items-center justify-center rounded-pill bg-brand-pink text-white">
-          <UserIcon class="size-4" />
+        <span class="flex size-8 shrink-0 items-center justify-center rounded-pill bg-brand-pink text-sm font-semibold text-white">
+          {initialOf(admin.admin()?.name)}
         </span>
         <span class="hidden lg:inline">{admin.admin()?.name ?? "Admin"}</span>
         <ChevronDownIcon class="hidden size-3.5 shrink-0 text-ink-gray lg:block" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content class="z-50 w-60 rounded-card border border-surface-gray bg-white p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
-          <div class="flex flex-col gap-0.5 border-b border-surface-gray px-3 pb-3 pt-1">
+        <DropdownMenu.Content class="z-50 w-60 rounded-card border border-border bg-surface-card p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+          <div class="flex flex-col gap-0.5 border-b border-border px-3 pb-3 pt-1">
             <p class="text-sm font-semibold text-ink">{admin.admin()?.name ?? "Admin"}</p>
             <p class="truncate text-xs text-ink-gray">{admin.admin()?.email}</p>
           </div>

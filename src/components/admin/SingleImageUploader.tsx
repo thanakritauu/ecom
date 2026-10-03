@@ -50,14 +50,14 @@ export function SingleImageUploader(props: { label: string; hint?: string; value
           <button
             type="button"
             onClick={openPicker}
-            class="flex size-24 flex-col items-center justify-center gap-1 rounded-media border border-dashed border-surface-gray text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink"
+            class="flex size-24 flex-col items-center justify-center gap-1 rounded-media border border-dashed border-border text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink"
           >
             <ImageIcon class="size-5" />
             <span class="text-xs">เพิ่มรูป</span>
           </button>
         }
       >
-        <div class="group relative size-24 overflow-hidden rounded-media border border-surface-gray">
+        <div class="group relative size-24 overflow-hidden rounded-media border border-border">
           <button type="button" onClick={openPicker} aria-label="เปลี่ยนรูปภาพ" class="block size-full">
             <img src={props.value} alt="" class="size-full object-cover" classList={{ "opacity-40": pending() }} />
           </button>

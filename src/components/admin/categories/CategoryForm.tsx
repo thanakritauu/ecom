@@ -1,23 +1,18 @@
 import { createSignal, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
+import { Toggle } from "~/components/admin/Toggle";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
-import { SingleImageUploader } from "~/components/admin/SingleImageUploader";
 import { slugifyCategory, type AdminCategory, type CategoryFormValues, type CategoryStatus } from "~/lib/adminCategories";
-
-const STATUS_OPTIONS: { value: CategoryStatus; label: string }[] = [
-  { value: "active", label: "เปิดใช้งาน" },
-  { value: "inactive", label: "ปิดใช้งาน" },
-];
 
 /**
  * One Create/Edit form shared by `/new` and `/:id/edit` — same "one form,
  * two routes" shape every other Admin form uses. Modeled directly on
  * `ProductCollectionForm` (single save action, no publish workflow) plus the
  * taxonomy fields a Category needs: Slug (auto-derived from Name until the
- * admin edits it directly, same UX as `CampaignForm`'s slug field), a square
- * thumbnail image, and a numeric Sort Order used as the list's default sort
- * and (eventually) the storefront menu order.
+ * admin edits it directly, same UX as `CampaignForm`'s slug field) and a
+ * square thumbnail image. Status is a Toggle (§3) — no Display Order field
+ * anymore (§5, removed with no replacement).
  */
 export function CategoryForm(props: {
   initial?: AdminCategory;
@@ -30,9 +25,12 @@ export function CategoryForm(props: {
   const [slug, setSlugRaw] = createSignal(props.initial?.slug ?? "");
   const [slugTouched, setSlugTouched] = createSignal(!!props.initial);
   const [description, setDescription] = createSignal(props.initial?.description ?? "");
-  const [image, setImage] = createSignal(props.initial?.image ?? "");
+  // CMS Dashboard & Admin UX Refinement §13 — Category is Product
+  // Classification only, so its Image field has no admin UI anymore; the
+  // value itself is still preserved and resubmitted unchanged (never reset
+  // to "") so legacy mock data with an image doesn't silently lose it.
+  const [image] = createSignal(props.initial?.image ?? "");
   const [status, setStatus] = createSignal<CategoryStatus>(props.initial?.status ?? "active");
-  const [sortOrder, setSortOrder] = createSignal(props.initial?.sortOrder ?? 0);
 
   const [errors, setErrors] = createSignal<Record<string, string>>({});
   const [saving, setSaving] = createSignal(false);
@@ -69,7 +67,6 @@ export function CategoryForm(props: {
       description: description().trim(),
       image: image(),
       status: status(),
-      sortOrder: sortOrder(),
     };
 
     setSaving(true);
@@ -113,34 +110,20 @@ export function CategoryForm(props: {
               placeholder="ลิปสติก ลิปทินท์ ลิปกลอส และผลิตภัณฑ์ดูแลริมฝีปาก"
               onInput={(e) => setDescription(e.currentTarget.value)}
               rows={3}
-              class="rounded-card border border-surface-gray bg-white px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+              class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
             />
           </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium text-ink">สถานะ</span>
-            <select
-              value={status()}
-              disabled={saving()}
-              onChange={(e) => setStatus(e.currentTarget.value as CategoryStatus)}
-              class="h-11 rounded-card border border-surface-gray bg-white px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <option value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </label>
-          <TextField
-            label="ลำดับการแสดงผล"
-            type="number"
-            value={String(sortOrder())}
-            onInput={(e) => setSortOrder(Number(e.currentTarget.value) || 0)}
-            disabled={saving()}
-          />
+          {/* CMS + Frontend Refinement §1 — Status only appears on Edit; Create
+              uses the existing default ("active", same as `normalizeCategory`)
+              with no picker at all, so a brand-new Category can't be created
+              disabled by accident. */}
+          <Show when={props.mode === "edit"}>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
+              <Toggle checked={status() === "active"} onChange={(checked) => setStatus(checked ? "active" : "inactive")} disabled={saving()} />
+            </label>
+          </Show>
         </div>
-      </Section>
-
-      <Section title="รูปภาพ">
-        <SingleImageUploader label="รูปหมวดหมู่" hint="แนะนำสัดส่วน 1:1" value={image()} onChange={setImage} />
       </Section>
 
       <Show when={submitError()}>
@@ -166,7 +149,7 @@ export function CategoryForm(props: {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-4 rounded-card bg-white p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

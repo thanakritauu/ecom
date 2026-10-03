@@ -215,9 +215,11 @@ export default function AdminCouponListPage() {
         title="คูปอง"
         description="จัดการคูปองส่วนลดของ Charmiss"
         actions={
-          <Button href="/admin/marketing/coupons/new" variant="primary">
-            <PlusIcon class="size-4" /> สร้างคูปอง
-          </Button>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button href="/admin/marketing/coupons/new" variant="primary">
+              <PlusIcon class="size-4" /> สร้างคูปอง
+            </Button>
+          </div>
         }
       />
 
@@ -234,7 +236,7 @@ export default function AdminCouponListPage() {
         <Show
           when={listStatus() === "success"}
           fallback={
-            <EmptyState tone="error" icon={<RefreshIcon />} title="ไม่สามารถโหลดรายการคูปองได้" description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง" actionLabel="ลองอีกครั้ง" onAction={loadList} class="bg-white shadow-card" />
+            <EmptyState tone="error" icon={<RefreshIcon />} title="ไม่สามารถโหลดรายการคูปองได้" description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง" actionLabel="ลองอีกครั้ง" onAction={loadList} class="bg-surface-card shadow-card" />
           }
         >
           <Show
@@ -246,7 +248,7 @@ export default function AdminCouponListPage() {
                 description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "เริ่มสร้างคูปองแรกของคุณ"}
                 actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "+ สร้างคูปอง"}
                 onAction={hasActiveFilters() ? clearFilters : () => navigate("/admin/marketing/coupons/new")}
-                class="bg-white shadow-card"
+                class="bg-surface-card shadow-card"
               />
             }
           >
@@ -261,7 +263,7 @@ export default function AdminCouponListPage() {
               getRowKey={(row) => row.id}
               onRowClick={(row) => setQuickViewId(row.id)}
               renderMobileCard={(row) => (
-                <div class="flex gap-3 rounded-card bg-white p-4 shadow-card">
+                <div class="flex gap-3 rounded-card bg-surface-card p-4 shadow-card">
                   <input
                     type="checkbox"
                     aria-label={`เลือก ${row.code}`}
@@ -270,14 +272,14 @@ export default function AdminCouponListPage() {
                     onChange={() => toggleSelect(row.id)}
                     class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
                   />
-                  <button type="button" onClick={() => setQuickViewId(row.id)} class="flex flex-1 flex-col gap-2 text-left">
+                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-2 text-left">
                     <div class="flex items-start justify-between gap-2">
-                      <p class="font-mono font-semibold text-ink">{row.code}</p>
-                      <StatusBadge tone={MARKETING_STATUS_META[row.status].tone}>{MARKETING_STATUS_META[row.status].label}</StatusBadge>
+                      <p class="truncate font-mono font-semibold text-ink">{row.code}</p>
+                      <StatusBadge class="shrink-0" tone={MARKETING_STATUS_META[row.status].tone}>{MARKETING_STATUS_META[row.status].label}</StatusBadge>
                     </div>
-                    <p class="text-sm text-ink-gray">{formatCouponDiscount(row)}</p>
-                    <p class="text-xs text-ink-gray">{formatMarketingDate(row.startDate)} - {formatMarketingDate(row.endDate)}</p>
-                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-surface-gray text-sm font-medium text-ink">ดูรายละเอียด</span>
+                    <p class="truncate text-sm text-ink-gray">{formatCouponDiscount(row)}</p>
+                    <p class="truncate text-xs text-ink-gray">{formatMarketingDate(row.startDate)} - {formatMarketingDate(row.endDate)}</p>
+                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>
                   </button>
                 </div>
               )}
@@ -351,7 +353,7 @@ function ListSkeleton() {
   return (
     <div class="flex flex-col gap-3">
       {Array.from({ length: 5 }).map(() => (
-        <div class="flex items-center gap-3 rounded-card bg-white p-3 shadow-card">
+        <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
           <div class="flex flex-1 flex-col gap-1.5">
             <Skeleton class="h-4 w-1/3" />
             <Skeleton class="h-3 w-1/4" />

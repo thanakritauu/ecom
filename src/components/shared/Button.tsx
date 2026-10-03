@@ -12,10 +12,14 @@ type Size = "sm" | "md" | "lg";
  * map onto the existing `primary` (solid pink + white) / `outline` (pink
  * border + pink text) variants below — no new colors or a third visual
  * language for Admin.
+ *
+ * Design system rule: button text is always Medium (`font-medium`, 500) —
+ * don't override it with semibold/bold, even when a Figma frame says so.
+ * The same default is set for every raw `<button>` in `app.css`.
  */
 const variantClass: Record<Variant, string> = {
   primary: "bg-brand-pink text-white hover:bg-brand-pink/90 border-none",
-  outline: "bg-white text-brand-pink border border-brand-pink hover:bg-surface-pink",
+  outline: "bg-surface-card text-brand-pink border border-brand-pink hover:bg-surface-pink",
   ghost: "bg-white/30 text-white border-none hover:bg-white/40",
   white: "bg-white text-brand-pink hover:bg-white/90 border-none",
 };

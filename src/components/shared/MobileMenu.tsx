@@ -1,17 +1,15 @@
 import { Dialog } from "@kobalte/core/dialog";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import { For, Show } from "solid-js";
 import { A } from "@solidjs/router";
 import { useAuth } from "~/lib/auth";
-import { catalogNavLinks } from "~/lib/nav";
-import { useLandingPages } from "~/lib/promotionPages";
-import { useCategoryContent } from "~/lib/categoryContent";
-import { getPromotionNavIcon } from "~/lib/promotionNavIcons";
-import { categoryListHref } from "~/lib/adminHomepage";
+import { useNavigationContent } from "~/lib/navigationContent";
+import { NavIcon } from "./NavIcon";
+import type { ResolvedNavigationItem } from "~/lib/navigationResolver";
 
 export function MobileMenu(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const auth = useAuth();
-  const landingPages = useLandingPages();
-  const categories = useCategoryContent();
+  const navigation = useNavigationContent();
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
@@ -43,64 +41,45 @@ export function MobileMenu(props: { open: boolean; onOpenChange: (open: boolean)
             >
               <A
                 href="/account"
-                class="flex min-h-[44px] items-center rounded-pill bg-surface-pink px-4 text-ink"
+                class="flex min-h-[44px] items-center rounded-pill bg-surface-pink px-4 font-medium text-ink"
                 onClick={() => props.onOpenChange(false)}
               >
                 {auth.user()?.name}
               </A>
             </Show>
 
+            {/* Navigation Architecture (Blueprint v1 FINAL) — one resolved,
+                already-filtered list from the standalone Navigation module,
+                same source Header.tsx's desktop row reads. Nested items
+                (`item.children`) render indented beneath their parent — the
+                one place in the storefront that actually renders the
+                parent/child relationship the data model supports. */}
             <nav aria-label="เมนูหลัก" class="flex flex-col gap-1">
-              {/* Frontend Navigation add-on — same nav-enabled, currently-visible Landing Pages Header.tsx renders, never a separate list. */}
-              <For each={landingPages.navItems()}>
-                {(item) => {
-                  const Icon = getPromotionNavIcon(item.icon);
-                  return (
-                    <A
-                      href={item.href}
-                      class="flex min-h-[44px] items-center gap-3 rounded-lg px-2 text-base font-medium text-ink hover:bg-surface-pink"
-                      onClick={() => props.onOpenChange(false)}
-                    >
-                      {Icon && <Icon class="size-5 shrink-0 text-brand-pink" />}
-                      {item.label}
-                    </A>
-                  );
-                }}
-              </For>
+              <For each={navigation.visibleTree()}>{(item) => <MobileNavRow item={item} depth={0} onNavigate={() => props.onOpenChange(false)} />}</For>
             </nav>
 
-            <div class="h-px w-full bg-surface-gray" />
-
-            <nav aria-label="หมวดหมู่สินค้า" class="flex flex-col gap-1">
-              {/* Same real, admin-managed Category data Header.tsx's desktop
-                  category row reads — never a second hardcoded list. */}
-              <For each={categories.navCategories()}>
-                {(category) => (
-                  <A
-                    href={categoryListHref(category.slug)}
-                    class="flex min-h-[44px] items-center rounded-lg px-2 text-base text-ink hover:bg-surface-pink"
-                    onClick={() => props.onOpenChange(false)}
-                  >
-                    {category.name}
-                  </A>
-                )}
-              </For>
-              <For each={catalogNavLinks}>
-                {(link) => (
-                  <A
-                    href={link.href}
-                    class="flex min-h-[44px] items-center rounded-lg px-2 text-base text-ink hover:bg-surface-pink"
-                    onClick={() => props.onOpenChange(false)}
-                  >
-                    {link.label}
-                  </A>
-                )}
-              </For>
-            </nav>
+            <LanguageSwitcher tone="menu" />
           </Dialog.Content>
         </div>
       </Dialog.Portal>
     </Dialog>
+  );
+}
+
+export function MobileNavRow(props: { item: ResolvedNavigationItem; depth: number; onNavigate: () => void }) {
+  return (
+    <>
+      <A
+        href={props.item.href}
+        class="flex min-h-[44px] items-center gap-3 rounded-lg px-2 text-base text-ink hover:bg-surface-pink"
+        classList={{ "font-medium": props.depth === 0, "pl-6 text-sm text-ink-gray": props.depth > 0 }}
+        onClick={props.onNavigate}
+      >
+        <NavIcon icon={props.item.icon} class="size-5 shrink-0 rounded-full text-brand-pink" />
+        {props.item.label}
+      </A>
+      <For each={props.item.children}>{(child) => <MobileNavRow item={child} depth={props.depth + 1} onNavigate={props.onNavigate} />}</For>
+    </>
   );
 }
 

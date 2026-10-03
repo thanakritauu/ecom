@@ -28,8 +28,8 @@ export default function AdminProductCollectionEditPage() {
       when={collection()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "เนื้อหา", href: "/admin/content" }, { label: "Product Collections", href: "/admin/content/product-collections" }]} />
-          <EmptyState icon={<LayersIcon />} title="ไม่พบ Collection นี้" description="Collection นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/content/product-collections")} class="bg-white shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "Product Collections", href: "/admin/content/product-collections" }]} />
+          <EmptyState icon={<LayersIcon />} title="ไม่พบ Collection นี้" description="Collection นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/content/product-collections")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -38,7 +38,7 @@ export default function AdminProductCollectionEditPage() {
           <Breadcrumb
             items={[
               { label: "แดชบอร์ด", href: "/admin" },
-              { label: "เนื้อหา", href: "/admin/content" },
+              { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
               { label: "Product Collections", href: "/admin/content/product-collections" },
               { label: current().name },
               { label: "แก้ไข" },

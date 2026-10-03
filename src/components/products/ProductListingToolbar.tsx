@@ -11,6 +11,8 @@ export type ListingView = "grid" | "list";
  * bottom-sheet Filter drawer / drives the same sort select inline.
  */
 export function ProductListingToolbar(props: {
+  /** Defaults to "สินค้าทั้งหมด" (All Products' own title) — Category Listing pages pass their own title (e.g. "FACE") so this same toolbar reads correctly there too, instead of a second toolbar component. */
+  title?: string;
   resultCount: number;
   totalCount: number;
   view: ListingView;
@@ -18,13 +20,14 @@ export function ProductListingToolbar(props: {
   sort: SortValue;
   onSortChange: (sort: SortValue) => void;
   activeFilterCount: number;
-  onOpenMobileFilter: () => void;
+  /** Omit entirely (e.g. Category Listing, which has no Filter Sidebar) to hide the mobile "ตัวกรอง" button — Sort alone then fills the row. */
+  onOpenMobileFilter?: () => void;
 }) {
   return (
     <div class="flex w-full flex-col gap-3">
       <div class="flex w-full flex-wrap items-center justify-between gap-3">
         <div class="flex flex-wrap items-baseline gap-4">
-          <h1 class="text-2xl font-bold text-ink lg:text-[31px]">สินค้าทั้งหมด</h1>
+          <h1 class="text-2xl font-bold text-ink lg:text-[31px]">{props.title ?? "สินค้าทั้งหมด"}</h1>
           <p class="text-sm text-ink-gray">
             แสดง {props.resultCount} จาก {props.totalCount} รายการ
           </p>
@@ -59,16 +62,20 @@ export function ProductListingToolbar(props: {
       </div>
 
       <div class="flex items-center gap-3 lg:hidden">
-        <button
-          type="button"
-          onClick={props.onOpenMobileFilter}
-          class="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-pill border border-surface-gray bg-white px-4 text-sm font-semibold text-ink"
-        >
-          <FilterIcon class="size-[18px]" />
-          <Show when={props.activeFilterCount > 0} fallback="ตัวกรอง">
-            ตัวกรอง ({props.activeFilterCount})
-          </Show>
-        </button>
+        <Show when={props.onOpenMobileFilter}>
+          {(onOpenMobileFilter) => (
+            <button
+              type="button"
+              onClick={onOpenMobileFilter()}
+              class="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-pill border border-surface-gray bg-white px-4 text-sm font-medium text-ink"
+            >
+              <FilterIcon class="size-[18px]" />
+              <Show when={props.activeFilterCount > 0} fallback="ตัวกรอง">
+                ตัวกรอง ({props.activeFilterCount})
+              </Show>
+            </button>
+          )}
+        </Show>
         <SortSelect sort={props.sort} onSortChange={props.onSortChange} class="min-h-[44px] flex-1" />
       </div>
     </div>

@@ -18,14 +18,49 @@ module.exports = {
           purple: "#7650ff",
           yellow: "#ff9300",
         },
+        // CMS + Frontend Final Refinement §9 — `ink`/`surface`/`*-soft` are
+        // the tokens whose actual color differs between Charmiss CMS's Light
+        // and Dark mode, so (only these) resolve through a CSS variable
+        // instead of a static hex. The `rgb(var(...) / <alpha-value>)` form
+        // is Tailwind's own documented pattern for a var-backed color that
+        // still supports opacity modifiers (`bg-surface-gray/60` etc. is
+        // used ~150x across this codebase and must keep working). The
+        // variables themselves (`app.css`, `:root` vs `:root[data-theme=
+        // "dark"]`) default to these exact hex values, so nothing changes
+        // visually anywhere until Admin's theme toggle sets the attribute —
+        // the Customer Frontend never sets it, so it never sees a dark
+        // value. `brand`/`system`/`success.DEFAULT`/`danger.strong` stay
+        // static: the spec's own "Brand Color stays the same", and those
+        // saturated accents already read fine on both a light and dark card.
         ink: {
-          DEFAULT: "#1e3146", // Text/Black token — not pure black anywhere in the design
-          gray: "#5a6a85",
-          placeholder: "#b3bac7",
+          DEFAULT: "rgb(var(--color-ink) / <alpha-value>)",
+          gray: "rgb(var(--color-ink-gray) / <alpha-value>)",
+          placeholder: "rgb(var(--color-ink-placeholder) / <alpha-value>)",
         },
         surface: {
-          pink: "#feebf1",
-          gray: "#eff0f3",
+          pink: "rgb(var(--color-surface-pink) / <alpha-value>)",
+          gray: "rgb(var(--color-surface-gray) / <alpha-value>)",
+          // NEW — the plain white Card/Table/Modal/Dropdown/Drawer surface
+          // (`bg-white` at ~230 call sites in Admin) had no named token at
+          // all before this; every one of those call sites is renamed to
+          // `bg-surface-card` so it can follow the theme, `card` defaulting
+          // to the exact same #ffffff so Light mode is byte-identical.
+          card: "rgb(var(--color-surface-card) / <alpha-value>)",
+        },
+        // Category/Brand Action + Dark Mode Refinement §4/§5 — a dedicated
+        // border token, split out from `surface.gray` (which every
+        // `border-surface-gray` call site used to share with the neutral
+        // *background* tint). One CSS variable can't hold two different
+        // dark-mode values at once, and the audit's own root cause is that
+        // reusing the background token AS the border color makes borders
+        // nearly invisible once `surface.gray` turns near-black in Dark Mode
+        // (its own contrast ratio against the Card surface is ~1.08:1).
+        // `DEFAULT`/`strong` default to the exact same light hex
+        // (`surface.gray`'s #eff0f3) — Light Mode is byte-identical either
+        // way — and only diverge under `[data-theme="dark"]`.
+        border: {
+          DEFAULT: "rgb(var(--color-border) / <alpha-value>)",
+          strong: "rgb(var(--color-border-strong) / <alpha-value>)",
         },
         system: {
           red: "#f23030",
@@ -33,11 +68,17 @@ module.exports = {
         },
         success: {
           DEFAULT: "#009b4d",
-          soft: "#e6fbf0",
+          soft: "rgb(var(--color-success-soft) / <alpha-value>)",
         },
         danger: {
-          soft: "#feeaea",
-          strong: "#da2b2b",
+          soft: "rgb(var(--color-danger-soft) / <alpha-value>)",
+          // Contrast audit §6 — `text-danger-strong` on `danger.soft`'s dark
+          // tint only measured ~3.2:1 (below the 4.5:1 normal-text target)
+          // at the original static #da2b2b; a brighter Dark Mode–only
+          // variant (still resolving through <alpha-value> so
+          // `bg-danger-strong/90` keeps working) fixes that without
+          // touching the Light Mode color at all.
+          strong: "rgb(var(--color-danger-strong) / <alpha-value>)",
         },
         // Promoted from StatusBadge's inline arbitrary values (`bg-[#fff4e6]`
         // / `bg-[#f1eeff]`) into named tokens — same two soft tints, now a
@@ -47,10 +88,10 @@ module.exports = {
         // codebase already treats as its "info" semantic (StatusBadge, the
         // brand palette has no blue) rather than introducing an unrelated color.
         warning: {
-          soft: "#fff4e6",
+          soft: "rgb(var(--color-warning-soft) / <alpha-value>)",
         },
         info: {
-          soft: "#f1eeff",
+          soft: "rgb(var(--color-info-soft) / <alpha-value>)",
         },
       },
       fontFamily: {

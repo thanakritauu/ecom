@@ -1,7 +1,8 @@
-import { createUniqueId, For } from "solid-js";
+import { createUniqueId, For, Show } from "solid-js";
 import type { AdminVariant } from "~/lib/adminProductStore";
 import { TrashIcon, PlusIcon } from "~/components/admin/icons";
 import { ProductImageUploader } from "./ProductImageUploader";
+import { SingleImageUploader } from "~/components/admin/SingleImageUploader";
 
 /**
  * PART 16 — deliberately simple: Name/SKU/Price/Stock per row, add/remove
@@ -13,6 +14,13 @@ import { ProductImageUploader } from "./ProductImageUploader";
  * entirely). Reuses `ProductImageUploader` per variant, each with its own
  * independent `images` array — adding/removing here can never touch the
  * Gallery or any other variant's images.
+ *
+ * Each variant has two independent visuals, uploaded separately:
+ * 1. "วงสีบน Product Card" — the card's small shade circle: a flat color
+ *    or its own small swatch image (`mode` picks which; switching keeps the
+ *    other value so flipping back loses nothing).
+ * 2. "รูปสินค้าใน Modal ตัวเลือกสินค้า" — the variant's real product photos
+ *    (`images`), shown as the option tile in the Product Option Modal.
  */
 export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChange: (variants: AdminVariant[]) => void }) {
   const update = (id: string, patch: Partial<AdminVariant>) => {
@@ -24,21 +32,24 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
   };
 
   const add = () => {
-    props.onChange([...props.variants, { id: createUniqueId(), label: "", sku: "", stock: 0, images: [] }]);
+    props.onChange([...props.variants, { id: createUniqueId(), label: "", sku: "", stock: 0, images: [], color: "#CCCCCC", mode: "color" }]);
   };
+
+  /** Only decides what the Product Card circle shows — the modal photos (`images`) are untouched either way. */
+  const setMode = (id: string, mode: "color" | "image") => update(id, { mode });
 
   return (
     <div class="flex flex-col gap-4">
       <For each={props.variants}>
         {(variant, i) => (
-          <div class="flex flex-col gap-3 rounded-card border border-surface-gray p-3">
+          <div class="flex flex-col gap-3 rounded-card border border-border p-3">
             <div class="flex items-center justify-between gap-2">
               <p class="text-sm font-semibold text-ink">{variant.label || `ตัวเลือกที่ ${i() + 1}`}</p>
               <button
                 type="button"
                 onClick={() => remove(variant.id)}
                 aria-label="ลบตัวเลือกนี้"
-                class="flex min-h-9 items-center justify-center gap-1.5 rounded-card border border-surface-gray px-3 text-sm text-system-red hover:bg-danger-soft"
+                class="flex min-h-9 items-center justify-center gap-1.5 rounded-card border border-border px-3 text-sm text-system-red hover:bg-danger-soft"
               >
                 <TrashIcon class="size-4" />
                 ลบ
@@ -52,7 +63,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                   value={variant.label}
                   onInput={(e) => update(variant.id, { label: e.currentTarget.value })}
                   placeholder="เช่น Coral Bloom"
-                  class="h-10 rounded-card border border-surface-gray px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
+                  class="h-10 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                 />
               </label>
               <label class="flex flex-col gap-1 text-xs font-medium text-ink-gray">
@@ -60,7 +71,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                 <input
                   value={variant.sku}
                   onInput={(e) => update(variant.id, { sku: e.currentTarget.value })}
-                  class="h-10 rounded-card border border-surface-gray px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
+                  class="h-10 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                 />
               </label>
               <label class="flex flex-col gap-1 text-xs font-medium text-ink-gray">
@@ -71,7 +82,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                   step="0.01"
                   value={variant.price ?? ""}
                   onInput={(e) => update(variant.id, { price: e.currentTarget.value === "" ? undefined : Number(e.currentTarget.value) })}
-                  class="h-10 rounded-card border border-surface-gray px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
+                  class="h-10 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                 />
               </label>
               <label class="flex flex-col gap-1 text-xs font-medium text-ink-gray">
@@ -81,13 +92,77 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                   min="0"
                   value={variant.stock}
                   onInput={(e) => update(variant.id, { stock: Math.max(0, Number(e.currentTarget.value)) })}
-                  class="h-10 rounded-card border border-surface-gray px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
+                  class="h-10 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                 />
               </label>
             </div>
 
-            <div class="border-t border-dashed border-surface-gray pt-3">
-              <p class="mb-2 text-xs font-medium text-ink-gray">รูปภาพของ{variant.label ? ` "${variant.label}"` : "ตัวเลือกนี้"}</p>
+            {/* 1 — Product Card shade circle: color or its own small swatch image. */}
+            <div class="border-t border-dashed border-border pt-3">
+              <p class="text-xs font-medium text-ink">วงสีบน Product Card</p>
+              <p class="mb-2 text-[11px] text-ink-gray">วงกลมเล็กใต้ชื่อสินค้าบนการ์ด — แยกจากรูปสินค้าใน Modal</p>
+              <div role="radiogroup" aria-label="รูปแบบวงสีบน Product Card" class="mb-3 inline-flex rounded-card border border-border p-1">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={(variant.mode ?? "color") === "color"}
+                  onClick={() => setMode(variant.id, "color")}
+                  class={`rounded-[10px] px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
+                    (variant.mode ?? "color") === "color" ? "bg-brand-pink text-white" : "text-ink-gray hover:text-ink"
+                  }`}
+                >
+                  สี (Color)
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={variant.mode === "image"}
+                  onClick={() => setMode(variant.id, "image")}
+                  class={`rounded-[10px] px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
+                    variant.mode === "image" ? "bg-brand-pink text-white" : "text-ink-gray hover:text-ink"
+                  }`}
+                >
+                  รูปภาพ (Image)
+                </button>
+              </div>
+
+              <Show
+                when={variant.mode === "image"}
+                fallback={
+                  <label class="flex w-40 flex-col gap-1 text-xs font-medium text-ink-gray">
+                    รหัสสี (Hex Color Code)
+                    <div class="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={variant.color || "#CCCCCC"}
+                        onInput={(e) => update(variant.id, { color: e.currentTarget.value })}
+                        class="h-10 w-12 shrink-0 cursor-pointer rounded-card border border-border"
+                      />
+                      <input
+                        value={variant.color || "#CCCCCC"}
+                        onInput={(e) => update(variant.id, { color: e.currentTarget.value })}
+                        placeholder="#FF0000"
+                        class="h-10 min-w-0 flex-1 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
+                      />
+                    </div>
+                  </label>
+                }
+              >
+                <div class="max-w-xs">
+                  <SingleImageUploader
+                    label="รูปวงสี"
+                    hint="แสดงเป็นวงกลมขนาดเล็ก — แนะนำรูปสี่เหลี่ยมจัตุรัส"
+                    value={variant.swatchImage ?? ""}
+                    onChange={(url) => update(variant.id, { swatchImage: url || undefined })}
+                  />
+                </div>
+              </Show>
+            </div>
+
+            {/* 2 — Product Option Modal photos: the option tile, independent of the swatch above. */}
+            <div class="border-t border-dashed border-border pt-3">
+              <p class="text-xs font-medium text-ink">รูปสินค้าใน Modal ตัวเลือกสินค้า</p>
+              <p class="mb-2 text-[11px] text-ink-gray">รูปแรกแสดงเป็นช่องตัวเลือกสี่เหลี่ยมใน Modal และในตะกร้า</p>
               <ProductImageUploader images={variant.images ?? []} onChange={(images) => update(variant.id, { images })} />
             </div>
           </div>
@@ -96,7 +171,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
       <button
         type="button"
         onClick={add}
-        class="flex min-h-11 items-center justify-center gap-2 rounded-card border border-dashed border-surface-gray text-sm font-medium text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink"
+        class="flex min-h-11 items-center justify-center gap-2 rounded-card border border-dashed border-border text-sm font-medium text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink"
       >
         <PlusIcon class="size-4" />
         เพิ่มตัวเลือกสินค้า

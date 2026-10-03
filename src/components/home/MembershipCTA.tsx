@@ -12,9 +12,9 @@ import arrowIcon from "~/assets/icons/membership-arrow.svg";
  */
 export function MembershipCTA() {
   return (
-    <section aria-labelledby="membership-heading" class="py-8 lg:py-12">
+    <section aria-labelledby="membership-heading" class="pb-6 pt-0 sm:pb-8 lg:pb-10">
       <Container width="wide">
-        <div class="relative overflow-hidden rounded-card lg:aspect-[1140/362]">
+        <div class="relative overflow-hidden rounded-2xl sm:rounded-[20px] lg:aspect-[1140/362] lg:rounded-card">
           <div class="lg:absolute lg:inset-0">
             <Artwork
               kind="image"

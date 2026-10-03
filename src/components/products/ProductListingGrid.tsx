@@ -15,8 +15,30 @@ export function ProductListingGrid(props: {
   onLoadMore: () => void;
   onRetry: () => void;
   onClearFilters: () => void;
+  /**
+   * Defaults to `false` — All Products' own grid caps at 3 columns because a
+   * 280px Filter Sidebar shares the row with it. Category Listing pages have
+   * no sidebar and use the full Container width, so they opt into `true` to
+   * reach 5 columns at desktop — the exact same 2→3→4→5 breakpoint set
+   * `HomepageSections.tsx`'s full-width "Product Grid" section already
+   * established, not a new one invented here.
+   */
+  fullWidth?: boolean;
 }) {
-  const gridClass = () => (props.view === "list" ? "grid grid-cols-1 gap-4" : "grid grid-cols-2 gap-4 md:grid-cols-3 md:gap-5");
+  /**
+   * User-test feedback (Global Responsive pass) — Tablet must stay at 2
+   * columns like Mobile, not jump to 3 early; the old `sm:`/`md:` triggers
+   * (640/768px) sat inside the Tablet band itself. Moving that first step to
+   * `lg:` (1024px, this project's Desktop cutoff) is the only change — every
+   * column count from `lg:` up is untouched, so Desktop looks exactly as it
+   * did before.
+   */
+  const gridClass = () =>
+    props.view === "list"
+      ? "grid grid-cols-1 gap-4"
+      : props.fullWidth
+        ? "grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-5 xl:grid-cols-5 xl:gap-6"
+        : "grid grid-cols-2 gap-4 lg:grid-cols-3 lg:gap-5";
 
   return (
     <div class="flex w-full flex-col items-center gap-6">

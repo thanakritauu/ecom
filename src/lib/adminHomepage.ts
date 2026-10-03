@@ -1,11 +1,5 @@
 import heroBanner2 from "~/assets/images/hero/hero-banner-2.png";
-import {
-  emptyBanners,
-  emptyCta,
-  normalizeHomepageSection,
-  type HomepageSection,
-  type HomepageSectionType,
-} from "./pageSections";
+import { emptyBanners, emptyCta, type HomepageSection, type HomepageSectionType } from "./pageSections";
 
 /**
  * Phase 10.2 — Content Management: Homepage. Five section types cover every
@@ -29,29 +23,27 @@ import {
  */
 export * from "./pageSections";
 
-/** Section order *is* array order (no separate numeric field to keep in sync) — same convention `PromotionPage.products` already established. */
-export type HomepageContent = {
-  sections: HomepageSection[];
-  updatedAt: string;
-};
-
-export function normalizeHomepageContent(c: Partial<HomepageContent> | null | undefined): HomepageContent {
-  return {
-    sections: Array.isArray(c?.sections) ? c!.sections.map(normalizeHomepageSection) : [],
-    updatedAt: c?.updatedAt ?? "",
-  };
-}
-
+/**
+ * Promotion Page / Homepage Architecture §8/§37 — Homepage's own `sections`
+ * live directly on its `PromotionPage` record (`adminContent.ts`) now, so
+ * the separate `HomepageContent` wrapper type + normalizer that used to back
+ * `adminHomepageStore.tsx`'s two independent draft/published snapshots are
+ * gone (not deprecated-in-place — nothing reads them anymore). This file's
+ * remaining job is just `buildHomepageSectionBaseline()`, the seed content
+ * both `adminContent.ts`'s Homepage seed row and (transitively) every fresh
+ * install's `/` render from.
+ */
 const TODAY_LABEL = "18 ก.ย. 2569";
 
 /**
  * Fixed, hand-picked ids (not `genHomepageSectionId()`) — this function must
- * be *pure*: `adminHomepageStore.tsx` and `homepageContent.tsx` (Admin and
- * the storefront, two entirely separate provider trees) both call it as
- * their fallback, sometimes more than once per page load. An incrementing
- * counter would hand back a "different" baseline every call; a fixed id per
- * seed section makes every call byte-identical, which is the whole point of
- * a shared baseline.
+ * be *pure*: `adminContent.ts`'s Homepage seed row calls it once to build
+ * that row's initial `sections`, and every independent provider tree that
+ * falls back to `buildMockPromotionPages()` (Admin's own store, the
+ * storefront's read-only mirror) gets the byte-identical result. An
+ * incrementing counter would hand back a "different" baseline every call; a
+ * fixed id per seed section is what makes that byte-identical result
+ * possible.
  */
 function makeSection(partial: Partial<HomepageSection> & { id: string; type: HomepageSectionType; name: string }): HomepageSection {
   return {
@@ -60,11 +52,13 @@ function makeSection(partial: Partial<HomepageSection> & { id: string; type: Hom
     title: "",
     description: "",
     banners: emptyBanners(),
+    assets: [],
     cta: emptyCta(),
     contentLayout: "image-text",
     productSource: "manual",
     products: [],
     collectionId: "",
+    categoryId: "",
     campaignId: "",
     createdAt: TODAY_LABEL,
     updatedAt: TODAY_LABEL,
@@ -73,9 +67,8 @@ function makeSection(partial: Partial<HomepageSection> & { id: string; type: Hom
 }
 
 /**
- * §23 — the one baseline both `adminHomepageStore.tsx` (Admin's own initial
- * state) and `homepageContent.tsx` (the storefront's fallback when nothing
- * has been persisted yet) call — so a brand-new browser's Home page already
+ * §23 — the seed content for the one `PromotionPage` where `isHomepage` is
+ * `true` (`adminContent.ts`) — so a brand-new browser's Home page already
  * looks reasonable instead of showing nothing until an admin saves once.
  * The `product` section here reproduces the old hardcoded "Featured
  * Collection" section exactly (same title, same `featured` source) so
@@ -109,18 +102,6 @@ export function buildHomepageSectionBaseline(): HomepageSection[] {
       enabled: false,
       title: "",
       description: "",
-    }),
-    makeSection({
-      id: "home-sec-campaign-99",
-      type: "campaign",
-      name: "9.9 Beauty Sale Campaign",
-      title: "9.9 Beauty Sale",
-      description: "รวมไอเทมดูแลผิวและสุขภาพในราคาพิเศษ ลดสูงสุด 50%",
-      cta: { label: "ช้อปเลย", destination: { type: "landingPage", landingPageId: "promo-page-001" } },
-      products: [
-        { productId: "best-1", variantIds: [] },
-        { productId: "feature-1", variantIds: [] },
-      ],
     }),
     makeSection({
       id: "home-sec-content-1",
