@@ -101,8 +101,9 @@ export function PurchaseFooter(props: {
         />
         <AddToCartButton
           size={bar() ? "compact" : "md"}
-          class="min-w-0 sm:w-[220px] sm:flex-none lg:w-[260px]"
-          classList={{ "flex-1": !bar(), "shrink-0": bar() }}
+          // Plain `class` string, not `classList`: Button composes its own class, which drops a passed classList.
+          // Modal: fills the row beside the stepper on phones; fixed width from `sm`.
+          class={`min-w-0 sm:w-[220px] sm:flex-none lg:w-[260px] ${bar() ? "shrink-0" : "flex-1"}`}
           disabled={props.disabled}
           outOfStock={props.outOfStock}
           label={props.ctaLabel}

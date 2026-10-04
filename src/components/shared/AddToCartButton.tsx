@@ -9,16 +9,18 @@ import { CartIcon } from "./icons";
  * Never drop the icon, never shorten the label; where space is tight the
  * button scales down instead (`size`).
  *
- * - `lg`: PDP main CTA (52px, 16px text).
- * - `md`: Product Option Modal (52px, 14px text).
- * - `compact`: PDP sticky bar — 40px, 14px text + 16px icon, 24px side
+ * - `lg`: PDP main CTA (52px).
+ * - `md`: Product Option Modal (52px).
+ * - `compact`: PDP sticky bar — 40px, 16px icon, 24px side
  *   padding on phones (16px below 375px so the one-row bar still fits a
  *   360px screen), `md` from `sm`.
- * - `card`: Product Card — 40px, 14px text; 16px side padding below `sm`
+ * - `card`: Product Card — 40px; 16px side padding below `sm`
  *   (a ~134px wide mobile card has no room for 24px), 24px from `sm`.
  *
- * Text is never smaller than 14px — tight spots get less padding, not
- * smaller text.
+ * Purchase-control text standard: the label is 14px (`text-sm`) at every
+ * size and breakpoint, and every QuantityStepper number uses the same 14px
+ * — one size for "จำนวน" and "เพิ่มลงตะกร้า" everywhere. Tight spots get
+ * less padding, never smaller (or bigger) text.
  */
 export function AddToCartButton(
   props: {
@@ -34,7 +36,7 @@ export function AddToCartButton(
   const size = () => local.size ?? "md";
   const sizeClass = () =>
     ({
-      lg: "h-[52px] !gap-2 !px-6 !text-base",
+      lg: "h-[52px] !gap-2 !px-6 !text-sm",
       md: "h-[52px] !gap-2 !px-6 !text-sm",
       compact: "h-10 !min-h-10 !gap-1 !px-6 !text-sm max-[374px]:!px-4 sm:h-[52px] sm:!gap-2",
       card: "h-10 !min-h-10 !gap-1 !px-4 !text-sm sm:!gap-1.5 sm:!px-6",

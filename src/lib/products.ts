@@ -41,7 +41,7 @@ const shadeVariants = [
  * Cushion-foundation shade family — hex values pulled directly from the
  * Figma "ColorOption" swatch export (node 65:1491–1499) so this one is
  * pixel-accurate, not approximated. Shades 06–08 are appended purely to give
- * the card's shade row (max 6 slots, the 6th becomes "+N") its overflow
+ * the card's shade row (max 5 slots, the 5th becomes "+N") its overflow
  * state in this catalog; drop them once real SKUs define how many shades exist.
  */
 const cushionShadeVariants = [

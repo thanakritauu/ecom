@@ -23,8 +23,14 @@ const QuickAddSheet = clientOnly(() =>
   import("./QuickAddSheet").then((m) => ({ default: m.QuickAddSheet })),
 );
 
-/** Card shade row: at most 6 circles on one line; past that the 6th becomes "+N" (N = shades not shown). */
-const MAX_SHADE_SLOTS = 6;
+/**
+ * Card shade row: one row of 5 equal slots spanning the card's full width at
+ * every screen size — each circle is 1/5 of the row (minus gaps), so it
+ * scales with the card and 5 always fit. Past 5 shades the 5th slot becomes
+ * "+N" (N = shades not shown). Fewer than 5 shades keep the same circle size,
+ * left-aligned.
+ */
+const MAX_SHADE_SLOTS = 5;
 
 /**
  * Shared everywhere a product grid appears (Featured Collection, Flash Sale,
@@ -213,16 +219,14 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
   const ShadeSelector = () => (
     <Show when={hasVariants()}>
       <div class="flex flex-col gap-1.5">
-        {/* One row, never wraps: each slot is up to 28px and shrinks evenly when
-            the card is narrower than 6 × 28px (mobile grid cards are ~134px inside). */}
-        <div role="radiogroup" aria-label="ตัวเลือกสินค้า" class="flex flex-nowrap items-center gap-1 sm:gap-1.5">
+        <div role="radiogroup" aria-label="ตัวเลือกสินค้า" class="grid grid-cols-5 items-center gap-1.5 sm:gap-2">
           <For each={visibleShades()}>
             {(shade) => (
               <ShadeSwatch
                 shade={shade}
                 selected={selectedVariantId() === shade.id}
                 onSelect={() => selectShade(shade.id)}
-                class="aspect-square min-w-0 max-w-7 flex-[0_1_28px]"
+                class="aspect-square w-full"
               />
             )}
           </For>
@@ -231,7 +235,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
               type="button"
               onClick={() => setSheetOpen(true)}
               aria-label={`ดูตัวเลือกสินค้าเพิ่มเติมอีก ${shadeOverflowCount()} ตัวเลือก`}
-              class="flex aspect-square min-w-0 max-w-7 flex-[0_1_28px] items-center justify-center rounded-full border border-border bg-surface-gray text-[10px] font-medium leading-none text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink"
+              class="flex aspect-square w-full items-center justify-center rounded-full border border-border bg-surface-gray text-xs font-medium leading-none text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink"
             >
               +{shadeOverflowCount()}
             </button>

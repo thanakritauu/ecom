@@ -6,6 +6,10 @@
  * since both are the same increment/decrement/clamp behavior with different
  * skins, and a future screen needing a quantity control should reach for
  * this with a new `tone` rather than writing another stepper.
+ *
+ * The number is always 14px (`text-sm`) in both tones and at every size —
+ * the same size as the "เพิ่มลงตะกร้า" label (see AddToCartButton's
+ * purchase-control text standard).
  */
 export function QuantityStepper(props: {
   value: number;
@@ -82,8 +86,8 @@ export function QuantityStepper(props: {
         <MinusIcon class="size-3.5" />
       </button>
       <span
-        class="text-center font-semibold"
-        classList={{ "min-w-9 text-lg": !props.compactOnMobile, "min-w-6 text-base sm:min-w-9 sm:text-lg": !!props.compactOnMobile }}
+        class="text-center text-sm font-semibold"
+        classList={{ "min-w-9": !props.compactOnMobile, "min-w-6 sm:min-w-9": !!props.compactOnMobile }}
         aria-live="polite"
         aria-atomic="true"
       >
