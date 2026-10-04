@@ -1,5 +1,7 @@
 import { createUniqueId, Show } from "solid-js";
 import { TextField } from "../shared/TextField";
+import visaMark from "~/assets/icons/payment/visa.svg";
+import mastercardMark from "~/assets/icons/payment/mastercard.svg";
 import { detectCardBrand, formatCardNumber, formatExpiry, isExpiryValid, passesLuhn, type CardBrand } from "~/lib/payment";
 
 export type CardInput = { number: string; expiry: string; cvv: string; name: string };
@@ -24,6 +26,8 @@ export function validateCard(card: CardInput): CardErrors {
 }
 
 const BRAND_LABEL: Record<CardBrand, string> = { visa: "VISA", mastercard: "Mastercard", jcb: "JCB", amex: "AMEX", unknown: "" };
+/** Same marks as the payment-method row; other brands fall back to a short text badge. */
+const BRAND_MARK: Partial<Record<CardBrand, string>> = { visa: visaMark, mastercard: mastercardMark };
 
 export function CardPaymentForm(props: {
   card: CardInput;
@@ -48,7 +52,8 @@ export function CardPaymentForm(props: {
           autocomplete="cc-number"
           placeholder="1234 5678 9012 3456"
           maxlength={19}
-          class="pr-28 tracking-wider"
+          // Room for the brand badge only once a brand is detected — otherwise the placeholder would be cut off on phones.
+          class={`tracking-wider ${brand() !== "unknown" ? "pr-16" : ""}`}
           disabled={props.disabled}
           value={props.card.number}
           onInput={(e) => set("number", formatCardNumber(e.currentTarget.value))}
@@ -56,9 +61,16 @@ export function CardPaymentForm(props: {
           error={props.errors.number}
         />
         <Show when={brand() !== "unknown"}>
-          <span class="pointer-events-none absolute right-3 top-[38px] rounded-md border border-surface-gray bg-white px-2 py-0.5 text-xs font-bold text-ink" aria-hidden="true">
-            {BRAND_LABEL[brand()]}
-          </span>
+          <Show
+            when={BRAND_MARK[brand()]}
+            fallback={
+              <span class="pointer-events-none absolute right-3 top-[38px] rounded-md border border-surface-gray bg-white px-1.5 py-0.5 text-xs font-bold text-ink" aria-hidden="true">
+                {BRAND_LABEL[brand()]}
+              </span>
+            }
+          >
+            {(src) => <img src={src()} alt="" aria-hidden="true" class="pointer-events-none absolute right-3 top-[38px] h-5 w-auto rounded-[3px]" />}
+          </Show>
         </Show>
       </div>
       <div class="grid grid-cols-2 gap-4">

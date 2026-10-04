@@ -198,7 +198,7 @@ const ADDRESSES: OrderAddress[] = [
 ];
 
 const SHIPPING_METHOD_NAMES = ["จัดส่งมาตรฐาน", "จัดส่งด่วน"];
-const PAYMENT_METHOD_NAMES = ["บัตรเครดิต / เดบิต", "พร้อมเพย์ (PromptPay)", "เก็บเงินปลายทาง (COD)"];
+const PAYMENT_METHOD_NAMES = ["บัตรเครดิต / เดบิต", "พร้อมเพย์ (PromptPay)", "TrueMoney Wallet"];
 const COURIERS = ["Kerry Express", "Flash Express", "Thailand Post"];
 
 /** Default payment/fulfillment pairing for each order status — the pairing an order in that state would realistically have. A couple of orders below override this to also demo `failed` payment and `delivery_failed` fulfillment. */

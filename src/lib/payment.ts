@@ -1,7 +1,7 @@
 import type { PaymentMethodId } from "./cartSelectors";
 
 /**
- * Phase 06 — payment layer for the Beam-style payment step (prototype).
+ * Payment layer for the one-page Checkout (prototype) — card, PromptPay, TrueMoney Wallet.
  *
  * Checkout and the payment UI only talk to `PaymentProvider`; nothing
  * Beam-specific lives anywhere else. Today's provider is a mock: no Beam
@@ -26,7 +26,7 @@ export type CardBrand = "visa" | "mastercard" | "jcb" | "amex" | "unknown";
 
 export type CardToken = { token: string; last4: string; brand: CardBrand };
 
-export type PaymentFailureReason = "card_declined" | "insufficient_funds" | "expired" | "network_error";
+export type PaymentFailureReason = "card_declined" | "insufficient_funds" | "expired" | "wallet_failed" | "network_error";
 
 export type PaymentResult =
   | { status: "succeeded"; reference: string; method: PaymentMethodId; detail?: string }
@@ -43,18 +43,18 @@ export type PromptPaySession = {
 export type PromptPayStatus = "pending" | "succeeded" | "expired";
 
 export interface PaymentProvider {
-  /** Card / installment. */
-  chargeCard(request: PaymentRequest, card: CardToken, opts?: { installmentMonths?: number }): Promise<PaymentResult>;
+  chargeCard(request: PaymentRequest, card: CardToken): Promise<PaymentResult>;
   createPromptPaySession(request: PaymentRequest): Promise<PromptPaySession>;
   getPromptPayStatus(sessionId: string): Promise<PromptPayStatus>;
-  /** Cash on delivery — nothing to collect online, just confirms the order. */
-  confirmCashOnDelivery(request: PaymentRequest): Promise<PaymentResult>;
+  /** TrueMoney Wallet — the gateway sends a payment request to the wallet linked to this phone; resolves once the customer approves (or it fails/times out). */
+  chargeTrueMoney(request: PaymentRequest, phone: string): Promise<PaymentResult>;
 }
 
 export const FAILURE_MESSAGES: Record<PaymentFailureReason, { title: string; body: string }> = {
   card_declined: { title: "ธนาคารปฏิเสธรายการ", body: "ลองตรวจสอบข้อมูลบัตรอีกครั้ง ใช้บัตรใบอื่น หรือเปลี่ยนเป็นช่องทางชำระเงินอื่น" },
   insufficient_funds: { title: "วงเงินหรือยอดเงินไม่เพียงพอ", body: "กรุณาใช้บัตรใบอื่นหรือเปลี่ยนเป็นช่องทางชำระเงินอื่น" },
   expired: { title: "QR Code หมดอายุแล้ว", body: "รายการยังไม่ถูกเรียกเก็บเงิน กดลองอีกครั้งเพื่อสร้าง QR ใหม่" },
+  wallet_failed: { title: "TrueMoney Wallet ชำระไม่สำเร็จ", body: "ยอดเงินใน Wallet อาจไม่พอ หรือคำขอชำระหมดเวลา ลองอีกครั้งหรือเปลี่ยนช่องทางชำระเงิน" },
   network_error: { title: "การเชื่อมต่อขัดข้อง", body: "ยังไม่มีการเรียกเก็บเงิน กรุณาลองอีกครั้งในอีกสักครู่" },
 };
 
@@ -69,6 +69,9 @@ export const MOCK_TEST_CARDS = {
   insufficientFunds: "4000 0000 0000 9995",
 } as const;
 
+/** TrueMoney test numbers: any valid mobile number succeeds; one ending in 0000 fails. */
+export const MOCK_TRUEMONEY_FAIL_SUFFIX = "0000";
+
 export type MockPaymentOptions = {
   /** Forces every payment to fail (`?mockPayment=fail`). */
   forceFail?: boolean;
@@ -76,15 +79,15 @@ export type MockPaymentOptions = {
   shortQrExpiry?: boolean;
 };
 
-export type MockPaymentProvider = PaymentProvider & {
-  /** Prototype-only stand-in for "the customer scanned and paid". */
-  simulatePromptPayPaid(sessionId: string): void;
-};
+export type MockPaymentProvider = PaymentProvider;
+
+/** Mock only: a PromptPay QR counts as "scanned and paid" this long after it's created (no on-screen test control). */
+const MOCK_PROMPTPAY_AUTO_PAID_MS = 8000;
 
 export function createMockPaymentProvider(opts: MockPaymentOptions = {}): MockPaymentProvider {
   const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   const ref = () => `MOCK-${Date.now().toString(36).toUpperCase()}`;
-  const sessions = new Map<string, { expiresAt: number; paid: boolean }>();
+  const sessions = new Map<string, { expiresAt: number; paidAt: number }>();
 
   return {
     async chargeCard(request, card) {
@@ -97,23 +100,22 @@ export function createMockPaymentProvider(opts: MockPaymentOptions = {}): MockPa
       await delay(600);
       const id = `pp_${Date.now().toString(36)}`;
       const expiresAt = Date.now() + (opts.shortQrExpiry ? 20_000 : 10 * 60_000);
-      sessions.set(id, { expiresAt, paid: false });
+      sessions.set(id, { expiresAt, paidAt: Date.now() + MOCK_PROMPTPAY_AUTO_PAID_MS });
       return { id, expiresAt, qrPayload: `MOCK|CHARMISS|${request.orderNumber}|${request.amount.toFixed(2)}` };
     },
     async getPromptPayStatus(sessionId) {
       const s = sessions.get(sessionId);
       if (!s) return "expired";
-      if (s.paid) return opts.forceFail ? "expired" : "succeeded";
-      return Date.now() >= s.expiresAt ? "expired" : "pending";
+      if (Date.now() >= s.expiresAt) return "expired";
+      if (opts.shortQrExpiry) return "pending"; // `?mockPayment=expire`: let the QR run out
+      if (Date.now() >= s.paidAt) return opts.forceFail ? "expired" : "succeeded";
+      return "pending";
     },
-    async confirmCashOnDelivery(request) {
-      await delay(1000);
-      if (opts.forceFail) return { status: "failed", reason: "network_error" };
-      return { status: "succeeded", reference: ref(), method: request.method };
-    },
-    simulatePromptPayPaid(sessionId) {
-      const s = sessions.get(sessionId);
-      if (s && Date.now() < s.expiresAt) s.paid = true;
+    async chargeTrueMoney(request, phone) {
+      await delay(2200);
+      const digits = phone.replace(/\D/g, "");
+      if (opts.forceFail || digits.endsWith(MOCK_TRUEMONEY_FAIL_SUFFIX)) return { status: "failed", reason: "wallet_failed" };
+      return { status: "succeeded", reference: ref(), method: request.method, detail: `TrueMoney •••• ${digits.slice(-4)}` };
     },
   };
 }

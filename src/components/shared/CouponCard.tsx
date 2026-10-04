@@ -18,13 +18,21 @@ export type Coupon = {
  * background/clipping of its own. % icon at (31, 20), dashed divider at
  * x=100, content area from x=100 with 16px padding.
  */
-export function CouponCard(props: { coupon: Coupon; collected: boolean; onCollect: () => Promise<void> }) {
+/** Replaces the default "เก็บเลย" collect button — e.g. Checkout's "ใช้เลย" / "ยกเลิก". */
+export type CouponCardAction = { label: string; variant: "primary" | "outline"; disabled?: boolean; onClick: () => void };
+
+export function CouponCard(props: {
+  coupon: Coupon;
+  collected?: boolean;
+  onCollect?: () => Promise<void>;
+  action?: CouponCardAction;
+}) {
   const [status, setStatus] = createSignal<"idle" | "loading" | "error">("idle");
 
   const collect = async () => {
     setStatus("loading");
     try {
-      await props.onCollect();
+      await props.onCollect?.();
       setStatus("idle");
     } catch {
       setStatus("error");
@@ -47,17 +55,33 @@ export function CouponCard(props: { coupon: Coupon; collected: boolean; onCollec
           <p class="text-sm font-medium leading-5 text-ink">{props.coupon.minSpendLabel}</p>
           <p class="whitespace-nowrap text-xs leading-[normal] text-ink-gray">{props.coupon.expiryLabel}</p>
         </div>
-        <Button
-          variant={props.collected ? "outline" : "primary"}
-          class="!min-h-0 shrink-0 !px-4 !py-2 !text-base !leading-[normal]"
-          loading={status() === "loading"}
-          disabled={props.collected}
-          onClick={collect}
+        <Show
+          when={props.action}
+          fallback={
+            <Button
+              variant={props.collected ? "outline" : "primary"}
+              class="!min-h-0 shrink-0 !px-4 !py-2 !text-base !leading-[normal]"
+              loading={status() === "loading"}
+              disabled={props.collected}
+              onClick={collect}
+            >
+              <Show when={!props.collected} fallback="เก็บแล้ว">
+                {status() === "error" ? "ลองอีกครั้ง" : "เก็บเลย"}
+              </Show>
+            </Button>
+          }
         >
-          <Show when={!props.collected} fallback="เก็บแล้ว">
-            {status() === "error" ? "ลองอีกครั้ง" : "เก็บเลย"}
-          </Show>
-        </Button>
+          {(action) => (
+            <Button
+              variant={action().variant}
+              class="!min-h-0 shrink-0 !px-4 !py-2 !text-base !leading-[normal]"
+              disabled={action().disabled}
+              onClick={action().onClick}
+            >
+              {action().label}
+            </Button>
+          )}
+        </Show>
       </div>
     </div>
   );

@@ -18,7 +18,7 @@ const faqItems = [
   {
     id: "faq4",
     trigger: "ชำระเงินด้วยวิธีใดได้บ้าง?",
-    content: "รองรับบัตรเครดิต/เดบิต (Visa, Mastercard, JCB, UnionPay), โอนผ่านธนาคาร และการชำระเงินปลายทางในบางพื้นที่",
+    content: "รองรับบัตรเครดิต/เดบิต (Visa, Mastercard, JCB, UnionPay), พร้อมเพย์ (สแกน QR ผ่านแอปธนาคาร) และ TrueMoney Wallet",
   },
   {
     id: "faq5",

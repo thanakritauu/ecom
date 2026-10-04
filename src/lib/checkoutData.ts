@@ -47,9 +47,8 @@ export const MOCK_ADDRESSES: Address[] = [
 /**
  * Phase 04 — the 77 Thai provinces, for the address form's province
  * selector (a fixed, small list — picking beats typing on mobile and rules
- * out misspellings). District/sub-district/postal-code lookup data doesn't
- * exist in this project and no address API is in scope, so those stay
- * typed fields with validation.
+ * out misspellings). District → sub-district → postal code are cascading
+ * pick-lists fed by `lib/thaiAddress.ts`.
  */
 export const THAI_PROVINCES = [
   "กรุงเทพมหานคร", "กระบี่", "กาญจนบุรี", "กาฬสินธุ์", "กำแพงเพชร", "ขอนแก่น", "จันทบุรี", "ฉะเชิงเทรา", "ชลบุรี", "ชัยนาท",

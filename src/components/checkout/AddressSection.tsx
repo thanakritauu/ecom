@@ -1,8 +1,11 @@
-import { createEffect, createSignal, createUniqueId, For, on, Show } from "solid-js";
+import { createEffect, createResource, createSignal, createUniqueId, For, on, onMount, Show } from "solid-js";
 import { formatAddress, isBangkok, THAI_PROVINCES, type Address } from "~/lib/checkoutData";
 import { PHONE_PATTERN } from "~/lib/validators";
+import { districtsOf, loadThaiAddressData, postalCodesOf, stripAreaPrefix, subDistrictsOf } from "~/lib/thaiAddress";
 import { TextField } from "../shared/TextField";
 import { Button } from "../shared/Button";
+import { Badge } from "../shared/Badge";
+import { ChevronIcon } from "../shared/ChevronIcon";
 
 type Mode = "summary" | "list" | "add" | "edit";
 
@@ -30,8 +33,8 @@ export function AddressSection(props: {
   /** Shipping only — billing addresses don't carry a checkout default. */
   showDefaultOption?: boolean;
   newAddressLabel: string;
-  /** Name field label — billing may be a company, not a "recipient". */
-  nameLabel?: string;
+  /** Billing may be a company: the first-name field also takes a company name and the last name becomes optional. */
+  companyAllowed?: boolean;
   error?: string;
   /** Lets Checkout know an unsaved form is open (so "ยืนยัน" can ask to save it first). */
   onFormOpenChange?: (open: boolean) => void;
@@ -91,7 +94,7 @@ export function AddressSection(props: {
         <AddressForm
           initial={mode() === "edit" ? editingAddress() : undefined}
           newAddressLabel={props.newAddressLabel}
-          nameLabel={props.nameLabel ?? "ชื่อ-นามสกุลผู้รับ"}
+          companyAllowed={props.companyAllowed}
           showDefaultOption={props.showDefaultOption}
           forceDefault={props.showDefaultOption && isFirstAddress()}
           canCancel={!isFirstAddress()}
@@ -177,7 +180,7 @@ function AddressCard(props: {
         <span class="font-semibold text-ink">{props.address.recipientName}</span>
         <span class="text-sm text-ink-gray">{props.address.phone}</span>
         <Show when={props.address.isDefault}>
-          <span class="rounded-pill bg-brand-purple px-2 py-0.5 text-[10px] font-medium text-white">ค่าเริ่มต้น</span>
+          <Badge tone="success">ค่าเริ่มต้น</Badge>
         </Show>
       </span>
       <span class="text-sm text-ink">{formatAddress(props.address)}</span>
@@ -187,8 +190,9 @@ function AddressCard(props: {
   return (
     <div
       class="flex w-full items-start gap-3 rounded-card border p-4 transition-colors duration-150"
+      // No pink outline — the chosen address is the pink-tinted card (+ its radio dot in the list).
       classList={{
-        "border-brand-pink bg-surface-pink": !props.selectable || props.selected,
+        "border-transparent bg-surface-pink": !props.selectable || props.selected,
         "border-surface-gray bg-white hover:border-brand-pink/50": props.selectable && !props.selected,
       }}
     >
@@ -232,14 +236,20 @@ function AddressCard(props: {
   );
 }
 
-type FieldKey = "recipientName" | "phone" | "addressLine" | "province" | "district" | "subDistrict" | "postalCode";
-const FIELD_ORDER: FieldKey[] = ["recipientName", "phone", "addressLine", "province", "district", "subDistrict", "postalCode"];
+type FieldKey = "firstName" | "lastName" | "phone" | "addressLine" | "province" | "district" | "subDistrict" | "postalCode";
+const FIELD_ORDER: FieldKey[] = ["firstName", "lastName", "phone", "addressLine", "province", "district", "subDistrict", "postalCode"];
+
+/** The saved model keeps one `recipientName`; the form edits it as first + last name ("กมลชนก ใจดี" → "กมลชนก" / "ใจดี"). */
+function splitName(full: string | undefined): { first: string; last: string } {
+  const [first = "", ...rest] = (full ?? "").trim().split(/\s+/);
+  return { first, last: rest.join(" ") };
+}
 const POSTAL_PATTERN = /^\d{5}$/;
 
 function AddressForm(props: {
   initial?: Address;
   newAddressLabel: string;
-  nameLabel: string;
+  companyAllowed?: boolean;
   showDefaultOption?: boolean;
   /** First saved shipping address always becomes the default. */
   forceDefault?: boolean;
@@ -249,13 +259,15 @@ function AddressForm(props: {
 }) {
   const formId = createUniqueId();
   const fieldId = (key: FieldKey) => `${formId}-${key}`;
+  const initialName = splitName(props.initial?.recipientName);
   const [values, setValues] = createSignal<Record<FieldKey, string>>({
-    recipientName: props.initial?.recipientName ?? "",
+    firstName: initialName.first,
+    lastName: initialName.last,
     phone: props.initial?.phone ?? "",
     addressLine: props.initial?.addressLine ?? "",
     province: props.initial?.province ?? "",
-    district: props.initial?.district ?? "",
-    subDistrict: props.initial?.subDistrict ?? "",
+    district: stripAreaPrefix(props.initial?.district ?? ""),
+    subDistrict: stripAreaPrefix(props.initial?.subDistrict ?? ""),
     postalCode: props.initial?.postalCode ?? "",
   });
   const [makeDefault, setMakeDefault] = createSignal(props.forceDefault || !!props.initial?.isDefault);
@@ -264,17 +276,50 @@ function AddressForm(props: {
   const [status, setStatus] = createSignal<"idle" | "saving" | "error">("idle");
 
   const v = (key: FieldKey) => values()[key];
+  const touch = (key: FieldKey) => setTouched((prev) => ({ ...prev, [key]: true }));
   const set = (key: FieldKey, value: string) => setValues((prev) => ({ ...prev, [key]: value }));
   const bkk = () => isBangkok(v("province"));
   const districtLabel = () => (bkk() ? "เขต" : "อำเภอ");
   const subDistrictLabel = () => (bkk() ? "แขวง" : "ตำบล");
 
+  // Cascading lookup — each level only offers what belongs to the one above it.
+  // Loaded lazily on the client (onMount), so SSR and hydration render the same empty selects.
+  const [loadData, setLoadData] = createSignal(false);
+  onMount(() => setLoadData(true));
+  const [geo] = createResource(loadData, (go) => (go ? loadThaiAddressData() : undefined));
+  const districtOptions = () => (geo() ? districtsOf(geo()!, v("province")) : []);
+  const subDistrictOptions = () => (geo() ? subDistrictsOf(geo()!, v("province"), v("district")) : []);
+  const postalOptions = () => (geo() && v("district") ? postalCodesOf(geo()!, v("province"), v("district"), v("subDistrict")) : []);
+
+  // Changing a level clears everything below it — and un-touches those fields, so a just-cleared
+  // dropdown doesn't greet the shopper with an error before they've had a chance to pick.
+  // A single possible postal code fills itself in.
+  const untouch = (...keys: FieldKey[]) => setTouched((prev) => ({ ...prev, ...Object.fromEntries(keys.map((k) => [k, false])) }));
+  const pickProvince = (value: string) => {
+    setValues((prev) => ({ ...prev, province: value, district: "", subDistrict: "", postalCode: "" }));
+    untouch("district", "subDistrict", "postalCode");
+    touch("province");
+  };
+  const pickDistrict = (value: string) => {
+    setValues((prev) => ({ ...prev, district: value, subDistrict: "", postalCode: "" }));
+    untouch("subDistrict", "postalCode");
+    touch("district");
+  };
+  const pickSubDistrict = (value: string) => {
+    setValues((prev) => ({ ...prev, subDistrict: value }));
+    const codes = postalOptions();
+    set("postalCode", codes.length === 1 ? codes[0] : codes.includes(v("postalCode")) ? v("postalCode") : "");
+    touch("subDistrict");
+  };
+
   // Messages say what to fix, not just that something's wrong.
   const errorFor = (key: FieldKey): string | undefined => {
     const value = v(key).trim();
     switch (key) {
-      case "recipientName":
-        return value ? undefined : `กรุณากรอก${props.nameLabel}`;
+      case "firstName":
+        return value ? undefined : props.companyAllowed ? "กรุณากรอกชื่อ หรือชื่อบริษัท" : "กรุณากรอกชื่อ";
+      case "lastName":
+        return value || props.companyAllowed ? undefined : "กรุณากรอกนามสกุล";
       case "phone":
         if (!value) return "กรุณากรอกเบอร์โทรศัพท์ผู้รับ";
         return PHONE_PATTERN.test(value) ? undefined : "เบอร์โทรต้องเป็นตัวเลข 9–10 หลัก ขึ้นต้นด้วย 0 เช่น 081-234-5678";
@@ -283,18 +328,17 @@ function AddressForm(props: {
       case "province":
         return value ? undefined : "กรุณาเลือกจังหวัด";
       case "district":
-        return value ? undefined : `กรุณากรอก${districtLabel()}`;
+        return value ? undefined : `กรุณาเลือก${districtLabel()}`;
       case "subDistrict":
-        return value ? undefined : `กรุณากรอก${subDistrictLabel()}`;
+        return value ? undefined : `กรุณาเลือก${subDistrictLabel()}`;
       case "postalCode":
-        if (!value) return "กรุณากรอกรหัสไปรษณีย์";
+        if (!value) return "กรุณาเลือกรหัสไปรษณีย์";
         return POSTAL_PATTERN.test(value) ? undefined : "รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก เช่น 10110";
     }
   };
   // Errors appear once a field is left (blur) or on submit — not while typing the first time.
   const shownError = (key: FieldKey) => (submitted() || touched()[key] ? errorFor(key) : undefined);
-  const touch = (key: FieldKey) => setTouched((prev) => ({ ...prev, [key]: true }));
-
+  
   // Mobile: keep the focused field clear of the on-screen keyboard and the fixed order-summary bar.
   const onFocusIn = (e: FocusEvent) => {
     const el = e.target as HTMLElement;
@@ -312,12 +356,18 @@ function AddressForm(props: {
     }
     setStatus("saving");
     try {
-      const trimmed = Object.fromEntries(FIELD_ORDER.map((k) => [k, v(k).trim()])) as Record<FieldKey, string>;
+      const t = (k: FieldKey) => v(k).trim();
       await props.onSubmit(
         {
           id: props.initial?.id ?? `addr-${Date.now()}`,
           label: props.initial?.label ?? props.newAddressLabel,
-          ...trimmed,
+          recipientName: [t("firstName"), t("lastName")].filter(Boolean).join(" "),
+          phone: t("phone"),
+          addressLine: t("addressLine"),
+          province: t("province"),
+          district: t("district"),
+          subDistrict: t("subDistrict"),
+          postalCode: t("postalCode"),
           isDefault: props.initial?.isDefault,
         },
         props.showDefaultOption ? makeDefault() : false,
@@ -330,34 +380,46 @@ function AddressForm(props: {
 
   return (
     <form onSubmit={submit} onFocusIn={onFocusIn} novalidate class="flex flex-col gap-4 rounded-card border border-surface-gray p-4">
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {/* ชื่อ | นามสกุล — always side by side. */}
+      <div class="grid grid-cols-2 gap-3 sm:gap-4">
         <TextField
-          id={fieldId("recipientName")}
-          label={props.nameLabel}
+          id={fieldId("firstName")}
+          label={props.companyAllowed ? "ชื่อ หรือชื่อบริษัท" : "ชื่อ"}
           required
-          autocomplete="name"
+          autocomplete={props.companyAllowed ? "name" : "given-name"}
           enterkeyhint="next"
-          value={v("recipientName")}
-          onInput={(e) => set("recipientName", e.currentTarget.value)}
-          onBlur={() => touch("recipientName")}
-          error={shownError("recipientName")}
+          value={v("firstName")}
+          onInput={(e) => set("firstName", e.currentTarget.value)}
+          onBlur={() => touch("firstName")}
+          error={shownError("firstName")}
         />
         <TextField
-          id={fieldId("phone")}
-          label="เบอร์โทรศัพท์"
-          required
-          type="tel"
-          inputMode="tel"
-          autocomplete="tel"
+          id={fieldId("lastName")}
+          label="นามสกุล"
+          required={!props.companyAllowed}
+          autocomplete="family-name"
           enterkeyhint="next"
-          placeholder="08X-XXX-XXXX"
-          maxlength={12}
-          value={v("phone")}
-          onInput={(e) => set("phone", e.currentTarget.value.replace(/[^\d-]/g, ""))}
-          onBlur={() => touch("phone")}
-          error={shownError("phone")}
+          value={v("lastName")}
+          onInput={(e) => set("lastName", e.currentTarget.value)}
+          onBlur={() => touch("lastName")}
+          error={shownError("lastName")}
         />
       </div>
+      <TextField
+        id={fieldId("phone")}
+        label="เบอร์โทรศัพท์"
+        required
+        type="tel"
+        inputMode="tel"
+        autocomplete="tel"
+        enterkeyhint="next"
+        placeholder="08X-XXX-XXXX"
+        maxlength={12}
+        value={v("phone")}
+        onInput={(e) => set("phone", e.currentTarget.value.replace(/[^\d-]/g, ""))}
+        onBlur={() => touch("phone")}
+        error={shownError("phone")}
+      />
 
       <TextField
         id={fieldId("addressLine")}
@@ -372,55 +434,65 @@ function AddressForm(props: {
         error={shownError("addressLine")}
       />
 
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <ProvinceSelect
-          id={fieldId("province")}
-          value={v("province")}
-          onChange={(value) => {
-            set("province", value);
-            touch("province");
-          }}
-          error={shownError("province")}
-        />
-        <TextField
+      <SelectField
+        id={fieldId("province")}
+        label="จังหวัด"
+        placeholder="เลือกจังหวัด"
+        autocomplete="address-level1"
+        options={THAI_PROVINCES}
+        value={v("province")}
+        onChange={pickProvince}
+        error={shownError("province")}
+      />
+      {/* เขต/อำเภอ | แขวง/ตำบล | รหัสไปรษณีย์ — always one row (compact selects; labels name each field, so placeholders stay short). */}
+      {/* Postal column fixed at 88px on phones so all 5 digits always show; the two name columns share the rest. */}
+      <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_88px] gap-2 sm:grid-cols-3 sm:gap-4">
+        <SelectField
+          compact
           id={fieldId("district")}
-          label={`${districtLabel()}`}
-          required
+          label={districtLabel()}
+          placeholder={!v("province") ? "—" : geo.loading ? "…" : "เลือก"}
           autocomplete="address-level2"
-          enterkeyhint="next"
-          placeholder={bkk() ? "เช่น วัฒนา" : "เช่น เมืองเชียงใหม่"}
+          options={districtOptions()}
+          disabled={!v("province") || !geo()}
           value={v("district")}
-          onInput={(e) => set("district", e.currentTarget.value)}
-          onBlur={() => touch("district")}
+          onChange={pickDistrict}
           error={shownError("district")}
         />
-        <TextField
+        <SelectField
+          compact
           id={fieldId("subDistrict")}
-          label={`${subDistrictLabel()}`}
-          required
+          label={subDistrictLabel()}
+          placeholder={!v("district") ? "—" : "เลือก"}
           autocomplete="address-level3"
-          enterkeyhint="next"
-          placeholder={bkk() ? "เช่น คลองตันเหนือ" : "เช่น สุเทพ"}
+          options={subDistrictOptions()}
+          disabled={!v("district")}
           value={v("subDistrict")}
-          onInput={(e) => set("subDistrict", e.currentTarget.value)}
-          onBlur={() => touch("subDistrict")}
+          onChange={pickSubDistrict}
           error={shownError("subDistrict")}
         />
-        <TextField
+        <SelectField
+          compact
           id={fieldId("postalCode")}
           label="รหัสไปรษณีย์"
-          required
-          inputMode="numeric"
+          placeholder={!v("district") ? "—" : "เลือก"}
           autocomplete="postal-code"
-          enterkeyhint="done"
-          maxlength={5}
-          placeholder="5 หลัก"
+          options={postalOptions()}
+          disabled={!v("district")}
           value={v("postalCode")}
-          onInput={(e) => set("postalCode", e.currentTarget.value.replace(/\D/g, ""))}
-          onBlur={() => touch("postalCode")}
+          onChange={(value) => {
+            set("postalCode", value);
+            touch("postalCode");
+          }}
           error={shownError("postalCode")}
         />
       </div>
+      {/* Phones: the three narrow selects truncate long names ("ป้อมปราบศัตรูพ่าย") — spell the pick out in full. */}
+      <Show when={v("district")}>
+        <p class="-mt-2 text-xs text-ink-gray sm:hidden" aria-live="polite">
+          {[`${districtLabel()}${v("district")}`, v("subDistrict") && `${subDistrictLabel()}${v("subDistrict")}`, v("postalCode")].filter(Boolean).join(" ")}
+        </p>
+      </Show>
 
       <Show when={props.showDefaultOption}>
         <label class="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-ink" classList={{ "cursor-default": props.forceDefault }}>
@@ -460,13 +532,29 @@ function AddressForm(props: {
   );
 }
 
-/** Same visual/label/error treatment as `TextField`, for the one field that's a pick-list. */
-function ProvinceSelect(props: { id: string; value: string; onChange: (value: string) => void; error?: string }) {
+/**
+ * Same visual/label/error treatment as `TextField`, for the address pick-lists
+ * (จังหวัด → เขต/อำเภอ → แขวง/ตำบล → รหัสไปรษณีย์). Native `<select>` on purpose:
+ * on phones it opens the OS picker, which handles long lists best.
+ */
+function SelectField(props: {
+  id: string;
+  label: string;
+  placeholder: string;
+  options: readonly string[];
+  value: string;
+  onChange: (value: string) => void;
+  autocomplete?: string;
+  disabled?: boolean;
+  error?: string;
+  /** Narrow column (3 per row on phones): tighter side padding + smaller chevron. */
+  compact?: boolean;
+}) {
   const errorId = `${props.id}-error`;
   return (
     <div class="flex flex-col gap-1.5">
       <label for={props.id} class="text-sm font-medium text-ink">
-        จังหวัด
+        {props.label}
         <span class="text-system-red" aria-hidden="true">
           {" "}
           *
@@ -476,21 +564,26 @@ function ProvinceSelect(props: { id: string; value: string; onChange: (value: st
         <select
           id={props.id}
           value={props.value}
-          autocomplete="address-level1"
+          autocomplete={props.autocomplete}
+          disabled={props.disabled}
+          aria-required="true"
           aria-invalid={!!props.error}
           aria-describedby={props.error ? errorId : undefined}
           onChange={(e) => props.onChange(e.currentTarget.value)}
-          class={`h-11 w-full appearance-none rounded-card border bg-surface-card pl-4 pr-10 text-base outline-none transition-colors duration-150 focus:border-brand-pink ${
+          class={`h-11 w-full appearance-none truncate rounded-card border bg-surface-card text-base outline-none ${props.compact ? "pl-3 pr-6 sm:pl-4 sm:pr-10" : "pl-4 pr-10"} transition-colors duration-150 focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray/60 ${
             props.error ? "border-system-red" : "border-border"
           } ${props.value ? "text-ink" : "text-ink-placeholder"}`}
         >
-          <option value="" disabled>
-            เลือกจังหวัด
+          <option value="" disabled selected={!props.value}>
+            {props.placeholder}
           </option>
-          <For each={THAI_PROVINCES}>{(p) => <option value={p}>{p}</option>}</For>
+          <For each={props.options}>{(option) => <option value={option} selected={option === props.value}>{option}</option>}</For>
         </select>
-        <span class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink-gray" aria-hidden="true">
-          ▾
+        <span
+          class={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-ink-gray ${props.compact ? "right-2 sm:right-4" : "right-4"}`}
+          aria-hidden="true"
+        >
+          <ChevronIcon direction="down" class={props.compact ? "size-3.5 sm:size-5" : "size-5"} />
         </span>
       </div>
       <Show when={props.error}>

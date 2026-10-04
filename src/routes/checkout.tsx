@@ -11,20 +11,16 @@ import {
   computeCartTotal,
   computeCheckoutTotals,
   computeCoinsEarned,
-  SHIPPING_METHODS,
-  PAYMENT_METHODS,
+  DELIVERY,
   MAX_COIN_REDEMPTION,
-  type ShippingMethodId,
-  type PaymentMethodId,
   type Coupon,
 } from "~/lib/cartSelectors";
 import { createAddressBook, createLocalAddressRepository, type AddressMockState } from "~/lib/addressBook";
 import { useProductCatalog } from "~/lib/productCatalog";
 import { formatTHB } from "~/components/shared/PriceDisplay";
 import { AddressSection } from "~/components/checkout/AddressSection";
-import { ShippingMethodSection } from "~/components/checkout/ShippingMethodSection";
-import { PaymentMethodSection } from "~/components/checkout/PaymentMethodSection";
-import { PaymentStep, type PaidResult } from "~/components/payment/PaymentStep";
+import { PaymentSection } from "~/components/checkout/PaymentSection";
+import { createCheckoutPayment, type PaidResult } from "~/components/checkout/checkoutPayment";
 import { createMockPaymentProvider } from "~/lib/payment";
 import { CheckoutOrderSummary } from "~/components/checkout/CheckoutOrderSummary";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
@@ -68,29 +64,24 @@ export default function CheckoutPage() {
   const billingCandidates = () => addressBook.addresses().filter((a) => a.id !== selectedAddressId());
   const billingAddressId = () =>
     billingSameAsShipping() ? selectedAddressId() : billingCandidates().some((a) => a.id === pickedBillingId()) ? pickedBillingId() : undefined;
-  const [shippingMethod, setShippingMethod] = createSignal<ShippingMethodId>("standard");
-  const [paymentMethod, setPaymentMethod] = createSignal<PaymentMethodId>("card");
   const [coupon, setCoupon] = createSignal<Coupon>();
   const [coinsRedeemed, setCoinsRedeemed] = createSignal(0);
 
   const [fieldErrors, setFieldErrors] = createSignal<Record<string, string>>({});
-  const [submitStatus, setSubmitStatus] = createSignal<"idle" | "loading" | "error">("idle");
   const [submitError, setSubmitError] = createSignal<string>();
   const [order, setOrder] = createSignal<{ number: string; total: number; coinsEarned: number; payment: PaidResult } | undefined>();
 
-  // Phase 06 — Checkout (details) → Beam-style payment step. The payment
-  // provider is the only payment dependency; mock today (`?mockPayment=fail`
-  // forces failures, `?mockPayment=expire` shortens the PromptPay QR).
-  const [step, setStep] = createSignal<"details" | "payment">("details");
+  // One-page checkout: address → billing → payment, paid right here.
+  // The payment provider is the only payment dependency; mock today
+  // (`?mockPayment=fail` forces failures, `?mockPayment=expire` shortens the PromptPay QR).
   const [pendingOrderNumber, setPendingOrderNumber] = createSignal("");
   const paymentProvider = createMockPaymentProvider({
     forceFail: searchParams.mockPayment === "fail",
     shortQrExpiry: searchParams.mockPayment === "expire",
   });
 
-  const shippingFee = createMemo(() => SHIPPING_METHODS.find((m) => m.id === shippingMethod())!.fee);
   const totals = createMemo(() =>
-    computeCheckoutTotals({ subtotal: subtotal(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: shippingFee() }),
+    computeCheckoutTotals({ subtotal: subtotal(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: DELIVERY.fee }),
   );
   // Same condition that gates the two-column form/summary — nothing to pay
   // for once the cart's empty or the order already went through, so the
@@ -105,33 +96,26 @@ export default function CheckoutPage() {
         : "กรุณากรอกที่อยู่จัดส่งให้ครบ แล้วกด “ใช้ที่อยู่นี้”";
     } else if (!selectedAddressId()) errors.address = "กรุณาเพิ่มที่อยู่จัดส่ง";
     if (!billingSameAsShipping()) {
-      if (billingFormOpen()) errors.billing = "กรุณากรอกที่อยู่ออกบิลให้ครบ แล้วกดบันทึก หรือเลือก “ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง”";
-      else if (!billingAddressId()) errors.billing = "กรุณาเลือกหรือเพิ่มที่อยู่ออกบิล";
+      if (billingFormOpen()) errors.billing = "กรุณากรอกที่อยู่ออกใบเสร็จรับเงินให้ครบ แล้วกดบันทึก หรือเลือก “ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง”";
+      else if (!billingAddressId()) errors.billing = "กรุณาเลือกหรือเพิ่มที่อยู่ออกใบเสร็จรับเงิน";
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
-      const scrollTargetId = errors.address ? "shipping-address-heading" : errors.billing ? "billing-address-heading" : "payment-method-heading";
+      const scrollTargetId = errors.address ? "shipping-address-heading" : "billing-address-heading";
       document.getElementById(scrollTargetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
       return false;
     }
     return true;
   };
 
-  const submit = async () => {
-    if (submitStatus() === "loading") return; // guards against double submit
+  // Checkout's own checks, run by the pay action before any money moves.
+  const validateOrder = (): boolean => {
     if (resolvedLines().length === 0 || hasUnavailableItem()) {
-      setSubmitStatus("error");
       setSubmitError("มีสินค้าในตะกร้าที่ไม่สามารถสั่งซื้อได้ กรุณากลับไปแก้ไขตะกร้าก่อน");
-      return;
+      return false;
     }
-    if (!validate()) return;
-
-    setSubmitStatus("idle");
     setSubmitError(undefined);
-    // The order number is reserved when moving to payment, so a failed/retried payment stays on the same order.
-    if (!pendingOrderNumber()) setPendingOrderNumber(`CM${Date.now().toString().slice(-8)}`);
-    setStep("payment");
-    window.scrollTo({ top: 0 });
+    return validate();
   };
 
   const onPaid = (payment: PaidResult) => {
@@ -143,6 +127,15 @@ export default function CheckoutPage() {
     cart.clearCart();
     window.scrollTo({ top: 0 });
   };
+
+  const payment = createCheckoutPayment({
+    provider: paymentProvider,
+    amount: () => totals().total,
+    // Reserved on the first pay attempt, so a failed/retried payment stays on the same order.
+    orderNumber: () => pendingOrderNumber() || setPendingOrderNumber(`CM${Date.now().toString().slice(-8)}`),
+    validateOrder,
+    onPaid,
+  });
 
   return (
     <>
@@ -179,25 +172,6 @@ export default function CheckoutPage() {
             }
           >
             <Show when={resolvedLines().length > 0} fallback={<EmptyCheckout />}>
-              <Show
-                when={step() === "details"}
-                fallback={
-                  <PaymentStep
-                    orderNumber={pendingOrderNumber()}
-                    lines={resolvedLines()}
-                    totals={totals()}
-                    coupon={coupon()}
-                    initialMethod={paymentMethod()}
-                    provider={paymentProvider}
-                    onPaid={onPaid}
-                    onMethodChange={setPaymentMethod}
-                    onBack={() => {
-                      setStep("details");
-                      window.scrollTo({ top: 0 });
-                    }}
-                  />
-                }
-              >
               <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
                 <div class="flex flex-1 flex-col gap-6 rounded-card bg-white p-4 lg:p-6">
                   <Show when={addressBook.ready()} fallback={<AddressSkeleton />}>
@@ -219,10 +193,13 @@ export default function CheckoutPage() {
                       error={fieldErrors().address}
                     />
 
+                    {/* Delivery (DHL) block hidden for now — component kept in checkout/DeliverySection.tsx. */}
+
                     <Show when={selectedAddressId()}>
-                      <section aria-labelledby="billing-address-heading" class="flex flex-col gap-3">
+                      {/* No gap: the checkbox row keeps its 44px tap height, which alone puts its box 12px under the heading. */}
+                      <section aria-labelledby="billing-address-heading" class="flex flex-col">
                         <h2 id="billing-address-heading" class="text-lg font-semibold text-ink">
-                          ที่อยู่ออกบิล
+                          ที่อยู่ออกใบเสร็จรับเงิน
                         </h2>
                         <label class="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-ink">
                           <input
@@ -237,13 +214,14 @@ export default function CheckoutPage() {
                           ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง
                         </label>
                         <Show when={!billingSameAsShipping()}>
+                          <div class="mt-2">
                           <AddressSection
                             embedded
                             headingId="billing-address-heading"
-                            title="เลือกที่อยู่ออกบิล"
-                            emptyTitle="เพิ่มที่อยู่ออกบิล"
-                            newAddressLabel="ที่อยู่ออกบิล"
-                            nameLabel="ชื่อ-นามสกุล หรือชื่อบริษัท"
+                            title="เลือกที่อยู่ออกใบเสร็จรับเงิน"
+                            emptyTitle="เพิ่มที่อยู่ออกใบเสร็จรับเงิน"
+                            newAddressLabel="ที่อยู่ออกใบเสร็จรับเงิน"
+                            companyAllowed
                             addresses={billingCandidates()}
                             selectedId={billingAddressId()}
                             onSelect={(id) => {
@@ -254,22 +232,29 @@ export default function CheckoutPage() {
                             onFormOpenChange={setBillingFormOpen}
                             error={fieldErrors().billing}
                           />
+                          </div>
                         </Show>
                       </section>
                     </Show>
                   </Show>
-                  <ShippingMethodSection selected={shippingMethod()} onSelect={setShippingMethod} />
-                  <PaymentMethodSection selected={paymentMethod()} onSelect={setPaymentMethod} />
-
-                  <Show when={hasUnavailableItem()}>
-                    <p class="rounded-card bg-danger-soft p-3 text-sm text-danger-strong" role="alert">
-                      มีสินค้าในตะกร้าที่หมดสต็อก กรุณา
-                      <A href="/cart" class="mx-1 underline">
-                        กลับไปที่ตะกร้า
-                      </A>
-                      เพื่อแก้ไขก่อนสั่งซื้อ
-                    </p>
-                  </Show>
+                  {/* Payment — right after the billing address; paid here, its button ends the form. */}
+                  <PaymentSection
+                    payment={payment}
+                    amount={totals().total}
+                    disabled={hasUnavailableItem()}
+                    submitError={submitError()}
+                    notice={
+                      <Show when={hasUnavailableItem()}>
+                        <p class="rounded-card bg-danger-soft p-3 text-sm text-danger-strong" role="alert">
+                          มีสินค้าในตะกร้าที่หมดสต็อก กรุณา
+                          <A href="/cart" class="mx-1 underline">
+                            กลับไปที่ตะกร้า
+                          </A>
+                          เพื่อแก้ไขก่อนสั่งซื้อ
+                        </p>
+                      </Show>
+                    }
+                  />
                 </div>
 
                 <CheckoutOrderSummary
@@ -280,30 +265,25 @@ export default function CheckoutPage() {
                   onRemoveCoupon={() => setCoupon(undefined)}
                   coinsRedeemed={coinsRedeemed()}
                   onToggleCoins={() => setCoinsRedeemed((v) => (v > 0 ? 0 : MAX_COIN_REDEMPTION))}
-                  onSubmit={submit}
-                  submitStatus={submitStatus()}
-                  submitError={submitError()}
-                  disabled={hasUnavailableItem()}
-                  submitLabel="ชำระเงิน"
                 />
               </div>
-              </Show>
             </Show>
           </Show>
         </Container>
       </main>
 
-      <Show when={showFloatingBar() && step() === "details"}>
+      <Show when={showFloatingBar()}>
         <FloatingOrderSummary
           itemCount={resolvedLines().reduce((n, l) => n + l.line.qty, 0)}
           discount={totals().couponDiscount + totals().coinDiscount}
           shippingFee={totals().shippingFee}
           total={totals().total}
-          ctaLabel="ชำระเงิน"
-          onCta={submit}
-          ctaLoading={submitStatus() === "loading"}
+          ctaLabel={payment.ctaLabel()}
+          ctaLoadingLabel={payment.ctaLoadingLabel()}
+          onCta={() => void payment.pay()}
+          ctaLoading={payment.busy()}
           ctaDisabled={hasUnavailableItem()}
-          error={submitStatus() === "error" ? (submitError() ?? "ไม่สามารถดำเนินการสั่งซื้อได้ กรุณาลองอีกครั้ง") : undefined}
+          error={submitError()}
         />
       </Show>
 
@@ -333,7 +313,6 @@ function EmptyCheckout() {
 }
 
 function OrderSuccess(props: { number: string; total: number; coinsEarned: number; payment: PaidResult; isMember: boolean }) {
-  const isCod = () => props.payment.method === "cod";
   return (
     <div class="mx-auto flex w-full max-w-[560px] flex-col items-center justify-center gap-4 rounded-card bg-white px-4 py-12 text-center shadow-card sm:py-16" role="status">
       <div class="flex size-16 items-center justify-center rounded-pill bg-success-soft text-success">
@@ -341,15 +320,15 @@ function OrderSuccess(props: { number: string; total: number; coinsEarned: numbe
           <path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
       </div>
-      <h1 class="text-2xl font-bold text-ink">{isCod() ? "สั่งซื้อสำเร็จ" : "ชำระเงินสำเร็จ"}</h1>
-      <p class="text-ink-gray">{isCod() ? "ชำระเงินสดเมื่อได้รับสินค้า" : "ขอบคุณสำหรับคำสั่งซื้อของคุณ"}</p>
+      <h1 class="text-2xl font-bold text-ink">ชำระเงินสำเร็จ</h1>
+      <p class="text-ink-gray">ขอบคุณสำหรับคำสั่งซื้อของคุณ</p>
       <dl class="flex w-full max-w-sm flex-col gap-2 rounded-card bg-surface-gray/60 px-5 py-4 text-sm">
         <div class="flex justify-between gap-3">
           <dt class="text-ink-gray">หมายเลขคำสั่งซื้อ</dt>
           <dd class="font-semibold text-ink">{props.number}</dd>
         </div>
         <div class="flex justify-between gap-3">
-          <dt class="text-ink-gray">{isCod() ? "ยอดที่ต้องชำระ" : "ยอดชำระ"}</dt>
+          <dt class="text-ink-gray">ยอดชำระ</dt>
           <dd class="font-semibold text-brand-pink">{formatTHB(props.total)}</dd>
         </div>
         <div class="flex justify-between gap-3">

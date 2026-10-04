@@ -1,9 +1,9 @@
-import { Dialog } from "@kobalte/core/dialog";
 import { For, Show, createEffect, createMemo, createSignal, on } from "solid-js";
 import type { Product } from "~/lib/types";
 import { resolveVariantOptions, type VariantOption } from "~/lib/productVariants";
 import { reviewsOfProduct } from "~/lib/productReviews";
 import { PurchaseFooter } from "./PurchaseFooter";
+import { SheetModal } from "./SheetModal";
 import { ReviewList, ReviewMediaViewer, type ReviewMediaViewerState } from "./ReviewList";
 
 /**
@@ -116,111 +116,95 @@ export function QuickAddSheet(props: {
   };
 
   return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay class="fixed inset-0 z-40 bg-ink/40 data-[expanded]:animate-toast-in" />
-        <div class="fixed inset-x-0 bottom-0 z-50 flex justify-center sm:inset-0 sm:items-center sm:p-4">
-          <Dialog.Content
-            // Esc closes the review media viewer first, not the whole modal.
-            onEscapeKeyDown={(e) => {
-              if (viewer()) {
-                e.preventDefault();
-                setViewer(null);
-              }
-            }}
-            class="relative flex h-[90dvh] w-full max-w-[668px] flex-col overflow-hidden rounded-t-card bg-white py-4 shadow-card sm:rounded-card lg:h-[min(680px,90dvh)]">
-            <div class="mx-auto mb-2 h-1 w-10 shrink-0 rounded-pill bg-surface-gray sm:hidden" aria-hidden="true" />
-
-            {/* Header */}
-            <div class="flex shrink-0 items-start gap-3 border-b border-border px-6 pb-2">
-              <div class="min-w-0 flex-1">
-                <Dialog.Title class="break-words text-lg font-semibold text-ink">{props.product.name}</Dialog.Title>
-                <Dialog.Description class="text-[13.65px] leading-[19.792px] text-ink-gray">{hasOptions() ? "เลือกตัวเลือกสินค้า" : "รายละเอียดสินค้า"}</Dialog.Description>
-              </div>
-              <Dialog.CloseButton class="-mr-2 -mt-2 flex size-11 shrink-0 items-center justify-center rounded-pill text-2xl text-ink-gray hover:bg-surface-pink">
-                <span aria-hidden="true">×</span>
-                <span class="sr-only">ปิด</span>
-              </Dialog.CloseButton>
-            </div>
-
-            {/* Body — options, quantity, then reviews; only this area scrolls. */}
-            <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-6 pb-4 pt-4">
-              <Show when={hasOptions()}>
-                <div class="flex flex-col gap-3">
-                  <p class="flex min-h-[24px] flex-wrap items-center gap-x-2 text-sm font-medium">
-                    <span class="text-black">ตัวเลือก:</span>
-                    <span class="text-ink-gray">{selectedOption()?.label ?? "—"}</span>
-                  </p>
-                  {/* Mobile: 3 tiles per row, each filling its column; from `sm` the fixed 100px tiles. */}
-                  <div role="radiogroup" aria-label="ตัวเลือกสินค้า" class="grid grid-cols-3 gap-3 sm:flex sm:flex-wrap">
-                    <For each={options()}>
-                      {(option) => (
-                        <OptionTile
-                          option={option}
-                          selected={selected() === option.id}
-                          onSelect={() => pick(option.id)}
-                          onZoom={option.image ? () => zoomOption(option.id) : undefined}
-                        />
-                      )}
-                    </For>
-                  </div>
-                </div>
-              </Show>
-
-              <section aria-labelledby="qa-reviews-heading" class="flex flex-col gap-2">
-                <h3
-                  id="qa-reviews-heading"
-                  class="sticky top-0 z-10 -mx-6 border-b border-border bg-white px-6 pt-2"
-                >
-                  <span class="-mb-px flex h-8 w-fit items-center border-b border-brand-pink text-sm font-medium text-ink">
-                    รีวิว
-                    <span class="ml-1 text-xs text-ink-gray">({reviewCountLabel().toLocaleString("th-TH")})</span>
-                  </span>
-                </h3>
-                <ReviewList
-                  reviews={reviews()}
-                  onOpenMedia={(items, index, author) => {
-                    setViewerKind("review");
-                    setViewer({ items, index, author });
-                  }}
-                />
-              </section>
-            </div>
-
-            {/* Footer — pinned; the shared buy row (also the PDP sticky bar). */}
-            <div class="flex shrink-0 flex-col gap-2 border-t border-border px-6 pt-4">
-              <PurchaseFooter
-                optionLabel={selectedOption()?.label}
-                price={selectedOption()?.price ?? props.product.price}
-                compareAtPrice={props.product.compareAtPrice}
-                quantity={quantity()}
-                onQuantityChange={setQuantity}
-                maxQuantity={maxQuantity()}
-                disabled={hasOptions() && (!selectedOption() || selectedOption()!.soldOut)}
-                loading={status() === "loading"}
-                ctaLabel={status() === "error" ? "ลองอีกครั้ง" : undefined}
-                onAdd={confirm}
-              />
-              <Show when={status() === "error"}>
-                <p class="text-sm text-system-red" role="alert">
-                  เพิ่มลงตะกร้าไม่สำเร็จ กรุณาลองอีกครั้ง
-                </p>
-              </Show>
-            </div>
-            <Show when={viewer()}>
-              {(v) => (
-                <ReviewMediaViewer
-                  state={v()}
-                  ariaLabel={viewerKind() === "option" ? `รูปตัวเลือกสินค้า ${props.product.name}` : undefined}
-                  onChange={(index) => setViewer({ ...v(), index })}
-                  onClose={() => setViewer(null)}
+    <SheetModal
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      title={props.product.name}
+      description={hasOptions() ? "เลือกตัวเลือกสินค้า" : "รายละเอียดสินค้า"}
+      // Esc closes the review media viewer first, not the whole modal.
+      onEscapeKeyDown={(e) => {
+        if (viewer()) {
+          e.preventDefault();
+          setViewer(null);
+        }
+      }}
+      footer={
+        // Pinned buy row — shared with the PDP sticky bar.
+        <>
+          <PurchaseFooter
+            optionLabel={selectedOption()?.label}
+            price={selectedOption()?.price ?? props.product.price}
+            compareAtPrice={props.product.compareAtPrice}
+            quantity={quantity()}
+            onQuantityChange={setQuantity}
+            maxQuantity={maxQuantity()}
+            disabled={hasOptions() && (!selectedOption() || selectedOption()!.soldOut)}
+            loading={status() === "loading"}
+            ctaLabel={status() === "error" ? "ลองอีกครั้ง" : undefined}
+            onAdd={confirm}
+          />
+          <Show when={status() === "error"}>
+            <p class="text-sm text-system-red" role="alert">
+              เพิ่มลงตะกร้าไม่สำเร็จ กรุณาลองอีกครั้ง
+            </p>
+          </Show>
+        </>
+      }
+      layer={
+        <Show when={viewer()}>
+          {(v) => (
+            <ReviewMediaViewer
+              state={v()}
+              ariaLabel={viewerKind() === "option" ? `รูปตัวเลือกสินค้า ${props.product.name}` : undefined}
+              onChange={(index) => setViewer({ ...v(), index })}
+              onClose={() => setViewer(null)}
+            />
+          )}
+        </Show>
+      }
+    >
+      {/* Body — options, then reviews; only this area scrolls. */}
+      <Show when={hasOptions()}>
+        <div class="flex flex-col gap-3">
+          <p class="flex min-h-[24px] flex-wrap items-center gap-x-2 text-sm font-medium">
+            <span class="text-black">ตัวเลือก:</span>
+            <span class="text-ink-gray">{selectedOption()?.label ?? "—"}</span>
+          </p>
+          {/* Mobile: 3 tiles per row, each filling its column; from `sm` the fixed 100px tiles. */}
+          <div role="radiogroup" aria-label="ตัวเลือกสินค้า" class="grid grid-cols-3 gap-3 sm:flex sm:flex-wrap">
+            <For each={options()}>
+              {(option) => (
+                <OptionTile
+                  option={option}
+                  selected={selected() === option.id}
+                  onSelect={() => pick(option.id)}
+                  onZoom={option.image ? () => zoomOption(option.id) : undefined}
                 />
               )}
-            </Show>
-          </Dialog.Content>
+            </For>
+          </div>
         </div>
-      </Dialog.Portal>
-    </Dialog>
+      </Show>
+
+      <section aria-labelledby="qa-reviews-heading" class="flex flex-col gap-2">
+        <h3
+          id="qa-reviews-heading"
+          class="sticky top-0 z-10 -mx-6 border-b border-border bg-white px-6 pt-2"
+        >
+          <span class="-mb-px flex h-8 w-fit items-center border-b border-brand-pink text-sm font-medium text-ink">
+            รีวิว
+            <span class="ml-1 text-xs text-ink-gray">({reviewCountLabel().toLocaleString("th-TH")})</span>
+          </span>
+        </h3>
+        <ReviewList
+          reviews={reviews()}
+          onOpenMedia={(items, index, author) => {
+            setViewerKind("review");
+            setViewer({ items, index, author });
+          }}
+        />
+      </section>
+    </SheetModal>
   );
 }
 

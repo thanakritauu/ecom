@@ -1,8 +1,11 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
 import type { ResolvedCartLine, CheckoutTotals, Coupon } from "~/lib/cartSelectors";
 import { AVAILABLE_COUPONS, MOCK_COIN_BALANCE, MAX_COIN_REDEMPTION } from "~/lib/cartSelectors";
 import { formatTHB } from "../shared/PriceDisplay";
-import { Button } from "../shared/Button";
+import { clientOnly } from "@solidjs/start";
+
+// Same Kobalte Dialog SSR/hydration issue as ProductCard's QuickAddSheet — mount the modal on the client only.
+const CouponPickerSheet = clientOnly(() => import("./CouponPickerSheet").then((m) => ({ default: m.CouponPickerSheet })));
 
 /**
  * Figma's coupon UI is a picker over a short list of already-available
@@ -22,13 +25,9 @@ export function CheckoutOrderSummary(props: {
   onRemoveCoupon: () => void;
   coinsRedeemed: number;
   onToggleCoins: () => void;
-  onSubmit: () => void;
-  submitStatus: "idle" | "loading" | "error";
-  submitError?: string;
-  disabled?: boolean;
-  submitLabel?: string;
 }) {
-  const [itemsExpanded, setItemsExpanded] = createSignal(true);
+  // Collapsed by default — the item list opens from the header.
+  const [itemsExpanded, setItemsExpanded] = createSignal(false);
   const [couponPickerOpen, setCouponPickerOpen] = createSignal(false);
 
   return (
@@ -79,52 +78,30 @@ export function CheckoutOrderSummary(props: {
       <div class="relative flex flex-col gap-3 overflow-hidden rounded-t-card bg-gradient-to-b from-brand-purple to-[#8462ff] p-4">
         <p class="text-center text-lg font-semibold text-white">ส่วนลดและสิทธิพิเศษ</p>
 
-        <Show when={couponPickerOpen()} fallback={
-          <button
-            type="button"
-            onClick={() => setCouponPickerOpen(true)}
-            class="flex items-center justify-between rounded-card border border-dashed border-brand-pink bg-white p-4"
-          >
-            <span class="flex items-center gap-2 text-sm font-medium text-brand-pink">
-              <TagIcon /> {props.coupon ? `ใช้คูปอง ${props.coupon.code}` : "เลือกคูปองส่วนลด"}
+        {/* Same row pattern + pill button as the Charmiss Coin row below; the button opens the coupon modal. */}
+        <div class="flex items-center justify-between gap-1.5 rounded-card bg-white p-3 sm:gap-2 sm:p-4">
+          <div class="flex min-w-0 items-center gap-1.5 sm:gap-2">
+            <span class="flex size-7 shrink-0 items-center justify-center rounded-pill bg-surface-pink text-brand-pink sm:size-8" aria-hidden="true">
+              <TagIcon />
             </span>
-            <span class="text-xs font-medium text-brand-pink underline">ใช้ได้ {AVAILABLE_COUPONS.length} คูปอง</span>
-          </button>
-        }>
-          <div class="flex flex-col gap-2 rounded-card bg-white p-3">
-            <div class="flex items-center justify-between">
-              <p class="text-sm font-semibold text-ink">เลือกคูปอง</p>
-              <button type="button" onClick={() => setCouponPickerOpen(false)} class="text-xs text-ink-gray underline">
-                ปิด
-              </button>
+            <div class="min-w-0">
+              <p class="whitespace-nowrap text-sm font-semibold text-ink">คูปองส่วนลด</p>
+              <p class="text-xs text-ink-gray">{props.coupon ? `ใช้คูปอง ${props.coupon.label} อยู่` : "เลือกคูปองเพื่อรับส่วนลด"}</p>
             </div>
-            <For each={AVAILABLE_COUPONS}>
-              {(coupon) => {
-                const eligible = () => props.totals.subtotal >= coupon.minSpend;
-                const active = () => props.coupon?.code === coupon.code;
-                return (
-                  <div class="flex items-center justify-between gap-2 rounded-card border border-surface-gray p-3" classList={{ "opacity-50": !eligible() }}>
-                    <div>
-                      <p class="text-sm font-bold text-system-red">{coupon.label}</p>
-                      <p class="text-xs text-ink-gray">
-                        ขั้นต่ำ {formatTHB(coupon.minSpend)} · {coupon.expiresLabel}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant={active() ? "outline" : "primary"}
-                      size="sm"
-                      disabled={!eligible()}
-                      onClick={() => (active() ? props.onRemoveCoupon() : props.onApplyCoupon(coupon))}
-                    >
-                      {active() ? "ยกเลิก" : "ใช้เลย"}
-                    </Button>
-                  </div>
-                );
-              }}
-            </For>
           </div>
-        </Show>
+          <PerkButton tone="pink" onClick={() => setCouponPickerOpen(true)} aria-haspopup="dialog">
+            {props.coupon ? "เปลี่ยนคูปอง" : `ใช้ได้ ${AVAILABLE_COUPONS.length} คูปอง`}
+          </PerkButton>
+        </div>
+        <CouponPickerSheet
+          open={couponPickerOpen()}
+          onOpenChange={setCouponPickerOpen}
+          coupons={AVAILABLE_COUPONS}
+          subtotal={props.totals.subtotal}
+          applied={props.coupon}
+          onApply={props.onApplyCoupon}
+          onRemove={props.onRemoveCoupon}
+        />
 
         <div class="flex items-center gap-2">
           <div class="h-px flex-1 bg-white/40" />
@@ -132,25 +109,20 @@ export function CheckoutOrderSummary(props: {
           <div class="h-px flex-1 bg-white/40" />
         </div>
 
-        <div class="flex items-center justify-between gap-2 rounded-card bg-[#fff4e6] p-4">
-          <div class="flex items-center gap-2">
+        {/* Both perk rows: 12px padding / 6px gaps / 28px icons below `sm` so "Charmiss Coin" + its pill fit a 360px phone. */}
+        <div class="flex items-center justify-between gap-1.5 rounded-card bg-[#fff4e6] p-3 sm:gap-2 sm:p-4">
+          <div class="flex items-center gap-1.5 sm:gap-2">
             <CoinIcon />
             <div>
-              <p class="text-sm font-semibold text-ink">Charmiss Coin</p>
+              <p class="whitespace-nowrap text-sm font-semibold text-ink">Charmiss Coin</p>
               <p class="text-xs text-ink-gray">คุณมี {MOCK_COIN_BALANCE.toLocaleString("th-TH")} คอยน์</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={props.onToggleCoins}
-            aria-pressed={props.coinsRedeemed > 0}
-            class="shrink-0 rounded-pill px-4 py-1.5 text-xs font-medium text-white transition-colors duration-150"
-            classList={{ "bg-system-yellow": props.coinsRedeemed === 0, "bg-ink-gray": props.coinsRedeemed > 0 }}
-          >
+          <PerkButton onClick={props.onToggleCoins} aria-pressed={props.coinsRedeemed > 0} active={props.coinsRedeemed > 0}>
             {props.coinsRedeemed > 0
               ? "ยกเลิกการใช้คอยน์"
-              : `ใช้ ${MAX_COIN_REDEMPTION} คอยน์ ลด ${formatTHB(Math.round(MAX_COIN_REDEMPTION * 0.1))}`}
-          </button>
+              : `ใช้ ${MAX_COIN_REDEMPTION} คอยน์ ลด ฿${Math.round(MAX_COIN_REDEMPTION * 0.1).toLocaleString("th-TH")}`}
+          </PerkButton>
         </div>
       </div>
 
@@ -190,28 +162,35 @@ export function CheckoutOrderSummary(props: {
           <span class="text-2xl font-bold text-brand-pink">{formatTHB(props.totals.total)}</span>
         </div>
 
-        <Show when={props.submitStatus === "error"}>
-          <p class="text-sm text-system-red" role="alert">
-            {props.submitError ?? "ไม่สามารถดำเนินการสั่งซื้อได้ กรุณาลองอีกครั้ง"}
-          </p>
-        </Show>
-
-        <Button
-          type="button"
-          variant="primary"
-          size="lg"
-          class="w-full"
-          loading={props.submitStatus === "loading"}
-          disabled={props.disabled}
-          onClick={props.onSubmit}
-        >
-          {props.submitStatus === "loading" ? "กำลังดำเนินการ..." : (props.submitLabel ?? "ยืนยันการชำระเงิน")}
-        </Button>
-        <p class="flex items-center justify-center gap-1.5 text-center text-xs text-ink-gray">
-          <LockIcon /> ข้อมูลของคุณจะถูกเข้ารหัสและชำระเงินผ่านช่องทางที่ปลอดภัย
-        </p>
+        {/* No pay button here — it ends the payment form (one-page checkout). */}
       </div>
     </div>
+  );
+}
+
+/**
+ * The pill used by both perk rows — one definition so they always match in
+ * size/shape; only the color differs: coupons pink (`tone="pink"`), Charmiss
+ * Coin yellow (default). `active` = the perk is in use (gray, "cancel").
+ */
+function PerkButton(
+  props: { children: JSX.Element; onClick: () => void; active?: boolean; tone?: "yellow" | "pink" } & Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "children">,
+) {
+  const [local, rest] = splitProps(props, ["children", "onClick", "active", "tone"]);
+  return (
+    <button
+      type="button"
+      {...rest}
+      onClick={local.onClick}
+      class="shrink-0 whitespace-nowrap rounded-pill px-3 py-1.5 text-xs font-medium text-white transition-colors duration-150 sm:px-4"
+      classList={{
+        "bg-system-yellow": !local.active && local.tone !== "pink",
+        "bg-brand-pink": !local.active && local.tone === "pink",
+        "bg-ink-gray": !!local.active,
+      }}
+    >
+      {local.children}
+    </button>
   );
 }
 
@@ -232,7 +211,7 @@ function TagIcon() {
 }
 function CoinIcon() {
   return (
-    <svg viewBox="0 0 24 24" class="size-8 shrink-0 text-system-yellow" fill="currentColor" aria-hidden="true">
+    <svg viewBox="0 0 24 24" class="size-7 shrink-0 text-system-yellow sm:size-8" fill="currentColor" aria-hidden="true">
       <circle cx="12" cy="12" r="10" />
       <text x="12" y="16" text-anchor="middle" font-size="11" fill="white" font-weight="bold">
         C
@@ -244,14 +223,6 @@ function CheckIcon() {
   return (
     <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
       <path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  );
-}
-function LockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" class="size-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <rect x="4" y="10" width="16" height="10" rx="2" />
-      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
     </svg>
   );
 }

@@ -41,21 +41,19 @@ export function computeCartTotal(resolved: ResolvedCartLine[]): number {
  * Checkout-only pricing inputs. Kept in this same file — not a second
  * pricing module — so Checkout's Order Summary computes its total with the
  * exact same `computeCartTotal`-derived subtotal the Drawer and Cart Page
- * use, extended with the three things only Checkout adds (shipping method,
+ * use, extended with the three things only Checkout adds (shipping fee,
  * coupon, Charmiss Coin), instead of three separate screens each re-deriving
  * a total their own way.
  */
-export const SHIPPING_METHODS = [
-  { id: "standard", label: "จัดส่งมาตรฐาน", fee: 0, etaLabel: "ได้รับ 10 ก.ย. – 11 ก.ย." },
-  { id: "express", label: "จัดส่งด่วน", fee: 60, etaLabel: "ได้รับภายใน 9 ก.ย." },
-] as const;
-export type ShippingMethodId = (typeof SHIPPING_METHODS)[number]["id"];
+/** One carrier, no shipping choice at checkout — every order ships with DHL (shown with its logo). */
+export const DELIVERY = { carrier: "DHL", label: "จัดส่งโดย DHL", fee: 0, etaLabel: "ได้รับภายใน 2–3 วันทำการ" } as const;
 
+/** Paid on the Checkout page itself (no separate payment step). No installments / cash on delivery. */
 export const PAYMENT_METHODS = [
   { id: "card", label: "บัตรเครดิต / เดบิต", description: "ชำระผ่านบัตรเครดิตหรือเดบิต" },
-  { id: "promptpay", label: "พร้อมเพย์ (PromptPay)", description: "สแกน QR ชำระผ่านแอปธนาคาร" },
-  { id: "cod", label: "เก็บเงินปลายทาง (COD)", description: "ชำระเมื่อได้รับสินค้า" },
-  { id: "installment", label: "ผ่อนชำระ 0%", description: "3 / 6 / 10 เดือน ผ่านบัตรที่ร่วมรายการ" },
+  // `shortLabel`: phone-width method row, where the PromptPay logo beside it already reads "PromptPay".
+  { id: "promptpay", label: "พร้อมเพย์ (PromptPay)", shortLabel: "พร้อมเพย์", description: "สแกน QR ชำระผ่านแอปธนาคาร" },
+  { id: "truemoney", label: "TrueMoney Wallet", description: "ยืนยันการชำระในแอป TrueMoney" },
 ] as const;
 export type PaymentMethodId = (typeof PAYMENT_METHODS)[number]["id"];
 

@@ -2,9 +2,9 @@ import { createMemo, For, Show } from "solid-js";
 import { formatTHB } from "../shared/PriceDisplay";
 
 /**
- * PromptPay QR step (prototype). The QR is a deterministic *pattern* drawn
- * from the mock session payload — deliberately NOT a real, scannable
- * PromptPay/EMV code, since no real payment may be created here.
+ * PromptPay QR. While the payment layer is the mock, the QR is a
+ * deterministic pattern drawn from the session payload — not a real,
+ * scannable PromptPay/EMV code (the real gateway will supply one).
  */
 export function PromptPayPanel(props: {
   amount: number;
@@ -13,7 +13,6 @@ export function PromptPayPanel(props: {
   secondsLeft: number;
   status: "creating" | "pending" | "confirming";
   notPaidYetHint?: boolean;
-  onSimulatePaid: () => void;
 }) {
   const mmss = () => {
     const s = Math.max(0, props.secondsLeft);
@@ -38,7 +37,6 @@ export function PromptPayPanel(props: {
             </div>
           </Show>
         </div>
-        <span class="rounded-pill bg-surface-gray px-2 py-0.5 text-[10px] text-ink-gray">QR ตัวอย่างสำหรับ Prototype — สแกนชำระจริงไม่ได้</span>
         <div>
           <p class="text-xs text-ink-gray">ยอดชำระ</p>
           <p class="text-2xl font-bold text-brand-pink">{formatTHB(props.amount)}</p>
@@ -67,18 +65,6 @@ export function PromptPayPanel(props: {
         <li>หน้านี้จะอัปเดตเองเมื่อชำระสำเร็จ</li>
       </ol>
 
-      {/* Prototype-only control: stands in for the customer's bank app */}
-      <div class="flex w-full max-w-[360px] flex-col gap-2 rounded-card border border-dashed border-ink-placeholder p-3">
-        <p class="text-xs text-ink-gray">โหมดทดสอบ (Prototype)</p>
-        <button
-          type="button"
-          disabled={props.status !== "pending"}
-          onClick={props.onSimulatePaid}
-          class="min-h-11 rounded-pill border border-surface-gray bg-white px-4 text-sm font-medium text-ink hover:border-brand-pink disabled:opacity-50"
-        >
-          จำลอง: สแกนจ่ายสำเร็จ
-        </button>
-      </div>
     </div>
   );
 }
@@ -97,7 +83,7 @@ function MockQr(props: { payload: string }) {
   });
   const finders = [[0, 0], [SIZE - 7, 0], [0, SIZE - 7]];
   return (
-    <svg viewBox={`-1 -1 ${SIZE + 2} ${SIZE + 2}`} class="size-full rounded-lg bg-white" shape-rendering="crispEdges" role="img" aria-label="QR Code ตัวอย่างสำหรับชำระเงินผ่านพร้อมเพย์">
+    <svg viewBox={`-1 -1 ${SIZE + 2} ${SIZE + 2}`} class="size-full rounded-lg bg-white" shape-rendering="crispEdges" role="img" aria-label="QR Code สำหรับชำระเงินผ่านพร้อมเพย์">
       <For each={cells()}>{([x, y]) => <rect x={x} y={y} width="1" height="1" fill="#1f2937" />}</For>
       <For each={finders}>
         {([x, y]) => (

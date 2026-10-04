@@ -79,7 +79,7 @@ export const MOCK_ORDERS: Order[] = [
     items: [lipTint("04 Sugar Coral")],
     total: 299,
     shippingAddress: HOME,
-    payment: { method: "เก็บเงินปลายทาง (COD)", subtotal: 299, shippingFee: 0, discount: 0, coinDiscount: 0 },
+    payment: { method: "TrueMoney Wallet", subtotal: 299, shippingFee: 0, discount: 0, coinDiscount: 0 },
     shipment: {
       carrier: "dhl",
       method: "จัดส่งมาตรฐาน",
