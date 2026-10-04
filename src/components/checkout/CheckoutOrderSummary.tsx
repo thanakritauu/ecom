@@ -64,7 +64,7 @@ export function CheckoutOrderSummary(props: {
                   class="size-[66px] shrink-0 rounded-media border border-surface-gray object-cover"
                 />
                 <div class="min-w-0 flex-1">
-                  <p class="line-clamp-1 text-sm font-medium text-ink">{product.name}</p>
+                  <p class="line-clamp-1 text-sm font-medium leading-[1.75] text-ink">{product.name}</p>
                   <p class="text-xs text-ink-gray">
                     {variant ? `ตัวเลือกสินค้า ${variant.label} · ` : ""}x{line.qty}
                   </p>

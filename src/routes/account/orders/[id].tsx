@@ -104,7 +104,7 @@ function OrderDetail(props: {
                 <div class="flex items-center gap-3">
                   <img src={item.image} alt="" loading="lazy" class="size-16 shrink-0 rounded-2xl border border-surface-gray object-cover" />
                   <div class="min-w-0 flex-1">
-                    <p class="line-clamp-2 text-sm font-medium text-ink">{item.name}</p>
+                    <p class="line-clamp-2 text-sm font-medium leading-[1.75] text-ink">{item.name}</p>
                     <p class="text-xs text-ink-gray">
                       {item.variantLabel} · {formatTHB(item.price)} x {item.qty}
                     </p>

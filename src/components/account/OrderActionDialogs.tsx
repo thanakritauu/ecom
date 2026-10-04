@@ -209,7 +209,7 @@ export function ReturnRequestDialog(props: {
                 <input type="checkbox" checked={selected().includes(i())} onChange={() => toggleItem(i())} class="size-5 shrink-0 rounded accent-brand-pink" />
                 <img src={item.image} alt="" class="size-12 shrink-0 rounded-xl border border-surface-gray object-cover" />
                 <span class="min-w-0 flex-1">
-                  <span class="line-clamp-1 text-sm font-medium text-ink">{item.name}</span>
+                  <span class="line-clamp-1 text-sm font-medium leading-[1.75] text-ink">{item.name}</span>
                   <span class="text-xs text-ink-gray">
                     {item.variantLabel} · x{item.qty}
                   </span>

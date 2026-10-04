@@ -47,7 +47,7 @@ export function CartItemRow(props: { entry: ResolvedCartLine; variant?: "drawer"
       </div>
 
       <div class="flex min-w-0 flex-1 flex-col justify-between gap-1">
-        <p class="line-clamp-2 font-medium text-ink" classList={{ "text-sm": layout() === "drawer", "text-base": layout() === "page" }}>
+        <p class="line-clamp-2 font-medium leading-[1.75] text-ink" classList={{ "text-sm": layout() === "drawer", "text-base": layout() === "page" }}>
           {product.name}
         </p>
 

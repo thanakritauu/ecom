@@ -260,7 +260,7 @@ function OptionTile(props: { option: VariantOption; selected: boolean; onSelect:
           </Show>
         </span>
         {/* Real option names can be longer than a short sample label — wrap to 2 lines under the tile instead of colliding. */}
-        <span class="line-clamp-2 w-full break-words text-center text-sm leading-[18px]" classList={{ "font-medium text-ink": props.selected, "text-ink-gray": !props.selected }}>
+        <span class="line-clamp-2 w-full break-words text-center text-sm leading-[1.75]" classList={{ "font-medium text-ink": props.selected, "text-ink-gray": !props.selected }}>
           {props.option.label}
         </span>
       </button>

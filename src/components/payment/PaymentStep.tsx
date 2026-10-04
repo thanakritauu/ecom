@@ -354,7 +354,7 @@ function PaymentOrderSummary(props: { lines: ResolvedCartLine[]; totals: Checkou
               <li class="flex items-center gap-2">
                 <img src={variant?.image ?? product.image} alt="" class="size-12 shrink-0 rounded-media border border-surface-gray object-cover" loading="lazy" />
                 <div class="min-w-0 flex-1">
-                  <p class="line-clamp-1 text-sm text-ink">{product.name}</p>
+                  <p class="line-clamp-1 text-sm leading-[1.75] text-ink">{product.name}</p>
                   <p class="text-xs text-ink-gray">
                     {variant ? `${variant.label} · ` : ""}x{line.qty}
                   </p>

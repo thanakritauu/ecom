@@ -150,7 +150,7 @@ export function SocialReviewCard(props: { review: SocialReview }) {
         </div>
 
         <Show when={props.review.content}>
-          <p class="line-clamp-4 text-sm text-ink">{props.review.content}</p>
+          <p class="line-clamp-4 text-sm leading-[1.75] text-ink">{props.review.content}</p>
         </Show>
 
         <div class="mt-auto flex flex-col gap-2 border-t border-surface-gray pt-3">
@@ -158,7 +158,7 @@ export function SocialReviewCard(props: { review: SocialReview }) {
             {(p) => (
               <A href={`/product/${p().slug}`} class="flex items-center gap-2 text-xs text-ink-gray hover:text-brand-pink">
                 <img src={p().mainImage ?? p().image} alt="" class="size-8 shrink-0 rounded-media border border-surface-gray object-cover" loading="lazy" />
-                <span class="line-clamp-1">{p().name}</span>
+                <span class="line-clamp-1 leading-[1.75]">{p().name}</span>
               </A>
             )}
           </Show>

@@ -41,7 +41,7 @@ export function OrderCard(props: { order: Order }) {
             <div class="flex items-center gap-3">
               <img src={item.image} alt="" loading="lazy" class="size-[60px] shrink-0 rounded-2xl border border-surface-gray object-cover" />
               <div class="min-w-0 flex-1">
-                <p class="line-clamp-1 text-sm font-medium text-ink">{item.name}</p>
+                <p class="line-clamp-1 text-sm font-medium leading-[1.75] text-ink">{item.name}</p>
                 <p class="text-xs text-ink-gray">
                   {item.variantLabel} · x{item.qty}
                 </p>

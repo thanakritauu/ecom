@@ -84,7 +84,7 @@ export function TikTokReviewRail(props: { clips: TikTokReviewClip[]; label: stri
                           fallback={
                             // No cover (lookup failed / not cached yet): a titled tile, never an empty box.
                             <span class="absolute inset-0 flex items-end bg-gradient-to-b from-ink/80 to-ink p-3 pb-4 text-left" aria-hidden="true">
-                              <span class="line-clamp-4 text-xs font-medium leading-snug text-white/90 sm:text-sm">{clip.title}</span>
+                              <span class="line-clamp-4 text-xs font-medium leading-[1.75] text-white/90 sm:text-sm">{clip.title}</span>
                             </span>
                           }
                         >

@@ -287,12 +287,17 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
       fallback={
         // Figma 545:6582 / 545:7248 — 8px padding, 8px gap between every
         // block, 24px card radius, 16px image radius, 0 2px 6px shadow.
-        <div class="group flex h-full w-full flex-col gap-2 rounded-2xl bg-surface-card p-2 sm:rounded-[20px] lg:rounded-card shadow-[0_2px_6px_rgba(90,106,133,0.10)] transition-all duration-200 ease-out hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)] lg:hover:-translate-y-1">
+        // Hover lift/shadow is desktop-only (`lg:`): on touch screens a tap leaves :hover stuck, and the
+        // big hover shadow (~26px deep) got cut flat by the mobile swipe rail's 12px bottom room.
+        // pb-3 on phones: the CTA sat 8px off a 16px-radius corner and looked cramped.
+        <div class="group flex h-full w-full flex-col gap-2 rounded-2xl bg-surface-card p-2 pb-3 sm:rounded-[20px] sm:pb-2 lg:rounded-card shadow-[0_2px_6px_rgba(90,106,133,0.10)] transition-all duration-200 ease-out lg:hover:-translate-y-1 lg:hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)]">
           <ImageBlock class="relative aspect-square w-full overflow-hidden rounded-xl border border-border lg:rounded-media" flashSaleOverlay />
 
           <div class="flex flex-1 flex-col gap-2">
             <A href={productDetailHref()} class="flex flex-col gap-2">
-              <p class="line-clamp-2 min-h-[3rem] text-base font-medium leading-6 text-ink">{props.product.name}</p>
+              {/* leading-7 (28px), not 24px: with line-clamp the hidden 3rd line still paints, and Thai
+                  stacked marks (e.g. "ฉ่ำ", "ทิ้น") rise past a 24px line box into line 2 as a stray dot. */}
+              <p class="line-clamp-2 min-h-14 text-base font-medium leading-7 text-ink">{props.product.name}</p>
               <PriceDisplay price={props.product.price} compareAtPrice={props.product.compareAtPrice} size="card" />
             </A>
 
@@ -312,14 +317,14 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
           data/state/handlers as the grid card above, only the arrangement
           changes. No Figma exists for this layout (grid view is what the
           audited node shows) — built to the explicit written spec instead. */}
-      <div class="group flex w-full gap-3 rounded-card bg-surface-card p-2 shadow-card transition-all duration-200 ease-out hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)] sm:gap-4">
+      <div class="group flex w-full gap-3 rounded-card bg-surface-card p-2 shadow-card transition-all duration-200 ease-out lg:hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)] sm:gap-4">
         <ImageBlock class="relative size-[96px] shrink-0 overflow-hidden rounded-media border border-border sm:size-[128px] lg:size-[150px]" />
 
         <div class="flex min-w-0 flex-1 flex-col gap-2 py-0.5">
           <FlashSaleStrip />
 
           <A href={productDetailHref()} class="flex flex-col gap-1.5">
-            <p class="line-clamp-2 text-sm font-medium text-ink sm:text-base">{props.product.name}</p>
+            <p class="line-clamp-2 text-sm font-medium leading-[1.75] text-ink sm:text-base">{props.product.name}</p>
             <PriceDisplay price={props.product.price} compareAtPrice={props.product.compareAtPrice} size="card" />
           </A>
 
