@@ -3,10 +3,7 @@ import { For, Show, createEffect, createMemo, createSignal, on } from "solid-js"
 import type { Product } from "~/lib/types";
 import { resolveVariantOptions, type VariantOption } from "~/lib/productVariants";
 import { reviewsOfProduct } from "~/lib/productReviews";
-import { Button } from "./Button";
-import { formatTHB } from "./PriceDisplay";
-import { CartIcon } from "./icons";
-import { QuantityStepper } from "./QuantityStepper";
+import { PurchaseFooter } from "./PurchaseFooter";
 import { ReviewList, ReviewMediaViewer, type ReviewMediaViewerState } from "./ReviewList";
 
 /**
@@ -89,8 +86,21 @@ export function QuickAddSheet(props: {
   const reviewCountLabel = () => props.product.reviewCount ?? reviews().length;
 
   // Review photo/video viewer — a layer inside the modal (no nested dialog).
+  // Option photos enlarge in the same viewer (`viewerKind` only swaps its label).
   const [viewer, setViewer] = createSignal<ReviewMediaViewerState | null>(null);
+  const [viewerKind, setViewerKind] = createSignal<"review" | "option">("review");
   createEffect(on(() => props.open, () => setViewer(null)));
+
+  const optionPhotos = () => options().filter((o) => o.image);
+  const zoomOption = (id: string) => {
+    const photos = optionPhotos();
+    setViewerKind("option");
+    setViewer({
+      items: photos.map((o) => ({ type: "image" as const, src: o.image! })),
+      index: Math.max(0, photos.findIndex((o) => o.id === id)),
+      author: props.product.name,
+    });
+  };
 
   const confirm = async () => {
     const option = selectedOption();
@@ -141,9 +151,17 @@ export function QuickAddSheet(props: {
                     <span class="text-black">ตัวเลือก:</span>
                     <span class="text-ink-gray">{selectedOption()?.label ?? "—"}</span>
                   </p>
-                  <div role="radiogroup" aria-label="ตัวเลือกสินค้า" class="flex flex-wrap gap-3">
+                  {/* Mobile: 3 tiles per row, each filling its column; from `sm` the fixed 100px tiles. */}
+                  <div role="radiogroup" aria-label="ตัวเลือกสินค้า" class="grid grid-cols-3 gap-3 sm:flex sm:flex-wrap">
                     <For each={options()}>
-                      {(option) => <OptionTile option={option} selected={selected() === option.id} onSelect={() => pick(option.id)} />}
+                      {(option) => (
+                        <OptionTile
+                          option={option}
+                          selected={selected() === option.id}
+                          onSelect={() => pick(option.id)}
+                          onZoom={option.image ? () => zoomOption(option.id) : undefined}
+                        />
+                      )}
                     </For>
                   </div>
                 </div>
@@ -159,48 +177,46 @@ export function QuickAddSheet(props: {
                     <span class="ml-1 text-xs text-ink-gray">({reviewCountLabel().toLocaleString("th-TH")})</span>
                   </span>
                 </h3>
-                <ReviewList reviews={reviews()} onOpenMedia={(items, index, author) => setViewer({ items, index, author })} />
+                <ReviewList
+                  reviews={reviews()}
+                  onOpenMedia={(items, index, author) => {
+                    setViewerKind("review");
+                    setViewer({ items, index, author });
+                  }}
+                />
               </section>
             </div>
 
-            {/* Footer — pinned. Option + price (compare-at included), then the
-                quantity + CTA pair, share one row from `sm`; below that they
-                stack (price row on top, quantity + CTA under it). */}
+            {/* Footer — pinned; the shared buy row (also the PDP sticky bar). */}
             <div class="flex shrink-0 flex-col gap-2 border-t border-border px-6 pt-4">
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-                <div class="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-x-4 gap-y-1 text-center sm:justify-start sm:text-left">
-                  <Show when={selectedOption()}>
-                    <span class="break-words text-sm font-medium leading-6 text-ink-gray">{selectedOption()!.label}</span>
-                  </Show>
-                  <span class="flex flex-wrap items-baseline justify-center gap-x-2 sm:justify-start">
-                    <span class="text-xl font-bold leading-tight text-system-red sm:text-2xl">{formatTHB(selectedOption()?.price ?? props.product.price)}</span>
-                    <Show when={props.product.compareAtPrice && props.product.compareAtPrice > (selectedOption()?.price ?? props.product.price)}>
-                      <span class="text-sm leading-5 text-ink-gray line-through sm:text-base sm:leading-6">{formatTHB(props.product.compareAtPrice!)}</span>
-                    </Show>
-                  </span>
-                </div>
-                {/* Same quantity control as the PDP (QuantityStepper, 52px), right before the CTA at the same height; capped by the option's stock. */}
-                <div class="flex items-center gap-3 sm:shrink-0">
-                  <QuantityStepper value={quantity()} onChange={setQuantity} max={maxQuantity()} disabled={hasOptions() && (!selectedOption() || selectedOption()!.soldOut)} />
-                  <Button
-                    variant="primary"
-                    class="h-[52px] min-w-0 flex-1 !gap-2 !px-6 !text-sm sm:w-[220px] sm:flex-none lg:w-[260px]"
-                    disabled={hasOptions() && (!selectedOption() || selectedOption()!.soldOut)}
-                    loading={status() === "loading"}
-                    onClick={confirm}
-                  >
-                    <CartIcon class="size-6 shrink-0" />
-                    <span>{status() === "error" ? "ลองอีกครั้ง" : "เพิ่มลงตะกร้า"}</span>
-                  </Button>
-                </div>
-              </div>
+              <PurchaseFooter
+                optionLabel={selectedOption()?.label}
+                price={selectedOption()?.price ?? props.product.price}
+                compareAtPrice={props.product.compareAtPrice}
+                quantity={quantity()}
+                onQuantityChange={setQuantity}
+                maxQuantity={maxQuantity()}
+                disabled={hasOptions() && (!selectedOption() || selectedOption()!.soldOut)}
+                loading={status() === "loading"}
+                ctaLabel={status() === "error" ? "ลองอีกครั้ง" : undefined}
+                onAdd={confirm}
+              />
               <Show when={status() === "error"}>
                 <p class="text-sm text-system-red" role="alert">
                   เพิ่มลงตะกร้าไม่สำเร็จ กรุณาลองอีกครั้ง
                 </p>
               </Show>
             </div>
-            <Show when={viewer()}>{(v) => <ReviewMediaViewer state={v()} onChange={(index) => setViewer({ ...v(), index })} onClose={() => setViewer(null)} />}</Show>
+            <Show when={viewer()}>
+              {(v) => (
+                <ReviewMediaViewer
+                  state={v()}
+                  ariaLabel={viewerKind() === "option" ? `รูปตัวเลือกสินค้า ${props.product.name}` : undefined}
+                  onChange={(index) => setViewer({ ...v(), index })}
+                  onClose={() => setViewer(null)}
+                />
+              )}
+            </Show>
           </Dialog.Content>
         </div>
       </Dialog.Portal>
@@ -209,41 +225,61 @@ export function QuickAddSheet(props: {
 }
 
 /**
- * One option: a ~100px rounded square showing the variant's real product
- * photo, its name (14px) under it. Selected = pink border + a pink check
- * badge; a sold-out option is faded and can't be picked.
+ * One option: a rounded square showing the variant's real product photo
+ * (fills its column on mobile — 3 per row — and is a fixed 100px from `sm`),
+ * its name (14px) under it. Selected = pink border + a pink check badge; a
+ * sold-out option is faded and can't be picked. The magnifier in the photo's
+ * bottom-right corner enlarges it (a sibling of the radio, never nested in it).
  */
-function OptionTile(props: { option: VariantOption; selected: boolean; onSelect: () => void }) {
+function OptionTile(props: { option: VariantOption; selected: boolean; onSelect: () => void; onZoom?: () => void }) {
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={props.selected}
-      aria-label={`${props.option.label}${props.option.soldOut ? " (สินค้าหมด)" : ""}`}
-      disabled={props.option.soldOut}
-      onClick={props.onSelect}
-      class="group/tile flex w-[100px] shrink-0 flex-col items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-40"
-    >
-      <span
-        class="relative block size-[100px] overflow-hidden rounded-xl border-2 bg-surface-gray transition-colors duration-150"
-        classList={{
-          "border-brand-pink": props.selected,
-          "border-transparent ring-1 ring-inset ring-border group-hover/tile:ring-brand-pink/50 group-disabled/tile:ring-border": !props.selected,
-        }}
+    <div class="relative w-full min-w-0 sm:w-[100px] sm:shrink-0">
+      <button
+        type="button"
+        role="radio"
+        aria-checked={props.selected}
+        aria-label={`${props.option.label}${props.option.soldOut ? " (สินค้าหมด)" : ""}`}
+        disabled={props.option.soldOut}
+        onClick={props.onSelect}
+        class="group/tile flex w-full flex-col items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <img src={props.option.image} alt="" loading="lazy" class="size-full object-cover" />
-        <Show when={props.selected}>
-          <span class="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-brand-pink text-white shadow-sm" aria-hidden="true">
-            <svg viewBox="0 0 16 16" fill="none" class="size-3">
-              <path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        <span
+          class="relative block aspect-square w-full overflow-hidden rounded-xl border-2 bg-surface-gray transition-colors duration-150"
+          classList={{
+            "border-brand-pink": props.selected,
+            "border-transparent ring-1 ring-inset ring-border group-hover/tile:ring-brand-pink/50 group-disabled/tile:ring-border": !props.selected,
+          }}
+        >
+          <img src={props.option.image} alt="" loading="lazy" class="size-full object-cover" />
+          <Show when={props.selected}>
+            <span class="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-brand-pink text-white shadow-sm" aria-hidden="true">
+              <svg viewBox="0 0 16 16" fill="none" class="size-3">
+                <path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+          </Show>
+        </span>
+        {/* Real option names can be longer than a short sample label — wrap to 2 lines under the tile instead of colliding. */}
+        <span class="line-clamp-2 w-full break-words text-center text-sm leading-[18px]" classList={{ "font-medium text-ink": props.selected, "text-ink-gray": !props.selected }}>
+          {props.option.label}
+        </span>
+      </button>
+      <Show when={props.onZoom}>
+        {/* Square overlay matching the photo, so the button sits on the photo's corner at any tile width. */}
+        <span class="pointer-events-none absolute inset-x-0 top-0 aspect-square">
+          <button
+            type="button"
+            onClick={() => props.onZoom!()}
+            aria-label={`ขยายรูป ${props.option.label}`}
+            class="pointer-events-auto absolute bottom-1 right-1 flex size-8 items-center justify-center rounded-pill bg-white/80 text-ink shadow-sm backdrop-blur-sm transition-colors hover:bg-white"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="size-4" aria-hidden="true">
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="M20 20l-4.2-4.2M11 8.5v5M8.5 11h5" />
             </svg>
-          </span>
-        </Show>
-      </span>
-      {/* Real option names can be longer than a short sample label — wrap to 2 lines under the tile instead of colliding. */}
-      <span class="line-clamp-2 w-full break-words text-center text-sm leading-[18px]" classList={{ "font-medium text-ink": props.selected, "text-ink-gray": !props.selected }}>
-        {props.option.label}
-      </span>
-    </button>
+          </button>
+        </span>
+      </Show>
+    </div>
   );
 }

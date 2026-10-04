@@ -40,9 +40,9 @@ const shadeVariants = [
 /**
  * Cushion-foundation shade family — hex values pulled directly from the
  * Figma "ColorOption" swatch export (node 65:1491–1499) so this one is
- * pixel-accurate, not approximated. A 6th shade is appended purely to give
- * the shade-selector's "+N" overflow affordance something real to render in
- * this catalog; drop it once real SKUs define how many shades exist.
+ * pixel-accurate, not approximated. Shades 06–08 are appended purely to give
+ * the card's shade row (max 6 slots, the 6th becomes "+N") its overflow
+ * state in this catalog; drop them once real SKUs define how many shades exist.
  */
 const cushionShadeVariants = [
   { id: "cushion-01", label: "เบอร์ 01", color: "#FBDBC4" },
@@ -51,6 +51,8 @@ const cushionShadeVariants = [
   { id: "cushion-04", label: "เบอร์ 04", color: "#EDA97D" },
   { id: "cushion-05", label: "เบอร์ 05", color: "#DB8B57" },
   { id: "cushion-06", label: "เบอร์ 06", color: "#C97A4A" },
+  { id: "cushion-07", label: "เบอร์ 07", color: "#B5683C" },
+  { id: "cushion-08", label: "เบอร์ 08", color: "#9A5530" },
 ];
 
 /**

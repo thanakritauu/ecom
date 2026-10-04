@@ -35,20 +35,23 @@ export function ReviewList(props: {
           {(review) => {
             const media = reviewMedia(review);
             return (
-              <article class="flex flex-col gap-1 border-b border-border pb-3 last:border-b-0">
-                <div class="flex items-center gap-1.5">
-                  <span class="flex size-5 shrink-0 items-center justify-center rounded-pill bg-surface-gray text-[10px] text-ink-gray" aria-hidden="true">
+              <article class="flex flex-col gap-2 border-b border-border pb-3 last:border-b-0">
+                {/* Header: 40px avatar · name over "ตัวเลือก: … · date" · stars on the right. */}
+                <div class="flex items-start gap-3">
+                  <span class="flex size-10 shrink-0 items-center justify-center rounded-pill bg-surface-gray text-base font-medium text-ink-gray" aria-hidden="true">
                     {review.name.trim().charAt(0)}
                   </span>
-                  <span class="text-xs text-ink">{maskName(review.name)}</span>
+                  <div class="flex min-w-0 flex-1 flex-col">
+                    <span class="truncate text-sm font-medium text-ink">{maskName(review.name)}</span>
+                    <span class="text-xs text-ink-gray">
+                      {review.variantLabel ? `ตัวเลือก: ${review.variantLabel} · ` : ""}
+                      {review.date}
+                    </span>
+                  </div>
+                  <div class="flex shrink-0 items-center gap-0.5 pt-0.5" role="img" aria-label={`ให้คะแนน ${review.rating} จาก 5`}>
+                    <For each={[0, 1, 2, 3, 4]}>{(i) => <img src={starGold} alt="" class="size-3.5" classList={{ "opacity-25 grayscale": i >= review.rating }} />}</For>
+                  </div>
                 </div>
-                <div class="flex items-center gap-0.5" aria-label={`ให้คะแนน ${review.rating} จาก 5`}>
-                  <For each={[0, 1, 2, 3, 4]}>{(i) => <img src={starGold} alt="" class="size-3" classList={{ "opacity-25 grayscale": i >= review.rating }} />}</For>
-                </div>
-                <p class="text-xs text-ink-gray">
-                  {review.variantLabel ? `ตัวเลือก: ${review.variantLabel} · ` : ""}
-                  {review.date}
-                </p>
                 <p class="text-sm text-ink">{review.text}</p>
                 <Show when={media.length > 0}>
                   <div class="mt-1 flex gap-2 overflow-x-auto pb-1">
@@ -91,7 +94,14 @@ export function ReviewList(props: {
  * dialog's own Esc handler closes it); on a page (PDP) pass `fixed` and it
  * covers the viewport and handles Esc itself.
  */
-export function ReviewMediaViewer(props: { state: ReviewMediaViewerState; onChange: (index: number) => void; onClose: () => void; fixed?: boolean }) {
+export function ReviewMediaViewer(props: {
+  state: ReviewMediaViewerState;
+  onChange: (index: number) => void;
+  onClose: () => void;
+  fixed?: boolean;
+  /** Overrides the review-specific dialog label (e.g. the option photo viewer). */
+  ariaLabel?: string;
+}) {
   let closeRef: HTMLButtonElement | undefined;
   const current = () => props.state.items[props.state.index];
   const count = () => props.state.items.length;
@@ -103,7 +113,7 @@ export function ReviewMediaViewer(props: { state: ReviewMediaViewerState; onChan
       class={`${props.fixed ? "fixed z-[100]" : "absolute z-20"} inset-0 flex flex-col bg-[#111318] text-white`}
       role="dialog"
       aria-modal="true"
-      aria-label={`สื่อจากรีวิวของ ${props.state.author}`}
+      aria-label={props.ariaLabel ?? `สื่อจากรีวิวของ ${props.state.author}`}
       // In the modal, Esc is handled by the Dialog's onEscapeKeyDown (closes this viewer, keeps the modal open).
       onKeyDown={(e) => {
         if (props.fixed && e.key === "Escape") props.onClose();

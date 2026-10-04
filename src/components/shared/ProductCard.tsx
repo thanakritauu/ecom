@@ -10,7 +10,7 @@ import { useWishlist } from "~/lib/wishlist";
 import { pushToast } from "~/lib/toast";
 import { createDialogOpenState } from "~/lib/focusRestore";
 import { Badge } from "./Badge";
-import { Button } from "./Button";
+import { AddToCartButton } from "./AddToCartButton";
 import { PriceDisplay } from "./PriceDisplay";
 import { ProductMeta } from "./ProductMeta";
 import { StockProgressBar } from "./StockProgressBar";
@@ -23,7 +23,8 @@ const QuickAddSheet = clientOnly(() =>
   import("./QuickAddSheet").then((m) => ({ default: m.QuickAddSheet })),
 );
 
-const MAX_SHADES_SHOWN = 5;
+/** Card shade row: at most 6 circles on one line; past that the 6th becomes "+N" (N = shades not shown). */
+const MAX_SHADE_SLOTS = 6;
 
 /**
  * Shared everywhere a product grid appears (Featured Collection, Flash Sale,
@@ -68,8 +69,10 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
   // up and ready for the moment real per-shade photography lands.
   const displayImage = () => selectedVariant()?.image ?? props.product.image;
   // Card circles read the Admin-managed swatch (color, or the separately uploaded swatch image) — never the modal's option photos.
-  const visibleShades = () => resolveVariantOptions(props.product).slice(0, MAX_SHADES_SHOWN);
-  const shadeOverflowCount = () => Math.max(0, (props.product.variants?.length ?? 0) - MAX_SHADES_SHOWN);
+  const shadeOptions = () => resolveVariantOptions(props.product);
+  const visibleShades = () =>
+    shadeOptions().length > MAX_SHADE_SLOTS ? shadeOptions().slice(0, MAX_SHADE_SLOTS - 1) : shadeOptions();
+  const shadeOverflowCount = () => shadeOptions().length - visibleShades().length;
 
   const selectShade = (id: string) => {
     setSelectedVariantId(id);
@@ -210,16 +213,25 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
   const ShadeSelector = () => (
     <Show when={hasVariants()}>
       <div class="flex flex-col gap-1.5">
-        <div role="radiogroup" aria-label="ตัวเลือกสินค้า" class="flex flex-wrap items-center gap-1.5">
+        {/* One row, never wraps: each slot is up to 28px and shrinks evenly when
+            the card is narrower than 6 × 28px (mobile grid cards are ~134px inside). */}
+        <div role="radiogroup" aria-label="ตัวเลือกสินค้า" class="flex flex-nowrap items-center gap-1 sm:gap-1.5">
           <For each={visibleShades()}>
-            {(shade) => <ShadeSwatch shade={shade} selected={selectedVariantId() === shade.id} onSelect={() => selectShade(shade.id)} />}
+            {(shade) => (
+              <ShadeSwatch
+                shade={shade}
+                selected={selectedVariantId() === shade.id}
+                onSelect={() => selectShade(shade.id)}
+                class="aspect-square min-w-0 max-w-7 flex-[0_1_28px]"
+              />
+            )}
           </For>
           <Show when={shadeOverflowCount() > 0}>
             <button
               type="button"
               onClick={() => setSheetOpen(true)}
               aria-label={`ดูตัวเลือกสินค้าเพิ่มเติมอีก ${shadeOverflowCount()} ตัวเลือก`}
-              class="flex h-7 shrink-0 items-center rounded-full px-1.5 text-xs font-medium text-ink-gray transition-colors duration-150 hover:text-brand-pink"
+              class="flex aspect-square min-w-0 max-w-7 flex-[0_1_28px] items-center justify-center rounded-full border border-border bg-surface-gray text-[10px] font-medium leading-none text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink"
             >
               +{shadeOverflowCount()}
             </button>
@@ -234,18 +246,15 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
     </Show>
   );
 
-  const AddToCartButton = (btnProps: { class?: string }) => (
-    <Button
-      type="button"
-      variant="outline"
+  const CardAddToCart = (btnProps: { class?: string }) => (
+    <AddToCartButton
+      size="card"
       class={btnProps.class ?? "w-full"}
-      disabled={outOfStock()}
+      outOfStock={outOfStock()}
       loading={addStatus() === "loading"}
       onClick={handleAddToCart}
       aria-label={outOfStock() ? `${props.product.name} สินค้าหมด` : `เพิ่ม ${props.product.name} ลงตะกร้า`}
-    >
-      {outOfStock() ? "สินค้าหมด" : "เพิ่มลงตะกร้า"}
-    </Button>
+    />
   );
 
   const quickAddSheet = (
@@ -288,7 +297,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
             <ProductMeta rating={props.product.rating} soldCount={props.product.soldCount} />
 
             {/* Below sm the card is ~150px wide — the CTA scales with it (14px, tighter padding) instead of wrapping to two lines. */}
-            <AddToCartButton class="mt-auto w-full whitespace-nowrap !px-2 !text-sm sm:!px-6 sm:!text-base" />
+            <CardAddToCart class="mt-auto w-full" />
           </div>
 
           {quickAddSheet}
@@ -318,7 +327,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
             <StockProgressBar stockLeft={props.product.stockLeft!} stockTotal={props.product.stockTotal!} />
           </Show>
 
-          <AddToCartButton class="mt-auto w-full sm:w-auto sm:self-start sm:px-8" />
+          <CardAddToCart class="mt-auto w-full sm:w-auto sm:self-start sm:!px-8" />
         </div>
 
         {quickAddSheet}

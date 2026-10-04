@@ -1,7 +1,7 @@
 import type { CartLine, Product, ProductVariant } from "./types";
 import { resolveVariantOption } from "./productVariants";
 
-/** Matches the free-shipping copy already used in TrustBadges/Home's Utility Bar — one real threshold, not a second number invented for the drawer. */
+/** Matches the free-shipping copy already used in Home's Utility Bar — one real threshold, not a second number invented for the drawer. */
 export const FREE_SHIPPING_THRESHOLD = 990;
 
 export type ResolvedCartLine = {

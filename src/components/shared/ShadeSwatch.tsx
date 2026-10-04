@@ -13,6 +13,8 @@ export function ShadeSwatch(props: {
   onSelect: () => void;
   disabled?: boolean;
   ariaLabel?: string;
+  /** Size override — defaults to the 28px circle (`size-7`). */
+  class?: string;
 }) {
   return (
     <button
@@ -22,7 +24,7 @@ export function ShadeSwatch(props: {
       aria-label={props.ariaLabel ?? `ตัวเลือกสินค้า ${props.shade.label}`}
       disabled={props.disabled}
       onClick={props.onSelect}
-      class="group/shade relative flex size-7 shrink-0 items-center justify-center rounded-full transition-transform duration-150 ease-out hover:scale-110 focus-visible:scale-110 disabled:cursor-not-allowed disabled:hover:scale-100"
+      class={`group/shade relative flex ${props.class ?? "size-7 shrink-0"} items-center justify-center rounded-full transition-transform duration-150 ease-out hover:scale-110 focus-visible:scale-110 disabled:cursor-not-allowed disabled:hover:scale-100`}
     >
       <Show
         when={props.shade.swatchImage}

@@ -1,42 +1,7 @@
-import { For } from "solid-js";
 import { Container } from "../shared/Container";
-import { Carousel } from "../shared/Carousel";
-import ugc1 from "~/assets/images/reviews/ugc-1.png";
-import ugc2 from "~/assets/images/reviews/ugc-2.png";
-import ugc3 from "~/assets/images/reviews/ugc-3.png";
+import { TikTokReviewRail } from "../shared/TikTokReviewRail";
+import { TIKTOK_REVIEW_CLIPS } from "~/lib/tiktokReviews";
 import starGold from "~/assets/icons/star-gold-4.svg";
-
-/**
- * The 3 UGC images already contain their own caption/like-count overlay
- * (they're screenshots of real Instagram posts pulled into the design), so
- * we render them as-is rather than reconstructing that overlay as markup.
- */
-const ugcImages = [ugc1, ugc2, ugc3];
-
-// Built once at module scope — Carousel reads `props.slides` multiple times
-// (count(), the aria-labels, <For>), so an inline `.map()` in the JSX prop
-// would re-run on every read and re-create fresh JSX each time, breaking
-// hydration. Hero/PromoCarousel already do this correctly; mirror it here.
-const reviewSlides = ugcImages.map((src, i) => ({
-  id: `ugc-${i}`,
-  content: (
-    <div class="mx-auto flex max-w-[320px] justify-center px-2 pt-4 pb-8">
-      {/* Carousel's track is `overflow-x-auto` with no `overflow-y` set —
-          per the CSS Overflow spec that forces overflow-y to auto too, which
-          clips this image's shadow-card bleed flush at the track's top/bottom
-          edge (same root cause as ProductRail's card-shadow fix). Padding
-          added here, on this slide's own content wrapper, not on Carousel's
-          shared track — Hero/PromoCarousel reuse that same track and don't
-          need the extra room. */}
-      <img
-        src={src}
-        alt="รีวิวสินค้า Charmiss จากลูกค้าบนโซเชียลมีเดีย"
-        loading="lazy"
-        class="aspect-[303/515] w-full rounded-2xl object-cover shadow-card"
-      />
-    </div>
-  ),
-}));
 
 export function ReviewsSection() {
   return (
@@ -66,23 +31,9 @@ export function ReviewsSection() {
           </div>
         </div>
 
-        {/* Mobile/tablet: swipeable single-card carousel */}
-        <div class="w-full max-w-[1000px] lg:hidden">
-          <Carousel label="รีวิวจากลูกค้าจริงบนโซเชียล" showDots={false} slides={reviewSlides} autoPlay={5000} />
-        </div>
-
-        {/* Desktop: Figma shows all 3 UGC posts side by side, not one at a time */}
-        <div class="hidden w-full max-w-[1000px] lg:grid lg:grid-cols-3 lg:gap-6">
-          <For each={ugcImages}>
-            {(src) => (
-              <img
-                src={src}
-                alt="รีวิวสินค้า Charmiss จากลูกค้าบนโซเชียลมีเดีย"
-                loading="lazy"
-                class="aspect-[303/515] w-full rounded-2xl object-cover shadow-card"
-              />
-            )}
-          </For>
+        {/* Real TikTok review clips (official embeds) — see lib/tiktokReviews.ts to edit the list. */}
+        <div class="w-full max-w-[1100px]">
+          <TikTokReviewRail clips={TIKTOK_REVIEW_CLIPS} label="คลิปรีวิวสินค้า Charmiss จาก TikTok" />
         </div>
       </Container>
     </section>

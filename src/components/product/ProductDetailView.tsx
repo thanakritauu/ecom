@@ -9,10 +9,9 @@ import { ProductRail } from "~/components/shared/ProductRail";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { ProductGallery } from "~/components/product/ProductGallery";
 import { QuantityStepper } from "~/components/shared/QuantityStepper";
-import { TrustBadges } from "~/components/product/TrustBadges";
-import { ProductTabs } from "~/components/product/ProductTabs";
+import { ProductDetails } from "~/components/product/ProductDetails";
 import { ProductReviews } from "~/components/product/ProductReviews";
-import { FeaturedReviews } from "~/components/product/FeaturedReviews";
+import { ProductTikTokReviews } from "~/components/product/ProductTikTokReviews";
 import { StickyAddToCartBar } from "~/components/product/StickyAddToCartBar";
 import { useProductCatalog } from "~/lib/productCatalog";
 import { useCategoryContent } from "~/lib/categoryContent";
@@ -22,7 +21,7 @@ import { getDiscountPercent } from "~/lib/products";
 import { useCart } from "~/lib/cart";
 import { pushToast } from "~/lib/toast";
 import starGold from "~/assets/icons/star-gold-4.svg";
-import { CartIcon } from "~/components/shared/icons";
+import { AddToCartButton } from "~/components/shared/AddToCartButton";
 
 /**
  * Shared by both `/product/:slug` (normal PDP) and `/product/:slug/out-of-stock`
@@ -193,18 +192,7 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
 
               <div ref={addToCartRef} class="flex items-center gap-3">
                 <QuantityStepper value={quantity()} onChange={setQuantity} max={props.product.stockLeft} disabled={outOfStock()} />
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="lg"
-                  class="flex-1"
-                  disabled={outOfStock()}
-                  loading={addStatus() === "loading"}
-                  onClick={addToCart}
-                >
-                  <CartIcon class="size-6" />
-                  {outOfStock() ? "สินค้าหมด" : "เพิ่มลงตะกร้า"}
-                </Button>
+                <AddToCartButton size="lg" class="flex-1" outOfStock={outOfStock()} loading={addStatus() === "loading"} onClick={addToCart} />
               </div>
 
               <Button type="button" variant="outline" size="lg" class="w-full" disabled={outOfStock()} onClick={buyNow}>
@@ -213,11 +201,10 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
             </div>
           </div>
 
-          {/* Phase 03 — Admin-curated Instagram/TikTok posts, right under the gallery + product info and above the detail tabs. Hidden when none are featured. */}
-          <FeaturedReviews product={props.product} />
-          <TrustBadges />
-          <ProductTabs product={props.product} />
+          {/* PDP order: TikTok clips (on every PDP, this product's own first) → #CharmissReviews → description + photos. */}
+          <ProductTikTokReviews product={props.product} />
           <ProductReviews product={props.product} />
+          <ProductDetails product={props.product} />
 
           <Show when={relatedProducts().length > 0}>
             <section aria-labelledby="related-heading" class="flex flex-col gap-6">
@@ -235,9 +222,10 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
         product={props.product}
         selectedVariant={selectedVariant()}
         quantity={quantity()}
+        onQuantityChange={setQuantity}
+        maxQuantity={props.product.stockLeft}
         watchRef={addToCartRef}
         onAddToCart={addToCart}
-        onBuyNow={buyNow}
         addStatus={addStatus()}
         outOfStock={outOfStock()}
       />

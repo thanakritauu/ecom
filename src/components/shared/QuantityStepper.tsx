@@ -13,6 +13,8 @@ export function QuantityStepper(props: {
   max?: number;
   disabled?: boolean;
   tone?: "pink" | "outline";
+  /** Pink tone only: 40px tall below `sm` (52px from `sm`) — for tight one-row bars like the PDP sticky bar. */
+  compactOnMobile?: boolean;
 }) {
   const tone = () => props.tone ?? "pink";
   const clamp = (n: number) => Math.max(1, props.max !== undefined ? Math.min(n, props.max) : n);
@@ -56,8 +58,12 @@ export function QuantityStepper(props: {
 
   return (
     <div
-      class="flex h-[52px] shrink-0 items-center gap-1 rounded-pill bg-brand-pink p-2 text-white"
-      classList={{ "opacity-50": props.disabled }}
+      class="flex shrink-0 items-center rounded-pill bg-brand-pink text-white"
+      classList={{
+        "opacity-50": props.disabled,
+        "h-[52px] gap-1 p-2": !props.compactOnMobile,
+        "h-10 gap-0 p-1 sm:h-[52px] sm:gap-1 sm:p-2": !!props.compactOnMobile,
+      }}
     >
       {/* The +/- buttons are 36px, under the usual 44px touch-target guidance
           — a documented exception, the same as the shade-swatch selector on
@@ -70,11 +76,17 @@ export function QuantityStepper(props: {
         onClick={dec}
         disabled={props.disabled || props.value <= 1}
         aria-label="ลดจำนวน"
-        class="flex size-9 items-center justify-center rounded-pill bg-white/30 transition-colors duration-150 hover:bg-white/40 disabled:cursor-not-allowed disabled:opacity-40"
+        class="flex items-center justify-center rounded-pill bg-white/30 transition-colors duration-150 hover:bg-white/40 disabled:cursor-not-allowed disabled:opacity-40"
+        classList={{ "size-9": !props.compactOnMobile, "size-7 sm:size-9": !!props.compactOnMobile }}
       >
         <MinusIcon class="size-3.5" />
       </button>
-      <span class="min-w-9 text-center text-lg font-semibold" aria-live="polite" aria-atomic="true">
+      <span
+        class="text-center font-semibold"
+        classList={{ "min-w-9 text-lg": !props.compactOnMobile, "min-w-6 text-base sm:min-w-9 sm:text-lg": !!props.compactOnMobile }}
+        aria-live="polite"
+        aria-atomic="true"
+      >
         {props.value}
       </span>
       <button
@@ -82,7 +94,8 @@ export function QuantityStepper(props: {
         onClick={inc}
         disabled={props.disabled || atMax()}
         aria-label="เพิ่มจำนวน"
-        class="flex size-9 items-center justify-center rounded-pill bg-white/30 transition-colors duration-150 hover:bg-white/40 disabled:cursor-not-allowed disabled:opacity-40"
+        class="flex items-center justify-center rounded-pill bg-white/30 transition-colors duration-150 hover:bg-white/40 disabled:cursor-not-allowed disabled:opacity-40"
+        classList={{ "size-9": !props.compactOnMobile, "size-7 sm:size-9": !!props.compactOnMobile }}
       >
         <PlusIcon class="size-3.5" />
       </button>

@@ -4,7 +4,7 @@ import { formatTHB } from "./PriceDisplay";
 
 /**
  * Shown in both the Cart Drawer (node 153:19197) and the Cart Page (node
- * 153:16170) — same ฿990 threshold TrustBadges/Home already advertise, same
+ * 153:16170) — same ฿990 threshold Home already advertises, same
  * `total` the rest of the cart UI uses, so the two never disagree about how
  * close a shopper is to free shipping. `showAmounts` renders the Page's
  * extra "ยอดในตะกร้า X / ขั้นต่ำ Y" line, which the Drawer's narrower width
