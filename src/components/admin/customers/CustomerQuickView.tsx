@@ -1,7 +1,8 @@
 import { Show } from "solid-js";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { CUSTOMER_STATUS_META, CUSTOMER_TIER_META, getCustomerFullName, getCustomerInitials, type Customer } from "~/lib/adminCustomers";
+import { TierBadge } from "~/components/admin/loyalty/TierBadge";
+import { CUSTOMER_SOURCE_META, CUSTOMER_STATUS_META, getCustomerFullName, getCustomerInitials, type Customer } from "~/lib/adminCustomers";
 import { useAdminOrders } from "~/lib/adminOrderStore";
 import { getCustomerOrderCount, getCustomerTotalSpent } from "~/lib/customerResolvers";
 
@@ -31,8 +32,10 @@ export function CustomerQuickView(props: { customer: Customer }) {
         </div>
       </div>
 
-      <div>
+      <div class="flex flex-wrap items-center gap-2">
         <StatusBadge tone={CUSTOMER_STATUS_META[c().status].tone}>{CUSTOMER_STATUS_META[c().status].label}</StatusBadge>
+        <StatusBadge tone={CUSTOMER_SOURCE_META[c().source].tone}>{CUSTOMER_SOURCE_META[c().source].label}</StatusBadge>
+        <Show when={c().tier}>{(tier) => <TierBadge tier={tier()} />}</Show>
       </div>
 
       <div class="grid grid-cols-2 gap-3 rounded-card bg-surface-gray/60 p-3 text-sm">
@@ -41,9 +44,8 @@ export function CustomerQuickView(props: { customer: Customer }) {
         <Field label="จำนวนคำสั่งซื้อ" value={String(orderCount())} />
         <Field label="ยอดซื้อสะสม" value={formatAdminCurrency(totalSpent())} />
         <Show when={c().loyaltyPoints !== undefined}>
-          <Field label="คะแนนสะสม" value={String(c().loyaltyPoints)} />
+          <Field label="Charmiss Coin" value={`${c().loyaltyPoints!.toLocaleString("th-TH")} คอยน์`} />
         </Show>
-        <Show when={c().tier}>{(tier) => <Field label="ระดับสมาชิก" value={CUSTOMER_TIER_META[tier()].label} />}</Show>
       </div>
     </div>
   );

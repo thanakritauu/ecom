@@ -1,10 +1,27 @@
 import type { StatusTone } from "~/components/admin/StatusBadge";
 import { isValidDateRange } from "./adminMarketing";
 import { normalizeHomepageDestination, type HomepageBanners, type HomepageDestination } from "./adminHomepage";
-import heroBanner1 from "~/assets/images/hero/hero-banner-1.png";
 import heroBanner2 from "~/assets/images/hero/hero-banner-2.png";
 import heroBanner3 from "~/assets/images/hero/hero-banner-3.png";
-import { upgradeSeedBanners } from "./seedBanners";
+import { upgradeSeedBanners, HERO1_BANNERS } from "./seedBanners";
+
+/**
+ * Storefront banner standard (`ResponsiveBanner.tsx`'s `BANNER_ASPECT_CLASS`)
+ * — three real crops, each shown whole in a box of its own ratio. Every
+ * Admin banner upload slot/preview reads its hint + aspect from here so the
+ * sizes Admin asks for are the sizes the storefront actually renders.
+ */
+export type BannerDevice = "desktop" | "tablet" | "mobile";
+
+export const BANNER_DEVICE_SPECS: Record<BannerDevice, { label: string; size: string; ratio: string; aspectClass: string }> = {
+  desktop: { label: "Desktop", size: "1920×640px", ratio: "3:1", aspectClass: "aspect-[3/1]" },
+  tablet: { label: "Tablet", size: "1024×768px", ratio: "4:3", aspectClass: "aspect-[4/3]" },
+  mobile: { label: "Mobile", size: "750×1000px", ratio: "3:4", aspectClass: "aspect-[3/4]" },
+};
+
+export function bannerSizeHint(device: BannerDevice): string {
+  return `แนะนำ ${BANNER_DEVICE_SPECS[device].size} (${BANNER_DEVICE_SPECS[device].ratio})`;
+}
 
 /**
  * Banner Management — a standalone media/CTA entity: unlike Promotion Page
@@ -132,15 +149,16 @@ const TODAY_LABEL = "18 ก.ย. 2569";
 export function buildMockBanners(): Banner[] {
   return [
     {
+      // Storefront sync — the live Home hero's first slide (Iconic Glow), real 3-size crops, no link, no end date.
       id: "banner-001",
       name: "Hero Banner หน้าแรก",
       placement: "homepage_hero",
       status: "published",
-      banners: { desktop: heroBanner1, tablet: heroBanner1, mobile: heroBanner1 },
-      destination: { type: "internal", path: "/products" },
-      startDate: "2026-09-01",
+      banners: { ...HERO1_BANNERS },
+      destination: { type: "none" },
+      startDate: "",
       startTime: "00:00",
-      endDate: "2026-09-30",
+      endDate: "",
       endTime: "23:59",
       createdAt: TODAY_LABEL,
       updatedAt: TODAY_LABEL,
@@ -151,7 +169,7 @@ export function buildMockBanners(): Banner[] {
       placement: "homepage_promotion",
       status: "scheduled",
       banners: { desktop: heroBanner2, tablet: heroBanner2, mobile: "" },
-      destination: { type: "internal", path: "/promotions" },
+      destination: { type: "internal", path: "/promotion/promotions" },
       startDate: "2026-09-25",
       startTime: "00:00",
       endDate: "2026-09-27",
@@ -163,12 +181,13 @@ export function buildMockBanners(): Banner[] {
       id: "banner-003",
       name: "Campaign Banner 9.9",
       placement: "campaign",
-      status: "published",
+      // Storefront sync — the 9.9 campaign ended on 9 ก.ย.; its page is unpublished too.
+      status: "expired",
       banners: { desktop: heroBanner3, tablet: heroBanner3, mobile: heroBanner3 },
       destination: { type: "external", url: "https://charmiss.co.th/9-9" },
       startDate: "2026-09-01",
       startTime: "00:00",
-      endDate: "2026-10-31",
+      endDate: "2026-09-09",
       endTime: "23:59",
       createdAt: TODAY_LABEL,
       updatedAt: TODAY_LABEL,
@@ -202,4 +221,27 @@ export function buildMockBanners(): Banner[] {
       updatedAt: TODAY_LABEL,
     },
   ];
+}
+
+/**
+ * Storefront sync seed upgrade, same versioned shape as
+ * `upgradePromotionPageSeeds` (`adminContent.ts`) — run once per version step
+ * by `adminBannerStore.tsx`; each step only touches a banner still in its
+ * old seed shape, so admin edits survive.
+ *  - v2: "Hero Banner หน้าแรก" → the live hero's real crops, no end date;
+ *    "Campaign Banner 9.9" → expired.
+ */
+export const BANNER_SEED_VERSION = 3;
+
+export function upgradeBannerSeeds(stored: Banner[], fromVersion: number): Banner[] {
+  if (fromVersion >= 3) return stored;
+  const seeds = buildMockBanners();
+  return stored.map((b) => {
+    // v3 — `/promotions` never had a route; any saved banner still pointing there moves to the real promotions page.
+    if (b.destination?.type === "internal" && b.destination.path === "/promotions") b = { ...b, destination: { ...b.destination, path: "/promotion/promotions" } };
+    if (fromVersion >= 2) return b;
+    if (b.id === "banner-001" && b.endDate === "2026-09-30") return { ...seeds[0], createdAt: b.createdAt, updatedAt: b.updatedAt };
+    if (b.id === "banner-003" && b.status === "published" && b.endDate === "2026-10-31") return { ...b, status: "expired", endDate: "2026-09-09" };
+    return b;
+  });
 }

@@ -226,7 +226,7 @@ export default function AdminFlashSaleListPage() {
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "แฟลชเซล" }]} />
       <PageHeader
         title="แฟลชเซล"
-        description="จัดการแคมเปญแฟลชเซลของ Charmiss"
+        description="ราคา จำนวนสต็อก และเวลานับถอยหลังของสินค้าในส่วน Flash Sale หน้าแรก"
         actions={
           <div class="flex flex-wrap items-center gap-2">
             <Button href="/admin/marketing/flash-sale/new" variant="primary">

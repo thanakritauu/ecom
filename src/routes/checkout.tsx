@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show } from "solid-js";
+import { createMemo, createSignal, onMount, Show } from "solid-js";
 import { A, useSearchParams } from "@solidjs/router";
 import { Header } from "~/components/shared/Header";
 import { Footer } from "~/components/shared/Footer";
@@ -10,18 +10,24 @@ import {
   resolveCartLines,
   computeCartTotal,
   computeCheckoutTotals,
+  resolveGiftPromotion,
   computeCoinsEarned,
-  DELIVERY,
+  computeShippingFee,
   MAX_COIN_REDEMPTION,
   type Coupon,
 } from "~/lib/cartSelectors";
 import { createAddressBook, createLocalAddressRepository, type AddressMockState } from "~/lib/addressBook";
+import { createMockOrderRepository, createOrderHistory } from "~/lib/orderHistory";
+import { resolveTier, yearlySpend } from "~/lib/membership";
 import { useProductCatalog } from "~/lib/productCatalog";
 import { formatTHB } from "~/components/shared/PriceDisplay";
 import { AddressSection } from "~/components/checkout/AddressSection";
+import { DeliverySection } from "~/components/checkout/DeliverySection";
 import { PaymentSection } from "~/components/checkout/PaymentSection";
 import { createCheckoutPayment, type PaidResult } from "~/components/checkout/checkoutPayment";
 import { createMockPaymentProvider } from "~/lib/payment";
+import { generateOrderNumber } from "~/lib/orderNumber";
+import { resolveSavedCards, type SavedCard } from "~/lib/savedCards";
 import { CheckoutOrderSummary } from "~/components/checkout/CheckoutOrderSummary";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
 
@@ -37,6 +43,7 @@ export default function CheckoutPage() {
   const catalog = useProductCatalog();
   const resolvedLines = createMemo(() => resolveCartLines(cart.lines(), catalog.products()));
   const subtotal = createMemo(() => computeCartTotal(resolvedLines()));
+  const gift = createMemo(() => resolveGiftPromotion(subtotal(), catalog.products()));
   const hasUnavailableItem = createMemo(() =>
     resolvedLines().some(({ product }) => product.stockLeft !== undefined && product.stockLeft <= 0),
   );
@@ -53,8 +60,10 @@ export default function CheckoutPage() {
   });
   const [pickedShippingId, setPickedShippingId] = createSignal<string | undefined>();
   // Falls back to the default address, so a returning shopper's checkout opens ready to go.
+  // Billing-only addresses (saved from the billing form, maybe a company) aren't offered for shipping.
+  const shippingAddresses = () => addressBook.addresses().filter((a) => a.kind !== "billing");
   const selectedAddressId = () =>
-    addressBook.addresses().some((a) => a.id === pickedShippingId()) ? pickedShippingId() : addressBook.defaultAddress()?.id;
+    shippingAddresses().some((a) => a.id === pickedShippingId()) ? pickedShippingId() : addressBook.defaultAddress()?.id;
   const [shippingFormOpen, setShippingFormOpen] = createSignal(false);
 
   // Billing — same as shipping by default (State E); unticking reveals a picker/form (State D).
@@ -71,7 +80,7 @@ export default function CheckoutPage() {
   const [submitError, setSubmitError] = createSignal<string>();
   const [order, setOrder] = createSignal<{ number: string; total: number; coinsEarned: number; payment: PaidResult } | undefined>();
 
-  // One-page checkout: address → billing → payment, paid right here.
+  // One-page checkout: address → billing → delivery → payment, paid right here.
   // The payment provider is the only payment dependency; mock today
   // (`?mockPayment=fail` forces failures, `?mockPayment=expire` shortens the PromptPay QR).
   const [pendingOrderNumber, setPendingOrderNumber] = createSignal("");
@@ -81,8 +90,11 @@ export default function CheckoutPage() {
   });
 
   const totals = createMemo(() =>
-    computeCheckoutTotals({ subtotal: subtotal(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: DELIVERY.fee }),
+    computeCheckoutTotals({ subtotal: subtotal(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: computeShippingFee(subtotal()) }),
   );
+  // The shopper's member tier (this year's paid spend, same as `/account/points`) sets the coin multiplier.
+  const orderHistory = createOrderHistory(() => createMockOrderRepository());
+  const tier = () => resolveTier(yearlySpend(orderHistory.orders())).current;
   // Same condition that gates the two-column form/summary — nothing to pay
   // for once the cart's empty or the order already went through, so the
   // floating bar (and the bottom padding reserved for it) only exist then.
@@ -121,28 +133,39 @@ export default function CheckoutPage() {
   const onPaid = (payment: PaidResult) => {
     // Display-only mockup — no loyalty-points backend exists, so this never
     // touches `auth`'s `coinBalance`; same amount-paid-for-merchandise basis
-    // (shipping fee excluded) as `OrderCard`'s own per-order estimate.
-    const coinsEarned = computeCoinsEarned(totals().total - totals().shippingFee);
+    // (shipping fee excluded) and tier multiplier as the account's order pages.
+    const coinsEarned = computeCoinsEarned(totals().total - totals().shippingFee, tier().id);
     setOrder({ number: pendingOrderNumber(), total: totals().total, coinsEarned, payment });
     cart.clearCart();
     window.scrollTo({ top: 0 });
   };
 
+  // Saved cards come from the (mock) card vault — read on the client only (localStorage), so SSR renders none.
+  const [savedCards, setSavedCards] = createSignal<SavedCard[]>([]);
+  onMount(() => {
+    const mode = searchParams.card === "saved" || searchParams.card === "none" ? searchParams.card : undefined;
+    setSavedCards(resolveSavedCards(mode, auth.isAuthenticated()));
+  });
+
   const payment = createCheckoutPayment({
     provider: paymentProvider,
     amount: () => totals().total,
     // Reserved on the first pay attempt, so a failed/retried payment stays on the same order.
-    orderNumber: () => pendingOrderNumber() || setPendingOrderNumber(`CM${Date.now().toString().slice(-8)}`),
+    orderNumber: () => pendingOrderNumber() || setPendingOrderNumber(generateOrderNumber()),
     validateOrder,
     onPaid,
+    savedCards,
+    canSaveCard: () => auth.isAuthenticated() || searchParams.card === "saved",
   });
 
   return (
     <>
       <Header minimal />
-      <div class="flex items-center justify-center gap-2 bg-success-soft px-4 py-2 text-center text-sm font-semibold text-success">
+      {/* Icon sits inline at the start of the sentence, so icon + text center as one block; the wrap is
+          balanced so phones get two even lines instead of "ปลอดภัย" alone. */}
+      <p class="text-balance bg-success-soft px-4 py-2 text-center text-sm font-semibold text-success">
         <ShieldIcon /> ข้อมูลการชำระเงินของคุณได้รับการปกป้องอย่างปลอดภัย
-      </div>
+      </p>
 
       {/* `overflow-x-hidden` forces `overflow-y` to `auto` too (an axis can't
           stay `visible` while the other isn't, per the CSS Overflow spec) —
@@ -154,10 +177,7 @@ export default function CheckoutPage() {
           kicking in (confirmed live: overflow-y stays `visible`), which is
           the actual fix for Part B's top-alignment — the CheckoutOrderSummary
           padding tweak alone only accounts for the remaining ~1px. */}
-      <main
-        class="flex flex-col overflow-x-clip bg-surface-gray/60 py-6"
-        classList={{ "pb-36 md:pb-24": showFloatingBar() }}
-      >
+      <main class="flex flex-col overflow-x-clip bg-surface-gray/60 py-6">
         <Container width="wide">
           <Show
             when={!order()}
@@ -180,7 +200,7 @@ export default function CheckoutPage() {
                       title="ที่อยู่จัดส่ง"
                       emptyTitle="เพิ่มที่อยู่จัดส่ง"
                       newAddressLabel="ที่อยู่ใหม่"
-                      addresses={addressBook.addresses()}
+                      addresses={shippingAddresses()}
                       selectedId={selectedAddressId()}
                       onSelect={(id) => {
                         setPickedShippingId(id);
@@ -192,8 +212,6 @@ export default function CheckoutPage() {
                       onFormOpenChange={setShippingFormOpen}
                       error={fieldErrors().address}
                     />
-
-                    {/* Delivery (DHL) block hidden for now — component kept in checkout/DeliverySection.tsx. */}
 
                     <Show when={selectedAddressId()}>
                       {/* No gap: the checkbox row keeps its 44px tap height, which alone puts its box 12px under the heading. */}
@@ -222,6 +240,7 @@ export default function CheckoutPage() {
                             emptyTitle="เพิ่มที่อยู่ออกใบเสร็จรับเงิน"
                             newAddressLabel="ที่อยู่ออกใบเสร็จรับเงิน"
                             companyAllowed
+                            kind="billing"
                             addresses={billingCandidates()}
                             selectedId={billingAddressId()}
                             onSelect={(id) => {
@@ -237,7 +256,10 @@ export default function CheckoutPage() {
                       </section>
                     </Show>
                   </Show>
-                  {/* Payment — right after the billing address; paid here, its button ends the form. */}
+                  {/* Delivery (DHL) — between the billing address and payment. */}
+                  <DeliverySection shippingFee={totals().shippingFee} />
+
+                  {/* Payment — paid here; its button ends the form. */}
                   <PaymentSection
                     payment={payment}
                     amount={totals().total}
@@ -259,6 +281,7 @@ export default function CheckoutPage() {
 
                 <CheckoutOrderSummary
                   lines={resolvedLines()}
+                  gift={gift()?.unlocked ? gift() : undefined}
                   totals={totals()}
                   coupon={coupon()}
                   onApplyCoupon={setCoupon}
@@ -288,6 +311,10 @@ export default function CheckoutPage() {
       </Show>
 
       <Footer />
+      {/* Room for the fixed floating bar — below the Footer, so the content→Footer gap stays the site-wide 24px. */}
+      <Show when={showFloatingBar()}>
+        <div class="h-36 bg-brand-pink md:h-24" aria-hidden="true" />
+      </Show>
     </>
   );
 }
@@ -371,10 +398,12 @@ function CoinEarnedIcon() {
   );
 }
 
+/** Iconex "Shield" (Light) — shield with a check; drawn in `currentColor`, i.e. the banner's success green (#009B4D). */
 function ShieldIcon() {
   return (
-    <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z" />
+    <svg viewBox="0 0 24 24" class="-mt-0.5 mr-1 inline-block size-5 align-middle" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+      <path d="M4 7.03285C4 6.66968 4.19689 6.33506 4.51436 6.15869L11.5144 2.2698C11.8164 2.10201 12.1836 2.10201 12.4856 2.2698L19.4856 6.15869C19.8031 6.33506 20 6.66968 20 7.03285V11.6715C20 15.3032 18.0311 18.6494 14.8564 20.4131L12.4856 21.7302C12.1836 21.898 11.8164 21.898 11.5144 21.7302L9.14357 20.4131C5.96892 18.6494 4 15.3032 4 11.6715V7.03285Z" />
+      <path d="M9.5 12L11.5 14L15.5 10" stroke-linecap="round" stroke-linejoin="round" />
     </svg>
   );
 }

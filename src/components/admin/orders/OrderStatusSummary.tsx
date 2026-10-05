@@ -1,10 +1,10 @@
 import { For } from "solid-js";
 import { ORDER_STATUS_META, type OrderStatus } from "~/lib/adminOrders";
 
-const TABS: ("all" | OrderStatus)[] = ["all", "pending_payment", "confirmed", "processing", "packed", "shipped", "delivered", "cancelled", "refunded"];
+const TABS: ("all" | OrderStatus)[] = ["all", "pending_payment", "preparing", "handed_over", "shipping", "completed", "cancelled"];
 
 /**
- * PART 6 — Order Status summary tabs, distinct from the Payment/Fulfillment/
+ * PART 6 — Order Status summary tabs (the storefront's 6 statuses), distinct from the Payment/Fulfillment/
  * Date/Value dropdown filters in FilterBar below it. Reuses the same
  * horizontal-scroll-rail pattern the storefront's own category nav already
  * established (app.css `.scroll-rail`) instead of a new horizontal-list

@@ -7,17 +7,41 @@ import { StatusBadge } from "~/components/admin/StatusBadge";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
-import { OrderTimeline } from "~/components/admin/orders/OrderTimeline";
+import { OrderTrackingPanel } from "~/components/admin/orders/OrderTrackingPanel";
+import { OrderReturnPanel } from "~/components/admin/orders/OrderReturnPanel";
+import { OrderTotalsBreakdown } from "~/components/admin/orders/OrderTotalsBreakdown";
 import { OrdersIcon, ReceiptIcon, PrintIcon, DownloadIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { ORDER_STATUS_META, PAYMENT_STATUS_META, FULFILLMENT_STATUS_META, getNextStatusActions, type AdminOrder, type OrderStatus } from "~/lib/adminOrders";
+import {
+  ORDER_STATUS_META,
+  PAYMENT_STATUS_META,
+  FULFILLMENT_STATUS_META,
+  CANCELLED_BY_LABEL,
+  canCancelOrder,
+  formatOrderAddress,
+  formatOrderDateTimeLabel,
+  getNextStatusActions,
+  paymentFailureLabel,
+  type AdminOrder,
+  type OrderAddress,
+  type OrderStatus,
+} from "~/lib/adminOrders";
 import { useAdminOrders } from "~/lib/adminOrderStore";
 import { useAdminCustomers } from "~/lib/adminCustomerStore";
 import { getCustomerFullName } from "~/lib/adminCustomers";
-import { getReceiptData, downloadReceiptHtml } from "~/lib/receiptResolver";
-import { computeCoinsEarned } from "~/lib/cartSelectors";
-import { LINE_ITEM_STOCK_STATUS_META, getMockLineItemStockStatus } from "~/lib/adminInventoryStock";
+import { getReceiptData } from "~/lib/receiptResolver";
+import { downloadOrderReceiptHtml } from "~/components/admin/orders/orderReceiptDocument";
+import { LINE_ITEM_STOCK_STATUS_META } from "~/lib/adminInventoryStock";
+import { GIFT_PROMOTION } from "~/lib/cartSelectors";
 import { pushToast } from "~/lib/toast";
+
+/** Stock state per order status — admin-local mapping onto the Inventory module's 4 line-item states (its own helper still keys off the old status codes). */
+function lineItemStockStatus(status: OrderStatus): keyof typeof LINE_ITEM_STOCK_STATUS_META {
+  if (status === "pending_payment") return "reserved";
+  if (status === "preparing") return "preparing";
+  if (status === "cancelled") return "released";
+  return "deducted";
+}
 
 export default function AdminOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -40,8 +64,11 @@ export default function AdminOrderDetailPage() {
       // Cancel is destructive even when it succeeds — Global Toast Rule #7 groups "Cancel Order" under red regardless of outcome, distinct from a routine status advance.
       pushToast("อัปเดตสถานะคำสั่งซื้อแล้ว", target === "cancelled" ? "error" : "success");
       setPendingStatus(null);
-    } catch {
-      pushToast("อัปเดตสถานะไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
+    } catch (err) {
+      pushToast(
+        err instanceof Error && err.message === "TRACKING_REQUIRED" ? "กรุณากรอกเลขพัสดุ DHL ก่อนส่งมอบพัสดุ" : "อัปเดตสถานะไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+        "error",
+      );
     } finally {
       setSaving(false);
     }
@@ -59,14 +86,16 @@ export default function AdminOrderDetailPage() {
     >
       {(current) => {
         const o = () => current() as AdminOrder;
-        const nextActions = () => getNextStatusActions(o().orderStatus);
+        // Cancel only while the parcel is still with Charmiss (storefront `canCancelOrder`).
+        const nextActions = () => getNextStatusActions(o().orderStatus).filter((a) => a.status !== "cancelled" || canCancelOrder(o()));
+        const needsTracking = (status: OrderStatus) => status === "handed_over" && !o().shipping.trackingNumber;
         const targetMeta = () => (pendingStatus() ? ORDER_STATUS_META[pendingStatus()!] : undefined);
         // §03/§09 — Order Detail resolves the *current* Customer Master record (with a link into Customer Management), separate from `o().customer` (the frozen historical snapshot the Receipt/Order.customer field always keeps). Falls back to the snapshot, un-linked, if this order's customerId doesn't resolve (e.g. legacy data) — never a broken link.
         const resolvedCustomer = () => customerStore.getById(o().customerId);
         const goToReceipt = (print?: boolean) => navigate(`/admin/orders/${o().id}/receipt${print ? "?print=1" : ""}`);
         const handleDownloadReceipt = () => {
           const data = getReceiptData(o().id, store.orders());
-          if (data) downloadReceiptHtml(data, formatAdminCurrency);
+          if (data) downloadOrderReceiptHtml(data, formatAdminCurrency);
         };
 
         return (
@@ -99,39 +128,25 @@ export default function AdminOrderDetailPage() {
                     <StatusRow label="Payment" tone={PAYMENT_STATUS_META[o().paymentStatus].tone} value={PAYMENT_STATUS_META[o().paymentStatus].label} />
                     <StatusRow label="Fulfillment" tone={FULFILLMENT_STATUS_META[o().fulfillmentStatus].tone} value={FULFILLMENT_STATUS_META[o().fulfillmentStatus].label} />
                   </div>
-                  <div class="flex flex-col gap-1.5 border-t border-border pt-4 text-sm">
-                    <Row label="ยอดรวมสินค้า" value={formatAdminCurrency(o().totals.subtotal)} />
-                    <Show when={o().totals.discount > 0}>
-                      <Row label="ส่วนลด" value={`-${formatAdminCurrency(o().totals.discount)}`} />
-                    </Show>
-                    <Row label="ค่าจัดส่ง" value={o().totals.shippingFee > 0 ? formatAdminCurrency(o().totals.shippingFee) : "ฟรี"} />
-                    <div class="flex items-center justify-between pt-1 text-base font-bold text-ink">
-                      <span>ยอดรวมทั้งหมด</span>
-                      <span>{formatAdminCurrency(o().totals.grandTotal)}</span>
-                    </div>
-                    {/* Display-only mockup, same as the Customer Frontend's own
-                        (checkout success screen / account order history) —
-                        no loyalty-points backend exists, so this is computed
-                        from the order total with the exact same
-                        `computeCoinsEarned` formula, not read from any stored
-                        per-order value. Hidden for cancelled/refunded orders,
-                        since no money was actually kept on those. */}
-                    <Show when={o().orderStatus !== "cancelled" && o().orderStatus !== "refunded"}>
-                      <div class="flex items-center justify-between text-sm">
-                        <span class="text-ink-gray">คอยน์ที่ลูกค้าได้รับ</span>
-                        <span class="font-semibold text-success">
-                          +{computeCoinsEarned(o().totals.grandTotal - o().totals.shippingFee).toLocaleString("th-TH")} คอยน์
-                        </span>
-                      </div>
-                    </Show>
+                  <div class="border-t border-border pt-4">
+                    <OrderTotalsBreakdown order={o()} />
                   </div>
+                  <Show when={o().cancellation}>
+                    {(c) => (
+                      <dl class="flex flex-col gap-1.5 border-t border-border pt-4 text-sm">
+                        <Row label="ยกเลิกโดย" value={CANCELLED_BY_LABEL[c().by]} />
+                        <Row label="เหตุผลการยกเลิก" value={c().reason ?? "ไม่ได้ระบุ"} />
+                        <Row label="ยกเลิกเมื่อ" value={formatOrderDateTimeLabel(c().at)} />
+                      </dl>
+                    )}
+                  </Show>
                 </Section>
 
                 <Section title="สินค้า">
                   <div class="flex flex-col gap-4">
                     <For each={o().items}>
                       {(item) => {
-                        const stockStatus = () => getMockLineItemStockStatus(o().orderStatus);
+                        const stockStatus = () => lineItemStockStatus(o().orderStatus);
                         return (
                           <div class="flex gap-3">
                             <img src={item.image} alt="" class="size-14 shrink-0 rounded-media object-cover" />
@@ -143,13 +158,18 @@ export default function AdminOrderDetailPage() {
                               </p>
                               <p class="text-xs text-ink-gray">
                                 {formatAdminCurrency(item.unitPrice)} × {item.qty}
-                                {item.discount > 0 ? ` · ส่วนลด ${formatAdminCurrency(item.discount)}` : ""}
                               </p>
-                              <StatusBadge tone={LINE_ITEM_STOCK_STATUS_META[stockStatus()].tone} class="mt-1">
-                                {LINE_ITEM_STOCK_STATUS_META[stockStatus()].label}
-                              </StatusBadge>
+                              <div class="mt-1 flex flex-wrap gap-1.5">
+                                <Show when={item.isFreeGift}>
+                                  <StatusBadge tone="success">ของแถมฟรี</StatusBadge>
+                                </Show>
+                                <StatusBadge tone={LINE_ITEM_STOCK_STATUS_META[stockStatus()].tone}>{LINE_ITEM_STOCK_STATUS_META[stockStatus()].label}</StatusBadge>
+                              </div>
+                              <Show when={item.isFreeGift}>
+                                <p class="mt-1 text-xs text-ink-gray">โปรโมชั่นซื้อครบ {formatAdminCurrency(GIFT_PROMOTION.threshold)} รับฟรี</p>
+                              </Show>
                             </div>
-                            <p class="shrink-0 text-sm font-semibold text-ink">{formatAdminCurrency(item.lineTotal)}</p>
+                            <p class="shrink-0 text-sm font-semibold text-ink">{item.isFreeGift ? "ฟรี" : formatAdminCurrency(item.lineTotal)}</p>
                           </div>
                         );
                       }}
@@ -157,9 +177,15 @@ export default function AdminOrderDetailPage() {
                   </div>
                 </Section>
 
-                <Section title="ไทม์ไลน์คำสั่งซื้อ">
-                  <OrderTimeline order={o()} />
+                <Section title="ติดตามการจัดส่ง">
+                  <OrderTrackingPanel order={o()} />
                 </Section>
+
+                <Show when={o().returnRequest}>
+                  <Section title="คำขอคืนสินค้า">
+                    <OrderReturnPanel order={o()} />
+                  </Section>
+                </Show>
               </div>
 
               <div class="flex flex-col gap-6">
@@ -192,26 +218,31 @@ export default function AdminOrderDetailPage() {
                 <Section title="การชำระเงิน">
                   <dl class="flex flex-col gap-1.5 text-sm">
                     <Row label="ช่องทาง" value={o().payment.method} />
-                    <Row label="เลขที่ธุรกรรม" value={o().payment.transactionId ?? "-"} />
+                    <Show when={o().payment.detail}>{(d) => <Row label="รายละเอียด" value={d()} />}</Show>
+                    <Row label="เลขอ้างอิงการชำระเงิน" value={o().payment.transactionId ?? "-"} />
                     <Row label="วันที่ชำระเงิน" value={o().payment.paidDate ?? "-"} />
+                    <StatusRow label="สถานะ" tone={PAYMENT_STATUS_META[o().paymentStatus].tone} value={PAYMENT_STATUS_META[o().paymentStatus].label} />
                   </dl>
+                  <Show when={o().payment.failureReason}>
+                    {(reason) => <p class="rounded-card bg-danger-soft px-3 py-2 text-sm text-danger-strong">ชำระเงินครั้งล่าสุดไม่สำเร็จ: {paymentFailureLabel(reason())}</p>}
+                  </Show>
                 </Section>
 
-                <Section title="การจัดส่ง">
-                  <dl class="flex flex-col gap-1.5 text-sm">
-                    <Row label="ผู้รับ" value={o().shipping.address.recipientName} />
-                    <Row label="โทรศัพท์" value={o().shipping.address.phone} />
-                  </dl>
-                  <p class="text-sm text-ink-gray">
-                    {o().shipping.address.addressLine} {o().shipping.address.subDistrict} {o().shipping.address.district}{" "}
-                    {o().shipping.address.province} {o().shipping.address.postalCode}
-                  </p>
-                  <dl class="flex flex-col gap-1.5 border-t border-border pt-3 text-sm">
-                    <Row label="วิธีจัดส่ง" value={o().shipping.method} />
-                    <Row label="ขนส่ง" value={o().shipping.courier ?? "-"} />
-                    <Row label="เลขพัสดุ" value={o().shipping.trackingNumber ?? "-"} />
-                    <StatusRow label="สถานะจัดส่ง" tone={FULFILLMENT_STATUS_META[o().fulfillmentStatus].tone} value={FULFILLMENT_STATUS_META[o().fulfillmentStatus].label} />
-                  </dl>
+                <Section title="ที่อยู่จัดส่ง">
+                  <AddressBlock address={o().shipping.address} />
+                </Section>
+
+                <Section title="ที่อยู่ออกใบเสร็จรับเงิน">
+                  <Show when={o().billingAddress} fallback={<p class="text-sm text-ink-gray">ลูกค้าไม่ได้ระบุ — ออกใบเสร็จในชื่อลูกค้า</p>}>
+                    {(b) => (
+                      <div class="flex flex-col gap-2">
+                        <Show when={b().isCompany}>
+                          <StatusBadge tone="info" class="self-start">นิติบุคคล</StatusBadge>
+                        </Show>
+                        <AddressBlock address={b()} />
+                      </div>
+                    )}
+                  </Show>
                 </Section>
               </div>
             </div>
@@ -219,19 +250,23 @@ export default function AdminOrderDetailPage() {
             {/* "เปลี่ยนสถานะ" is exactly the kind of action Global Admin UX
                 Rule #1 names directly — always reachable rather than buried
                 partway down a long Detail page. Only rendered at all once
-                there's something to change to (a terminal order like
-                `refunded` has none). */}
+                there's something to change to (ส่งสำเร็จ / ยกเลิกแล้ว
+                have none). */}
             <Show when={nextActions().length > 0}>
               <AdminFloatingBar>
                 <div class="flex w-full flex-wrap items-center gap-3">
                   <span class="hidden text-sm font-medium text-ink-gray sm:inline">เปลี่ยนสถานะ:</span>
                   <div class="ml-auto flex flex-wrap items-center gap-2">
+                    <Show when={nextActions().some((a) => needsTracking(a.status))}>
+                      <span class="text-xs text-ink-gray">กรอกเลขพัสดุ DHL ก่อนส่งมอบพัสดุ</span>
+                    </Show>
                     <For each={nextActions()}>
                       {(action) => (
                         <Button
                           type="button"
                           variant={action.status === "cancelled" ? "outline" : "primary"}
                           class={action.status === "cancelled" ? "!border-system-red !text-system-red" : ""}
+                          disabled={needsTracking(action.status)}
                           onClick={() => setPendingStatus(action.status)}
                         >
                           {action.label}
@@ -284,6 +319,16 @@ function StatusRow(props: { label: string; tone: "success" | "warning" | "danger
     <div class="flex items-center justify-between gap-3">
       <span class="text-sm text-ink-gray">{props.label}</span>
       <StatusBadge tone={props.tone}>{props.value}</StatusBadge>
+    </div>
+  );
+}
+
+function AddressBlock(props: { address: OrderAddress }) {
+  return (
+    <div class="flex flex-col gap-1 text-sm">
+      <p class="font-medium text-ink">{props.address.recipientName}</p>
+      <p class="text-ink-gray">{props.address.phone}</p>
+      <p class="text-ink-gray">{formatOrderAddress(props.address)}</p>
     </div>
   );
 }

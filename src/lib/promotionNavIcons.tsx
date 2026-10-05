@@ -1,15 +1,17 @@
 import type { Component } from "solid-js";
 import { TagIcon, StarIcon, FireIcon, GiftIcon, SparkleIcon, HeartIcon } from "~/components/shared/icons";
+import glowIcon from "~/assets/icons/nav/glow.png";
+import flashSaleIcon from "~/assets/icons/nav/flashsale.png";
+import bestSellerIcon from "~/assets/icons/nav/promotion.png";
+import newIcon from "~/assets/icons/nav/new.png";
+import hotIcon from "~/assets/icons/nav/hot.png";
+import nineNineIcon from "~/assets/icons/nav/nine-nine.png";
 
-/**
- * Nav add-on §3 — "ใช้ Icon Library เดิม ... ไม่ต้องสร้าง Icon Library ใหม่".
- * A `NavigationItem.icon` (see `adminNavigation.ts`) stores one of these
- * string keys, never an uploaded file — this registry is the single place
- * that turns a key back into the real icon component, shared as-is by the
- * Admin Navigation icon picker and the actual Frontend Top Navigation
- * (`Header.tsx`/`MobileMenu.tsx`), so a key can never render differently in
- * the two places.
- */
+/** Full-colour nav artwork (64×64 squares — 32px @2x), never recoloured; takes the caller's square `size-*` class like any other icon. */
+const artwork =
+  (src: string): Component<{ class?: string }> =>
+  (props) => <img src={src} alt="" class={`object-contain ${props.class ?? ""}`} />;
+
 export type PromotionNavIconOption = { key: string; label: string; Icon: Component<{ class?: string }> };
 
 export const PROMOTION_NAV_ICON_OPTIONS: PromotionNavIconOption[] = [
@@ -19,6 +21,12 @@ export const PROMOTION_NAV_ICON_OPTIONS: PromotionNavIconOption[] = [
   { key: "gift", label: "Gift", Icon: GiftIcon },
   { key: "sparkle", label: "Sparkle", Icon: SparkleIcon },
   { key: "heart", label: "Heart", Icon: HeartIcon },
+  { key: "glow", label: "Glow", Icon: artwork(glowIcon) },
+  { key: "flashsale", label: "Flash Sale", Icon: artwork(flashSaleIcon) },
+  { key: "bestseller", label: "ขายดี", Icon: artwork(bestSellerIcon) },
+  { key: "new", label: "มาใหม่", Icon: artwork(newIcon) },
+  { key: "hot", label: "กำลังฮิต", Icon: artwork(hotIcon) },
+  { key: "nine-nine", label: "9.9", Icon: artwork(nineNineIcon) },
 ];
 
 export function getPromotionNavIcon(key: string): Component<{ class?: string }> | undefined {

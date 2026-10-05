@@ -1,7 +1,7 @@
 import { Show } from "solid-js";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { MARKETING_STATUS_META, formatMarketingDate, formatCouponDiscount, type Coupon } from "~/lib/adminMarketing";
+import { MARKETING_STATUS_META, formatMarketingDate, formatCouponDiscount, formatCouponPlacement, type Coupon } from "~/lib/adminMarketing";
 
 /** Phase 07 #21 — Coupon Quick View, same Right Drawer pattern as every other Marketing entity. */
 export function CouponQuickView(props: { coupon: Coupon }) {
@@ -48,6 +48,10 @@ export function CouponQuickView(props: { coupon: Coupon }) {
             <span class="font-medium text-ink">{c().perCustomerLimit} ครั้ง</span>
           </div>
         </Show>
+        <div class="flex items-center justify-between">
+          <span class="text-ink-gray">แสดงที่หน้าร้าน</span>
+          <span class="font-medium text-ink">{formatCouponPlacement(c())}</span>
+        </div>
         <div class="flex items-center justify-between">
           <span class="text-ink-gray">เริ่ม</span>
           <span class="font-medium text-ink">{formatMarketingDate(c().startDate)} {c().startTime}</span>

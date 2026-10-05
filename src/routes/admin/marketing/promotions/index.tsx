@@ -27,6 +27,7 @@ import {
   type MarketingStatus,
 } from "~/lib/adminMarketing";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
+import { useAdminProducts } from "~/lib/adminProductStore";
 import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
 import type { DashboardPeriodKey } from "~/lib/adminDashboard";
@@ -52,6 +53,8 @@ function withinPeriod(date: string, period: DashboardPeriodKey): boolean {
 export default function AdminPromotionListPage() {
   const store = useAdminMarketing().promotions;
   const navigate = useNavigate();
+  const productStore = useAdminProducts();
+  const summary = (p: Promotion) => formatPromotionDiscount(p, p.giftProductId ? productStore.getById(p.giftProductId)?.name : undefined);
 
   const [search, setSearchRaw] = createSignal("");
   const [statusFilter, setStatusFilterRaw] = createSignal<"all" | MarketingStatus>("all");
@@ -213,10 +216,21 @@ export default function AdminPromotionListPage() {
         />
       ),
     },
-    { key: "name", label: "Promotion", render: (row) => <p class="font-medium text-ink">{row.name}</p> },
+    {
+      key: "name",
+      label: "Promotion",
+      render: (row) => (
+        <div class="flex flex-col gap-1">
+          <p class="font-medium text-ink">{row.name}</p>
+          <Show when={row.showInCart}>
+            <StatusBadge tone="info" class="w-fit">แสดงในตะกร้า</StatusBadge>
+          </Show>
+        </div>
+      ),
+    },
     { key: "type", label: "Type", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{PROMOTION_TYPE_META[row.type].label}</span> },
     { key: "scope", label: "Products", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{scopeLabel(row)}</span> },
-    { key: "discount", label: "Discount", render: (row) => <span class="font-medium text-ink">{formatPromotionDiscount(row)}</span> },
+    { key: "discount", label: "Discount", render: (row) => <span class="line-clamp-2 max-w-72 font-medium text-ink">{summary(row)}</span> },
     { key: "start", label: "Start", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{formatMarketingDate(row.startDate)}</span> },
     { key: "end", label: "End", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{formatMarketingDate(row.endDate)}</span> },
     { key: "status", label: "Status", render: (row) => <StatusBadge tone={MARKETING_STATUS_META[row.status].tone}>{MARKETING_STATUS_META[row.status].label}</StatusBadge> },
@@ -320,7 +334,10 @@ export default function AdminPromotionListPage() {
                       <p class="truncate font-semibold text-ink">{row.name}</p>
                       <StatusBadge class="shrink-0" tone={MARKETING_STATUS_META[row.status].tone}>{MARKETING_STATUS_META[row.status].label}</StatusBadge>
                     </div>
-                    <p class="truncate text-sm text-ink-gray">{PROMOTION_TYPE_META[row.type].label} · {formatPromotionDiscount(row)}</p>
+                    <p class="truncate text-sm text-ink-gray">{PROMOTION_TYPE_META[row.type].label} · {summary(row)}</p>
+                    <Show when={row.showInCart}>
+                      <StatusBadge tone="info" class="w-fit">แสดงในตะกร้า</StatusBadge>
+                    </Show>
                     <p class="truncate text-xs text-ink-gray">{scopeLabel(row)} · {formatMarketingDate(row.startDate)} - {formatMarketingDate(row.endDate)}</p>
                     <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>
                   </button>

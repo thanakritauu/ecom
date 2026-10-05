@@ -1,26 +1,34 @@
-import { Show } from "solid-js";
+import { createSignal, onMount, Show } from "solid-js";
 import { A, useNavigate } from "@solidjs/router";
-import { HeartIcon, UserIcon, DocumentIcon } from "../shared/icons";
 import { useAuth } from "~/lib/auth";
-import { useWishlist } from "~/lib/wishlist";
 import { pushToast } from "~/lib/toast";
-import { MOCK_ADDRESSES } from "~/lib/checkoutData";
+import { createMockOrderRepository } from "~/lib/orderHistory";
+
+/** Only "ประวัติการซื้อ" carries a counter. */
+export type AccountCounts = { orders?: number };
 
 /**
- * Shared Account Navigation — every entry routes to a real path (no
- * `href="#"`), matching PART 14's ACTIVE/OUT_OF_SCOPE/ACTION status per item.
- * Only "ประวัติการซื้อ" is ACTIVE (this page's own content, see
- * routes/account.tsx) since Figma node 159:20695 only shows this one section
- * built out — the rest point at real routes that fall through to the
- * existing catch-all's OutOfScopePage until their own Figma is provided.
+ * Shared Account Navigation — every account page renders it (via
+ * `AccountShell`). Desktop (lg+): a vertical card beside the content.
+ * Tablet/phone: one row of pills that scrolls sideways, the current page
+ * scrolled into view. Only the order history shows a count — loaded from
+ * the order repository unless the page passes its own live count.
  */
-export function AccountSidebar(props: { orderCount?: number }) {
+export function AccountSidebar(props: { counts?: AccountCounts }) {
   const auth = useAuth();
-  const wishlist = useWishlist();
   const navigate = useNavigate();
+  const [loadedOrders, setLoadedOrders] = createSignal<number>();
+  let rail: HTMLUListElement | undefined;
 
-  const itemClass =
-    "flex min-h-[44px] w-full items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium transition-colors duration-150";
+  onMount(async () => {
+    // Keep the current page's pill visible on narrow screens (horizontal only — never scrolls the page).
+    const active = rail?.querySelector<HTMLElement>("[aria-current='page']");
+    if (rail && active && rail.scrollWidth > rail.clientWidth)
+      rail.scrollLeft += active.getBoundingClientRect().left - rail.getBoundingClientRect().left - 12; // 12 = the rail's own left padding
+
+    setLoadedOrders((await createMockOrderRepository().list()).length);
+  });
+  const orderCount = () => props.counts?.orders ?? loadedOrders();
 
   const logout = () => {
     auth.logout(); // synchronous — Auth State is already cleared (and Header/this page already reactively guest) before the lines below run
@@ -29,87 +37,47 @@ export function AccountSidebar(props: { orderCount?: number }) {
   };
 
   return (
-    <nav aria-label="เมนูบัญชีของฉัน" class="flex w-full shrink-0 flex-col gap-1 rounded-card bg-white p-4 shadow-card lg:w-[264px]">
-      <A href="/account" end class={itemClass} activeClass="bg-surface-pink text-brand-pink" inactiveClass="text-ink hover:bg-surface-gray">
-        <DocumentIcon class="size-4 shrink-0" />
-        <span class="flex-1 text-left">ประวัติการซื้อ</span>
-        <Show when={props.orderCount !== undefined}>
-          <CountBadge count={props.orderCount!} active />
-        </Show>
-      </A>
+    <nav aria-label="เมนูบัญชีของฉัน" class="w-full min-w-0 shrink-0 rounded-card bg-white shadow-card lg:w-[264px] lg:p-4">
+      <ul ref={rail} class="no-scrollbar flex gap-2 overflow-x-auto p-3 lg:flex-col lg:gap-1 lg:overflow-visible lg:p-0">
+        <NavItem href="/account" end label="ประวัติการซื้อ" count={orderCount()} />
+        <NavItem href="/account/address" label="ที่อยู่จัดส่ง" />
+        <NavItem href="/account/cards" label="บัตรเครดิต / เดบิต" />
+        <NavItem href="/account/points" label="Charmiss Club" />
+        <NavItem href="/account/wishlist" label="รายการโปรด" />
+        <NavItem href="/account/profile" label="ข้อมูลส่วนตัว" />
 
-      <A href="/account/address" class={itemClass} activeClass="bg-surface-pink text-brand-pink" inactiveClass="text-ink hover:bg-surface-gray">
-        <LocationIcon class="size-4 shrink-0" />
-        <span class="flex-1 text-left">ที่อยู่จัดส่ง</span>
-        <CountBadge count={MOCK_ADDRESSES.length} />
-      </A>
-
-      <A href="/wishlist" class={itemClass} activeClass="bg-surface-pink text-brand-pink" inactiveClass="text-ink hover:bg-surface-gray">
-        <HeartIcon class="size-4 shrink-0" />
-        <span class="flex-1 text-left">รายการโปรด</span>
-        <CountBadge count={wishlist.count()} />
-      </A>
-
-      <A href="/account/points" class={itemClass} activeClass="bg-surface-pink text-brand-pink" inactiveClass="text-ink hover:bg-surface-gray">
-        <PointsIcon class="size-4 shrink-0" />
-        <span class="flex-1 text-left">คะแนนสะสม</span>
-      </A>
-
-      <A href="/account/profile" class={itemClass} activeClass="bg-surface-pink text-brand-pink" inactiveClass="text-ink hover:bg-surface-gray">
-        <UserIcon class="size-4 shrink-0" />
-        <span class="flex-1 text-left">ข้อมูลส่วนตัว</span>
-      </A>
-
-      <div class="my-1 h-px w-full bg-surface-gray" aria-hidden="true" />
-
-      <button type="button" onClick={logout} class={`${itemClass} text-danger-strong hover:bg-danger-soft`}>
-        <LogoutIcon class="size-4 shrink-0" />
-        <span class="flex-1 text-left">ออกจากระบบ</span>
-      </button>
+        <li class="my-1 hidden h-px w-full bg-surface-gray lg:block" aria-hidden="true" />
+        <li class="shrink-0">
+          <button type="button" onClick={logout} class={`${ITEM_CLASS} text-danger-strong lg:hover:bg-danger-soft`}>
+            <span class="flex-1 text-left">ออกจากระบบ</span>
+          </button>
+        </li>
+      </ul>
     </nav>
   );
 }
 
-function CountBadge(props: { count: number; active?: boolean }) {
-  return (
-    <span
-      class="flex size-6 shrink-0 items-center justify-center rounded-pill text-sm font-semibold"
-      classList={{
-        "bg-brand-pink text-white": props.active,
-        "bg-surface-gray text-ink-gray": !props.active,
-      }}
-    >
-      {props.count}
-    </span>
-  );
-}
+// Pill on tablet/phone (a row that scrolls sideways), full-width row on desktop.
+const ITEM_CLASS =
+  "flex min-h-[44px] items-center gap-2 whitespace-nowrap rounded-pill border border-surface-gray px-4 py-2 text-sm font-medium transition-colors duration-150 lg:w-full lg:rounded-2xl lg:border-transparent lg:px-3";
 
-function LocationIcon(props: { class?: string }) {
+function NavItem(props: { href: string; end?: boolean; label: string; count?: number }) {
   return (
-    <svg viewBox="0 0 24 24" class={props.class} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <path d="M12 21.5s-7-6.1-7-11.8a7 7 0 0 1 14 0c0 5.7-7 11.8-7 11.8Z" stroke-linejoin="round" />
-      <circle cx="12" cy="9.7" r="2.4" />
-    </svg>
-  );
-}
-
-function PointsIcon(props: { class?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" class={props.class} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <path
-        d="m12 2.5 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3 1.1-6.5-4.7-4.6 6.5-.9L12 2.5Z"
-        stroke-linejoin="round"
-        stroke-linecap="round"
-      />
-    </svg>
-  );
-}
-
-function LogoutIcon(props: { class?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" class={props.class} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <path d="M9 21H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h4" stroke-linecap="round" stroke-linejoin="round" />
-      <path d="M16 16.5 21 12l-5-4.5M21 12H9" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
+    <li class="shrink-0">
+      <A
+        href={props.href}
+        end={props.end}
+        class={`group ${ITEM_CLASS}`}
+        activeClass="!border-transparent bg-surface-pink text-brand-pink"
+        inactiveClass="text-ink lg:hover:bg-surface-gray"
+      >
+        <span class="flex-1 text-left">{props.label}</span>
+        <Show when={props.count !== undefined}>
+          <span class="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-pill bg-surface-gray px-1.5 text-sm font-semibold text-ink-gray group-aria-[current=page]:bg-brand-pink group-aria-[current=page]:text-white">
+            {props.count}
+          </span>
+        </Show>
+      </A>
+    </li>
   );
 }

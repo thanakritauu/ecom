@@ -6,11 +6,11 @@ import { Button } from "~/components/shared/Button";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { PointsCoinIcon, RefreshIcon } from "~/components/admin/icons";
-import { COIN_RULE_STATUS_META } from "~/lib/adminLoyaltyRules";
+import { COIN_RULE_STATUS_META, formatCoinRuleAmount } from "~/lib/adminLoyaltyRules";
 import { useAdminLoyalty } from "~/lib/adminLoyaltyStore";
 import { pushToast } from "~/lib/toast";
 
-/** Read-only Detail — every Cordy CRM field here (name/condition/coinAmount/status/source) has no edit affordance; "จัดการใน Cordy CRM" is the only way to change a Loyalty Rule, per Phase 08.1's spec. */
+/** Read-only Detail — every Charmiss Club CRM field here (name/condition/coinAmount/status/source) has no edit affordance; "จัดการใน Charmiss Club CRM" is the only way to change a Loyalty Rule, per Phase 08.1's spec. */
 export default function AdminLoyaltyDetailPage() {
   const params = useParams<{ id: string }>();
   const store = useAdminLoyalty();
@@ -25,10 +25,10 @@ export default function AdminLoyaltyDetailPage() {
     setSyncing(true);
     await store.syncSelected([current.id]);
     setSyncing(false);
-    pushToast("Sync ข้อมูลจาก Cordy CRM เรียบร้อยแล้ว", "success");
+    pushToast("Sync ข้อมูลจาก Charmiss Club CRM เรียบร้อยแล้ว", "success");
   };
 
-  const openCordyCrm = () => pushToast("(จำลอง) กำลังเปิด Cordy CRM ในแท็บใหม่", "success");
+  const openCrm = () => pushToast("(จำลอง) กำลังเปิด Charmiss Club CRM ในแท็บใหม่", "success");
 
   return (
     <Show
@@ -36,7 +36,7 @@ export default function AdminLoyaltyDetailPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สะสมคอยน์", href: "/admin/loyalty" }]} />
-          <EmptyState icon={<PointsCoinIcon />} title="ไม่พบกติกานี้" description="กติกาอาจยังไม่ได้ Sync มาจาก Cordy CRM หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าสะสมคอยน์" onAction={() => navigate("/admin/loyalty")} class="bg-surface-card shadow-card" />
+          <EmptyState icon={<PointsCoinIcon />} title="ไม่พบกติกานี้" description="กติกาอาจยังไม่ได้ Sync มาจาก Charmiss Club CRM หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าสะสมคอยน์" onAction={() => navigate("/admin/loyalty")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -53,8 +53,8 @@ export default function AdminLoyaltyDetailPage() {
                   <Button variant="outline" onClick={handleSync} loading={syncing()}>
                     <RefreshIcon class="size-4" /> Sync
                   </Button>
-                  <Button variant="primary" onClick={openCordyCrm}>
-                    จัดการใน Cordy CRM
+                  <Button variant="primary" onClick={openCrm}>
+                    จัดการใน Charmiss Club CRM
                   </Button>
                 </div>
               }
@@ -75,7 +75,7 @@ export default function AdminLoyaltyDetailPage() {
                 </Section>
 
                 <Section title="จำนวนคอยน์">
-                  <p class="text-2xl font-bold text-ink">+{r().coinAmount.toLocaleString("th-TH")}</p>
+                  <p class="text-2xl font-bold text-ink">{formatCoinRuleAmount(r())}</p>
                 </Section>
 
                 <Section title="ข้อมูลการเชื่อมต่อ">

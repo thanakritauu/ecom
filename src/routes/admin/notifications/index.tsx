@@ -4,7 +4,7 @@ import { PageHeader } from "~/components/shared/PageHeader";
 import { NotificationItemFormDrawer } from "~/components/admin/notifications/NotificationItemFormDrawer";
 import { PromoStrip, UtilityBar } from "~/components/shared/PromotionStrip";
 import { useAdminNotificationBar } from "~/lib/adminNotificationBarStore";
-import type { PromotionStripContent } from "~/lib/adminNotificationBar";
+import { buildMockPromotionStripState, type PromotionStripContent } from "~/lib/adminNotificationBar";
 import { pushToast } from "~/lib/toast";
 
 /**
@@ -21,6 +21,12 @@ export default function AdminNotificationsPage() {
   const [saving, setSaving] = createSignal(false);
 
   const openEdit = (variant: "purple" | "pink") => setEditingVariant(variant);
+
+  /** Storefront sync — the seed IS what `PromotionStrip.tsx` hardcodes, so "differs from the seed" means "differs from what customers see". */
+  const live = buildMockPromotionStripState();
+  const sameContent = (a: PromotionStripContent, b: PromotionStripContent) =>
+    a.icon === b.icon && a.text === b.text && (a.linkLabel ?? "") === (b.linkLabel ?? "") && (a.linkUrl ?? "") === (b.linkUrl ?? "");
+  const differsFromStorefront = () => !sameContent(bar.state().purple, live.purple) || !bar.state().purple.enabled || !sameContent(bar.state().pink, live.pink);
 
   const handleSubmit = async (values: PromotionStripContent) => {
     const variant = editingVariant();
@@ -47,6 +53,16 @@ export default function AdminNotificationsPage() {
     <div class="flex flex-col gap-6">
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "โปรโมชั่นแถบ" }]} />
       <PageHeader title="โปรโมชั่นแถบ" description="จัดการข้อความแถบด้านบนของหน้าร้าน — แถบสีม่วงและแถบสีชมพูอ่อน แต่ละแถบมีตำแหน่งตายตัว ไม่สามารถจัดลำดับได้" />
+
+      <div class="flex flex-col gap-1 rounded-card bg-surface-pink px-4 py-3 text-sm text-ink">
+        <p class="font-medium">หน้าร้านแสดงเนื้อหาคงที่ของทั้งสองแถบ</p>
+        <p class="text-xs text-ink-gray">
+          แถบสีม่วง: “{live.purple.text} {live.purple.linkLabel}” ลิงก์ไป {live.purple.linkUrl} พร้อมป้าย 9.9 · แถบสีชมพูอ่อน: “{live.pink.text}” (แสดงเฉพาะเดสก์ท็อป คู่กับปุ่มเข้าสู่ระบบและเลือกภาษา ไทย / English)
+        </p>
+        <Show when={differsFromStorefront()}>
+          <p class="text-xs font-medium text-system-yellow">⚠ ข้อมูลที่บันทึกไว้ด้านล่างต่างจากที่หน้าร้านแสดงอยู่ — การแก้ไขในหน้านี้ยังไม่มีผลกับหน้าร้าน</p>
+        </Show>
+      </div>
 
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Purple strip — content + one on/off Toggle (§05) */}
@@ -103,7 +119,7 @@ export default function AdminNotificationsPage() {
             <p class="flex items-center gap-2 text-sm font-semibold text-ink">
               <span class="size-3 rounded-pill bg-surface-pink ring-1 ring-inset ring-brand-pink/40" /> แถบสีชมพูอ่อน
             </p>
-            <p class="mt-1 text-xs text-ink-gray">แสดงตลอดเวลา — ไม่มีปุ่มเปิด/ปิด</p>
+            <p class="mt-1 text-xs text-ink-gray">แสดงตลอดเวลาบนเดสก์ท็อป (ซ่อนบนมือถือ/แท็บเล็ต) — ไม่มีปุ่มเปิด/ปิด</p>
           </div>
 
           <div class="flex items-center gap-3 rounded-card bg-surface-gray/40 p-3">

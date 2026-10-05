@@ -4,9 +4,10 @@ import type { Order, ReturnRequest } from "~/lib/types";
 import { RETURN_REASONS } from "~/lib/orderTracking";
 import { Button } from "../shared/Button";
 import { formatTHB } from "../shared/PriceDisplay";
+import { CheckIcon } from "../shared/icons";
 
 /** Bottom sheet on mobile, centered dialog from `sm:` — same shell as QuickAddSheet. */
-function Sheet(props: { open: boolean; onOpenChange: (open: boolean) => void; title: string; description?: string; children: JSX.Element; footer?: JSX.Element }) {
+export function Sheet(props: { open: boolean; onOpenChange: (open: boolean) => void; title: string; description?: string; children?: JSX.Element; footer?: JSX.Element }) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
@@ -25,7 +26,9 @@ function Sheet(props: { open: boolean; onOpenChange: (open: boolean) => void; ti
                 <span class="sr-only">ปิด</span>
               </Dialog.CloseButton>
             </div>
-            <div class="min-h-0 flex-1 overflow-y-auto px-5 py-3">{props.children}</div>
+            <Show when={props.children}>
+              <div class="min-h-0 flex-1 overflow-y-auto px-5 py-3">{props.children}</div>
+            </Show>
             <Show when={props.footer}>
               <div class="flex flex-col gap-2 border-t border-surface-gray px-5 py-4">{props.footer}</div>
             </Show>
@@ -55,7 +58,7 @@ export function CancelOrderDialog(props: { order: Order; open: boolean; onOpenCh
       open={props.open}
       onOpenChange={props.onOpenChange}
       title="ยืนยันการยกเลิกคำสั่งซื้อ?"
-      description={`คำสั่งซื้อ #${props.order.id} · ${formatTHB(props.order.total)}`}
+      description={`คำสั่งซื้อ ${props.order.id} · ${formatTHB(props.order.total)}`}
       footer={
         <>
           <Show when={status() === "error"}>
@@ -102,7 +105,9 @@ export function ReturnRequestDialog(props: {
       (open) => {
         if (!open) return;
         setStep("items");
-        setSelected(props.order.items.length === 1 ? [0] : []);
+        // The free gift (฿0) isn't a returnable line — only paid items are offered.
+        const paid = props.order.items.flatMap((item, i) => (item.isGift ? [] : [i]));
+        setSelected(paid.length === 1 ? paid : []);
         setReason("");
         setNote("");
         setError(undefined);
@@ -146,7 +151,7 @@ export function ReturnRequestDialog(props: {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={title()}
-      description={step() === "done" ? undefined : `คำสั่งซื้อ #${props.order.id}`}
+      description={step() === "done" ? undefined : `คำสั่งซื้อ ${props.order.id}`}
       footer={
         <Show
           when={step() !== "done"}
@@ -202,20 +207,22 @@ export function ReturnRequestDialog(props: {
           <legend class="mb-2 text-sm font-medium text-ink">เลือกสินค้าที่ต้องการคืน</legend>
           <For each={props.order.items}>
             {(item, i) => (
-              <label
-                class="flex min-h-[60px] cursor-pointer items-center gap-3 rounded-2xl border p-3"
-                classList={{ "border-brand-pink bg-surface-pink": selected().includes(i()), "border-surface-gray": !selected().includes(i()) }}
-              >
-                <input type="checkbox" checked={selected().includes(i())} onChange={() => toggleItem(i())} class="size-5 shrink-0 rounded accent-brand-pink" />
-                <img src={item.image} alt="" class="size-12 shrink-0 rounded-xl border border-surface-gray object-cover" />
-                <span class="min-w-0 flex-1">
-                  <span class="line-clamp-1 text-sm font-medium leading-[1.75] text-ink">{item.name}</span>
-                  <span class="text-xs text-ink-gray">
-                    {item.variantLabel} · x{item.qty}
+              <Show when={!item.isGift}>
+                <label
+                  class="flex min-h-[60px] cursor-pointer items-center gap-3 rounded-2xl border p-3"
+                  classList={{ "border-brand-pink bg-surface-pink": selected().includes(i()), "border-surface-gray": !selected().includes(i()) }}
+                >
+                  <input type="checkbox" checked={selected().includes(i())} onChange={() => toggleItem(i())} class="size-5 shrink-0 rounded accent-brand-pink" />
+                  <img src={item.image} alt="" class="size-12 shrink-0 rounded-xl border border-surface-gray object-cover" />
+                  <span class="min-w-0 flex-1">
+                    <span class="line-clamp-1 text-sm font-medium leading-[1.75] text-ink">{item.name}</span>
+                    <span class="text-xs text-ink-gray">
+                      {item.variantLabel} · x{item.qty}
+                    </span>
                   </span>
-                </span>
-                <span class="shrink-0 text-sm font-semibold text-ink">{formatTHB(item.price * item.qty)}</span>
-              </label>
+                  <span class="shrink-0 text-sm font-semibold text-ink">{formatTHB(item.price * item.qty)}</span>
+                </label>
+              </Show>
             )}
           </For>
         </fieldset>
@@ -279,13 +286,60 @@ export function ReturnRequestDialog(props: {
 
       <Show when={step() === "done"}>
         <div class="flex flex-col items-center gap-3 py-6 text-center">
-          <span class="flex size-14 items-center justify-center rounded-pill bg-success-soft text-2xl text-success" aria-hidden="true">
-            ✓
+          <span class="flex size-14 items-center justify-center rounded-pill bg-success-soft text-success" aria-hidden="true">
+            <CheckIcon class="size-7" />
           </span>
           <p class="text-base font-semibold text-ink">ส่งคำขอคืนสินค้าแล้ว</p>
           <p class="max-w-xs text-sm text-ink-gray">ทีมงานจะตรวจสอบคำขอและติดต่อกลับภายใน 1–2 วันทำการ คุณสามารถดูสถานะได้ในหน้าคำสั่งซื้อนี้</p>
         </div>
       </Show>
     </Sheet>
+  );
+}
+
+/** "Delete this?" confirmation for the account pages (saved address, saved card). */
+export function ConfirmRemoveDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onConfirm: () => Promise<void>;
+}) {
+  const [status, setStatus] = createSignal<"idle" | "loading" | "error">("idle");
+  createEffect(on(() => props.open, (open) => open && setStatus("idle")));
+
+  const confirm = async () => {
+    setStatus("loading");
+    try {
+      await props.onConfirm();
+      props.onOpenChange(false);
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  return (
+    <Sheet
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      title={props.title}
+      description={props.description}
+      footer={
+        <>
+          <Show when={status() === "error"}>
+            <p class="text-sm text-system-red" role="alert">
+              ลบไม่สำเร็จ กรุณาลองอีกครั้ง
+            </p>
+          </Show>
+          <Button type="button" variant="primary" size="lg" class="w-full !bg-system-red hover:!bg-system-red/90" loading={status() === "loading"} onClick={confirm}>
+            {props.confirmLabel}
+          </Button>
+          <Button type="button" variant="outline" size="lg" class="w-full" disabled={status() === "loading"} onClick={() => props.onOpenChange(false)}>
+            ยกเลิก
+          </Button>
+        </>
+      }
+    />
   );
 }

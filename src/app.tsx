@@ -12,7 +12,6 @@ import { CollectionContentProvider } from "~/lib/collectionContent";
 import { CategoryContentProvider } from "~/lib/categoryContent";
 import { BrandContentProvider } from "~/lib/brandContent";
 import { NavigationContentProvider } from "~/lib/navigationContent";
-import { FeaturedReviewContentProvider } from "~/lib/featuredReviewContent";
 import { ToastViewport } from "~/lib/toast";
 import "./app.css";
 
@@ -31,13 +30,11 @@ export default function App() {
                         <CollectionContentProvider>
                           <NavigationContentProvider>
                             <HomepageContentProvider>
-                              <FeaturedReviewContentProvider>
-                                <Suspense>{props.children}</Suspense>
-                                {/* Global, mounted once here (not per-route) — a toast pushed from any
-                                    page (Checkout, Account, a Product Card's wishlist error, ...) must
-                                    render regardless of which route triggered it. */}
-                                <ToastViewport />
-                              </FeaturedReviewContentProvider>
+                              <Suspense>{props.children}</Suspense>
+                              {/* Global, mounted once here (not per-route) — a toast pushed from any
+                                  page (Checkout, Account, a Product Card's wishlist error, ...) must
+                                  render regardless of which route triggered it. */}
+                              <ToastViewport />
                             </HomepageContentProvider>
                           </NavigationContentProvider>
                         </CollectionContentProvider>

@@ -13,7 +13,7 @@ import { AdminBulkActionBar } from "~/components/admin/AdminBulkActionBar";
 import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
 import { InventoryQuickView } from "~/components/admin/inventory/InventoryQuickView";
 import { RefreshIcon, InventoryIcon, EyeIcon, ImageIcon, CheckCircleIcon } from "~/components/admin/icons";
-import { STOCK_STATUS_META, getAvailableStock, type AdminInventoryStock, type StockStatus } from "~/lib/adminInventoryStock";
+import { STOCK_STATUS_META, getAvailableStock, inventoryStatusLabel, type AdminInventoryStock, type StockStatus } from "~/lib/adminInventoryStock";
 import { useAdminInventoryStock } from "~/lib/adminInventoryStockStore";
 import { useAdminProducts, type AdminProduct } from "~/lib/adminProductStore";
 import { pushToast } from "~/lib/toast";
@@ -198,7 +198,7 @@ export default function AdminInventoryItemsListPage() {
     { key: "onHand", label: "On Hand", align: "right", render: (row) => <span class="text-ink-gray">{row.onHand.toLocaleString("th-TH")}</span> },
     { key: "reserved", label: "Reserved", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.reserved.toLocaleString("th-TH")}</span> },
     { key: "available", label: "Available", align: "right", render: (row) => <span class="font-medium text-ink">{getAvailableStock(row).toLocaleString("th-TH")}</span> },
-    { key: "status", label: "สถานะ", render: (row) => <StatusBadge tone={STOCK_STATUS_META[row.status].tone}>{STOCK_STATUS_META[row.status].label}</StatusBadge> },
+    { key: "status", label: "สถานะ", render: (row) => <StatusBadge tone={STOCK_STATUS_META[row.status].tone}>{inventoryStatusLabel(row)}</StatusBadge> },
     { key: "warehouse", label: "Warehouse", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.warehouse}</span> },
     { key: "syncedAt", label: "Last Sync", align: "right", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.syncedAt}</span> },
     {
@@ -298,7 +298,7 @@ export default function AdminInventoryItemsListPage() {
                         <div class="min-w-0 flex-1">
                           <div class="flex items-start justify-between gap-2">
                             <p class="truncate font-semibold text-ink">{nameOf(row)}</p>
-                            <StatusBadge tone={STOCK_STATUS_META[row.status].tone}>{STOCK_STATUS_META[row.status].label}</StatusBadge>
+                            <StatusBadge tone={STOCK_STATUS_META[row.status].tone}>{inventoryStatusLabel(row)}</StatusBadge>
                           </div>
                           <p class="truncate text-xs text-ink-gray">{skuOf(row)} · {row.warehouse}</p>
                           <p class="mt-1 text-xs text-ink-gray">Available {getAvailableStock(row).toLocaleString("th-TH")} · On Hand {row.onHand.toLocaleString("th-TH")}</p>

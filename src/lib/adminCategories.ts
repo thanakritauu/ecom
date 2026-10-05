@@ -71,6 +71,30 @@ export function isCategorySlugTaken(categories: AdminCategory[], slug: string, e
   return categories.some((c) => c.id !== excludeId && c.slug.trim().toLowerCase() === target);
 }
 
+/**
+ * Storefront sync — category pages are static route files at the site root
+ * (`src/routes/cushion.tsx`, `lip.tsx`, ...), so a category's customer URL is
+ * `/{slug}` and only these slugs actually have a page. Static mirror of the
+ * route folder; update it when a category route file is added or removed.
+ */
+export const STOREFRONT_CATEGORY_ROUTE_SLUGS = ["cushion", "lip", "cheek", "eye", "skincare", "suncare-bodycare"];
+
+/** Every other first path segment the storefront already routes — a category slugged one of these would collide with that page. */
+export const STOREFRONT_RESERVED_ROOT_SLUGS = ["products", "product", "promotion", "cart", "checkout", "account", "login", "register", "admin"];
+
+export function categoryStorefrontHref(slug: string): string {
+  return `/${slug}`;
+}
+
+/** Thai warning for the slug field, or undefined when the slug maps cleanly onto an existing category page. */
+export function categorySlugRouteWarning(slug: string): { tone: "error" | "warning"; message: string } | undefined {
+  const s = slug.trim().toLowerCase();
+  if (!s) return undefined;
+  if (STOREFRONT_RESERVED_ROOT_SLUGS.includes(s)) return { tone: "error", message: `/${s} เป็นหน้าที่ระบบใช้งานอยู่แล้ว กรุณาเลือก Slug อื่น` };
+  if (!STOREFRONT_CATEGORY_ROUTE_SLUGS.includes(s)) return { tone: "warning", message: `หน้าร้านยังไม่มีหน้า /${s} — ลูกค้าที่เปิดลิงก์นี้จะเจอหน้าไม่พบ (ต้องเพิ่มหน้าหมวดหมู่ในโค้ดก่อน)` };
+  return undefined;
+}
+
 const TODAY_LABEL = "18 ก.ย. 2569";
 
 /**
@@ -82,19 +106,20 @@ const TODAY_LABEL = "18 ก.ย. 2569";
  * `productsInCategory`), never stored on the seed itself.
  */
 const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: string })[] = [
+  // Storefront menu order: คุชชั่น | ลิป | แก้ม | ตาและคิ้ว | ดูแลผิว | กันแดดและบอดี้แคร์ (ids kept from the first seed so product links hold).
   {
-    id: "category-001",
-    name: "ปาก",
-    slug: "lip",
-    description: "ลิปสติก ลิปทินท์ ลิปกลอส และผลิตภัณฑ์ดูแลริมฝีปาก",
+    id: "category-005",
+    name: "คุชชั่น",
+    slug: "cushion",
+    description: "คุชชั่นและรองพื้นเนื้อบางเบา เพื่อผิวโกลว์ฉ่ำทั้งวัน",
     image: "",
     status: "active",
   },
   {
-    id: "category-002",
-    name: "ตา",
-    slug: "eye",
-    description: "อายแชโดว์ อายไลน์เนอร์ มาสคาร่า และผลิตภัณฑ์แต่งตา",
+    id: "category-001",
+    name: "ลิป",
+    slug: "lip",
+    description: "ลิปสติก ลิปทินท์ ลิปกลอส และผลิตภัณฑ์ดูแลริมฝีปาก",
     image: "",
     status: "active",
   },
@@ -107,24 +132,42 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     status: "active",
   },
   {
+    id: "category-002",
+    name: "ตาและคิ้ว",
+    slug: "eye",
+    description: "อายแชโดว์ อายไลน์เนอร์ มาสคาร่า ดินสอและเจลเขียนคิ้ว",
+    image: "",
+    status: "active",
+  },
+  {
+    id: "category-006",
+    name: "ดูแลผิว",
+    slug: "skincare",
+    description: "สกินแคร์บำรุงผิวหน้า ให้ผิวชุ่มชื้น แข็งแรง พร้อมแต่งหน้า",
+    image: "",
+    status: "active",
+  },
+  {
+    id: "category-007",
+    name: "กันแดดและบอดี้แคร์",
+    slug: "suncare-bodycare",
+    description: "กันแดดและผลิตภัณฑ์ดูแลผิวกาย ปกป้องผิวจากแดดทุกวัน",
+    image: "",
+    status: "active",
+  },
+  {
+    // Merged into "ตาและคิ้ว" — kept (inactive) so older references still resolve. The storefront hides it from
+    // the nav and has no `/brow` page (the route file was removed), so `/brow` lands on the not-found screen.
     id: "category-004",
     name: "คิ้ว",
     slug: "brow",
     description: "ดินสอเขียนคิ้ว เจลเขียนคิ้ว และผลิตภัณฑ์แต่งคิ้ว",
     image: "",
-    status: "active",
-  },
-  {
-    id: "category-005",
-    name: "หน้า",
-    slug: "face",
-    description: "รองพื้น คูชั่น แป้ง และผลิตภัณฑ์แต่งหน้าหน้า",
-    image: "",
     status: "inactive",
   },
 ];
 
-/** Baseline builder — fixed string-literal ids ("category-001".."005"), not an incrementing counter, so this returns byte-identical output on every call within the same process (same rule as every other Admin content module's `buildMock*()`). */
+/** Baseline builder — fixed string-literal ids ("category-001".."007"), not an incrementing counter, so this returns byte-identical output on every call within the same process (same rule as every other Admin content module's `buildMock*()`). */
 export function buildMockCategories(): AdminCategory[] {
   return CATEGORY_SEEDS.map((seed) => ({
     ...seed,

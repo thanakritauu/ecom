@@ -16,7 +16,7 @@ import { LandingPageStatusSummary } from "~/components/admin/content/LandingPage
 import { LandingPageRowActionsMenu } from "~/components/admin/content/LandingPageRowActionsMenu";
 import { LandingPageQuickView } from "~/components/admin/content/LandingPageQuickView";
 import { RefreshIcon, ContentIcon, PlusIcon, ImageIcon } from "~/components/admin/icons";
-import { LANDING_PAGE_STATUS_META, validatePublishRequirements, findLandingPageReferences, type LandingPage, type LandingPageStatus } from "~/lib/adminContent";
+import { LANDING_PAGE_STATUS_META, validatePublishRequirements, findLandingPageReferences, type LandingPage, type LandingPageStatus, promotionPageHref } from "~/lib/adminContent";
 import { formatMarketingDate } from "~/lib/adminMarketing";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
@@ -67,7 +67,7 @@ export default function AdminLandingPagesListPage() {
   const quickViewSubtitle = createMemo(() => {
     const page = quickViewPage();
     if (!page) return undefined;
-    return page.isHomepage ? "/" : `/${page.slug}`;
+    return promotionPageHref(page);
   });
 
   const loadList = () => {
@@ -274,7 +274,7 @@ export default function AdminLandingPagesListPage() {
         </div>
       ),
     },
-    { key: "slug", label: "Slug", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.isHomepage ? "/" : `/${row.slug}`}</span> },
+    { key: "slug", label: "URL หน้าร้าน", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{promotionPageHref(row)}</span> },
     { key: "products", label: "จำนวนสินค้า", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.products.length}</span> },
     { key: "start", label: "Start Date", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.startDate ? formatMarketingDate(row.startDate) : "—"}</span> },
     { key: "end", label: "End Date", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.endDate ? formatMarketingDate(row.endDate) : "—"}</span> },
@@ -384,7 +384,7 @@ export default function AdminLandingPagesListPage() {
                           </p>
                           <StatusBadge tone={LANDING_PAGE_STATUS_META[row.status].tone}>{LANDING_PAGE_STATUS_META[row.status].label}</StatusBadge>
                         </div>
-                        <p class="text-sm text-ink-gray">{row.isHomepage ? "/" : `/${row.slug}`}</p>
+                        <p class="text-sm text-ink-gray">{promotionPageHref(row)}</p>
                       </div>
                     </div>
                     <p class="text-xs text-ink-gray">{row.products.length} สินค้า · แก้ไขล่าสุด {row.updatedAt}</p>

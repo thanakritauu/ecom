@@ -4,7 +4,7 @@ import { Container } from "../shared/Container";
 import { ProductRail } from "../shared/ProductRail";
 import { ProductCard } from "../shared/ProductCard";
 import { Button } from "../shared/Button";
-import { isBestSeller, isNewArrival, isTrending, isFeatured } from "~/lib/products";
+import { isBestSeller, isFlashSale, isNewArrival, isTrending, isFeatured } from "~/lib/products";
 import type { Product } from "~/lib/types";
 import type { PromotionPageProductRef } from "~/lib/adminContent";
 import { useStorefrontDestinationLookups } from "~/lib/storefrontDestinationLookups";
@@ -20,6 +20,8 @@ function productsForSource(source: Exclude<HomepageProductSource, "manual" | "co
   switch (source) {
     case "best_seller":
       return products.filter(isBestSeller);
+    case "flash_sale":
+      return products.filter(isFlashSale);
     case "new_arrival":
       return products.filter(isNewArrival);
     case "trending":
@@ -64,7 +66,7 @@ function useDestinationHref(destination: HomepageDestination) {
  * dev-build only — logs a warning so the gap is visible to whoever is
  * editing content, without any user-facing error.
  */
-function useSectionProducts(section: HomepageSection) {
+export function useSectionProducts(section: HomepageSection) {
   const collections = useCollectionContent();
   const categories = useCategoryContent();
   const catalog = useProductCatalog();

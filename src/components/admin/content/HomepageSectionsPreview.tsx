@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from "solid-js";
+import { children, createSignal, For, Show, type JSX } from "solid-js";
 import { AdminHeroSlide } from "~/components/home/HeroBanner";
 import { HomepageSections } from "~/components/home/HomepageSections";
 import type { HomepageSection } from "~/lib/adminHomepage";
@@ -12,10 +12,16 @@ type PreviewDevice = "desktop" | "mobile";
  * is exactly one implementation of "render this section list through the
  * real Frontend" (`HomepageSections`/`AdminHeroSlide`, same renderer the
  * real `/` and `/promotion/:slug` routes use), never two competing ones.
+ *
+ * `content` — replaces the default Hero + Sections body inside the same
+ * device frame, for a page the storefront renders another way (a Promotion
+ * Page in listing mode / with a YouTube video, see `PromotionPagePreviewBody`).
  */
-export function HomepageSectionsPreview(props: { sections: HomepageSection[]; class?: string }) {
+export function HomepageSectionsPreview(props: { sections: HomepageSection[]; content?: JSX.Element; class?: string }) {
   const [device, setDevice] = createSignal<PreviewDevice>("desktop");
   const enabledHero = () => props.sections.filter((s) => s.type === "hero" && s.enabled);
+  // Resolved once — `props.content` is read twice below and must not mount the custom body twice.
+  const content = children(() => props.content);
 
   return (
     <div class={props.class}>
@@ -52,16 +58,18 @@ export function HomepageSectionsPreview(props: { sections: HomepageSection[]; cl
         class="mx-auto max-h-[70vh] overflow-y-auto overflow-x-hidden rounded-card border border-border bg-surface-card"
         classList={{ "max-w-[375px] homepage-preview-mobile": device() === "mobile" }}
       >
-        <Show when={enabledHero().length > 0}>
-          <For each={enabledHero()}>
-            {(s) => (
-              <Show when={s.assets.length > 0} fallback={<AdminHeroSlide section={s} />}>
-                <For each={s.assets}>{(asset) => <AdminHeroSlide section={s} asset={asset} />}</For>
-              </Show>
-            )}
-          </For>
+        <Show when={!content()} fallback={content()}>
+          <Show when={enabledHero().length > 0}>
+            <For each={enabledHero()}>
+              {(s) => (
+                <Show when={s.assets.length > 0} fallback={<AdminHeroSlide section={s} />}>
+                  <For each={s.assets}>{(asset) => <AdminHeroSlide section={s} asset={asset} />}</For>
+                </Show>
+              )}
+            </For>
+          </Show>
+          <HomepageSections sections={props.sections} />
         </Show>
-        <HomepageSections sections={props.sections} />
       </div>
     </div>
   );

@@ -36,24 +36,48 @@ export type EntityCrud<T extends WithId> = {
  * prefix/baseline/storage key. Called once per entity inside the Provider
  * below, so each call still creates its own independent signal.
  */
+/**
+ * Seed-data version of what's persisted under each entity's storage key —
+ * same idea as `adminProductStore`'s `SEED_VERSION`. v2: seeds synced to the
+ * storefront (฿590 gift promo + ฿990 free shipping, the SAVE100/SAVE50/SAVE20
+ * coupons with placement flags, the flash-1…12 rail at storefront prices,
+ * re-priced bundles) and stable position-based seed ids. A stored copy from
+ * an older version drops its seed records (id number < 1000) for the new
+ * ones and keeps everything Admin created itself. v3: the three storefront
+ * coupons' real expiry dates, all shown on Home + Checkout.
+ */
+const SEED_VERSION = 3;
+
+const idNumber = (id: string) => Number(id.match(/-(\d+)$/)?.[1] ?? 0);
+
 function createEntityStore<T extends WithId>(storageKey: string, baseline: () => T[], idPrefix: string): EntityCrud<T> {
+  const versionKey = `${storageKey}:seed-version`;
   const [items, setItems] = createSignal<T[]>(baseline());
 
   onMount(() => {
     try {
       const raw = localStorage.getItem(storageKey);
-      if (raw) setItems(JSON.parse(raw) as T[]);
+      if (!raw) return;
+      let stored = JSON.parse(raw) as T[];
+      if (Number(localStorage.getItem(versionKey) ?? 1) < SEED_VERSION) {
+        stored = [...stored.filter((item) => idNumber(item.id) >= 1000), ...baseline()];
+        persist(stored);
+      }
+      // Never hand out an id a stored Admin-created record already has.
+      nextId = Math.max(nextId, ...stored.map((item) => idNumber(item.id) + 1));
+      setItems(stored);
     } catch {
       // storage unavailable — stays in-memory for this tab.
     }
   });
 
-  const persist = (list: T[]) => {
+  function persist(list: T[]) {
     if (isServer) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify(list));
+      localStorage.setItem(versionKey, String(SEED_VERSION));
     } catch {}
-  };
+  }
 
   const mutate = (fn: (list: T[]) => T[]) => {
     setItems((list) => {

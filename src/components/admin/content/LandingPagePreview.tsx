@@ -20,7 +20,7 @@ function LandingPagePreviewContent(props: { banners: PromotionPageBanners; title
 
   return (
     <div class="flex flex-col" classList={{ "mx-auto w-full max-w-[360px]": props.device === "mobile" }}>
-      <div class="aspect-[16/7] w-full overflow-hidden bg-surface-gray/60" classList={{ "aspect-[9/12]": props.device === "mobile" }}>
+      <div class="w-full overflow-hidden bg-surface-gray/60" classList={{ "aspect-[3/1]": props.device !== "mobile", "aspect-[3/4]": props.device === "mobile" }}>
         <Show when={bannerSrc()} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-8" /></div>}>
           <img src={bannerSrc()} alt="" class="size-full object-cover" />
         </Show>

@@ -1,83 +1,80 @@
 import type { StatusTone } from "~/components/admin/StatusBadge";
+import type { Order, ShipmentStatus, TrackingEvent, TrackingStatus } from "./types";
+import type { PaymentFailureReason } from "./payment";
+import { FAILURE_MESSAGES } from "./payment";
 import { allProducts } from "./products";
 import { formatAdminCurrency } from "./adminDashboard";
+import { MOCK_ORDERS as ACCOUNT_ORDERS, getPaymentStatus as getAccountPaymentStatus } from "./accountData";
+import { AVAILABLE_COUPONS, COIN_TO_BAHT_RATE, computeCoinsEarned, computeShippingFee, DELIVERY, GIFT_PROMOTION, PAYMENT_METHODS, type PaymentMethodId } from "./cartSelectors";
+import type { TierId } from "./membership";
+import { getShipmentStatus, RETURN_REASONS, SHIPMENT_STATUS_META } from "./orderTracking";
+import { formatAddress } from "./checkoutData";
 
 /**
- * Order Status Model — SOURCE OF TRUTH (Phase 04 spec, part 3). Three
- * independent dimensions, exactly the codes listed there — do not add more:
- * an order's lifecycle (`OrderStatus`), whether it's been paid
- * (`PaymentStatus`), and whether it's been packed/shipped (`FulfillmentStatus`).
- * Replaces the flatter 5-status model Phase 02's Dashboard widgets used —
- * those widgets (OrderOverview/RecentOrdersTable) are updated in this phase
- * to read the same model instead of keeping two competing ones.
+ * Order Status Model — SOURCE OF TRUTH is the storefront (`types.ts`
+ * `OrderStatus` + `accountData.ts`'s labels). Admin uses the exact same 6
+ * codes and Thai labels the shopper sees in บัญชีของฉัน → คำสั่งซื้อ, so a
+ * status never reads one way to the customer and another way to staff.
+ * Three independent dimensions, same as before: the order lifecycle
+ * (`OrderStatus`), payment (`PaymentStatus`), and where the parcel is
+ * (`FulfillmentStatus` = the storefront's DHL `ShipmentStatus`).
  */
-export type OrderStatus =
-  | "pending_payment"
-  | "confirmed"
-  | "processing"
-  | "packed"
-  | "shipped"
-  | "delivered"
-  | "cancelled"
-  | "refunded";
+export type OrderStatus = "pending_payment" | "preparing" | "handed_over" | "shipping" | "completed" | "cancelled";
 
-export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
+/** Storefront's `paid`/`pending`/`cancelled` (accountData.ts) + `refunded`, which only an approved return produces. */
+export type PaymentStatus = "paid" | "pending" | "cancelled" | "refunded";
 
-export type FulfillmentStatus = "pending" | "preparing" | "packed" | "shipped" | "delivered" | "delivery_failed";
+/** = storefront `ShipmentStatus`, always derived from the DHL tracking events (`getShipmentStatus`), never set by hand. */
+export type FulfillmentStatus = ShipmentStatus;
 
 export const ORDER_STATUS_META: Record<OrderStatus, { label: string; tone: StatusTone }> = {
   pending_payment: { label: "รอชำระเงิน", tone: "warning" },
-  confirmed: { label: "ยืนยันแล้ว", tone: "info" },
-  processing: { label: "กำลังเตรียมสินค้า", tone: "info" },
-  packed: { label: "แพ็กแล้ว", tone: "info" },
-  shipped: { label: "อยู่ระหว่างการขนส่ง", tone: "info" },
-  delivered: { label: "ส่งสำเร็จ", tone: "success" },
+  preparing: { label: "กำลังเตรียมการจัดส่ง", tone: "info" },
+  handed_over: { label: "ส่งให้บริษัทขนส่ง", tone: "info" },
+  shipping: { label: "กำลังจัดส่ง", tone: "info" },
+  completed: { label: "ส่งสำเร็จ", tone: "success" },
   cancelled: { label: "ยกเลิกแล้ว", tone: "neutral" },
-  refunded: { label: "คืนเงินแล้ว", tone: "neutral" },
 };
 
 export const PAYMENT_STATUS_META: Record<PaymentStatus, { label: string; tone: StatusTone }> = {
+  paid: { label: "ชำระเงินสำเร็จ", tone: "success" },
   pending: { label: "รอชำระเงิน", tone: "warning" },
-  paid: { label: "ชำระเงินแล้ว", tone: "success" },
-  failed: { label: "ชำระเงินไม่สำเร็จ", tone: "danger" },
+  cancelled: { label: "ยกเลิกการชำระเงิน", tone: "neutral" },
   refunded: { label: "คืนเงินแล้ว", tone: "neutral" },
 };
 
+/** Labels straight from the storefront's `SHIPMENT_STATUS_META`; only the tone is Admin's own. */
 export const FULFILLMENT_STATUS_META: Record<FulfillmentStatus, { label: string; tone: StatusTone }> = {
-  pending: { label: "รอดำเนินการ", tone: "neutral" },
-  preparing: { label: "กำลังเตรียมสินค้า", tone: "info" },
-  packed: { label: "แพ็กแล้ว", tone: "info" },
-  shipped: { label: "อยู่ระหว่างการขนส่ง", tone: "info" },
-  delivered: { label: "ส่งสำเร็จ", tone: "success" },
-  delivery_failed: { label: "จัดส่งไม่สำเร็จ", tone: "danger" },
+  awaiting_shipment: { label: SHIPMENT_STATUS_META.awaiting_shipment.label, tone: "neutral" },
+  shipped: { label: SHIPMENT_STATUS_META.shipped.label, tone: "info" },
+  in_transit: { label: SHIPMENT_STATUS_META.in_transit.label, tone: "info" },
+  out_for_delivery: { label: SHIPMENT_STATUS_META.out_for_delivery.label, tone: "info" },
+  delivered: { label: SHIPMENT_STATUS_META.delivered.label, tone: "success" },
 };
 
 /**
- * PART 4/15 — the only transitions Change Status may offer. Admin can never
- * jump steps (e.g. processing → shipped directly); `packed`/`shipped` are
- * reached one at a time, and cancel is only reachable before packing starts.
- * Refund is only offered from the two natural end states.
+ * The only transitions Change Status may offer — one step at a time, same
+ * flow as the storefront. Cancel follows the storefront rule
+ * (`orderTracking.ts` `canCancelOrder`): only until the parcel is handed to
+ * DHL. Returns/refunds aren't a status here — they're a `returnRequest` on a
+ * completed order, decided separately.
  */
 export const VALID_NEXT_ORDER_STATUS: Record<OrderStatus, OrderStatus[]> = {
-  pending_payment: ["confirmed", "cancelled"],
-  confirmed: ["processing", "cancelled"],
-  processing: ["packed", "cancelled"],
-  packed: ["shipped"],
-  shipped: ["delivered"],
-  delivered: ["refunded"],
-  cancelled: ["refunded"],
-  refunded: [],
+  pending_payment: ["preparing", "cancelled"],
+  preparing: ["handed_over", "cancelled"],
+  handed_over: ["shipping"],
+  shipping: ["completed"],
+  completed: [],
+  cancelled: [],
 };
 
 const NEXT_STATUS_ACTION_LABEL: Record<OrderStatus, string> = {
   pending_payment: "-",
-  confirmed: "ยืนยันคำสั่งซื้อ",
-  processing: "เริ่มเตรียมสินค้า",
-  packed: "แพ็กสินค้าแล้ว",
-  shipped: "จัดส่งสินค้า",
-  delivered: "ยืนยันส่งสำเร็จ",
+  preparing: "ยืนยันการชำระเงิน",
+  handed_over: "ส่งมอบพัสดุให้ DHL",
+  shipping: "อัปเดตเป็นกำลังจัดส่ง",
+  completed: "ยืนยันส่งสำเร็จ",
   cancelled: "ยกเลิกคำสั่งซื้อ",
-  refunded: "คืนเงิน",
 };
 
 export function getNextStatusActions(current: OrderStatus): { status: OrderStatus; label: string }[] {
@@ -86,6 +83,7 @@ export function getNextStatusActions(current: OrderStatus): { status: OrderStatu
 
 export type OrderCustomer = { id: string; name: string; email: string; phone: string };
 
+/** Same structured Thai fields as the storefront's `Address` (checkoutData.ts), minus its address-book-only `id`/`label`. */
 export type OrderAddress = {
   recipientName: string;
   phone: string;
@@ -106,31 +104,99 @@ export type OrderLineItem = {
   unitPrice: number;
   discount: number;
   lineTotal: number;
+  /** The storefront's "ซื้อครบ ฿590 รับฟรี" gift (`GIFT_PROMOTION`) — always unitPrice 0, never counted toward the subtotal. */
+  isFreeGift?: boolean;
 };
 
-export type OrderTotals = { subtotal: number; discount: number; shippingFee: number; grandTotal: number };
+/**
+ * `discount` stays the combined coupon + coin amount (receiptResolver.ts
+ * and the HTML download still read it); the split fields are what Admin
+ * displays — same breakdown as the shopper's own order detail.
+ */
+export type OrderTotals = {
+  subtotal: number;
+  couponCode?: string;
+  couponDiscount: number;
+  coinsRedeemed: number;
+  coinDiscount: number;
+  discount: number;
+  shippingFee: number;
+  grandTotal: number;
+};
 
-export type OrderPaymentInfo = { method: string; transactionId?: string; paidDate?: string };
+export type OrderPaymentInfo = {
+  methodId: PaymentMethodId;
+  /** Display label — same 3 labels as Checkout's `PAYMENT_METHODS`. */
+  method: string;
+  /** What the gateway returned with the charge, e.g. "VISA •••• 4242" / "TrueMoney •••• 4567" (payment.ts `PaymentResult.detail`). */
+  detail?: string;
+  /** Gateway reference — `MOCK-…` for card/TrueMoney, the `pp_…` session id for PromptPay (same shapes the mock provider issues). */
+  transactionId?: string;
+  paidDate?: string;
+  /** Last attempt failed (payment.ts `PaymentFailureReason`) — the order stays รอชำระเงิน. */
+  failureReason?: PaymentFailureReason;
+};
 
-export type OrderShippingInfo = { method: string; trackingNumber?: string; courier?: string; address: OrderAddress };
+/** Field names line up with the storefront's `Shipment`, so its tracking helpers (`orderTracking.ts`) read this directly. */
+export type OrderShippingInfo = {
+  carrier: "dhl";
+  method: string;
+  courier: string;
+  trackingNumber?: string;
+  events: TrackingEvent[];
+  address: OrderAddress;
+};
 
-/** One entry per status the order has actually passed through, in order reached — drives the Timeline (PART 14) and updates live when Change Status runs. */
-export type OrderStatusHistoryEntry = { status: OrderStatus; date: string };
+/** One-line display with the storefront's own แขวง/เขต (or ตำบล/อำเภอ) prefixing rules. */
+export const formatOrderAddress = (a: OrderAddress) => formatAddress({ id: "", label: "", ...a });
+
+/** ที่อยู่ออกใบเสร็จรับเงิน — optional, like Checkout's billing form; `recipientName` may be a company name (`companyAllowed`). */
+export type OrderBillingAddress = OrderAddress & { isCompany?: boolean };
+
+export type OrderCancellation = {
+  by: "customer" | "admin" | "system";
+  /** ISO 8601. */
+  at: string;
+  reason?: string;
+};
+
+export type ReturnRequestStatus = "requested" | "approved" | "rejected";
+
+/** Storefront `ReturnRequest` + the decision Admin makes on it. */
+export type OrderReturnRequest = {
+  itemIndexes: number[];
+  reason: string;
+  note?: string;
+  /** ISO 8601. */
+  requestedAt: string;
+  status: ReturnRequestStatus;
+  decidedAt?: string;
+};
+
+export const RETURN_STATUS_META: Record<ReturnRequestStatus, { label: string; tone: StatusTone }> = {
+  requested: { label: "รอตรวจสอบคำขอคืน", tone: "warning" },
+  approved: { label: "อนุมัติคืนสินค้า", tone: "success" },
+  rejected: { label: "ปฏิเสธคำขอคืน", tone: "danger" },
+};
+
+export const CANCELLED_BY_LABEL: Record<OrderCancellation["by"], string> = {
+  customer: "ลูกค้ายกเลิก",
+  admin: "แอดมินยกเลิก",
+  system: "ระบบยกเลิกอัตโนมัติ",
+};
+
+export const paymentFailureLabel = (reason: PaymentFailureReason) => FAILURE_MESSAGES[reason].title;
 
 export type AdminOrder = {
   id: string;
   orderNumber: string;
+  /** ISO 8601 — sortable; `createdAt` is its display label. */
+  placedAt: string;
   createdAt: string;
   /**
-   * Architecture Cleanup & Source of Truth §26/§27 — a real, top-level
-   * reference into a future Customer Master (`customer.id` today, since no
-   * Customer store exists yet — see `normalizeOrder` for how this backfills
-   * on data saved before this field existed). `customer` below stays exactly
-   * what it always was: a historical snapshot (Order = Historical Snapshot,
-   * §28) — this order's price/name/customer-name-at-purchase-time never
-   * changes just because the Customer Master record later does. Phase 05
-   * only needs to start writing real Customer ids here; nothing about this
-   * order's own snapshot fields changes when that happens.
+   * Architecture Cleanup & Source of Truth §26/§27 — a real reference into
+   * the Customer Master; `customer` below stays the historical snapshot
+   * (Order = Historical Snapshot, §28).
    */
   customerId: string;
   customer: OrderCustomer;
@@ -138,11 +204,116 @@ export type AdminOrder = {
   totals: OrderTotals;
   payment: OrderPaymentInfo;
   shipping: OrderShippingInfo;
+  billingAddress?: OrderBillingAddress;
   orderStatus: OrderStatus;
   paymentStatus: PaymentStatus;
   fulfillmentStatus: FulfillmentStatus;
-  statusHistory: OrderStatusHistoryEntry[];
+  cancellation?: OrderCancellation;
+  returnRequest?: OrderReturnRequest;
 };
+
+// ---------------------------------------------------------------------------
+// Mock "today" + date helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Order module's mock "today" — the day of the storefront's newest account
+ * order (ORD-2026-1032, 2 ต.ค. 2569), so the shopper's orders and Admin's
+ * read as one timeline. New events recorded from Admin are stamped with this
+ * date (+ the real wall-clock time).
+ */
+export const ORDERS_TODAY_ISO_DATE = "2026-10-02";
+
+const TZ = "Asia/Bangkok";
+
+/** "2 ต.ค. 2569" — Admin's usual date-label style. */
+export function formatOrderDateLabel(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("th-TH", { timeZone: TZ, day: "numeric", month: "short", year: "numeric" });
+}
+
+/** "2 ต.ค. 2569 09:32 น." */
+export function formatOrderDateTimeLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${formatOrderDateLabel(iso)} ${d.toLocaleTimeString("th-TH", { timeZone: TZ, hour: "2-digit", minute: "2-digit" })} น.`;
+}
+
+/** Whole days between an order's (Bangkok) date and the mock today. */
+export function daysBeforeToday(iso: string): number {
+  return Math.round((Date.parse(`${ORDERS_TODAY_ISO_DATE}T00:00:00+07:00`) - Date.parse(`${iso.slice(0, 10)}T00:00:00+07:00`)) / 86_400_000);
+}
+
+/** A timestamp on the mock today at the current wall-clock time, never earlier than `after` (keeps event order sane). */
+export function mockNowIso(after?: string): string {
+  const time = new Date().toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+  const candidate = `${ORDERS_TODAY_ISO_DATE}T${time}:00+07:00`;
+  if (after && Date.parse(candidate) <= Date.parse(after)) return new Date(Date.parse(after) + 5 * 60_000).toISOString();
+  return candidate;
+}
+
+const addHours = (iso: string, hours: number) => {
+  const d = new Date(Date.parse(iso) + hours * 3_600_000);
+  // Keep the +07:00 form the storefront seeds use, so `slice(0, 10)` is the Bangkok date.
+  const local = new Date(d.getTime() + 7 * 3_600_000).toISOString().slice(0, 19);
+  return `${local}+07:00`;
+};
+
+// ---------------------------------------------------------------------------
+// Derivations shared by seeds + store
+// ---------------------------------------------------------------------------
+
+/** DHL waybill style: 10 digits (same shape as the storefront's mock numbers, e.g. 5093847261). */
+export const DHL_TRACKING_PATTERN = /^\d{10}$/;
+
+export function mockDhlTrackingNumber(seed: number): string {
+  return `5092${String((seed * 7919) % 1_000_000).padStart(6, "0")}`;
+}
+
+/** Gateway reference in the mock provider's own shapes (payment.ts). */
+export function mockPaymentReference(methodId: PaymentMethodId, iso: string): string {
+  const stamp = Date.parse(iso).toString(36);
+  return methodId === "promptpay" ? `pp_${stamp}` : `MOCK-${stamp.toUpperCase()}`;
+}
+
+export const paymentMethodLabel = (id: PaymentMethodId) => PAYMENT_METHODS.find((m) => m.id === id)!.label;
+
+/** Order status the tracking events imply (furthest step reached) — used to move an order forward when an event is recorded. */
+export function statusImpliedByEvents(events: TrackingEvent[]): OrderStatus | undefined {
+  const has = (s: TrackingStatus) => events.some((e) => e.status === s);
+  if (has("delivered")) return "completed";
+  if (has("in_transit") || has("out_for_delivery")) return "shipping";
+  if (has("shipped")) return "handed_over";
+  if (has("ordered") || has("preparing")) return "preparing";
+  return undefined;
+}
+
+export const ORDER_STATUS_RANK: Record<OrderStatus, number> = {
+  pending_payment: 0,
+  preparing: 1,
+  handed_over: 2,
+  shipping: 3,
+  completed: 4,
+  cancelled: -1,
+};
+
+export function deriveFulfillmentStatus(shipping: OrderShippingInfo): FulfillmentStatus {
+  return getShipmentStatus(shipping);
+}
+
+/** Storefront rule (`canCancelOrder`): cancellable until the parcel is handed to the carrier. */
+export function canCancelOrder(order: Pick<AdminOrder, "orderStatus" | "shipping">): boolean {
+  return VALID_NEXT_ORDER_STATUS[order.orderStatus].includes("cancelled") && getShipmentStatus(order.shipping) === "awaiting_shipment";
+}
+
+/** Refund amount of an approved return = the returned lines' paid total (gift lines are ฿0). */
+export function returnRefundAmount(order: Pick<AdminOrder, "items" | "returnRequest">): number {
+  return (order.returnRequest?.itemIndexes ?? []).reduce((sum, i) => sum + (order.items[i]?.lineTotal ?? 0), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Seeds
+// ---------------------------------------------------------------------------
 
 /** Same SKU scheme Product Management (adminProductStore.tsx) derives, so an order's line items never disagree with the catalog's own admin-facing SKU. */
 function skuForProductId(productId: string): string {
@@ -150,7 +321,7 @@ function skuForProductId(productId: string): string {
   return index >= 0 ? `CHM${String(index + 1).padStart(3, "0")}` : productId.toUpperCase();
 }
 
-function lineItem(productId: string, qty: number, discount = 0): OrderLineItem {
+function lineItem(productId: string, qty: number): OrderLineItem {
   const product = allProducts.find((p) => p.id === productId);
   if (!product) throw new Error(`Unknown mock product id: ${productId}`);
   const unitPrice = product.price;
@@ -162,23 +333,46 @@ function lineItem(productId: string, qty: number, discount = 0): OrderLineItem {
     image: product.image,
     qty,
     unitPrice,
-    discount,
-    lineTotal: unitPrice * qty - discount,
+    discount: 0,
+    lineTotal: unitPrice * qty,
   };
 }
 
-function totalsFor(items: OrderLineItem[], shippingFee: number): OrderTotals {
+/** GIFT_PROMOTION's product (feature-9), resolved like every other seed line — a ฿0 line, flagged as the gift. */
+function giftLineItem(): OrderLineItem {
+  return { ...lineItem(GIFT_PROMOTION.productId, GIFT_PROMOTION.qty), unitPrice: 0, lineTotal: 0, isFreeGift: true };
+}
+
+/** Adds the gift line when the paid subtotal reaches the promo threshold — same rule as Checkout's `resolveGiftPromotion`. */
+function withGift(items: OrderLineItem[]): OrderLineItem[] {
+  const subtotal = items.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
+  return subtotal >= GIFT_PROMOTION.threshold ? [...items, giftLineItem()] : items;
+}
+
+function totalsFor(items: OrderLineItem[], opts: { couponCode?: string; coinsRedeemed?: number }): OrderTotals {
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.qty, 0);
-  const discount = items.reduce((sum, item) => sum + item.discount, 0);
-  return { subtotal, discount, shippingFee, grandTotal: subtotal - discount + shippingFee };
+  const coupon = opts.couponCode ? AVAILABLE_COUPONS.find((c) => c.code === opts.couponCode) : undefined;
+  const couponDiscount = coupon && subtotal >= coupon.minSpend ? coupon.discount : 0;
+  const coinsRedeemed = opts.coinsRedeemed ?? 0;
+  const coinDiscount = Math.round(coinsRedeemed * COIN_TO_BAHT_RATE);
+  // Storefront rule: DHL standard ฿60 below ฿990 of products, free from there.
+  const shippingFee = computeShippingFee(subtotal);
+  return {
+    subtotal,
+    couponCode: couponDiscount > 0 ? opts.couponCode : undefined,
+    couponDiscount,
+    coinsRedeemed,
+    coinDiscount,
+    discount: couponDiscount + coinDiscount,
+    shippingFee,
+    grandTotal: Math.max(0, subtotal - couponDiscount - coinDiscount + shippingFee),
+  };
 }
 
 /**
- * Phase 05 — Customer Management — exported so `adminCustomers.ts`'s mock
- * Customer seed can be built from these exact same 6 records (same id/name/
- * email/phone) instead of a second, independently-typed hand-copy that could
- * drift. This array itself is untouched — still only `OrderCustomer`
- * (order-snapshot) shaped, still only used here to seed `ORDER_SEEDS`.
+ * Phase 05 — exported so `adminCustomers.ts`'s mock Customer seed can be
+ * built from these exact same 6 records. cust-2 (Nutcha S.) is the
+ * storefront's own signed-in persona (`accountData.ts` `MOCK_USER`).
  */
 export const CUSTOMERS: OrderCustomer[] = [
   { id: "cust-1", name: "Thanakrit P.", email: "thanakrit.p@example.com", phone: "089-111-2222" },
@@ -189,194 +383,289 @@ export const CUSTOMERS: OrderCustomer[] = [
   { id: "cust-6", name: "ก้อย อ.", email: "koi.a@example.com", phone: "084-555-6666" },
 ];
 
-/** Same Thai address shape/style as the customer side's own MOCK_ADDRESSES (lib/checkoutData.ts) — a few more, for variety across orders. */
+/**
+ * Each admin-seed customer's own shipping address (same Thai shape/style as
+ * the customer side's MOCK_ADDRESSES, lib/checkoutData.ts) — indexed like
+ * `CUSTOMERS`, so an order never ships to someone else's name. Nutcha's
+ * (cust-2) orders are all the storefront's own, built from `accountData.ts`.
+ */
 const ADDRESSES: OrderAddress[] = [
-  { recipientName: "Thanakrit P.", phone: "089-111-2222", addressLine: "88/12 ซอยสุขุมวิท 31", subDistrict: "คลองตันเหนือ", district: "เขตวัฒนา", province: "กรุงเทพมหานคร", postalCode: "10110" },
+  { recipientName: "Thanakrit P.", phone: "089-111-2222", addressLine: "129/45 หมู่บ้านพฤกษาวิลล์ ซอยลาดพร้าว 101", subDistrict: "คลองจั่น", district: "เขตบางกะปิ", province: "กรุงเทพมหานคร", postalCode: "10240" },
   { recipientName: "Nutcha S.", phone: "089-123-4567", addressLine: "อาคารเอ็มไพร์ ชั้น 21 ถนนสาทรใต้", subDistrict: "ยานนาวา", district: "เขตสาทร", province: "กรุงเทพมหานคร", postalCode: "10120" },
   { recipientName: "ปาล์มมี่ ก.", phone: "081-222-3333", addressLine: "199 หมู่ 4 ถนนสุขุมวิท", subDistrict: "บางละมุง", district: "อำเภอบางละมุง", province: "ชลบุรี", postalCode: "20150" },
   { recipientName: "ฝ้าย ธ.", phone: "082-333-4444", addressLine: "45 ถนนนิมมานเหมินท์", subDistrict: "สุเทพ", district: "อำเภอเมืองเชียงใหม่", province: "เชียงใหม่", postalCode: "50200" },
+  { recipientName: "มะปราง ว.", phone: "083-444-5555", addressLine: "212 ถนนมิตรภาพ", subDistrict: "ในเมือง", district: "อำเภอเมืองขอนแก่น", province: "ขอนแก่น", postalCode: "40000" },
+  { recipientName: "ก้อย อ.", phone: "084-555-6666", addressLine: "17 ถนนถลาง", subDistrict: "ตลาดใหญ่", district: "อำเภอเมืองภูเก็ต", province: "ภูเก็ต", postalCode: "83000" },
 ];
 
-const SHIPPING_METHOD_NAMES = ["จัดส่งมาตรฐาน", "จัดส่งด่วน"];
-const PAYMENT_METHOD_NAMES = ["บัตรเครดิต / เดบิต", "พร้อมเพย์ (PromptPay)", "TrueMoney Wallet"];
-const COURIERS = ["Kerry Express", "Flash Express", "Thailand Post"];
-
-/** Default payment/fulfillment pairing for each order status — the pairing an order in that state would realistically have. A couple of orders below override this to also demo `failed` payment and `delivery_failed` fulfillment. */
-const DEFAULT_PAYMENT_FOR_STATUS: Record<OrderStatus, PaymentStatus> = {
-  pending_payment: "pending",
-  confirmed: "paid",
-  processing: "paid",
-  packed: "paid",
-  shipped: "paid",
-  delivered: "paid",
-  cancelled: "pending",
-  refunded: "refunded",
+const COMPANY_BILLING: OrderBillingAddress = {
+  recipientName: "บริษัท ฟ้าใส บิวตี้ จำกัด (สำนักงานใหญ่)",
+  phone: "02-123-4567",
+  addressLine: "999/9 อาคารเดอะออฟฟิศ ชั้น 12 ถนนพระราม 4",
+  subDistrict: "คลองเตย",
+  district: "เขตคลองเตย",
+  province: "กรุงเทพมหานคร",
+  postalCode: "10110",
+  isCompany: true,
 };
 
-const DEFAULT_FULFILLMENT_FOR_STATUS: Record<OrderStatus, FulfillmentStatus> = {
-  pending_payment: "pending",
-  confirmed: "pending",
-  processing: "preparing",
-  packed: "packed",
-  shipped: "shipped",
-  delivered: "delivered",
-  cancelled: "pending",
-  refunded: "delivered",
-};
+const SHIPPING_METHOD = DELIVERY.method;
 
-/** Canonical happy-path order (excluding the branch-only cancelled/refunded), used to both derive a plausible status history and render the Timeline. */
-const HAPPY_PATH = ["confirmed", "processing", "packed", "shipped", "delivered"] as const satisfies readonly OrderStatus[];
-
-function buildStatusHistory(orderStatus: OrderStatus, dates: string[]): OrderStatusHistoryEntry[] {
-  const history: OrderStatusHistoryEntry[] = [];
-  let dateIndex = 0;
-  const nextDate = () => dates[Math.min(dateIndex++, dates.length - 1)];
-
-  if (orderStatus === "cancelled") {
-    history.push({ status: "cancelled", date: nextDate() });
-    return history;
-  }
-  if (orderStatus === "refunded") {
-    // Most refunds in this mock data happen after a full delivery — walk the whole happy path, then refund.
-    for (const step of HAPPY_PATH) history.push({ status: step, date: nextDate() });
-    history.push({ status: "refunded", date: nextDate() });
-    return history;
-  }
-  for (const step of HAPPY_PATH) {
-    history.push({ status: step, date: nextDate() });
-    if (step === orderStatus) break;
-  }
-  return history;
+/** DHL hand-over → delivery scans, same wording/locations as the storefront's account orders. */
+function standardEvents(placedAt: string, upTo: TrackingStatus, address: OrderAddress): TrackingEvent[] {
+  const branch = `DHL สาขา${address.district.replace(/^(เขต|อำเภอ)/, "")}`;
+  const all: TrackingEvent[] = [
+    { status: "ordered", timestamp: placedAt, description: "ได้รับคำสั่งซื้อและชำระเงินเรียบร้อย" },
+    { status: "preparing", timestamp: addHours(placedAt, 5), description: "Charmiss กำลังแพ็กสินค้าของคุณ" },
+    { status: "shipped", timestamp: addHours(placedAt, 25), description: "ส่งมอบพัสดุให้ DHL แล้ว", location: "คลังสินค้า Charmiss บางนา" },
+    { status: "in_transit", timestamp: addHours(placedAt, 35), description: "พัสดุถึงศูนย์คัดแยก", location: "DHL Hub บางพลี" },
+    { status: "out_for_delivery", timestamp: addHours(placedAt, 47), description: "พนักงานกำลังนำส่งพัสดุ", location: branch },
+    { status: "delivered", timestamp: addHours(placedAt, 52), description: `จัดส่งสำเร็จ ผู้รับ: ${address.recipientName}`, location: address.province },
+  ];
+  const stop = all.findIndex((e) => e.status === upTo);
+  return all.slice(0, stop + 1);
 }
+
+type CardDetail = { brand: "VISA" | "MASTERCARD" | "JCB"; last4: string };
 
 type OrderSeed = {
-  orderNumber: string;
-  createdAt: string;
+  seq: number;
+  placedAt: string;
   customer: OrderCustomer;
   address: OrderAddress;
-  items: [string, number, number?][]; // [productId, qty, discount?]
+  billing?: OrderBillingAddress;
+  items: [string, number][]; // [productId, qty]
   orderStatus: OrderStatus;
-  shippingFee: number;
-  paymentOverride?: PaymentStatus;
-  fulfillmentOverride?: FulfillmentStatus;
-  historyDates: string[]; // oldest → newest, consumed in order by buildStatusHistory
-  transactionId?: string;
-  paidDate?: string;
-  trackingNumber?: string;
+  methodId: PaymentMethodId;
+  card?: CardDetail;
+  couponCode?: string;
+  coinsRedeemed?: number;
+  failureReason?: PaymentFailureReason;
+  cancellation?: Omit<OrderCancellation, "at"> & { afterHours: number };
+  returnRequest?: Omit<OrderReturnRequest, "requestedAt" | "decidedAt"> & { afterHours: number };
 };
 
-const ORDER_SEEDS: OrderSeed[] = [
-  { orderNumber: "ORD-2026-1024", createdAt: "17 ก.ย. 2569", customer: CUSTOMERS[0], address: ADDRESSES[0], items: [["flash-1", 2], ["best-3", 1]], orderStatus: "processing", shippingFee: 0, historyDates: ["16 ก.ย. 2569", "17 ก.ย. 2569"], transactionId: "TXN-88213", paidDate: "16 ก.ย. 2569" },
-  { orderNumber: "ORD-2026-1023", createdAt: "17 ก.ย. 2569", customer: CUSTOMERS[1], address: ADDRESSES[1], items: [["new-2", 1]], orderStatus: "pending_payment", shippingFee: 60, historyDates: [] },
-  { orderNumber: "ORD-2026-1022", createdAt: "16 ก.ย. 2569", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["trend-1", 2]], orderStatus: "shipped", shippingFee: 0, historyDates: ["13 ก.ย. 2569", "14 ก.ย. 2569", "15 ก.ย. 2569", "16 ก.ย. 2569"], transactionId: "TXN-88190", paidDate: "13 ก.ย. 2569", trackingNumber: "TH482013882KE" },
-  { orderNumber: "ORD-2026-1021", createdAt: "16 ก.ย. 2569", customer: CUSTOMERS[3], address: ADDRESSES[3], items: [["feature-1", 1], ["flash-4", 2]], orderStatus: "delivered", shippingFee: 0, historyDates: ["11 ก.ย. 2569", "12 ก.ย. 2569", "13 ก.ย. 2569", "14 ก.ย. 2569", "16 ก.ย. 2569"], transactionId: "TXN-88101", paidDate: "11 ก.ย. 2569", trackingNumber: "TH482013801FL" },
-  { orderNumber: "ORD-2026-1020", createdAt: "15 ก.ย. 2569", customer: CUSTOMERS[4], address: ADDRESSES[0], items: [["best-5", 1]], orderStatus: "pending_payment", shippingFee: 60, paymentOverride: "failed", historyDates: [] },
-  { orderNumber: "ORD-2026-1019", createdAt: "15 ก.ย. 2569", customer: CUSTOMERS[1], address: ADDRESSES[1], items: [["new-4", 1], ["trend-6", 1]], orderStatus: "delivered", shippingFee: 0, historyDates: ["10 ก.ย. 2569", "11 ก.ย. 2569", "12 ก.ย. 2569", "13 ก.ย. 2569", "15 ก.ย. 2569"], transactionId: "TXN-88056", paidDate: "10 ก.ย. 2569", trackingNumber: "TH482013755TP" },
-  { orderNumber: "ORD-2026-1018", createdAt: "14 ก.ย. 2569", customer: CUSTOMERS[5], address: ADDRESSES[2], items: [["flash-7", 1]], orderStatus: "cancelled", shippingFee: 60, historyDates: ["14 ก.ย. 2569"] },
-  { orderNumber: "ORD-2026-1017", createdAt: "14 ก.ย. 2569", customer: CUSTOMERS[0], address: ADDRESSES[0], items: [["feature-3", 1], ["best-1", 2], ["new-1", 2]], orderStatus: "delivered", shippingFee: 0, historyDates: ["9 ก.ย. 2569", "10 ก.ย. 2569", "11 ก.ย. 2569", "12 ก.ย. 2569", "14 ก.ย. 2569"], transactionId: "TXN-88012", paidDate: "9 ก.ย. 2569", trackingNumber: "TH482013701KE" },
-  { orderNumber: "ORD-2026-1016", createdAt: "13 ก.ย. 2569", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["trend-3", 1]], orderStatus: "packed", shippingFee: 60, historyDates: ["11 ก.ย. 2569", "12 ก.ย. 2569", "13 ก.ย. 2569"], transactionId: "TXN-87980", paidDate: "11 ก.ย. 2569" },
-  { orderNumber: "ORD-2026-1015", createdAt: "13 ก.ย. 2569", customer: CUSTOMERS[3], address: ADDRESSES[3], items: [["flash-2", 1]], orderStatus: "confirmed", shippingFee: 60, historyDates: ["13 ก.ย. 2569"], transactionId: "TXN-87955", paidDate: "13 ก.ย. 2569" },
-  { orderNumber: "ORD-2026-1014", createdAt: "12 ก.ย. 2569", customer: CUSTOMERS[4], address: ADDRESSES[0], items: [["best-8", 1], ["new-6", 1]], orderStatus: "shipped", shippingFee: 0, fulfillmentOverride: "delivery_failed", historyDates: ["9 ก.ย. 2569", "10 ก.ย. 2569", "11 ก.ย. 2569", "12 ก.ย. 2569"], transactionId: "TXN-87901", paidDate: "9 ก.ย. 2569", trackingNumber: "TH482013622FL" },
-  { orderNumber: "ORD-2026-1013", createdAt: "12 ก.ย. 2569", customer: CUSTOMERS[5], address: ADDRESSES[1], items: [["trend-9", 2]], orderStatus: "refunded", shippingFee: 0, historyDates: ["6 ก.ย. 2569", "7 ก.ย. 2569", "8 ก.ย. 2569", "9 ก.ย. 2569", "11 ก.ย. 2569", "12 ก.ย. 2569"], transactionId: "TXN-87844", paidDate: "6 ก.ย. 2569", trackingNumber: "TH482013590TP" },
-  { orderNumber: "ORD-2026-1012", createdAt: "11 ก.ย. 2569", customer: CUSTOMERS[1], address: ADDRESSES[1], items: [["feature-5", 1]], orderStatus: "cancelled", shippingFee: 0, historyDates: ["11 ก.ย. 2569"] },
-  { orderNumber: "ORD-2026-1011", createdAt: "11 ก.ย. 2569", customer: CUSTOMERS[0], address: ADDRESSES[0], items: [["flash-9", 1], ["best-10", 1]], orderStatus: "delivered", shippingFee: 0, historyDates: ["6 ก.ย. 2569", "7 ก.ย. 2569", "8 ก.ย. 2569", "9 ก.ย. 2569", "11 ก.ย. 2569"], transactionId: "TXN-87790", paidDate: "6 ก.ย. 2569", trackingNumber: "TH482013544KE" },
-  { orderNumber: "ORD-2026-1010", createdAt: "10 ก.ย. 2569", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["new-8", 1]], orderStatus: "processing", shippingFee: 60, historyDates: ["9 ก.ย. 2569", "10 ก.ย. 2569"], transactionId: "TXN-87755", paidDate: "9 ก.ย. 2569" },
-  { orderNumber: "ORD-2026-1009", createdAt: "10 ก.ย. 2569", customer: CUSTOMERS[3], address: ADDRESSES[3], items: [["trend-4", 1], ["flash-11", 1]], orderStatus: "delivered", shippingFee: 0, historyDates: ["5 ก.ย. 2569", "6 ก.ย. 2569", "7 ก.ย. 2569", "8 ก.ย. 2569", "10 ก.ย. 2569"], transactionId: "TXN-87700", paidDate: "5 ก.ย. 2569", trackingNumber: "TH482013488FL" },
-  { orderNumber: "ORD-2026-1008", createdAt: "9 ก.ย. 2569", customer: CUSTOMERS[4], address: ADDRESSES[0], items: [["best-6", 2]], orderStatus: "pending_payment", shippingFee: 60, historyDates: [] },
-  { orderNumber: "ORD-2026-1007", createdAt: "9 ก.ย. 2569", customer: CUSTOMERS[5], address: ADDRESSES[1], items: [["new-9", 1]], orderStatus: "packed", shippingFee: 0, historyDates: ["7 ก.ย. 2569", "8 ก.ย. 2569", "9 ก.ย. 2569"], transactionId: "TXN-87650", paidDate: "7 ก.ย. 2569" },
+/**
+ * Admin-only seeds (the other customers — Nutcha's orders are exactly the
+ * ones her storefront account shows, below). Numbered
+ * 1007–1024 (before the storefront's account orders 1025–1032) and
+ * 1033–1036 (after them, same day as the mock today), so the one
+ * `ORD-2026-<seq>` sequence stays chronological.
+ */
+const ADMIN_ORDER_SEEDS: OrderSeed[] = [
+  { seq: 1036, placedAt: "2026-10-02T11:50:00+07:00", customer: CUSTOMERS[3], address: ADDRESSES[3], billing: COMPANY_BILLING, items: [["feature-10", 1], ["new-3", 1], ["trend-8", 1]], orderStatus: "preparing", methodId: "truemoney", coinsRedeemed: 800 },
+  { seq: 1035, placedAt: "2026-10-02T11:15:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], items: [["flash-4", 1], ["best-4", 1]], orderStatus: "pending_payment", methodId: "promptpay" },
+  { seq: 1034, placedAt: "2026-10-02T10:40:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["trend-2", 1]], orderStatus: "pending_payment", methodId: "card", card: { brand: "VISA", last4: "0002" }, failureReason: "card_declined" },
+  { seq: 1033, placedAt: "2026-10-02T10:05:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["best-2", 1], ["new-7", 1]], orderStatus: "preparing", methodId: "card", card: { brand: "VISA", last4: "4242" }, couponCode: "SAVE50" },
+  { seq: 1024, placedAt: "2026-09-10T20:15:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], items: [["flash-1", 2], ["best-3", 1]], orderStatus: "completed", methodId: "card", card: { brand: "MASTERCARD", last4: "5100" } },
+  { seq: 1023, placedAt: "2026-09-10T13:02:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["new-2", 1]], orderStatus: "cancelled", methodId: "promptpay", cancellation: { by: "system", reason: "ไม่ชำระเงินภายในเวลาที่กำหนด", afterHours: 24 } },
+  { seq: 1022, placedAt: "2026-09-09T19:40:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["trend-1", 2]], orderStatus: "completed", methodId: "truemoney", couponCode: "SAVE20" },
+  { seq: 1021, placedAt: "2026-09-09T13:25:00+07:00", customer: CUSTOMERS[3], address: ADDRESSES[3], items: [["feature-1", 1], ["flash-4", 2]], orderStatus: "completed", methodId: "card", card: { brand: "VISA", last4: "4242" }, returnRequest: { itemIndexes: [1], reason: RETURN_REASONS[1], note: "ฝาตลับแตกตั้งแต่เปิดกล่อง", status: "requested", afterHours: 120 } },
+  { seq: 1020, placedAt: "2026-09-09T08:10:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["best-5", 1]], orderStatus: "cancelled", methodId: "card", card: { brand: "VISA", last4: "9995" }, failureReason: "insufficient_funds", cancellation: { by: "system", reason: "ไม่ชำระเงินภายในเวลาที่กำหนด", afterHours: 24 } },
+  { seq: 1019, placedAt: "2026-09-08T18:12:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], items: [["new-4", 1], ["trend-6", 1]], orderStatus: "completed", methodId: "promptpay" },
+  { seq: 1018, placedAt: "2026-09-08T10:48:00+07:00", customer: CUSTOMERS[5], address: ADDRESSES[5], items: [["flash-7", 1]], orderStatus: "cancelled", methodId: "card", card: { brand: "JCB", last4: "0505" }, cancellation: { by: "customer", reason: "สั่งซื้อซ้ำ", afterHours: 1 } },
+  { seq: 1017, placedAt: "2026-09-07T21:30:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], items: [["feature-3", 1], ["best-1", 2], ["new-1", 2]], orderStatus: "completed", methodId: "card", card: { brand: "MASTERCARD", last4: "5100" }, couponCode: "SAVE50" },
+  { seq: 1016, placedAt: "2026-09-07T15:05:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["trend-3", 1]], orderStatus: "completed", methodId: "promptpay" },
+  { seq: 1015, placedAt: "2026-09-07T09:20:00+07:00", customer: CUSTOMERS[3], address: ADDRESSES[3], items: [["flash-2", 1]], orderStatus: "completed", methodId: "truemoney" },
+  { seq: 1014, placedAt: "2026-09-06T20:55:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["best-8", 1], ["new-6", 1]], orderStatus: "completed", methodId: "card", card: { brand: "VISA", last4: "1881" }, returnRequest: { itemIndexes: [0], reason: RETURN_REASONS[4], note: undefined, status: "rejected", afterHours: 360 } },
+  { seq: 1013, placedAt: "2026-09-06T12:35:00+07:00", customer: CUSTOMERS[5], address: ADDRESSES[5], items: [["trend-9", 3]], orderStatus: "completed", methodId: "card", card: { brand: "VISA", last4: "4242" }, returnRequest: { itemIndexes: [0], reason: RETURN_REASONS[0], note: "ได้รับเฉดสีไม่ตรงกับที่สั่ง", status: "approved", afterHours: 72 } },
+  { seq: 1012, placedAt: "2026-09-05T19:10:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["feature-5", 1]], orderStatus: "cancelled", methodId: "card", card: { brand: "VISA", last4: "4242" }, cancellation: { by: "customer", reason: "ต้องการเปลี่ยนตัวเลือกสินค้า", afterHours: 2 } },
+  { seq: 1011, placedAt: "2026-09-05T10:45:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], billing: COMPANY_BILLING, items: [["flash-9", 1], ["best-10", 1]], orderStatus: "completed", methodId: "card", card: { brand: "MASTERCARD", last4: "5100" }, couponCode: "SAVE20" },
+  { seq: 1010, placedAt: "2026-09-04T20:30:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["new-8", 1]], orderStatus: "completed", methodId: "promptpay" },
+  { seq: 1009, placedAt: "2026-09-04T11:00:00+07:00", customer: CUSTOMERS[3], address: ADDRESSES[3], items: [["trend-4", 1], ["flash-11", 1]], orderStatus: "completed", methodId: "truemoney", coinsRedeemed: 300 },
+  { seq: 1008, placedAt: "2026-09-03T17:25:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["best-6", 2]], orderStatus: "cancelled", methodId: "promptpay", cancellation: { by: "system", reason: "ไม่ชำระเงินภายในเวลาที่กำหนด", afterHours: 24 } },
+  { seq: 1007, placedAt: "2026-09-03T09:40:00+07:00", customer: CUSTOMERS[5], address: ADDRESSES[5], items: [["new-9", 1]], orderStatus: "completed", methodId: "promptpay" },
 ];
 
-function buildOrders(): AdminOrder[] {
-  return ORDER_SEEDS.map((seed, i) => {
-    const items = seed.items.map(([productId, qty, discount]) => lineItem(productId, qty, discount));
-    const paymentStatus = seed.paymentOverride ?? DEFAULT_PAYMENT_FOR_STATUS[seed.orderStatus];
-    const fulfillmentStatus = seed.fulfillmentOverride ?? DEFAULT_FULFILLMENT_FOR_STATUS[seed.orderStatus];
-    return {
-      id: seed.orderNumber,
-      orderNumber: seed.orderNumber,
-      createdAt: seed.createdAt,
-      customerId: seed.customer.id,
-      customer: seed.customer,
-      items,
-      totals: totalsFor(items, seed.shippingFee),
-      payment: {
-        method: PAYMENT_METHOD_NAMES[i % PAYMENT_METHOD_NAMES.length],
-        transactionId: seed.transactionId,
-        paidDate: seed.paidDate,
-      },
-      shipping: {
-        method: SHIPPING_METHOD_NAMES[seed.shippingFee > 0 ? 1 : 0],
-        trackingNumber: seed.trackingNumber,
-        courier: seed.trackingNumber ? COURIERS[i % COURIERS.length] : undefined,
-        address: seed.address,
-      },
-      orderStatus: seed.orderStatus,
-      paymentStatus,
-      fulfillmentStatus,
-      statusHistory: buildStatusHistory(seed.orderStatus, seed.historyDates),
-    };
-  });
+const TRACKING_STEP_FOR_STATUS: Partial<Record<OrderStatus, TrackingStatus>> = {
+  preparing: "ordered",
+  handed_over: "shipped",
+  shipping: "in_transit",
+  completed: "delivered",
+};
+
+function paymentDetail(methodId: PaymentMethodId, card: CardDetail | undefined, phone: string): string | undefined {
+  if (methodId === "card") return card ? `${card.brand} •••• ${card.last4}` : undefined;
+  if (methodId === "truemoney") return `TrueMoney •••• ${phone.replace(/\D/g, "").slice(-4)}`;
+  return undefined;
 }
 
-export const MOCK_ORDERS: AdminOrder[] = buildOrders();
+function buildAdminSeedOrder(seed: OrderSeed): AdminOrder {
+  const orderNumber = `ORD-2026-${seed.seq}`;
+  const items = withGift(seed.items.map(([productId, qty]) => lineItem(productId, qty)));
+  const isPaid = seed.orderStatus !== "pending_payment" && seed.orderStatus !== "cancelled";
+  const step = TRACKING_STEP_FOR_STATUS[seed.orderStatus];
+  const events = step ? standardEvents(seed.placedAt, step, seed.address) : [];
+  const shipping: OrderShippingInfo = {
+    carrier: "dhl",
+    method: SHIPPING_METHOD,
+    courier: "DHL",
+    trackingNumber: events.some((e) => e.status === "shipped") ? mockDhlTrackingNumber(seed.seq) : undefined,
+    events,
+    address: seed.address,
+  };
+  const returnRequest: OrderReturnRequest | undefined = seed.returnRequest && {
+    itemIndexes: seed.returnRequest.itemIndexes,
+    reason: seed.returnRequest.reason,
+    note: seed.returnRequest.note,
+    status: seed.returnRequest.status,
+    requestedAt: addHours(seed.placedAt, seed.returnRequest.afterHours),
+    decidedAt: seed.returnRequest.status === "requested" ? undefined : addHours(seed.placedAt, seed.returnRequest.afterHours + 20),
+  };
+  const paymentStatus: PaymentStatus = returnRequest?.status === "approved" ? "refunded" : isPaid ? "paid" : seed.orderStatus === "cancelled" ? "cancelled" : "pending";
+  return {
+    id: orderNumber,
+    orderNumber,
+    placedAt: seed.placedAt,
+    createdAt: formatOrderDateLabel(seed.placedAt),
+    customerId: seed.customer.id,
+    customer: seed.customer,
+    items,
+    totals: totalsFor(items, { couponCode: seed.couponCode, coinsRedeemed: seed.coinsRedeemed }),
+    payment: {
+      methodId: seed.methodId,
+      method: paymentMethodLabel(seed.methodId),
+      detail: paymentDetail(seed.methodId, seed.card, seed.customer.phone),
+      transactionId: isPaid ? mockPaymentReference(seed.methodId, seed.placedAt) : undefined,
+      paidDate: isPaid ? formatOrderDateLabel(seed.placedAt) : undefined,
+      failureReason: seed.failureReason,
+    },
+    shipping,
+    billingAddress: seed.billing,
+    orderStatus: seed.orderStatus,
+    paymentStatus,
+    fulfillmentStatus: deriveFulfillmentStatus(shipping),
+    cancellation: seed.cancellation && { by: seed.cancellation.by, reason: seed.cancellation.reason, at: addHours(seed.placedAt, seed.cancellation.afterHours) },
+    returnRequest,
+  };
+}
+
+/** Admin-facing SKUs for the account orders' snapshot items (they were never added to the PDP catalog — see accountData.ts). */
+const ACCOUNT_ITEM_SKU: Record<string, string> = {
+  "ลิปทินท์ Y2K Glow": "CHM-LIP-Y2K",
+  "รองพื้น Soft Matte": "CHM-FDN-SMT",
+  "บลัชออนแบบแท่ง": "CHM-BLS-STK",
+};
+
+/** Mock card per account order (Checkout's success test card is a VISA 4242). */
+const ACCOUNT_CARD: CardDetail = { brand: "VISA", last4: "4242" };
 
 /**
- * Architecture Cleanup & Source of Truth §27 — root-cause guard, same
- * convention as every other Admin store's `normalize*`: an `AdminOrder`
- * persisted to `localStorage` before `customerId` existed on this type
- * (every order saved in an earlier session/phase) comes back out with it
- * `undefined` unless backfilled here. Backfills from `customer.id` — the
- * exact same value `buildOrders()` now seeds it from — so existing orders
- * never lose their customer link; nothing about the `customer` snapshot
- * itself is touched.
+ * The storefront's own account orders (Nutcha S. = cust-2), read straight
+ * from `accountData.ts` so items/statuses/tracking can't drift from what the
+ * shopper sees. Its gift line (`isGift`) is the storefront's own — mapped to
+ * the catalog gift line here, never added a second time — and coupon code,
+ * coins and the DHL fee are re-derived with the same rules, so the totals
+ * equal the account's.
+ */
+function buildFromAccountOrder(order: Order): AdminOrder {
+  const methodId = (PAYMENT_METHODS.find((m) => m.label === order.payment.method)?.id ?? "card") as PaymentMethodId;
+  const items: OrderLineItem[] = order.items.map((item) =>
+    item.isGift
+      ? giftLineItem()
+      : {
+          productId: `account:${ACCOUNT_ITEM_SKU[item.name] ?? item.name}`,
+          name: item.name,
+          sku: ACCOUNT_ITEM_SKU[item.name] ?? "-",
+          variantLabel: item.variantLabel,
+          image: item.image,
+          qty: item.qty,
+          unitPrice: item.price,
+          discount: 0,
+          lineTotal: item.price * item.qty,
+        },
+  );
+  const accountPayment = getAccountPaymentStatus(order);
+  const paidEvent = order.shipment.events.find((e) => e.status === "ordered");
+  const isPaid = accountPayment === "paid";
+  const address = order.shippingAddress;
+  const shippingAddress: OrderAddress = {
+    recipientName: address.recipientName,
+    phone: address.phone,
+    addressLine: address.addressLine,
+    subDistrict: address.subDistrict,
+    district: address.district,
+    province: address.province,
+    postalCode: address.postalCode,
+  };
+  const shipping: OrderShippingInfo = {
+    carrier: "dhl",
+    method: SHIPPING_METHOD,
+    courier: "DHL",
+    trackingNumber: order.shipment.trackingNumber,
+    events: order.shipment.events,
+    address: shippingAddress,
+  };
+  return {
+    id: order.id,
+    orderNumber: order.id,
+    placedAt: order.placedAt,
+    createdAt: formatOrderDateLabel(order.placedAt),
+    customerId: CUSTOMERS[1].id,
+    customer: CUSTOMERS[1],
+    items,
+    totals: totalsFor(items, { couponCode: order.payment.couponCode, coinsRedeemed: Math.round(order.payment.coinDiscount / COIN_TO_BAHT_RATE) }),
+    payment: {
+      methodId,
+      method: paymentMethodLabel(methodId),
+      detail: paymentDetail(methodId, ACCOUNT_CARD, CUSTOMERS[1].phone),
+      transactionId: isPaid ? mockPaymentReference(methodId, paidEvent?.timestamp ?? order.placedAt) : undefined,
+      paidDate: isPaid ? formatOrderDateLabel(paidEvent?.timestamp ?? order.placedAt) : undefined,
+    },
+    shipping,
+    orderStatus: order.status,
+    paymentStatus: accountPayment,
+    fulfillmentStatus: deriveFulfillmentStatus(shipping),
+    cancellation: order.cancelledAt ? { by: "customer", at: order.cancelledAt } : undefined,
+    returnRequest: order.returnRequest && { ...order.returnRequest, status: "requested" },
+  };
+}
+
+/** Newest first — `customerResolvers.ts`'s `getCustomerLastOrder` relies on this order. */
+export const MOCK_ORDERS: AdminOrder[] = [...ADMIN_ORDER_SEEDS.map(buildAdminSeedOrder), ...ACCOUNT_ORDERS.map(buildFromAccountOrder)].sort((a, b) =>
+  b.placedAt.localeCompare(a.placedAt),
+);
+
+/**
+ * One order's Charmiss Coin movements, with the storefront's own rules
+ * (`/account/points`): redeemed coins unless the order was cancelled; earned
+ * on the amount paid excl. shipping × the customer's tier multiplier —
+ * credited once delivered ("earned"), until then "pending"; nothing on an
+ * unpaid, cancelled or refunded order.
+ */
+export function orderCoinMovements(order: AdminOrder, tier: TierId): { used: number; earned: number; state?: "earned" | "pending" } {
+  const used = order.orderStatus === "cancelled" ? 0 : order.totals.coinsRedeemed;
+  const earns = order.orderStatus !== "cancelled" && order.orderStatus !== "pending_payment" && order.paymentStatus !== "refunded";
+  if (!earns) return { used, earned: 0 };
+  return { used, earned: computeCoinsEarned(order.totals.grandTotal - order.totals.shippingFee, tier), state: order.orderStatus === "completed" ? "earned" : "pending" };
+}
+
+/** Coins a customer's seed orders add to their balance: delivered earnings minus redemptions (pending earnings aren't credited yet). */
+export function customerOrderCoinNet(customerId: string, tier: TierId, orders: AdminOrder[] = MOCK_ORDERS): number {
+  return orders
+    .filter((o) => o.customerId === customerId)
+    .reduce((sum, o) => {
+      const m = orderCoinMovements(o, tier);
+      return sum - m.used + (m.state === "earned" ? m.earned : 0);
+    }, 0);
+}
+
+/**
+ * Same convention as every other Admin store's `normalize*`: backfills
+ * `customerId` from `customer.id` and re-derives `fulfillmentStatus` from
+ * the tracking events (it's never independently edited).
  */
 export function normalizeOrder(o: AdminOrder): AdminOrder {
   return {
     ...o,
     customerId: o.customerId || o.customer.id,
+    fulfillmentStatus: deriveFulfillmentStatus(o.shipping),
   };
 }
 
-export type OrderTimelineEvent = { key: string; label: string; date?: string; completed: boolean };
-
-const TIMELINE_LABELS: Record<(typeof HAPPY_PATH)[number], string> = {
-  confirmed: "ยืนยันการชำระเงิน",
-  processing: "กำลังเตรียมสินค้า",
-  packed: "แพ็กสินค้าแล้ว",
-  shipped: "อยู่ระหว่างการขนส่ง",
-  delivered: "จัดส่งสำเร็จ",
-};
-
-/** PART 14 — derived from `statusHistory`, not the current status alone, so a Change Status action immediately reflects here with its own date. */
-export function buildOrderTimeline(order: Pick<AdminOrder, "createdAt" | "statusHistory">): OrderTimelineEvent[] {
-  const events: OrderTimelineEvent[] = [{ key: "created", label: "สร้างคำสั่งซื้อ", date: order.createdAt, completed: true }];
-  const findEntry = (status: OrderStatus) => order.statusHistory.find((h) => h.status === status);
-  const isCancelled = !!findEntry("cancelled");
-
-  if (isCancelled) {
-    const entry = findEntry("cancelled")!;
-    events.push({ key: "cancelled", label: "ยกเลิกคำสั่งซื้อ", date: entry.date, completed: true });
-    return events;
-  }
-
-  for (const step of HAPPY_PATH) {
-    const entry = findEntry(step);
-    events.push({ key: step, label: TIMELINE_LABELS[step], date: entry?.date, completed: !!entry });
-  }
-
-  const refundEntry = findEntry("refunded");
-  if (refundEntry) events.push({ key: "refunded", label: "คืนเงินแล้ว", date: refundEntry.date, completed: true });
-
-  return events;
-}
-
 /**
- * Full System Regression — Price Format audit: labels used to hardcode
- * "฿500"/"฿1,000" as plain strings, bypassing `formatAdminCurrency` entirely
- * — the exact "formatted per-page instead of through the one utility"
- * mistake the 2-decimal rule exists to prevent. Built from `formatAdminCurrency`
- * instead, so these automatically show "฿500.00" etc. and stay correct if
- * that formatter ever changes again.
+ * Full System Regression — Price Format audit: bucket labels are built from
+ * `formatAdminCurrency`, never hardcoded "฿500" strings.
  */
 export const ORDER_VALUE_BUCKETS = [
   { value: "all", label: "ทุกช่วงราคา", min: 0, max: Infinity },

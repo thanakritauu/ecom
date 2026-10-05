@@ -11,7 +11,7 @@ export function NewArrivalsSection() {
   return (
     <section aria-labelledby="new-arrivals-heading" class="pb-0 pt-6 sm:pt-8 lg:pt-10">
       <Container width="wide" class="flex flex-col gap-2">
-        <SectionHeader title="มาใหม่" href="/new" headingId="new-arrivals-heading" />
+        <SectionHeader title="มาใหม่" href="/promotion/new-arrivals" headingId="new-arrivals-heading" />
         <ProductRail products={newArrivalProducts()} rows={1} swipe />
       </Container>
     </section>

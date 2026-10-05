@@ -152,7 +152,7 @@ export default function AdminLoyaltyRewardsListPage() {
     setSyncingAll(true);
     await store.syncAll();
     setSyncingAll(false);
-    pushToast("Sync ข้อมูลจาก Cordy CRM เรียบร้อยแล้ว", "success");
+    pushToast("Sync ข้อมูลจาก Charmiss Club CRM เรียบร้อยแล้ว", "success");
   };
 
   const handleSyncSelected = async () => {
@@ -164,7 +164,7 @@ export default function AdminLoyaltyRewardsListPage() {
     pushToast(`Sync ${ids.length} รายการที่เลือกเรียบร้อยแล้ว`, "success");
   };
 
-  const openCordyCrm = () => pushToast("(จำลอง) กำลังเปิด Cordy CRM ในแท็บใหม่", "success");
+  const openCrm = () => pushToast("(จำลอง) กำลังเปิด Charmiss Club CRM ในแท็บใหม่", "success");
 
   const columns: DataTableColumn<AdminReward>[] = [
     {
@@ -225,13 +225,13 @@ export default function AdminLoyaltyRewardsListPage() {
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สะสมแต้ม", href: "/admin/loyalty" }, { label: "ของรางวัล" }]} />
-      <PageHeader title="ของรางวัล" description="ของรางวัลที่ Sync มาจาก Cordy CRM — จัดการการแสดงผลฝั่ง Charmiss ได้" />
+      <PageHeader title="ของรางวัล" description="ของรางวัลที่ Sync มาจาก Charmiss Club CRM — จัดการการแสดงผลฝั่ง Charmiss ได้" />
 
       <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div class="flex flex-col gap-2">
           <div class="flex items-center gap-2">
             <CheckCircleIcon class="size-5 text-success" />
-            <p class="text-sm font-semibold text-ink">เชื่อมต่อกับ Cordy CRM แล้ว</p>
+            <p class="text-sm font-semibold text-ink">เชื่อมต่อกับ Charmiss Club CRM แล้ว</p>
           </div>
           <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-gray">
             <span>Sync ล่าสุด: {store.lastSyncedAt()}</span>
@@ -239,8 +239,8 @@ export default function AdminLoyaltyRewardsListPage() {
           </div>
         </div>
         <div class="flex shrink-0 flex-wrap gap-2">
-          <Button variant="outline" onClick={openCordyCrm}>
-            จัดการใน Cordy CRM
+          <Button variant="outline" onClick={openCrm}>
+            จัดการใน Charmiss Club CRM
           </Button>
           <Button variant="primary" onClick={handleSyncAll} loading={syncingAll()}>
             <RefreshIcon class="size-4" /> Sync ข้อมูล
@@ -267,8 +267,8 @@ export default function AdminLoyaltyRewardsListPage() {
             fallback={
               <EmptyState
                 icon={<RewardGiftIcon />}
-                title={hasActiveFilters() ? "ไม่พบของรางวัลที่ตรงกับการค้นหา" : "ยังไม่มีข้อมูลจาก Cordy CRM"}
-                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "ลอง Sync ข้อมูลจาก Cordy CRM อีกครั้ง"}
+                title={hasActiveFilters() ? "ไม่พบของรางวัลที่ตรงกับการค้นหา" : "ยังไม่มีข้อมูลจาก Charmiss Club CRM"}
+                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "ลอง Sync ข้อมูลจาก Charmiss Club CRM อีกครั้ง"}
                 actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "Sync ข้อมูล"}
                 onAction={hasActiveFilters() ? clearFilters : handleSyncAll}
                 class="bg-surface-card shadow-card"

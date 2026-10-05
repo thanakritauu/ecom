@@ -40,6 +40,8 @@ export function AddressSection(props: {
   onFormOpenChange?: (open: boolean) => void;
   /** Rendered inside another section (billing) — skips the outer heading. */
   embedded?: boolean;
+  /** Kind given to addresses added here. */
+  kind?: Address["kind"];
 }) {
   const initialMode = (): Mode => (props.addresses.length === 0 ? "add" : props.selectedId ? "summary" : "list");
   const [mode, setMode] = createSignal<Mode>(initialMode());
@@ -95,6 +97,7 @@ export function AddressSection(props: {
           initial={mode() === "edit" ? editingAddress() : undefined}
           newAddressLabel={props.newAddressLabel}
           companyAllowed={props.companyAllowed}
+          kind={props.kind}
           showDefaultOption={props.showDefaultOption}
           forceDefault={props.showDefaultOption && isFirstAddress()}
           canCancel={!isFirstAddress()}
@@ -165,14 +168,18 @@ export function AddressSection(props: {
   );
 }
 
-function AddressCard(props: {
+/** Also the account's address book (`/account/address`): there `selected` marks the default card and `onDelete` adds "ลบ". */
+export function AddressCard(props: {
   address: Address;
   selectable?: boolean;
+  /** Pink-tinted card. Defaults to on for a non-selectable (summary) card. */
   selected?: boolean;
   onSelect?: () => void;
   onEdit: () => void;
   onSetDefault?: () => Promise<void>;
+  onDelete?: () => void;
 }) {
+  const tinted = () => props.selected ?? !props.selectable;
   const [settingDefault, setSettingDefault] = createSignal(false);
   const body = (
     <span class="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -192,8 +199,9 @@ function AddressCard(props: {
       class="flex w-full items-start gap-3 rounded-card border p-4 transition-colors duration-150"
       // No pink outline — the chosen address is the pink-tinted card (+ its radio dot in the list).
       classList={{
-        "border-transparent bg-surface-pink": !props.selectable || props.selected,
-        "border-surface-gray bg-white hover:border-brand-pink/50": props.selectable && !props.selected,
+        "border-transparent bg-surface-pink": tinted(),
+        "border-surface-gray bg-white": !tinted(),
+        "lg:hover:border-brand-pink/50": props.selectable && !tinted(),
       }}
     >
       <Show when={props.selectable} fallback={body}>
@@ -231,6 +239,16 @@ function AddressCard(props: {
             ตั้งเป็นค่าเริ่มต้น
           </button>
         </Show>
+        <Show when={props.onDelete}>
+          <button
+            type="button"
+            onClick={props.onDelete}
+            class="min-h-6 text-xs text-ink-gray underline lg:hover:text-system-red"
+            aria-label={`ลบที่อยู่ของ ${props.address.recipientName}`}
+          >
+            ลบ
+          </button>
+        </Show>
       </div>
     </div>
   );
@@ -246,7 +264,7 @@ function splitName(full: string | undefined): { first: string; last: string } {
 }
 const POSTAL_PATTERN = /^\d{5}$/;
 
-function AddressForm(props: {
+export function AddressForm(props: {
   initial?: Address;
   newAddressLabel: string;
   companyAllowed?: boolean;
@@ -256,6 +274,10 @@ function AddressForm(props: {
   canCancel: boolean;
   onCancel: () => void;
   onSubmit: (address: Address, makeDefault: boolean) => Promise<void>;
+  /** Overrides the new-address button label ("ใช้ที่อยู่นี้" is checkout wording). */
+  submitLabel?: string;
+  /** Kind given to a new address ("billing" from a billing form). */
+  kind?: Address["kind"];
 }) {
   const formId = createUniqueId();
   const fieldId = (key: FieldKey) => `${formId}-${key}`;
@@ -369,6 +391,7 @@ function AddressForm(props: {
           subDistrict: t("subDistrict"),
           postalCode: t("postalCode"),
           isDefault: props.initial?.isDefault,
+          kind: props.initial?.kind ?? props.kind,
         },
         props.showDefaultOption ? makeDefault() : false,
       );
@@ -525,7 +548,7 @@ function AddressForm(props: {
           </Button>
         </Show>
         <Button type="submit" variant="primary" class="w-full sm:w-auto" loading={status() === "saving"}>
-          {props.initial ? "บันทึกการแก้ไข" : "ใช้ที่อยู่นี้"}
+          {props.initial ? "บันทึกการแก้ไข" : (props.submitLabel ?? "ใช้ที่อยู่นี้")}
         </Button>
       </div>
     </form>

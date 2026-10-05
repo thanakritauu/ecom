@@ -139,9 +139,9 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
           </Show>
           <BannerLibraryPicker onSelect={(banners) => patch({ banners })} />
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <BannerUploader label="Desktop Banner" hint="แนะนำ 1920×840px" value={s().banners.desktop} onChange={(v) => patch({ banners: { ...s().banners, desktop: v } })} />
-            <BannerUploader label="Tablet Banner" hint="แนะนำ 1024×600px" value={s().banners.tablet} onChange={(v) => patch({ banners: { ...s().banners, tablet: v } })} />
-            <BannerUploader label="Mobile Banner" hint="แนะนำ 750×960px" value={s().banners.mobile} onChange={(v) => patch({ banners: { ...s().banners, mobile: v } })} />
+            <BannerUploader label="Desktop Banner" device="desktop" value={s().banners.desktop} onChange={(v) => patch({ banners: { ...s().banners, desktop: v } })} />
+            <BannerUploader label="Tablet Banner" device="tablet" value={s().banners.tablet} onChange={(v) => patch({ banners: { ...s().banners, tablet: v } })} />
+            <BannerUploader label="Mobile Banner" device="mobile" value={s().banners.mobile} onChange={(v) => patch({ banners: { ...s().banners, mobile: v } })} />
           </div>
         </div>
       </Show>

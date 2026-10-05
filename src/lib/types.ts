@@ -51,7 +51,7 @@ export type Product = {
    * `categoryId` → `AdminCategory.id` instead. See `adminProductStore.tsx`'s
    * `AdminProduct` for the id-based fields this migrated to.
    */
-  category?: "eye" | "cheek" | "lip";
+  category?: "eye" | "cheek" | "lip" | "cushion" | "skincare" | "suncare-bodycare";
   /**
    * The one live Category relationship — an id into `~/lib/adminCategories`'s
    * `AdminCategory[]`, resolved through the Product Catalog wherever a
@@ -101,6 +101,11 @@ export type User = {
   email: string;
   phone: string;
   coinBalance: number;
+  /** ISO date (YYYY-MM-DD). */
+  birthDate?: string;
+  gender?: "female" | "male" | "unspecified";
+  /** "crm" = moved over from the Charmiss Club CRM (coins carried over); "new" = signed up on the website. */
+  memberSource?: "crm" | "new";
 };
 
 /**
@@ -110,7 +115,8 @@ export type User = {
  * "กำลังนำส่ง". This replaces the earlier 4-value set — one status model,
  * not a second one alongside it.
  */
-export type OrderStatus = "pending_payment" | "paid" | "preparing" | "shipping" | "completed" | "cancelled";
+/** Flow after payment: กำลังเตรียมการจัดส่ง → ส่งให้บริษัทขนส่ง → กำลังจัดส่ง → ส่งสำเร็จ (payment itself is `PaymentStatus`, not a step here). */
+export type OrderStatus = "pending_payment" | "preparing" | "handed_over" | "shipping" | "completed" | "cancelled";
 
 /** Where the parcel is — derived from the latest carrier event (see `orderTracking.ts`). */
 export type ShipmentStatus = "awaiting_shipment" | "shipped" | "in_transit" | "out_for_delivery" | "delivered";
@@ -151,13 +157,17 @@ export type OrderItem = {
   /** Unit price at purchase time. */
   price: number;
   image: string;
+  /** The "ซื้อครบ ฿590 รับฟรี" gift (`GIFT_PROMOTION`) — always ฿0, never counted toward the subtotal. */
+  isGift?: boolean;
 };
 
 export type OrderPayment = {
   method: string;
   subtotal: number;
   shippingFee: number;
+  /** Coupon discount (฿) — `couponCode` is the `AVAILABLE_COUPONS` code it came from. */
   discount: number;
+  couponCode?: string;
   coinDiscount: number;
 };
 

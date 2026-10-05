@@ -1,25 +1,29 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
-import type { Order, OrderStatus } from "~/lib/types";
+import type { Order } from "~/lib/types";
 import { Button } from "../shared/Button";
 import { OrderCard } from "./OrderCard";
 
-type TabKey = "all" | "pending_payment" | "in_progress" | "completed" | "cancelled";
+type TabKey = "all" | "pending_payment" | "in_progress" | "completed" | "cancelled_return";
 
-/** Tabs group the order statuses a shopper thinks in — "กำลังจัดส่ง" covers everything paid but not yet delivered. */
-const TABS: { key: TabKey; label: string; statuses?: OrderStatus[] }[] = [
+/**
+ * Tabs group the order statuses a shopper thinks in — "กำลังจัดส่ง" covers
+ * everything paid but not yet delivered (เตรียมการจัดส่ง → ส่งให้บริษัทขนส่ง →
+ * กำลังจัดส่ง); a delivered order with a return request moves to "ยกเลิก/คืนสินค้า".
+ */
+const TABS: { key: TabKey; label: string; match?: (o: Order) => boolean }[] = [
   { key: "all", label: "ทั้งหมด" },
-  { key: "pending_payment", label: "รอชำระเงิน", statuses: ["pending_payment"] },
-  { key: "in_progress", label: "กำลังจัดส่ง", statuses: ["paid", "preparing", "shipping"] },
-  { key: "completed", label: "สำเร็จ", statuses: ["completed"] },
-  { key: "cancelled", label: "ยกเลิก", statuses: ["cancelled"] },
+  { key: "pending_payment", label: "รอชำระเงิน", match: (o) => o.status === "pending_payment" },
+  { key: "in_progress", label: "กำลังจัดส่ง", match: (o) => ["preparing", "handed_over", "shipping"].includes(o.status) },
+  { key: "completed", label: "ส่งสำเร็จ", match: (o) => o.status === "completed" && !o.returnRequest },
+  { key: "cancelled_return", label: "ยกเลิก/คืนสินค้า", match: (o) => o.status === "cancelled" || !!o.returnRequest },
 ];
 
 export function OrderHistoryPanel(props: { orders: Order[]; ready: boolean }) {
   const [activeTab, setActiveTab] = createSignal<TabKey>("all");
 
   const filteredOrders = createMemo(() => {
-    const statuses = TABS.find((t) => t.key === activeTab())?.statuses;
-    return statuses ? props.orders.filter((o) => statuses.includes(o.status)) : props.orders;
+    const match = TABS.find((t) => t.key === activeTab())?.match;
+    return match ? props.orders.filter(match) : props.orders;
   });
 
   return (

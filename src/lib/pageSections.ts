@@ -39,11 +39,12 @@ export const HOMEPAGE_SECTION_TYPE_META: Record<HomepageSectionType, { label: st
  * (create/use a Collection, then switch the section to `"collection"`),
  * never further edited as manual picks.
  */
-export type HomepageProductSource = "manual" | "best_seller" | "new_arrival" | "trending" | "featured" | "collection" | "category";
+export type HomepageProductSource = "manual" | "best_seller" | "flash_sale" | "new_arrival" | "trending" | "featured" | "collection" | "category";
 
 export const HOMEPAGE_PRODUCT_SOURCE_META: Record<HomepageProductSource, { label: string }> = {
   manual: { label: "เลือกสินค้าเอง (เดิม — ย้ายไปใช้ Collection แทน)" },
   best_seller: { label: "สินค้าขายดี (Best Seller)" },
+  flash_sale: { label: "Flash Sale" },
   new_arrival: { label: "สินค้ามาใหม่ (New Arrival)" },
   trending: { label: "กำลังฮิต (Trending)" },
   featured: { label: "คอลเลกชันแนะนำ (Featured)" },

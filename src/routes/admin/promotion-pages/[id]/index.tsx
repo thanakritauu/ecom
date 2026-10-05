@@ -14,7 +14,7 @@ import { HOMEPAGE_SECTION_TYPE_META } from "~/lib/adminHomepage";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { formatMarketingDate } from "~/lib/adminMarketing";
-import { LANDING_PAGE_STATUS_META, validatePublishRequirements, findLandingPageReferences } from "~/lib/adminContent";
+import { LANDING_PAGE_STATUS_META, validatePublishRequirements, findLandingPageReferences, promotionPageHref } from "~/lib/adminContent";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
 import { findNavigationReferences, describeNavigationReference } from "~/lib/adminNavigation";
@@ -135,7 +135,7 @@ export default function AdminLandingPageDetailPage() {
             />
             <PageHeader
               title={p().name}
-              description={p().isHomepage ? "/" : `/${p().slug}`}
+              description={promotionPageHref(p())}
               status={
                 <Show when={p().isHomepage}>
                   <span class="shrink-0 rounded-pill bg-surface-pink px-2.5 py-1 text-xs font-medium text-brand-pink">★ Homepage</span>
@@ -170,14 +170,27 @@ export default function AdminLandingPageDetailPage() {
             <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div class="flex flex-col gap-6 lg:col-span-2">
                 <Section title="แบนเนอร์หลัก">
-                  <div class="aspect-[16/6] w-full overflow-hidden rounded-media bg-surface-gray/60">
+                  <div class="aspect-[3/1] w-full overflow-hidden rounded-media bg-surface-gray/60">
                     <Show when={p().banners.desktop} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-8" /></div>}>
                       <img src={p().banners.desktop} alt="" class="size-full object-cover" />
                     </Show>
                   </div>
                   <div class="grid grid-cols-2 gap-3">
-                    <BannerThumb label="แบนเนอร์แท็บเล็ต" src={p().banners.tablet} />
-                    <BannerThumb label="แบนเนอร์มือถือ" src={p().banners.mobile} />
+                    <BannerThumb label="แบนเนอร์แท็บเล็ต" src={p().banners.tablet} aspectClass="aspect-[4/3]" />
+                    <BannerThumb label="แบนเนอร์มือถือ" src={p().banners.mobile} aspectClass="aspect-[3/4] max-w-[60%]" />
+                  </div>
+                  {/* Same field as the form's "วิดีโอ YouTube" — when set, the storefront shows it in place of the banners. */}
+                  <div class="flex flex-col gap-1">
+                    <dt class="text-sm text-ink-gray">วิดีโอ YouTube (แสดงแทนแบนเนอร์)</dt>
+                    <dd class="min-w-0 text-sm text-ink">
+                      <Show when={p().videoUrl} fallback="—">
+                        {(url) => (
+                          <a href={url()} target="_blank" rel="noopener noreferrer" class="break-all text-brand-pink hover:underline">
+                            {url()}
+                          </a>
+                        )}
+                      </Show>
+                    </dd>
                   </div>
                 </Section>
 
@@ -245,7 +258,7 @@ export default function AdminLandingPageDetailPage() {
                 </Section>
 
                 <Section title="ข้อมูลเพิ่มเติม">
-                  <Row label="Slug" value={p().isHomepage ? "/ (Homepage)" : `/${p().slug}`} />
+                  <Row label="URL หน้าร้าน" value={p().isHomepage ? "/ (Homepage)" : promotionPageHref(p())} />
                   <Row label="สร้างเมื่อ" value={p().createdAt} />
                   <Row label="แก้ไขล่าสุด" value={p().updatedAt} />
                 </Section>
@@ -333,11 +346,12 @@ function Row(props: { label: string; value: string }) {
   );
 }
 
-function BannerThumb(props: { label: string; src: string }) {
+/** `aspectClass` — the storefront crop ratio for this slot (Tablet 4:3, Mobile 3:4 — `BANNER_DEVICE_SPECS`). */
+function BannerThumb(props: { label: string; src: string; aspectClass: string }) {
   return (
     <div class="flex flex-col gap-1.5">
       <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">{props.label}</p>
-      <div class="aspect-[16/10] w-full overflow-hidden rounded-media bg-surface-gray/60">
+      <div class={`${props.aspectClass} w-full overflow-hidden rounded-media bg-surface-gray/60`}>
         <Show when={props.src} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-5" /></div>}>
           <img src={props.src} alt="" class="size-full object-cover" />
         </Show>

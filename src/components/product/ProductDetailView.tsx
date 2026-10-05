@@ -92,7 +92,7 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
   return (
     <>
       <Header />
-      <main class="flex flex-col overflow-x-hidden pb-6 sm:pb-8 lg:pb-10">
+      <main class="flex flex-col overflow-x-hidden pb-6">
         <Container width="wide" class="pt-4 sm:pt-6">
           <Breadcrumb
             items={[

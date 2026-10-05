@@ -14,6 +14,7 @@ import {
   useAdminProducts,
   getStockStatus,
   STOCK_STATUS_META,
+  stockStatusLabel,
   ADMIN_PRODUCT_STATUS_META,
   type AdminProduct,
   type AdminProductStatus,
@@ -25,12 +26,22 @@ import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
 import { findNavigationReferences, describeNavigationReference } from "~/lib/adminNavigation";
 import { collectionsContainingProduct, findProductReferencesInPromotionPages } from "~/lib/masterDataRelations";
-import { STOCK_STATUS_META as INVENTORY_STOCK_STATUS_META, getAvailableStock } from "~/lib/adminInventoryStock";
+import { STOCK_STATUS_META as INVENTORY_STOCK_STATUS_META, getAvailableStock, inventoryStatusLabel } from "~/lib/adminInventoryStock";
 import { useAdminInventoryStock } from "~/lib/adminInventoryStockStore";
 import { pushToast } from "~/lib/toast";
+import { useAdminTiktokClips } from "~/lib/adminTiktokClips";
+import { ReviewStars } from "~/components/admin/reviews/ReviewStars";
+import { TiktokClipCover } from "~/components/admin/reviews/TiktokClipCover";
 
 /** Fallback only for products saved before `categoryId` existed (see `normalizeAdminProduct`). */
-const LEGACY_CATEGORY_LABELS: Record<string, string> = { eye: "ตา", cheek: "แก้ม", lip: "ปาก" };
+const LEGACY_CATEGORY_LABELS: Record<string, string> = {
+  cushion: "คุชชั่น",
+  eye: "ตา",
+  cheek: "แก้ม",
+  lip: "ปาก",
+  skincare: "สกินแคร์",
+  "suncare-bodycare": "กันแดด & บอดี้แคร์",
+};
 
 export default function AdminProductDetailPage() {
   const params = useParams<{ id: string }>();
@@ -41,6 +52,7 @@ export default function AdminProductDetailPage() {
   const contentStore = useAdminContent();
   const navigation = useAdminNavigation();
   const inventoryStore = useAdminInventoryStock();
+  const tiktokClips = useAdminTiktokClips();
   const navigate = useNavigate();
 
   const product = createMemo(() => store.getById(params.id));
@@ -194,6 +206,34 @@ export default function AdminProductDetailPage() {
                   <p class="text-sm text-ink-gray">{p().description ?? "ยังไม่มีคำอธิบายสินค้า"}</p>
                 </div>
 
+                {/* Read-only — what this product's PDP review area shows: its TikTok clips first, then its own reviews. Managed under รีวิว. */}
+                <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+                  <div class="flex items-center justify-between gap-2">
+                    <h2 class="text-base font-semibold text-ink">คลิปรีวิว TikTok ({tiktokClips.clipsForProduct(p().id).length})</h2>
+                    <Button variant="outline" size="sm" href="/admin/reviews/tiktok">
+                      จัดการคลิป
+                    </Button>
+                  </div>
+                  <Show
+                    when={tiktokClips.clipsForProduct(p().id).length > 0}
+                    fallback={<p class="text-sm text-ink-gray">ยังไม่มีคลิปที่ผูกกับสินค้านี้ — PDP จะแสดงคลิปอื่นของแบรนด์แทน</p>}
+                  >
+                    <div class="flex gap-3 overflow-x-auto">
+                      <For each={tiktokClips.clipsForProduct(p().id)}>
+                        {(clip) => (
+                          <div class="flex w-24 shrink-0 flex-col gap-1" classList={{ "opacity-60": !clip.active }}>
+                            <TiktokClipCover clip={clip} class="w-24" />
+                            <p class="truncate text-xs text-ink-gray">@{clip.author}</p>
+                            <Show when={!clip.active}>
+                              <StatusBadge tone="neutral" class="w-fit">ซ่อน</StatusBadge>
+                            </Show>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
+
                 <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">ข้อมูลตัวเลือกสินค้า</h2>
                   <Show when={p().adminVariants.length > 0} fallback={<p class="text-sm text-ink-gray">สินค้านี้ไม่มีตัวเลือก</p>}>
@@ -204,7 +244,8 @@ export default function AdminProductDetailPage() {
                             <th class="py-2 pr-3">ชื่อตัวเลือก</th>
                             <th class="py-2 pr-3">SKU</th>
                             <th class="py-2 pr-3">ราคา</th>
-                            <th class="py-2">สต๊อก</th>
+                            <th class="py-2 pr-3">สต๊อก</th>
+                            <th class="py-2">รีวิว</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -214,7 +255,13 @@ export default function AdminProductDetailPage() {
                                 <td class="py-2 pr-3 text-ink">{v.label}</td>
                                 <td class="py-2 pr-3 text-ink-gray">{v.sku}</td>
                                 <td class="py-2 pr-3 text-ink-gray">{v.price !== undefined ? formatAdminCurrency(v.price) : "-"}</td>
-                                <td class="py-2 text-ink-gray">{v.stock}</td>
+                                <td class="py-2 pr-3 text-ink-gray">
+                                  {v.stock}
+                                  <Show when={v.soldOut || v.stock <= 0}>
+                                    <StatusBadge tone="danger" class="ml-2">สินค้าหมด</StatusBadge>
+                                  </Show>
+                                </td>
+                                <td class="py-2 text-ink-gray">{(p().reviews ?? []).filter((r) => r.variantId === v.id).length}</td>
                               </tr>
                             )}
                           </For>
@@ -238,10 +285,30 @@ export default function AdminProductDetailPage() {
                 </div>
 
                 <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+                  <div class="flex items-center justify-between gap-2">
+                    <h2 class="text-base font-semibold text-ink">รีวิวและยอดขาย</h2>
+                    <Button variant="outline" size="sm" href="/admin/reviews">
+                      ดูรีวิว
+                    </Button>
+                  </div>
+                  <Show when={p().rating !== undefined} fallback={<p class="text-sm text-ink-gray">ไม่แสดงคะแนนบนการ์ด</p>}>
+                    <div class="flex items-center gap-2">
+                      <p class="text-2xl font-bold text-ink">{p().rating!.toFixed(1)}</p>
+                      <ReviewStars rating={p().rating!} />
+                    </div>
+                  </Show>
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="จำนวนรีวิว (แสดงบนหน้าร้าน)" value={p().reviewCount !== undefined ? String(p().reviewCount) : "-"} />
+                    <Row label="รีวิวในระบบ" value={String(p().reviews?.length ?? 0)} />
+                    <Row label="ขายแล้ว" value={p().soldCount !== undefined ? `${p().soldCount} ชิ้น` : "-"} />
+                  </dl>
+                </div>
+
+                <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">สต๊อกสินค้า</h2>
                   <p class="text-2xl font-bold text-ink">{displayStock()}</p>
                   <StatusBadge tone={STOCK_STATUS_META[displayStockStatus()].tone} class="w-fit">
-                    {STOCK_STATUS_META[displayStockStatus()].label}
+                    {stockStatusLabel({ stockLeft: displayStock(), lowStockThreshold: p().lowStockThreshold })}
                   </StatusBadge>
                 </div>
 
@@ -251,7 +318,7 @@ export default function AdminProductDetailPage() {
                     <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                       <div class="flex items-center justify-between gap-2">
                         <h2 class="text-base font-semibold text-ink">คลังสินค้า (Inventory System)</h2>
-                        <StatusBadge tone={INVENTORY_STOCK_STATUS_META[stock().status].tone}>{INVENTORY_STOCK_STATUS_META[stock().status].label}</StatusBadge>
+                        <StatusBadge tone={INVENTORY_STOCK_STATUS_META[stock().status].tone}>{inventoryStatusLabel(stock())}</StatusBadge>
                       </div>
                       <dl class="flex flex-col gap-1.5 text-sm">
                         <Row label="Available" value={String(getAvailableStock(stock()))} />

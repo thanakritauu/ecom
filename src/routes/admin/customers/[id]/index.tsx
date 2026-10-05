@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
 import { useNavigate, useParams } from "@solidjs/router";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
@@ -15,7 +15,20 @@ import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { useAdminCustomers } from "~/lib/adminCustomerStore";
 import { useAdminOrders } from "~/lib/adminOrderStore";
 import { ORDER_STATUS_META, PAYMENT_STATUS_META, FULFILLMENT_STATUS_META, type AdminOrder } from "~/lib/adminOrders";
-import { CUSTOMER_STATUS_META, CUSTOMER_TIER_META, getCustomerFullName, getCustomerInitials, type CustomerStatus } from "~/lib/adminCustomers";
+import { TierBadge } from "~/components/admin/loyalty/TierBadge";
+import { useAdminProducts } from "~/lib/adminProductStore";
+import { formatAddress } from "~/lib/checkoutData";
+import {
+  CARD_BRAND_LABEL,
+  CUSTOMER_SOURCE_META,
+  CUSTOMER_STATUS_META,
+  formatBirthDate,
+  GENDER_LABEL,
+  getCustomerFullName,
+  getCustomerInitials,
+  SIGNUP_METHOD_LABEL,
+  type CustomerStatus,
+} from "~/lib/adminCustomers";
 import { getCustomerAverageOrderValue, getCustomerOrders, getCustomerTotalSpent } from "~/lib/customerResolvers";
 import { pushToast } from "~/lib/toast";
 
@@ -33,6 +46,7 @@ export default function AdminCustomerDetailPage() {
   const params = useParams<{ id: string }>();
   const store = useAdminCustomers();
   const orderStore = useAdminOrders();
+  const productStore = useAdminProducts();
   const navigate = useNavigate();
 
   const customer = createMemo(() => store.getById(params.id));
@@ -41,6 +55,13 @@ export default function AdminCustomerDetailPage() {
   const totalSpent = () => (customer() ? getCustomerTotalSpent(customer()!.id, orderStore.orders()) : 0);
   const averageOrderValue = () => (customer() ? getCustomerAverageOrderValue(customer()!.id, orderStore.orders()) : 0);
   const lastOrder = () => orders()[0];
+  /** Wishlist ids resolved against the live product catalog — an id whose product was deleted just drops out. */
+  const wishlistProducts = createMemo(() => (customer()?.wishlistProductIds ?? []).map((id) => productStore.getById(id)).filter((p) => p !== undefined));
+  // Default shipping first, then other shipping, then billing — same order as the storefront address page.
+  const sortedAddresses = createMemo(() => {
+    const rank = (a: { isDefault?: boolean; kind?: string }) => (a.isDefault ? 0 : a.kind === "billing" ? 2 : 1);
+    return [...(customer()?.addresses ?? [])].sort((a, b) => rank(a) - rank(b));
+  });
 
   const [confirmDelete, setConfirmDelete] = createSignal(false);
   const [confirmToggleBlocked, setConfirmToggleBlocked] = createSignal(false);
@@ -135,18 +156,38 @@ export default function AdminCustomerDetailPage() {
               <div class="flex size-16 shrink-0 items-center justify-center rounded-full bg-brand-pink text-xl font-semibold text-white">{getCustomerInitials(current())}</div>
               <div>
                 <p class="text-base font-semibold text-ink">{getCustomerFullName(current())}</p>
-                <StatusBadge tone={CUSTOMER_STATUS_META[current().status].tone}>{CUSTOMER_STATUS_META[current().status].label}</StatusBadge>
+                <div class="flex flex-wrap gap-1.5">
+                  <StatusBadge tone={CUSTOMER_STATUS_META[current().status].tone}>{CUSTOMER_STATUS_META[current().status].label}</StatusBadge>
+                  <StatusBadge tone={CUSTOMER_SOURCE_META[current().source].tone}>{CUSTOMER_SOURCE_META[current().source].label}</StatusBadge>
+                </div>
               </div>
             </div>
             <div class="grid grid-cols-1 gap-3 rounded-card bg-surface-gray/60 p-3 text-sm sm:grid-cols-3">
               <Field label="อีเมล" value={current().email} />
               <Field label="เบอร์โทร" value={current().phone} />
               <Field label="เป็นสมาชิกตั้งแต่" value={current().memberSince || "-"} />
-              {/* CMS + Frontend Final Refinement §2 — Loyalty (points/tier) folded into this same ข้อมูลลูกค้า card instead of its own floating Section below, so it reads as one Customer Information set; same fields, same source (`current()`), only rendered here now. */}
+              <Field label="วันเกิด" value={formatBirthDate(current().birthDate)} />
+              <Field label="เพศ" value={current().gender ? GENDER_LABEL[current().gender!] : "-"} />
+              {/* The storefront collects no marketing / PDPA consent yet — shown honestly rather than a made-up "ยินยอม". */}
+              <Field label="ความยินยอมรับข่าวสาร (PDPA)" value="ยังไม่เก็บ" />
+              {/* CMS + Frontend Final Refinement §2 — Loyalty (coins/tier) folded into this same ข้อมูลลูกค้า card instead of its own floating Section below, so it reads as one Customer Information set. */}
               <Show when={current().loyaltyPoints !== undefined}>
-                <Field label="คะแนนสะสม" value={String(current().loyaltyPoints)} />
+                <Field label="Charmiss Coin" value={`${current().loyaltyPoints!.toLocaleString("th-TH")} คอยน์`} />
               </Show>
-              <Show when={current().tier}>{(tier) => <Field label="ระดับสมาชิก" value={CUSTOMER_TIER_META[tier()].label} />}</Show>
+              <Show when={current().tier}>
+                {(tier) => (
+                  <div>
+                    <p class="text-xs text-ink-placeholder">ระดับสมาชิก</p>
+                    <TierBadge tier={tier()} class="mt-0.5" />
+                  </div>
+                )}
+              </Show>
+              <Field label="ที่มาของสมาชิก" value={CUSTOMER_SOURCE_META[current().source].label} />
+              <Show when={current().signupMethod}>{(m) => <Field label="สมัคร / เข้าสู่ระบบด้วย" value={SIGNUP_METHOD_LABEL[m()]} />}</Show>
+              <Show when={current().crmMemberId}>{(id) => <Field label="รหัสสมาชิก Charmiss Club CRM" value={id()} />}</Show>
+              <Show when={current().crmCoinsTransferred !== undefined}>
+                <Field label="คอยน์ที่ย้ายมาจาก CRM" value={`${current().crmCoinsTransferred!.toLocaleString("th-TH")} คอยน์`} />
+              </Show>
             </div>
           </div>
 
@@ -187,13 +228,78 @@ export default function AdminCustomerDetailPage() {
             </Show>
           </div>
 
-          {/* ข้อมูลเพิ่มเติม */}
-          <Show when={current().address}>
-            <div class="flex flex-col gap-2 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-              <h2 class="text-base font-semibold text-ink">ข้อมูลเพิ่มเติม</h2>
-              <Field label="ที่อยู่" value={current().address ?? "-"} />
+          {/* สมุดที่อยู่ — same entries the customer manages on /account/address */}
+          <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+            <h2 class="text-base font-semibold text-ink">สมุดที่อยู่</h2>
+            <Show when={sortedAddresses().length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่มีที่อยู่ที่บันทึกไว้</p>}>
+              <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <For each={sortedAddresses()}>
+                  {(a) => (
+                    <div class="flex flex-col gap-1 rounded-card border border-border p-3 text-sm">
+                      <div class="flex flex-wrap items-center gap-1.5">
+                        <p class="font-semibold text-ink">{a.label}</p>
+                        <Show when={a.isDefault}>
+                          <StatusBadge tone="success">ที่อยู่หลัก</StatusBadge>
+                        </Show>
+                        <StatusBadge tone={a.kind === "billing" ? "info" : "neutral"}>{a.kind === "billing" ? "ออกใบเสร็จ" : "จัดส่ง"}</StatusBadge>
+                      </div>
+                      <p class="text-ink">
+                        {a.recipientName} · {a.phone}
+                      </p>
+                      <p class="text-ink-gray">{formatAddress(a)}</p>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+
+          <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* รายการโปรด (mock, read-only) — products looked up live from the catalog */}
+            <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+              <h2 class="text-base font-semibold text-ink">รายการโปรด</h2>
+              <Show when={wishlistProducts().length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่มีสินค้าในรายการโปรด</p>}>
+                <ul class="flex flex-col divide-y divide-border">
+                  <For each={wishlistProducts()}>
+                    {(p) => (
+                      <li>
+                        <a href={`/admin/products/${p!.id}`} class="flex items-center gap-3 py-2.5 lg:hover:opacity-80">
+                          <img src={p!.image} alt="" class="size-12 shrink-0 rounded-card bg-surface-gray object-cover" loading="lazy" />
+                          <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-medium text-ink">{p!.name}</p>
+                            <p class="text-xs text-ink-gray">{p!.sku}</p>
+                          </div>
+                          <p class="shrink-0 text-sm font-medium text-ink">{formatAdminCurrency(p!.price)}</p>
+                        </a>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </Show>
             </div>
-          </Show>
+
+            {/* บัตรที่บันทึกไว้ (mock, read-only) — only brand / last 4 / expiry, never a full number */}
+            <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+              <h2 class="text-base font-semibold text-ink">บัตรที่บันทึกไว้</h2>
+              <Show when={current().savedCards.length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่มีบัตรที่บันทึกไว้</p>}>
+                <ul class="flex flex-col divide-y divide-border">
+                  <For each={current().savedCards}>
+                    {(card) => (
+                      <li class="flex items-center justify-between gap-3 py-2.5 text-sm">
+                        <div class="min-w-0">
+                          <p class="font-medium text-ink">
+                            {CARD_BRAND_LABEL[card.brand]} •••• {card.last4}
+                          </p>
+                          <p class="truncate text-xs text-ink-gray">{card.holder}</p>
+                        </div>
+                        <p class="shrink-0 text-ink-gray">หมดอายุ {card.expiry}</p>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </Show>
+            </div>
+          </div>
 
           <QuickViewDrawer
             open={quickViewOrder() !== undefined}

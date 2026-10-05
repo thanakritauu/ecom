@@ -3,8 +3,11 @@ import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { ChevronDownIcon } from "~/components/admin/icons";
+import { Toggle } from "~/components/admin/Toggle";
 import { ProductSelector } from "./ProductSelector";
+import { useAdminProducts } from "~/lib/adminProductStore";
 import {
+  PROMOTION_TYPES_WITH_MIN_SPEND,
   isValidDateRange,
   formatMarketingDate,
   formatPromotionDiscount,
@@ -46,6 +49,13 @@ export function PromotionForm(props: {
   const [discountValue, setDiscountValue] = createSignal(props.initial?.discountValue !== undefined ? String(props.initial.discountValue) : "");
   const [buyQty, setBuyQty] = createSignal(props.initial?.buyQty !== undefined ? String(props.initial.buyQty) : "2");
   const [getQty, setGetQty] = createSignal(props.initial?.getQty !== undefined ? String(props.initial.getQty) : "1");
+  const [minSpend, setMinSpend] = createSignal(props.initial?.minSpend !== undefined ? String(props.initial.minSpend) : "");
+  const [giftProductId, setGiftProductId] = createSignal(props.initial?.giftProductId ?? "");
+  const [giftQty, setGiftQty] = createSignal(props.initial?.giftQty !== undefined ? String(props.initial.giftQty) : "1");
+  const [showInCart, setShowInCart] = createSignal(props.initial?.showInCart ?? false);
+  const productStore = useAdminProducts();
+  const giftName = () => productStore.getById(giftProductId())?.name;
+  const hasMinSpend = () => PROMOTION_TYPES_WITH_MIN_SPEND.includes(type());
   const [applyToAll, setApplyToAll] = createSignal((props.initial?.productIds.length ?? 0) === 0);
   const [productIds, setProductIds] = createSignal<string[]>(props.initial?.productIds ?? []);
   const [startDate, setStartDate] = createSignal(props.initial?.startDate ?? "");
@@ -62,9 +72,20 @@ export function PromotionForm(props: {
   const validate = (): Record<string, string> => {
     const next: Record<string, string> = {};
     if (!name().trim()) next.name = "กรุณากรอกชื่อโปรโมชั่น";
-    if (type() !== "free_shipping" && type() !== "buy_x_get_y") {
+    if (type() === "percentage" || type() === "fixed") {
       const v = Number(discountValue());
       if (!discountValue().trim() || Number.isNaN(v) || v <= 0) next.discountValue = "กรุณากรอกส่วนลดที่ถูกต้อง";
+    }
+    if (type() === "gift_with_purchase") {
+      const spend = Number(minSpend());
+      if (!minSpend().trim() || Number.isNaN(spend) || spend <= 0) next.minSpend = "กรุณากรอกยอดซื้อขั้นต่ำ";
+      if (!giftProductId()) next.giftProductId = "กรุณาเลือกสินค้าของแถม";
+      const qty = Number(giftQty());
+      if (!Number.isInteger(qty) || qty < 1) next.giftQty = "จำนวนของแถมต้องเป็นจำนวนเต็มอย่างน้อย 1";
+    }
+    if (type() === "free_shipping" && minSpend().trim()) {
+      const spend = Number(minSpend());
+      if (Number.isNaN(spend) || spend < 0) next.minSpend = "กรุณากรอกยอดซื้อขั้นต่ำที่ถูกต้อง";
     }
     if (!startDate()) next.startDate = "กรุณาเลือกวันเริ่ม";
     if (!endDate()) next.endDate = "กรุณาเลือกวันสิ้นสุด";
@@ -76,9 +97,13 @@ export function PromotionForm(props: {
     name: name().trim(),
     description: description().trim() || undefined,
     type: type(),
-    discountValue: discountValue().trim() ? Number(discountValue()) : undefined,
+    discountValue: (type() === "percentage" || type() === "fixed") && discountValue().trim() ? Number(discountValue()) : undefined,
     buyQty: type() === "buy_x_get_y" ? Number(buyQty()) : undefined,
     getQty: type() === "buy_x_get_y" ? Number(getQty()) : undefined,
+    minSpend: hasMinSpend() && minSpend().trim() ? Number(minSpend()) : undefined,
+    giftProductId: type() === "gift_with_purchase" ? giftProductId() || undefined : undefined,
+    giftQty: type() === "gift_with_purchase" ? Number(giftQty()) || 1 : undefined,
+    showInCart: showInCart(),
     productIds: applyToAll() ? [] : productIds(),
     startDate: startDate(),
     startTime: startTime(),
@@ -171,7 +196,55 @@ export function PromotionForm(props: {
               />
             </Show>
             <Show when={type() === "free_shipping"}>
-              <p class="text-sm text-ink-gray">โปรโมชั่นประเภทนี้ไม่ต้องกำหนดจำนวนส่วนลด</p>
+              <TextField
+                label="ยอดซื้อขั้นต่ำ (฿)"
+                type="number"
+                min="0"
+                step="0.01"
+                value={minSpend()}
+                onInput={(e) => setMinSpend(e.currentTarget.value)}
+                error={errors().minSpend}
+                disabled={saving()}
+              />
+              <p class="text-sm text-ink-gray">เว้นว่างไว้ = ส่งฟรีทุกออเดอร์ ไม่มีขั้นต่ำ</p>
+            </Show>
+            <Show when={type() === "gift_with_purchase"}>
+              <div class="grid grid-cols-2 gap-4">
+                <TextField
+                  label="ยอดซื้อขั้นต่ำ (฿)"
+                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={minSpend()}
+                  onInput={(e) => setMinSpend(e.currentTarget.value)}
+                  error={errors().minSpend}
+                  disabled={saving()}
+                />
+                <TextField
+                  label="จำนวนของแถม"
+                  required
+                  type="number"
+                  min="1"
+                  value={giftQty()}
+                  onInput={(e) => setGiftQty(e.currentTarget.value)}
+                  error={errors().giftQty}
+                  disabled={saving()}
+                />
+              </div>
+              <div class="flex flex-col gap-2">
+                <span class="text-sm font-medium text-ink">
+                  สินค้าของแถม <span class="text-system-red">*</span>
+                </span>
+                <Show when={giftName()}>
+                  <p class="text-sm text-ink-gray">เลือกแล้ว: {giftName()}</p>
+                </Show>
+                <Show when={errors().giftProductId}>
+                  <p class="text-sm text-system-red">{errors().giftProductId}</p>
+                </Show>
+                <ProductSelector single selectedIds={giftProductId() ? [giftProductId()] : []} onChange={(ids) => setGiftProductId(ids[0] ?? "")} />
+              </div>
+              <p class="text-sm text-ink-gray">ของแถมจะไม่นับเป็นสินค้าในตะกร้า ไม่คิดราคา และหายไปเองเมื่อยอดซื้อต่ำกว่าขั้นต่ำ</p>
             </Show>
             <Show when={type() === "buy_x_get_y"}>
               <div class="grid grid-cols-2 gap-4">
@@ -179,6 +252,16 @@ export function PromotionForm(props: {
                 <TextField label="แถมจำนวน" type="number" min="1" value={getQty()} onInput={(e) => setGetQty(e.currentTarget.value)} disabled={saving()} />
               </div>
             </Show>
+          </Section>
+
+          <Section title="การแสดงผลหน้าร้าน">
+            <div class="flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-ink">แสดงในตะกร้า</p>
+                <p class="text-sm text-ink-gray">แสดงแถบความคืบหน้า "ซื้อเพิ่มอีก ฿X" ในตะกร้าและหน้าตะกร้าสินค้า — หน้าร้านแสดงได้ครั้งละ 1 แถบ (ตอนนี้คือแถบของแถม) โปรที่ไม่แสดงยังคงมีผลตามเงื่อนไข</p>
+              </div>
+              <Toggle checked={showInCart()} onChange={setShowInCart} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
+            </div>
           </Section>
 
           <Section title="วันที่เริ่มต้น - สิ้นสุด">
@@ -205,7 +288,8 @@ export function PromotionForm(props: {
           <Section title="ตัวอย่างโปรโมชั่น">
             <div class="flex flex-col gap-2 text-sm">
               <p class="text-base font-semibold text-ink">{name() || "ชื่อโปรโมชั่น"}</p>
-              <p class="font-medium text-brand-pink">{formatPromotionDiscount(previewValues())}</p>
+              <p class="font-medium text-brand-pink">{formatPromotionDiscount(previewValues(), giftName())}</p>
+              <p class="text-ink-gray">{showInCart() ? "แสดงในตะกร้า" : "ไม่แสดงในตะกร้า"}</p>
               <p class="text-ink-gray">{applyToAll() ? "ทุกสินค้า" : `${productIds().length} สินค้าที่เลือก`}</p>
               <Show when={startDate() && endDate()}>
                 <p class="text-ink-gray">

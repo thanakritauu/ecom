@@ -4,7 +4,6 @@ import { clientOnly } from "@solidjs/start";
 import type { Product } from "~/lib/types";
 import { getDiscountPercent } from "~/lib/products";
 import { resolveVariantOptions } from "~/lib/productVariants";
-import { useAuth } from "~/lib/auth";
 import { useCart } from "~/lib/cart";
 import { useWishlist } from "~/lib/wishlist";
 import { pushToast } from "~/lib/toast";
@@ -49,7 +48,6 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
   const variant = () => props.variant ?? "grid";
   const cart = useCart();
   const wishlist = useWishlist();
-  const auth = useAuth();
   const [sheetOpen, setSheetOpen] = createDialogOpenState();
   const [addStatus, setAddStatus] = createSignal<"idle" | "loading" | "error">("idle");
   const [wishStatus, setWishStatus] = createSignal<"idle" | "loading">("idle");
@@ -116,7 +114,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
 
   const toggleWishlist = async () => {
     if (!wishlist.isLoggedIn()) {
-      auth.openAuthModal();
+      wishlist.saveAfterLogin(props.product.id);
       return;
     }
     setWishStatus("loading");
@@ -133,7 +131,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
   // pixel-identical content between variants — only its container's size
   // changes (full-width square vs a fixed-size thumbnail), so it's one
   // function shared by both layouts below rather than copy-pasted twice.
-  const ImageBlock = (imgProps: { class: string; flashSaleOverlay?: boolean }) => (
+  const ImageBlock = (imgProps: { class: string; flashSaleOverlay?: boolean; /** List-view thumbnail: smaller heart, smaller sold-out label, no detail arrow. */ compact?: boolean }) => (
     <div class={imgProps.class}>
       <A href={productDetailHref()} class="block size-full">
         <img
@@ -157,7 +155,12 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
 
       <Show when={outOfStock()}>
         <div class="absolute inset-0 flex items-center justify-center bg-ink/10" aria-hidden="true">
-          <span class="rounded-pill bg-ink/85 px-2.5 py-1 text-xs font-medium text-white sm:px-4 sm:py-1.5 sm:text-sm">สินค้าหมด</span>
+          <span
+            class="rounded-pill bg-ink/85 font-medium text-white"
+            classList={{ "px-2.5 py-1 text-xs sm:px-4 sm:py-1.5 sm:text-sm": !imgProps.compact, "px-2 py-0.5 text-xs": !!imgProps.compact }}
+          >
+            สินค้าหมด
+          </span>
         </div>
       </Show>
 
@@ -181,26 +184,30 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
         disabled={wishStatus() === "loading"}
         aria-pressed={wishlist.has(props.product.id)}
         aria-label={wishlist.has(props.product.id) ? "นำออกจากรายการโปรด" : "เพิ่มในรายการโปรด"}
-        class="absolute right-2 top-2 flex size-11 items-center justify-center rounded-pill bg-white/90 shadow-card transition-all duration-200 active:scale-90 disabled:cursor-not-allowed disabled:opacity-60 lg:scale-90 lg:opacity-0 lg:group-hover:scale-100 lg:group-hover:opacity-100 lg:focus-visible:scale-100 lg:focus-visible:opacity-100"
+        class="absolute flex items-center justify-center rounded-pill bg-white/90 shadow-card transition-all duration-200 active:scale-90 disabled:cursor-not-allowed disabled:opacity-60 lg:scale-90 lg:opacity-0 lg:group-hover:scale-100 lg:group-hover:opacity-100 lg:focus-visible:scale-100 lg:focus-visible:opacity-100"
         classList={{
+          "right-2 top-2 size-11": !imgProps.compact,
+          "right-1.5 top-1.5 size-8": !!imgProps.compact,
           "text-brand-pink": wishlist.has(props.product.id),
           "text-ink": !wishlist.has(props.product.id),
         }}
       >
-        <Show when={wishStatus() === "loading"} fallback={<HeartIcon filled={wishlist.has(props.product.id)} class="size-5" />}>
+        <Show when={wishStatus() === "loading"} fallback={<HeartIcon filled={wishlist.has(props.product.id)} class={imgProps.compact ? "size-4" : "size-5"} />}>
           <span class="loading loading-spinner loading-xs" aria-hidden="true" />
         </Show>
       </button>
 
       {/* Secondary action — desktop-only: on mobile the image/name are already the "go to detail" tap target, so a second affordance would just be clutter */}
-      <A
-        href={productDetailHref()}
-        aria-label={`ดูรายละเอียด ${props.product.name}`}
-        class="absolute right-2 hidden size-11 items-center justify-center rounded-pill bg-white/90 text-ink shadow-card transition-all duration-200 hover:bg-white active:scale-90 lg:flex lg:scale-90 lg:opacity-0 lg:group-hover:scale-100 lg:group-hover:opacity-100 lg:focus-visible:scale-100 lg:focus-visible:opacity-100"
-        classList={{ "bottom-2": !(imgProps.flashSaleOverlay && flashSaleActive()), "bottom-12": !!imgProps.flashSaleOverlay && flashSaleActive() }}
-      >
-        <DetailArrowIcon class="size-4" />
-      </A>
+      <Show when={!imgProps.compact}>
+        <A
+          href={productDetailHref()}
+          aria-label={`ดูรายละเอียด ${props.product.name}`}
+          class="absolute right-2 hidden size-11 items-center justify-center rounded-pill bg-white/90 text-ink shadow-card transition-all duration-200 hover:bg-white active:scale-90 lg:flex lg:scale-90 lg:opacity-0 lg:group-hover:scale-100 lg:group-hover:opacity-100 lg:focus-visible:scale-100 lg:focus-visible:opacity-100"
+          classList={{ "bottom-2": !(imgProps.flashSaleOverlay && flashSaleActive()), "bottom-12": !!imgProps.flashSaleOverlay && flashSaleActive() }}
+        >
+          <DetailArrowIcon class="size-4" />
+        </A>
+      </Show>
 
     </div>
   );
@@ -216,17 +223,22 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
 
   // Shade selector + Add to Cart CTA — identical content in both variants,
   // only surrounding spacing differs, so this is shared the same way.
-  const ShadeSelector = () => (
+  // `compact` (list view): fixed 28px circles in a row — the grid card's 5 stretch-to-fill slots would balloon in a wide text column.
+  const ShadeSelector = (shadeProps: { compact?: boolean }) => (
     <Show when={hasVariants()}>
       <div class="flex flex-col gap-1.5">
-        <div role="radiogroup" aria-label="ตัวเลือกสินค้า" class="grid grid-cols-5 items-center gap-1.5 sm:gap-2">
+        <div
+          role="radiogroup"
+          aria-label="ตัวเลือกสินค้า"
+          classList={{ "grid grid-cols-5 items-center gap-1.5 sm:gap-2": !shadeProps.compact, "flex flex-wrap items-center gap-2": !!shadeProps.compact }}
+        >
           <For each={visibleShades()}>
             {(shade) => (
               <ShadeSwatch
                 shade={shade}
                 selected={selectedVariantId() === shade.id}
                 onSelect={() => selectShade(shade.id)}
-                class="aspect-square w-full"
+                class={shadeProps.compact ? "size-7 shrink-0" : "aspect-square w-full"}
               />
             )}
           </For>
@@ -235,7 +247,8 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
               type="button"
               onClick={() => setSheetOpen(true)}
               aria-label={`ดูตัวเลือกสินค้าเพิ่มเติมอีก ${shadeOverflowCount()} ตัวเลือก`}
-              class="flex aspect-square w-full items-center justify-center rounded-full border border-border bg-surface-gray text-xs font-medium leading-none text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink"
+              class="flex items-center justify-center rounded-full border border-border bg-surface-gray text-xs font-medium leading-none text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink"
+              classList={{ "aspect-square w-full": !shadeProps.compact, "size-7 shrink-0": !!shadeProps.compact }}
             >
               +{shadeOverflowCount()}
             </button>
@@ -313,27 +326,29 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
         </div>
       }
     >
-      {/* List view — Product Detail image left, everything else right; same
-          data/state/handlers as the grid card above, only the arrangement
-          changes. No Figma exists for this layout (grid view is what the
-          audited node shows) — built to the explicit written spec instead. */}
-      <div class="group flex w-full gap-3 rounded-card bg-surface-card p-2 shadow-card transition-all duration-200 ease-out lg:hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)] sm:gap-4">
-        <ImageBlock class="relative size-[96px] shrink-0 overflow-hidden rounded-media border border-border sm:size-[128px] lg:size-[150px]" />
+      {/* List view — image left, details right; same data/state/handlers as the grid card, only the arrangement
+          changes (no Figma for this layout). Compact pieces throughout so a 112–180px thumbnail and a wide text
+          column both read cleanly: small heart, 28px shade circles, CTA sized to its label from `sm`. */}
+      <div class="group flex w-full items-start gap-3 rounded-2xl bg-surface-card p-3 shadow-[0_2px_6px_rgba(90,106,133,0.10)] transition-shadow duration-200 ease-out sm:gap-4 lg:rounded-card lg:hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)]">
+        <ImageBlock compact class="relative size-28 shrink-0 overflow-hidden rounded-xl border border-border sm:size-36 lg:size-44 lg:rounded-media" />
 
-        <div class="flex min-w-0 flex-1 flex-col gap-2 py-0.5">
+        <div class="flex min-w-0 flex-1 flex-col gap-2 self-stretch">
           <FlashSaleStrip />
 
-          <A href={productDetailHref()} class="flex flex-col gap-1.5">
-            <p class="line-clamp-2 text-sm font-medium leading-[1.75] text-ink sm:text-base">{props.product.name}</p>
+          <A href={productDetailHref()} class="flex flex-col gap-1">
+            {/* leading-7: room for Thai stacked marks under line-clamp (same reason as the grid card). */}
+            <p class="line-clamp-2 text-sm font-medium leading-7 text-ink sm:text-base">{props.product.name}</p>
             <PriceDisplay price={props.product.price} compareAtPrice={props.product.compareAtPrice} size="card" />
           </A>
 
           <ProductMeta rating={props.product.rating} soldCount={props.product.soldCount} />
 
-          <ShadeSelector />
+          <ShadeSelector compact />
 
           <Show when={props.product.stockLeft && props.product.stockTotal}>
-            <StockProgressBar stockLeft={props.product.stockLeft!} stockTotal={props.product.stockTotal!} />
+            <div class="sm:max-w-[280px]">
+              <StockProgressBar compact stockLeft={props.product.stockLeft!} stockTotal={props.product.stockTotal!} />
+            </div>
           </Show>
 
           <CardAddToCart class="mt-auto w-full sm:w-auto sm:self-start sm:!px-8" />

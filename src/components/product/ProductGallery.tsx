@@ -2,7 +2,6 @@ import { createEffect, createSignal, For, Show, onMount, onCleanup } from "solid
 import { ChevronIcon } from "~/components/shared/ChevronIcon";
 import { isServer } from "solid-js/web";
 import type { Product } from "~/lib/types";
-import { useAuth } from "~/lib/auth";
 import { useWishlist } from "~/lib/wishlist";
 import { pushToast } from "~/lib/toast";
 import { Badge } from "../shared/Badge";
@@ -32,7 +31,6 @@ export function ProductGallery(props: { product: Product; forceOutOfStock?: bool
   };
   const [active, setActive] = createSignal(0);
   const wishlist = useWishlist();
-  const auth = useAuth();
   const [wishStatus, setWishStatus] = createSignal<"idle" | "loading">("idle");
 
   let thumbRefs: (HTMLButtonElement | undefined)[] = [];
@@ -75,7 +73,7 @@ export function ProductGallery(props: { product: Product; forceOutOfStock?: bool
 
   const toggleWishlist = async () => {
     if (!wishlist.isLoggedIn()) {
-      auth.openAuthModal();
+      wishlist.saveAfterLogin(props.product.id);
       return;
     }
     setWishStatus("loading");

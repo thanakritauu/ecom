@@ -2,6 +2,7 @@ import { createEffect, createSignal, on, onCleanup } from "solid-js";
 import { PAYMENT_METHODS, type PaymentMethodId } from "~/lib/cartSelectors";
 import { mockTokenizeCard, type MockPaymentProvider, type PaymentFailureReason, type PaymentProvider, type PromptPaySession } from "~/lib/payment";
 import { PHONE_PATTERN } from "~/lib/validators";
+import { storeCard, type SavedCard } from "~/lib/savedCards";
 import { EMPTY_CARD, validateCard, type CardErrors, type CardInput } from "../payment/CardPaymentForm";
 
 export type PaidResult = { method: PaymentMethodId; methodLabel: string; reference: string; detail?: string };
@@ -25,6 +26,10 @@ export function createCheckoutPayment(opts: {
   orderNumber: () => string;
   validateOrder: () => boolean;
   onPaid: (result: PaidResult) => void;
+  /** Cards already saved to the shopper's account (mock vault). */
+  savedCards?: () => SavedCard[];
+  /** Whether "save this card" is offered (needs an account). */
+  canSaveCard?: () => boolean;
 }) {
   const [method, setMethodRaw] = createSignal<PaymentMethodId>("card");
   const [phase, setPhase] = createSignal<"form" | "processing" | "failed">("form");
@@ -38,6 +43,21 @@ export function createCheckoutPayment(opts: {
     const all = validateCard(card());
     return Object.fromEntries(Object.entries(all).filter(([k]) => submitted() || cardTouched()[k as keyof CardInput])) as CardErrors;
   };
+
+  // Saved card — the first saved card is picked by default; "new" = type a card in.
+  const savedCards = () => opts.savedCards?.() ?? [];
+  const [pickedCard, setPickedCard] = createSignal<string | "new">();
+  const cardChoice = () => {
+    const picked = pickedCard();
+    if (picked === "new") return "new";
+    return savedCards().some((c) => c.id === picked) ? picked! : (savedCards()[0]?.id ?? "new");
+  };
+  const savedCard = () => savedCards().find((c) => c.id === cardChoice());
+  const [savedCvv, setSavedCvv] = createSignal("");
+  const [savedCvvTouched, setSavedCvvTouched] = createSignal(false);
+  const savedCvvErrorRaw = () => (!savedCvv() ? "กรุณากรอก CVV ของบัตรนี้" : /^\d{3,4}$/.test(savedCvv()) ? undefined : "CVV คือเลข 3 หลักด้านหลังบัตร");
+  const savedCvvError = () => (submitted() || savedCvvTouched() ? savedCvvErrorRaw() : undefined);
+  const [saveNewCard, setSaveNewCard] = createSignal(false);
 
   // TrueMoney
   const [walletPhone, setWalletPhone] = createSignal("");
@@ -130,6 +150,8 @@ export function createCheckoutPayment(opts: {
   const retry = () => {
     // Card details stay except CVV (re-entered, as on real gateways).
     setCard((c) => ({ ...c, cvv: "" }));
+    setSavedCvv("");
+    setSavedCvvTouched(false);
     setCardTouched((t) => ({ ...t, cvv: false }));
     setSubmitted(false);
     setPhase("form");
@@ -143,10 +165,26 @@ export function createCheckoutPayment(opts: {
 
     setSubmitted(true);
     if (method() === "card") {
+      const saved = savedCard();
+      if (saved) {
+        if (savedCvvErrorRaw()) return scrollToPayment();
+        setPhase("processing");
+        try {
+          settle(await opts.provider.chargeCard(request(), { token: saved.token, last4: saved.last4, brand: saved.brand }));
+        } catch {
+          fail("network_error");
+        }
+        return;
+      }
       if (Object.keys(validateCard(card())).length > 0) return scrollToPayment();
       setPhase("processing");
       try {
-        settle(await opts.provider.chargeCard(request(), mockTokenizeCard(card().number)));
+        const token = mockTokenizeCard(card().number);
+        const result = await opts.provider.chargeCard(request(), token);
+        // Saved only after a successful charge, and only the vault-safe parts (never the number/CVV).
+        if (result.status === "succeeded" && saveNewCard() && opts.canSaveCard?.())
+          storeCard({ id: `card-${Date.now()}`, brand: token.brand, last4: token.last4, expiry: card().expiry, holder: card().name.trim(), token: token.token });
+        settle(result);
       } catch {
         fail("network_error");
       }
@@ -181,6 +219,21 @@ export function createCheckoutPayment(opts: {
     setCard,
     cardErrors,
     touchCard: (k: keyof CardInput) => setCardTouched((t) => ({ ...t, [k]: true })),
+    savedCards,
+    cardChoice,
+    pickCard: (id: string | "new") => {
+      setPickedCard(id);
+      setSubmitted(false);
+      setSavedCvv("");
+      setSavedCvvTouched(false);
+    },
+    savedCvv,
+    setSavedCvv,
+    savedCvvError,
+    touchSavedCvv: () => setSavedCvvTouched(true),
+    saveNewCard,
+    setSaveNewCard,
+    canSaveCard: () => !!opts.canSaveCard?.(),
     walletPhone,
     setWalletPhone,
     walletError,

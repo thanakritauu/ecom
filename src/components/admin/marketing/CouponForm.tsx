@@ -4,7 +4,8 @@ import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
 import { ChevronDownIcon } from "~/components/admin/icons";
-import { isValidDateRange, formatMarketingDate, formatCouponDiscount, type Coupon, type MarketingStatus } from "~/lib/adminMarketing";
+import { Toggle } from "~/components/admin/Toggle";
+import { isValidDateRange, formatMarketingDateShort, formatCouponDiscount, type Coupon, type MarketingStatus } from "~/lib/adminMarketing";
 import { CouponCard, type Coupon as PreviewCoupon } from "~/components/shared/CouponCard";
 import { pushToast } from "~/lib/toast";
 
@@ -26,13 +27,15 @@ export function CouponForm(props: {
 }) {
   const [code, setCode] = createSignal(props.initial?.code ?? "");
   const [description, setDescription] = createSignal(props.initial?.description ?? "");
-  const [discountType, setDiscountType] = createSignal<"percentage" | "fixed">(props.initial?.discountType ?? "percentage");
+  const [discountType, setDiscountType] = createSignal<"percentage" | "fixed">(props.initial?.discountType ?? "fixed");
   const [discountValue, setDiscountValue] = createSignal(props.initial ? String(props.initial.discountValue) : "");
   const [minSpend, setMinSpend] = createSignal(props.initial?.minSpend !== undefined ? String(props.initial.minSpend) : "");
   const [maxDiscount, setMaxDiscount] = createSignal(props.initial?.maxDiscount !== undefined ? String(props.initial.maxDiscount) : "");
   const [usageLimit, setUsageLimit] = createSignal(props.initial?.usageLimit !== undefined ? String(props.initial.usageLimit) : "");
   const [perCustomerLimit, setPerCustomerLimit] = createSignal(props.initial?.perCustomerLimit !== undefined ? String(props.initial.perCustomerLimit) : "1");
   const [status, setStatus] = createSignal<MarketingStatus>(props.initial?.status ?? "draft");
+  const [showOnHome, setShowOnHome] = createSignal(props.initial?.showOnHome ?? false);
+  const [showAtCheckout, setShowAtCheckout] = createSignal(props.initial?.showAtCheckout ?? false);
   const [startDate, setStartDate] = createSignal(props.initial?.startDate ?? "");
   const [startTime, setStartTime] = createSignal(props.initial?.startTime ?? "00:00");
   const [endDate, setEndDate] = createSignal(props.initial?.endDate ?? "");
@@ -65,6 +68,8 @@ export function CouponForm(props: {
     maxDiscount: maxDiscount().trim() ? Number(maxDiscount()) : undefined,
     usageLimit: usageLimit().trim() ? Number(usageLimit()) : undefined,
     perCustomerLimit: perCustomerLimit().trim() ? Number(perCustomerLimit()) : undefined,
+    showOnHome: showOnHome(),
+    showAtCheckout: showAtCheckout(),
     startDate: startDate(),
     startTime: startTime(),
     endDate: endDate(),
@@ -84,7 +89,7 @@ export function CouponForm(props: {
       id: props.initial?.id ?? "preview-draft",
       amountLabel: formatCouponDiscount(v),
       minSpendLabel: v.minSpend ? `ขั้นต่ำ ฿${v.minSpend.toLocaleString("th-TH")}` : "ไม่มีขั้นต่ำ",
-      expiryLabel: v.endDate ? `หมดอายุ ${formatMarketingDate(v.endDate)}` : "ยังไม่ระบุวันหมดอายุ",
+      expiryLabel: v.endDate ? `หมดอายุ ${formatMarketingDateShort(v.endDate)}` : "ยังไม่ระบุวันหมดอายุ",
     };
   });
 
@@ -164,6 +169,9 @@ export function CouponForm(props: {
                   </select>
                   <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
                 </div>
+                <Show when={discountType() === "percentage"}>
+                  <span class="rounded-card bg-warning-soft px-3 py-2 text-xs text-ink">หน้าชำระเงินของร้านตอนนี้รองรับเฉพาะคูปองลดเป็นจำนวนเงิน (฿) — คูปองแบบเปอร์เซ็นต์ยังไม่ถูกนำไปใช้ที่หน้าร้าน</span>
+                </Show>
               </label>
               <TextField
                 label={discountType() === "percentage" ? "เปอร์เซ็นต์ส่วนลด" : "จำนวนเงินส่วนลด"}
@@ -180,6 +188,25 @@ export function CouponForm(props: {
               <TextField label="ส่วนลดสูงสุด (฿)" type="number" min="0" step="0.01" value={maxDiscount()} onInput={(e) => setMaxDiscount(e.currentTarget.value)} disabled={saving()} />
               <TextField label="จำนวนสิทธิ์ใช้ทั้งหมด" type="number" min="0" value={usageLimit()} onInput={(e) => setUsageLimit(e.currentTarget.value)} disabled={saving()} />
               <TextField label="จำกัดต่อลูกค้า (ครั้ง)" type="number" min="0" value={perCustomerLimit()} onInput={(e) => setPerCustomerLimit(e.currentTarget.value)} disabled={saving()} />
+            </div>
+          </Section>
+
+          <Section title="การแสดงผลหน้าร้าน">
+            <div class="flex flex-col gap-4">
+              <div class="flex items-center justify-between gap-4">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-ink">แสดงในหน้าแรก</p>
+                  <p class="text-sm text-ink-gray">แสดงเป็นคูปองให้กดเก็บในส่วน "คูปองส่วนลด" ของหน้าแรก</p>
+                </div>
+                <Toggle checked={showOnHome()} onChange={setShowOnHome} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
+              </div>
+              <div class="flex items-center justify-between gap-4">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-ink">แสดงในหน้าชำระเงิน</p>
+                  <p class="text-sm text-ink-gray">แสดงในรายการคูปองที่ลูกค้าเลือกใช้ได้ตอนชำระเงิน</p>
+                </div>
+                <Toggle checked={showAtCheckout()} onChange={setShowAtCheckout} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
+              </div>
             </div>
           </Section>
 

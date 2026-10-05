@@ -1,6 +1,14 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import type { Product } from "~/lib/types";
-import type { AdminProduct, AdminProductStatus, AdminVariant, ProductFormValues } from "~/lib/adminProductStore";
+import { flashSaleRoundEndsAt, getDiscountPercent } from "~/lib/products";
+import {
+  LOW_STOCK_THRESHOLD,
+  STOREFRONT_CATEGORY_SLUGS,
+  type AdminProduct,
+  type AdminProductStatus,
+  type AdminVariant,
+  type ProductFormValues,
+} from "~/lib/adminProductStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { useAdminBrands } from "~/lib/adminBrandStore";
 import { TextField } from "~/components/shared/TextField";
@@ -22,8 +30,8 @@ function defaultFlashSaleDatetimeLocal(): string {
   return toDatetimeLocal(Date.now() + 24 * 60 * 60 * 1000);
 }
 
-/** The storefront's `/products?category=` facet filter (Global Frontend Navigation Architecture) only ever matches these three literal values — a Category whose slug isn't one of them still saves correctly, it just isn't filterable there yet. */
-const FACET_CATEGORY_SLUGS: Product["category"][] = ["eye", "cheek", "lip"];
+/** Optional number field → `undefined` when blank (so the card hides that row), otherwise the number. */
+const optionalNumber = (raw: string) => (raw.trim() === "" || Number.isNaN(Number(raw)) ? undefined : Number(raw));
 
 const STATUS_OPTIONS: { value: AdminProductStatus; label: string }[] = [
   { value: "active", label: "Active" },
@@ -54,7 +62,11 @@ export function ProductForm(props: {
   const [price, setPrice] = createSignal(props.initial ? String(props.initial.price) : "");
   const [compareAtPrice, setCompareAtPrice] = createSignal(props.initial?.compareAtPrice ? String(props.initial.compareAtPrice) : "");
   const [stockLeft, setStockLeft] = createSignal(props.initial ? String(props.initial.stockLeft ?? 0) : "0");
-  const [lowStockThreshold, setLowStockThreshold] = createSignal(props.initial ? String(props.initial.lowStockThreshold) : "10");
+  const [lowStockThreshold, setLowStockThreshold] = createSignal(props.initial ? String(props.initial.lowStockThreshold) : String(LOW_STOCK_THRESHOLD));
+  const [stockTotal, setStockTotal] = createSignal(props.initial?.stockTotal !== undefined ? String(props.initial.stockTotal) : "");
+  const [rating, setRating] = createSignal(props.initial?.rating !== undefined ? String(props.initial.rating) : "");
+  const [soldCount, setSoldCount] = createSignal(props.initial?.soldCount !== undefined ? String(props.initial.soldCount) : "");
+  const [reviewCount, setReviewCount] = createSignal(props.initial?.reviewCount !== undefined ? String(props.initial.reviewCount) : "");
   const [status, setStatus] = createSignal<AdminProductStatus>(props.initial?.status ?? "active");
   const [images, setImages] = createSignal<string[]>(
     props.initial?.images?.length ? props.initial.images : props.initial?.image ? [props.initial.image] : [],
@@ -64,6 +76,10 @@ export function ProductForm(props: {
   const effectiveMainImage = () => (mainImage() && images().includes(mainImage()!) ? mainImage()! : images()[0]);
   const [variants, setVariants] = createSignal<AdminVariant[]>(props.initial?.adminVariants ?? []);
   const [flashSaleEnabled, setFlashSaleEnabled] = createSignal(!!props.initial?.flashSaleEndsAt);
+  // New Flash Sale products default to the storefront's daily round; a product with a saved one-off end time keeps it.
+  const [flashSaleDaily, setFlashSaleDaily] = createSignal(props.initial?.flashSaleEndsAt ? !!props.initial.flashSaleDaily : true);
+  const flashSaleEndsAtValue = () =>
+    !flashSaleEnabled() ? undefined : flashSaleDaily() ? flashSaleRoundEndsAt() : new Date(flashSaleEndsAtLocal()).getTime();
   const [flashSaleEndsAtLocal, setFlashSaleEndsAtLocal] = createSignal(
     props.initial?.flashSaleEndsAt ? toDatetimeLocal(props.initial.flashSaleEndsAt) : defaultFlashSaleDatetimeLocal(),
   );
@@ -81,6 +97,10 @@ export function ProductForm(props: {
     if (!price().trim() || Number.isNaN(priceNum) || priceNum <= 0) next.price = "กรุณากรอกราคาที่ถูกต้อง";
     const stockNum = Number(stockLeft());
     if (stockLeft().trim() === "" || Number.isNaN(stockNum) || stockNum < 0) next.stock = "จำนวนสต๊อกต้องเป็นตัวเลขและไม่ติดลบ";
+    const ratingNum = optionalNumber(rating());
+    if (ratingNum !== undefined && (ratingNum < 0 || ratingNum > 5)) next.rating = "คะแนนต้องอยู่ระหว่าง 0–5";
+    const totalNum = optionalNumber(stockTotal());
+    if (flashSaleEnabled() && totalNum !== undefined && totalNum < stockNum) next.stockTotal = "จำนวนทั้งหมดต้องไม่น้อยกว่าสต๊อกคงเหลือ";
     return next;
   };
 
@@ -100,21 +120,26 @@ export function ProductForm(props: {
         sku: sku().trim(),
         brand: selectedBrand?.name ?? "",
         brandId: brandId(),
-        // Legacy 3-value enum the storefront's `/products?category=` facet
-        // filter matches against — only set when the picked Category's slug
-        // actually is one of those three; `categoryId` is the real reference.
-        category: selectedCategory && FACET_CATEGORY_SLUGS.includes(selectedCategory.slug as Product["category"]) ? (selectedCategory.slug as Product["category"]) : undefined,
+        // The slug the storefront filters/menus by (cushion, lip, cheek, eye,
+        // skincare, suncare-bodycare) — only set when the picked Category's
+        // slug is one of those; `categoryId` is the real reference.
+        category: STOREFRONT_CATEGORY_SLUGS.find((slug) => slug === selectedCategory?.slug),
         categoryId: categoryId(),
         description: description().trim() || undefined,
         price: Number(price()),
         compareAtPrice: compareAtPrice().trim() ? Number(compareAtPrice()) : undefined,
         stockLeft: Number(stockLeft()),
-        lowStockThreshold: Number(lowStockThreshold()) || 10,
+        lowStockThreshold: optionalNumber(lowStockThreshold()) ?? LOW_STOCK_THRESHOLD,
         status: status(),
         images: images(),
         mainImage: effectiveMainImage(),
         adminVariants: variants(),
-        flashSaleEndsAt: flashSaleEnabled() ? new Date(flashSaleEndsAtLocal()).getTime() : undefined,
+        flashSaleEndsAt: flashSaleEndsAtValue(),
+        flashSaleDaily: flashSaleEnabled() && flashSaleDaily(),
+        stockTotal: optionalNumber(stockTotal()),
+        rating: optionalNumber(rating()),
+        soldCount: optionalNumber(soldCount()),
+        reviewCount: optionalNumber(reviewCount()),
       });
     } catch {
       setSubmitError("บันทึกสินค้าไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
@@ -136,8 +161,8 @@ export function ProductForm(props: {
   const previewProduct = createMemo<Product>(() => {
     const priceNum = Number(price()) || 0;
     const compareAtPriceNum = compareAtPrice().trim() ? Number(compareAtPrice()) : undefined;
-    const discountPercent =
-      compareAtPriceNum && compareAtPriceNum > priceNum && priceNum > 0 ? Math.round((1 - priceNum / compareAtPriceNum) * 100) : undefined;
+    // Same rule the card itself uses (and what the store saves) — one discount formula.
+    const discountPercent = getDiscountPercent({ price: priceNum, compareAtPrice: compareAtPriceNum });
     const stockLeftNum = Number(stockLeft()) || 0;
     return {
       id: props.initial?.id ?? "preview-draft",
@@ -157,8 +182,8 @@ export function ProductForm(props: {
       // `ProductFormValues.stockLeft` this form actually submits, are both
       // completely untouched (see `handleSubmit`'s own `stockLeft: Number(stockLeft())`).
       stockLeft: Math.max(stockLeftNum, 1),
-      stockTotal: Math.max(props.initial?.stockTotal ?? 0, stockLeftNum, 1),
-      flashSaleEndsAt: flashSaleEnabled() ? new Date(flashSaleEndsAtLocal()).getTime() : undefined,
+      stockTotal: Math.max(optionalNumber(stockTotal()) ?? props.initial?.stockTotal ?? 0, stockLeftNum, 1),
+      flashSaleEndsAt: flashSaleEndsAtValue(),
       // The card's shade circle follows the swatch settings (color, or the
       // separate swatch image in Image mode); the variant's photos stay its
       // modal/option photos — the two are uploaded independently.
@@ -170,10 +195,12 @@ export function ProductForm(props: {
               color: v.color || "#CCCCCC",
               swatchImage: v.mode === "image" ? v.swatchImage : undefined,
               image: v.images[0],
+              soldOut: v.soldOut || v.stock <= 0 || undefined,
             }))
           : undefined,
-      rating: props.initial?.rating,
-      soldCount: props.initial?.soldCount,
+      rating: optionalNumber(rating()),
+      soldCount: optionalNumber(soldCount()),
+      reviewCount: optionalNumber(reviewCount()),
     };
   });
 
@@ -267,6 +294,30 @@ export function ProductForm(props: {
               เปิดใช้งานแฟลชเซลสำหรับสินค้านี้
             </label>
             <Show when={flashSaleEnabled()}>
+              <div class="mt-3">
+              <TextField
+                label="จำนวนทั้งหมดของแฟลชเซล"
+                type="number"
+                min="0"
+                value={stockTotal()}
+                placeholder={String(Math.max(props.initial?.stockTotal ?? 0, Number(stockLeft()) || 0))}
+                onInput={(e) => setStockTotal(e.currentTarget.value)}
+                error={errors().stockTotal}
+                disabled={saving()}
+              />
+              </div>
+              <p class="mt-1 text-xs text-ink-gray">แถบสต๊อกบนการ์ดแฟลชเซล = สต๊อกคงเหลือ / จำนวนทั้งหมด</p>
+              <label class="mt-3 flex items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={flashSaleDaily()}
+                  disabled={saving()}
+                  onChange={(e) => setFlashSaleDaily(e.currentTarget.checked)}
+                  class="size-4 accent-brand-pink"
+                />
+                รอบรายวัน (00:00–23:59 สิ้นสุดเที่ยงคืนทุกวัน เหมือนหน้าร้าน)
+              </label>
+              <Show when={!flashSaleDaily()}>
               <label class="mt-3 flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">สิ้นสุดเวลา</span>
                 <input
@@ -277,14 +328,25 @@ export function ProductForm(props: {
                   class="h-11 w-full rounded-card border border-border bg-surface-card px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
                 />
               </label>
+              </Show>
             </Show>
           </Section>
 
           <Section title="สต๊อกสินค้า">
             <div class="grid grid-cols-2 gap-4">
               <TextField label="จำนวนสต๊อก" required type="number" min="0" value={stockLeft()} onInput={(e) => setStockLeft(e.currentTarget.value)} error={errors().stock} disabled={saving()} />
-              <TextField label="แจ้งเตือนเมื่อต่ำกว่า" type="number" min="0" value={lowStockThreshold()} onInput={(e) => setLowStockThreshold(e.currentTarget.value)} disabled={saving()} />
+              <TextField label="แจ้งเตือนเมื่อเหลือไม่เกิน" type="number" min="0" value={lowStockThreshold()} onInput={(e) => setLowStockThreshold(e.currentTarget.value)} disabled={saving()} />
             </div>
+            <p class="text-xs text-ink-gray">ตะกร้าหน้าร้านแสดง "เหลือ X ชิ้นสุดท้าย" เมื่อเหลือไม่เกิน {LOW_STOCK_THRESHOLD} ชิ้น</p>
+          </Section>
+
+          <Section title="คะแนนและยอดขาย (แสดงบน Product Card)">
+            <div class="grid grid-cols-3 gap-4">
+              <TextField label="คะแนนรีวิว" type="number" min="0" max="5" step="0.1" value={rating()} onInput={(e) => setRating(e.currentTarget.value)} error={errors().rating} disabled={saving()} />
+              <TextField label="ขายแล้ว (ชิ้น)" type="number" min="0" value={soldCount()} onInput={(e) => setSoldCount(e.currentTarget.value)} disabled={saving()} />
+              <TextField label="จำนวนรีวิว" type="number" min="0" value={reviewCount()} onInput={(e) => setReviewCount(e.currentTarget.value)} disabled={saving()} />
+            </div>
+            <p class="text-xs text-ink-gray">เว้นว่างเพื่อซ่อนแถวคะแนน/ยอดขายบนการ์ด</p>
           </Section>
 
           <Section title="สถานะ">

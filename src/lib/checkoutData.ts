@@ -9,12 +9,16 @@ export type Address = {
   subDistrict: string;
   postalCode: string;
   isDefault?: boolean;
+  /** "billing" = saved as a ที่อยู่ออกใบเสร็จรับเงิน (may be a company); unset = a shipping address. Billing never holds the default. */
+  kind?: "billing";
 };
 
 /**
  * Mock saved addresses — this prototype has no account/address backend, so
  * these stand in for "what a returning shopper would already have on file",
- * matching Figma's own two example addresses. New/edited addresses added
+ * matching Figma's own two example addresses — in the mock persona's name
+ * (`accountData.ts` `MOCK_USER`, Nutcha S.). `addressLine` is only the
+ * house/building/street part: แขวง/เขต live in their own fields. New/edited addresses added
  * during a session are appended to this same shape by CheckoutAddressSection,
  * not a separate data structure.
  */
@@ -22,9 +26,9 @@ export const MOCK_ADDRESSES: Address[] = [
   {
     id: "addr-1",
     label: "บ้าน",
-    recipientName: "กมลชนก ใจดี",
-    phone: "081-234-5678",
-    addressLine: "88/12 ซอยสุขุมวิท 31 แขวงคลองตันเหนือ เขตวัฒนา",
+    recipientName: "Nutcha S.",
+    phone: "089-123-4567",
+    addressLine: "88/12 ซอยสุขุมวิท 31",
     province: "กรุงเทพมหานคร",
     district: "เขตวัฒนา",
     subDistrict: "คลองตันเหนือ",
@@ -34,9 +38,9 @@ export const MOCK_ADDRESSES: Address[] = [
   {
     id: "addr-2",
     label: "ที่ทำงาน",
-    recipientName: "กมลชนก ใจดี",
-    phone: "081-234-5678",
-    addressLine: "อาคารเอ็มไพร์ ชั้น 21 ถนนสาทรใต้ แขวงยานนาวา เขตสาทร",
+    recipientName: "Nutcha S.",
+    phone: "089-123-4567",
+    addressLine: "อาคารเอ็มไพร์ ชั้น 21 ถนนสาทรใต้",
     province: "กรุงเทพมหานคร",
     district: "เขตสาทร",
     subDistrict: "ยานนาวา",
@@ -64,7 +68,7 @@ export const THAI_PROVINCES = [
 /** Bangkok uses เขต/แขวง; every other province uses อำเภอ/ตำบล — labels/errors follow the selected province. */
 export const isBangkok = (province: string) => province === "กรุงเทพมหานคร";
 
-/** One-line display for cards/summaries. Seed `addressLine`s already include แขวง/เขต, so each part is only appended when its prefixed form (e.g. "เขตวัฒนา") isn't already in the line — a bare-name check would wrongly match street names like "ถนนสาทรใต้". */
+/** One-line display for cards/summaries. Each part is only appended when its prefixed form (e.g. "เขตวัฒนา") isn't already in the line (an older saved address may have typed it there) — a bare-name check would wrongly match street names like "ถนนสาทรใต้". */
 export function formatAddress(a: Address): string {
   const bkk = isBangkok(a.province);
   const withPrefix = (value: string, prefixes: RegExp, prefix: string) => {

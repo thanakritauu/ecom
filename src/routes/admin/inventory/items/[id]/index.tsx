@@ -6,7 +6,7 @@ import { Button } from "~/components/shared/Button";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { ImageIcon, InventoryIcon, RefreshIcon } from "~/components/admin/icons";
-import { STOCK_STATUS_META, getAvailableStock } from "~/lib/adminInventoryStock";
+import { STOCK_STATUS_META, getAvailableStock, inventoryStatusLabel } from "~/lib/adminInventoryStock";
 import { useAdminInventoryStock } from "~/lib/adminInventoryStockStore";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { pushToast } from "~/lib/toast";
@@ -91,7 +91,7 @@ export default function AdminInventoryItemDetailPage() {
               <div class="flex flex-col gap-6">
                 <Section title="สถานะสต็อก">
                   <StatusBadge tone={STOCK_STATUS_META[s().status].tone} class="w-fit">
-                    {STOCK_STATUS_META[s().status].label}
+                    {inventoryStatusLabel(s())}
                   </StatusBadge>
                 </Section>
 

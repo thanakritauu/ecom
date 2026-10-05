@@ -5,7 +5,7 @@ import { PageHeader } from "~/components/shared/PageHeader";
 import { Button } from "~/components/shared/Button";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { RefreshIcon, CheckCircleIcon, InventoryIcon, ImageIcon } from "~/components/admin/icons";
-import { STOCK_STATUS_META, getAvailableStock } from "~/lib/adminInventoryStock";
+import { STOCK_STATUS_META, getAvailableStock, inventoryStatusLabel } from "~/lib/adminInventoryStock";
 import { useAdminInventoryStock } from "~/lib/adminInventoryStockStore";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { pushToast } from "~/lib/toast";
@@ -107,7 +107,7 @@ export default function AdminInventoryOverviewPage() {
                     <p class="truncate text-sm font-medium text-ink">{p?.name ?? "(ไม่พบสินค้า)"}</p>
                     <p class="truncate text-xs text-ink-gray">{p?.sku ?? "-"} · {s.warehouse}</p>
                   </div>
-                  <StatusBadge tone={STOCK_STATUS_META[s.status].tone}>{STOCK_STATUS_META[s.status].label}</StatusBadge>
+                  <StatusBadge tone={STOCK_STATUS_META[s.status].tone}>{inventoryStatusLabel(s)}</StatusBadge>
                 </A>
               );
             })}

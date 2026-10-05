@@ -1,7 +1,7 @@
 import { createEffect, createSignal, Show } from "solid-js";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { getStockStatus, STOCK_STATUS_META, ADMIN_PRODUCT_STATUS_META, type AdminProduct } from "~/lib/adminProductStore";
+import { getStockStatus, STOCK_STATUS_META, stockStatusLabel, ADMIN_PRODUCT_STATUS_META, type AdminProduct } from "~/lib/adminProductStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { useAdminBrands } from "~/lib/adminBrandStore";
 import { ProductVariantImages } from "./ProductVariantImages";
@@ -70,7 +70,7 @@ export function ProductQuickView(props: { product: AdminProduct }) {
 
       <div class="flex flex-wrap items-center gap-2">
         <StatusBadge tone={ADMIN_PRODUCT_STATUS_META[p().status].tone}>{ADMIN_PRODUCT_STATUS_META[p().status].label}</StatusBadge>
-        <StatusBadge tone={STOCK_STATUS_META[stockStatus()].tone}>{STOCK_STATUS_META[stockStatus()].label}</StatusBadge>
+        <StatusBadge tone={STOCK_STATUS_META[stockStatus()].tone}>{stockStatusLabel(p())}</StatusBadge>
       </div>
 
       <Show when={p().adminVariants.length > 0}>

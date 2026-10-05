@@ -11,6 +11,7 @@ import visaMark from "~/assets/icons/payment/visa.svg";
 import mastercardMark from "~/assets/icons/payment/mastercard.svg";
 import promptPayMark from "~/assets/icons/payment/promptpay.png";
 import trueMoneyMark from "~/assets/icons/payment/truemoney.png";
+import { CheckIcon } from "../shared/icons";
 
 /**
  * One-page Checkout — payment, right after the billing address: pick a
@@ -63,9 +64,7 @@ export function PaymentSection(props: {
                 </span>
                 <Show when={p.method() === m.id}>
                   <span class="absolute right-4 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-pill bg-brand-pink text-white sm:right-2 sm:top-2 sm:translate-y-0" aria-hidden="true">
-                    <svg viewBox="0 0 16 16" fill="none" class="size-3.5">
-                      <path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
+                    <CheckIcon class="size-3.5" />
                   </span>
                 </Show>
               </button>
@@ -74,7 +73,99 @@ export function PaymentSection(props: {
         </div>
 
         <Show when={p.method() === "card"}>
-          <CardPaymentForm card={p.card()} onChange={p.setCard} errors={p.cardErrors()} onBlurField={p.touchCard} disabled={p.busy()} />
+          {/* Saved cards (if any): pick one and confirm with its CVV, or switch to a new card. */}
+          <Show when={p.savedCards().length > 0}>
+            <div class="flex flex-col gap-2">
+              <p id="saved-cards-heading" class="text-sm font-medium text-ink">
+                บัตรที่บันทึกไว้
+              </p>
+              <div role="radiogroup" aria-labelledby="saved-cards-heading" class="flex flex-col gap-2">
+                <For each={p.savedCards()}>
+                  {(c) => (
+                    <div
+                      class="flex flex-col rounded-card border-2 transition-colors duration-150"
+                      classList={{
+                        "border-brand-pink bg-surface-pink": p.cardChoice() === c.id,
+                        "border-surface-gray bg-white hover:border-brand-pink/40": p.cardChoice() !== c.id,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={p.cardChoice() === c.id}
+                        disabled={p.busy()}
+                        onClick={() => p.pickCard(c.id)}
+                        class="font-normal flex min-h-[56px] w-full items-center gap-3 px-4 py-3 text-left"
+                      >
+                        <RadioDot checked={p.cardChoice() === c.id} />
+                        <Show when={BRAND_MARK[c.brand]} fallback={<span class="w-9 shrink-0 text-xs font-bold uppercase text-ink">{c.brand}</span>}>
+                          {(src) => <img src={src()} alt="" class="h-6 w-auto shrink-0 rounded-[3px]" />}
+                        </Show>
+                        <span class="flex min-w-0 flex-1 flex-col">
+                          <span class="text-sm font-semibold tracking-wider text-ink">•••• {c.last4}</span>
+                          <span class="truncate text-xs text-ink-gray">
+                            หมดอายุ {c.expiry} · {c.holder}
+                          </span>
+                        </span>
+                        <span class="sr-only">{`บัตร ${c.brand} ลงท้าย ${c.last4}`}</span>
+                      </button>
+                      <Show when={p.cardChoice() === c.id}>
+                        <div class="px-4 pb-4">
+                          <div class="sm:max-w-[220px]">
+                            <TextField
+                              label="CVV ของบัตรนี้"
+                              required
+                              type="password"
+                              inputMode="numeric"
+                              autocomplete="cc-csc"
+                              placeholder="•••"
+                              maxlength={4}
+                              disabled={p.busy()}
+                              value={p.savedCvv()}
+                              onInput={(e) => p.setSavedCvv(e.currentTarget.value.replace(/\D/g, ""))}
+                              onBlur={p.touchSavedCvv}
+                              error={p.savedCvvError()}
+                            />
+                          </div>
+                        </div>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={p.cardChoice() === "new"}
+                  disabled={p.busy()}
+                  onClick={() => p.pickCard("new")}
+                  class="font-normal flex min-h-[56px] w-full items-center gap-3 rounded-card border-2 px-4 py-3 text-left transition-colors duration-150"
+                  classList={{
+                    "border-brand-pink bg-surface-pink": p.cardChoice() === "new",
+                    "border-surface-gray bg-white hover:border-brand-pink/40": p.cardChoice() !== "new",
+                  }}
+                >
+                  <RadioDot checked={p.cardChoice() === "new"} />
+                  <span class="text-sm font-semibold text-ink">ใช้บัตรใบใหม่</span>
+                </button>
+              </div>
+            </div>
+          </Show>
+
+          <Show when={p.cardChoice() === "new"}>
+            <CardPaymentForm card={p.card()} onChange={p.setCard} errors={p.cardErrors()} onBlurField={p.touchCard} disabled={p.busy()} />
+            <Show when={p.canSaveCard()}>
+              <label class="-mt-1 flex min-h-11 cursor-pointer items-center gap-3 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={p.saveNewCard()}
+                  disabled={p.busy()}
+                  onChange={(e) => p.setSaveNewCard(e.currentTarget.checked)}
+                  class="size-5 shrink-0 rounded accent-brand-pink"
+                />
+                บันทึกบัตรนี้ไว้ใช้ครั้งต่อไป
+              </label>
+            </Show>
+          </Show>
         </Show>
 
         <Show when={p.method() === "promptpay"}>
@@ -192,6 +283,22 @@ function MethodMark(props: { id: PaymentMethodId; active: boolean }) {
       </Show>
       <Show when={props.id === "truemoney"}>
         <img src={trueMoneyMark} alt="" class="h-5 w-auto" />
+      </Show>
+    </span>
+  );
+}
+
+const BRAND_MARK: Partial<Record<string, string>> = { visa: visaMark, mastercard: mastercardMark };
+
+function RadioDot(props: { checked: boolean }) {
+  return (
+    <span
+      class="flex size-5 shrink-0 items-center justify-center rounded-pill border-2"
+      classList={{ "border-brand-pink": props.checked, "border-ink-placeholder": !props.checked }}
+      aria-hidden="true"
+    >
+      <Show when={props.checked}>
+        <span class="size-2.5 rounded-pill bg-brand-pink" />
       </Show>
     </span>
   );

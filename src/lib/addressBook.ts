@@ -18,18 +18,22 @@ export interface AddressRepository {
   /** Adds or updates by `id`. `makeDefault` moves the default flag to this address. Returns the full updated list. */
   save(address: Address, opts?: { makeDefault?: boolean }): Promise<Address[]>;
   setDefault(id: string): Promise<Address[]>;
+  /** Removing the default hands the flag to the next address. */
+  remove(id: string): Promise<Address[]>;
 }
 
 export type AddressMockState = "new" | "existing";
 
-/** Applies the single-default invariant: exactly one default whenever there's at least one address. */
+/** Applies the single-default invariant: exactly one default shipping address whenever there's at least one (billing addresses never are). */
 function withSingleDefault(list: Address[], defaultId?: string): Address[] {
-  const target = defaultId ?? list.find((a) => a.isDefault)?.id ?? list[0]?.id;
-  return list.map((a) => ({ ...a, isDefault: a.id === target }));
+  const shipping = list.filter((a) => a.kind !== "billing");
+  const target = (defaultId && shipping.some((a) => a.id === defaultId) ? defaultId : undefined) ?? shipping.find((a) => a.isDefault)?.id ?? shipping[0]?.id;
+  return list.map((a) => ({ ...a, isDefault: a.kind !== "billing" && a.id === target }));
 }
 
 export function createLocalAddressRepository(mockState: AddressMockState): AddressRepository {
-  const key = `charmiss:addresses:${mockState}`;
+  // v2: seed addresses moved to the persona's name (no แขวง/เขต repeated in the line) — older copies reseed.
+  const key = `charmiss:addresses:v2:${mockState}`;
   const seed = () => (mockState === "existing" ? withSingleDefault(MOCK_ADDRESSES) : []);
 
   const read = (): Address[] => {
@@ -64,11 +68,15 @@ export function createLocalAddressRepository(mockState: AddressMockState): Addre
       await delay();
       return write(withSingleDefault(read(), id));
     },
+    async remove(id) {
+      await delay();
+      return write(withSingleDefault(read().filter((a) => a.id !== id)));
+    },
   };
 }
 
 /**
- * Reactive wrapper Checkout uses. The repository is resolved on mount
+ * Reactive wrapper Checkout and the account's address page use. The repository is resolved on mount
  * (client only) because which one applies can depend on client-side state
  * such as the signed-in user.
  */
@@ -86,7 +94,7 @@ export function createAddressBook(resolveRepo: () => AddressRepository) {
   return {
     addresses,
     ready,
-    defaultAddress: () => addresses().find((a) => a.isDefault) ?? addresses()[0],
+    defaultAddress: () => addresses().find((a) => a.isDefault) ?? addresses().find((a) => a.kind !== "billing"),
     save: async (address: Address, opts?: { makeDefault?: boolean }) => {
       const list = await getRepo().save(address, opts);
       setAddresses(list);
@@ -94,6 +102,9 @@ export function createAddressBook(resolveRepo: () => AddressRepository) {
     },
     setDefault: async (id: string) => {
       setAddresses(await getRepo().setDefault(id));
+    },
+    remove: async (id: string) => {
+      setAddresses(await getRepo().remove(id));
     },
   };
 }

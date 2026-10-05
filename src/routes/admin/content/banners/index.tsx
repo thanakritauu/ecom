@@ -277,7 +277,7 @@ export default function AdminBannersListPage() {
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "Banners" }]} />
       <PageHeader
         title="Banners"
-        description="จัดการ Banner สำหรับ Homepage และ Campaign"
+        description="คลังไฟล์ Banner (Asset Library) — เก็บรูป Desktop / Tablet / Mobile ไว้เลือกใช้ใน Section ของหน้าแรกและหน้าโปรโมชั่น ผ่านปุ่ม “เลือกจาก Banner ที่มีอยู่” การเผยแพร่ในหน้านี้ไม่ได้วาง Banner บนหน้าร้านโดยตรง"
         actions={
           <div class="flex flex-wrap items-center gap-2">
             <Button href="/admin/content/banners/new" variant="primary">

@@ -3,7 +3,7 @@ import { isServer } from "solid-js/web";
 import { normalizeCategory, buildMockCategories, type AdminCategory } from "./adminCategories";
 
 /** Same key `adminCategoryStore.tsx` (Admin's source of truth) persists to — read-only here, never written from the customer side. */
-const STORAGE_KEY = "charmiss:admin:catalog:categories";
+const STORAGE_KEY = "charmiss:admin:catalog:categories:v2"; // v2 = คุชชั่น / ลิป / แก้ม / ตาและคิ้ว / ดูแลผิว / กันแดดและบอดี้แคร์
 
 /**
  * Falls back to the same seed baseline `adminCategoryStore.tsx` starts from

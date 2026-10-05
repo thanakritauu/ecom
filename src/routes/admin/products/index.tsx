@@ -22,7 +22,9 @@ import { formatAdminCurrency } from "~/lib/adminDashboard";
 import {
   useAdminProducts,
   getStockStatus,
+  LOW_STOCK_THRESHOLD,
   STOCK_STATUS_META,
+  stockStatusLabel,
   ADMIN_PRODUCT_STATUS_META,
   type AdminProduct,
   type AdminProductStatus,
@@ -154,7 +156,7 @@ export default function AdminProductListPage() {
         categoryId: category?.id ?? "",
         price: Number.isFinite(price) && price > 0 ? price : 0,
         stockLeft: Number.isFinite(stock) && stock >= 0 ? stock : 0,
-        lowStockThreshold: 5,
+        lowStockThreshold: LOW_STOCK_THRESHOLD,
         status: resolvedStatus ?? "draft",
         images: [],
         adminVariants: [],
@@ -413,7 +415,7 @@ export default function AdminProductListPage() {
         return (
           <div class="flex items-center gap-2 whitespace-nowrap">
             <span class="text-ink">{row.stockLeft ?? 0}</span>
-            <StatusBadge tone={STOCK_STATUS_META[stockStatus].tone}>{STOCK_STATUS_META[stockStatus].label}</StatusBadge>
+            <StatusBadge tone={STOCK_STATUS_META[stockStatus].tone}>{stockStatusLabel(row)}</StatusBadge>
           </div>
         );
       },
@@ -488,9 +490,9 @@ export default function AdminProductListPage() {
             value: stockFilter(),
             options: [
               { value: "all", label: "ทุกสต๊อก" },
-              { value: "in_stock", label: "In Stock" },
-              { value: "low_stock", label: "Low Stock" },
-              { value: "out_of_stock", label: "Out of Stock" },
+              { value: "in_stock", label: STOCK_STATUS_META.in_stock.label },
+              { value: "low_stock", label: STOCK_STATUS_META.low_stock.label },
+              { value: "out_of_stock", label: STOCK_STATUS_META.out_of_stock.label },
             ],
           },
         ]}
@@ -562,7 +564,7 @@ export default function AdminProductListPage() {
                         <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <span class="flex items-center gap-1.5 whitespace-nowrap text-sm text-ink-gray">
                             Stock {row.stockLeft ?? 0}
-                            <StatusBadge tone={STOCK_STATUS_META[stockStatus].tone}>{STOCK_STATUS_META[stockStatus].label}</StatusBadge>
+                            <StatusBadge tone={STOCK_STATUS_META[stockStatus].tone}>{stockStatusLabel(row)}</StatusBadge>
                           </span>
                           <StatusBadge tone={ADMIN_PRODUCT_STATUS_META[row.status].tone}>{ADMIN_PRODUCT_STATUS_META[row.status].label}</StatusBadge>
                         </div>

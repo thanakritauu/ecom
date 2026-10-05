@@ -23,8 +23,10 @@ import {
   ORDER_STATUS_META,
   PAYMENT_STATUS_META,
   FULFILLMENT_STATUS_META,
+  RETURN_STATUS_META,
   ORDER_VALUE_BUCKETS,
-  VALID_NEXT_ORDER_STATUS,
+  canCancelOrder,
+  daysBeforeToday,
   type AdminOrder,
   type OrderStatus,
   type PaymentStatus,
@@ -42,16 +44,21 @@ const SORT_OPTIONS = [
   { value: "customer-asc", label: "ชื่อลูกค้า A→Z" },
 ];
 
-/** All our mock dates fall within 6–17 ก.ย. 2569 — "today" is anchored at 17, matching the rest of the admin prototype's mock timeline (Phase 02's Dashboard). */
-const TODAY_DAY = 17;
-function dayOf(dateLabel: string): number {
-  return Number(dateLabel.match(/^(\d+)/)?.[1] ?? TODAY_DAY);
+/** Relative to the Orders module's mock today (`ORDERS_TODAY_ISO_DATE`, 2 ต.ค. 2569 — the storefront's newest account order). */
+function withinPeriod(placedAt: string, period: DashboardPeriodKey): boolean {
+  const days = daysBeforeToday(placedAt);
+  if (period === "today") return days === 0;
+  if (period === "7d") return days <= 7;
+  if (period === "30d") return days <= 30;
+  if (period === "month") return placedAt.slice(0, 7) === "2026-10";
+  return true; // custom — no range picker wired to this list yet
 }
-function withinPeriod(dateLabel: string, period: DashboardPeriodKey): boolean {
-  if (period === "today") return dayOf(dateLabel) === TODAY_DAY;
-  if (period === "7d") return TODAY_DAY - dayOf(dateLabel) <= 7;
-  return true; // 30d / month / custom — the whole mock dataset already fits within 30 days
-}
+
+const RETURN_FILTER_OPTIONS = [
+  { value: "all", label: "ทุกคำสั่งซื้อ" },
+  { value: "any", label: "มีคำขอคืนสินค้า" },
+  ...Object.entries(RETURN_STATUS_META).map(([value, meta]) => ({ value, label: meta.label })),
+];
 
 export default function AdminOrderListPage() {
   const store = useAdminOrders();
@@ -68,6 +75,7 @@ export default function AdminOrderListPage() {
   const [search, setSearchRaw] = createSignal("");
   const [fulfillmentFilter, setFulfillmentFilterRaw] = createSignal<FulfillmentStatus | "all">("all");
   const [valueFilter, setValueFilterRaw] = createSignal("all");
+  const [returnFilter, setReturnFilterRaw] = createSignal("all");
   const [dateFilter, setDateFilter] = createSignal<DashboardPeriodKey>("30d");
   const [sort, setSortRaw] = createSignal("date-desc");
   const [page, setPage] = createSignal(1);
@@ -91,18 +99,20 @@ export default function AdminOrderListPage() {
   const setPaymentFilter = (v: string) => { setSearchParams({ payment: v === "all" ? undefined : v }); resetPage(); };
   const setFulfillmentFilter = (v: string) => { setFulfillmentFilterRaw(v as FulfillmentStatus | "all"); resetPage(); };
   const setValueFilter = (v: string) => { setValueFilterRaw(v); resetPage(); };
+  const setReturnFilter = (v: string) => { setReturnFilterRaw(v); resetPage(); };
   const setDateFilterAndReset = (v: DashboardPeriodKey) => { setDateFilter(v); resetPage(); };
   const setSort = (v: string) => { setSortRaw(v); resetPage(); };
   const setPageSize = (v: number) => { setPageSizeRaw(v); resetPage(); };
 
   const hasActiveFilters = () =>
-    search().trim() !== "" || statusFilter() !== "all" || paymentFilter() !== "all" || fulfillmentFilter() !== "all" || valueFilter() !== "all";
+    search().trim() !== "" || statusFilter() !== "all" || paymentFilter() !== "all" || fulfillmentFilter() !== "all" || valueFilter() !== "all" || returnFilter() !== "all";
 
   const clearFilters = () => {
     setSearchRaw("");
     setSearchParams({ status: undefined, payment: undefined });
     setFulfillmentFilterRaw("all");
     setValueFilterRaw("all");
+    setReturnFilterRaw("all");
     resetPage();
   };
 
@@ -117,6 +127,7 @@ export default function AdminOrderListPage() {
     const payment = paymentFilter();
     const fulfillment = fulfillmentFilter();
     const valueBucket = valueFilter();
+    const returns = returnFilter();
     const period = dateFilter();
     const q = search().trim().toLowerCase();
     const bucket = ORDER_VALUE_BUCKETS.find((b) => b.value === valueBucket);
@@ -126,9 +137,11 @@ export default function AdminOrderListPage() {
       if (payment !== "all" && order.paymentStatus !== payment) return false;
       if (fulfillment !== "all" && order.fulfillmentStatus !== fulfillment) return false;
       if (bucket && (order.totals.grandTotal < bucket.min || order.totals.grandTotal >= bucket.max)) return false;
-      if (!withinPeriod(order.createdAt, period)) return false;
+      if (returns === "any" && !order.returnRequest) return false;
+      if (returns !== "all" && returns !== "any" && order.returnRequest?.status !== returns) return false;
+      if (!withinPeriod(order.placedAt, period)) return false;
       if (q) {
-        const haystack = `${order.orderNumber} ${order.customer.name} ${order.customer.email} ${order.customer.phone} ${order.items
+        const haystack = `${order.orderNumber} ${order.customer.name} ${order.customer.email} ${order.customer.phone} ${order.shipping.trackingNumber ?? ""} ${order.items
           .map((i) => `${i.sku} ${i.name}`)
           .join(" ")}`.toLowerCase();
         if (!haystack.includes(q)) return false;
@@ -141,7 +154,7 @@ export default function AdminOrderListPage() {
     const list = [...filtered()];
     switch (sort()) {
       case "date-asc":
-        return list.sort((a, b) => dayOf(a.createdAt) - dayOf(b.createdAt));
+        return list.sort((a, b) => a.placedAt.localeCompare(b.placedAt));
       case "value-desc":
         return list.sort((a, b) => b.totals.grandTotal - a.totals.grandTotal);
       case "value-asc":
@@ -149,7 +162,7 @@ export default function AdminOrderListPage() {
       case "customer-asc":
         return list.sort((a, b) => a.customer.name.localeCompare(b.customer.name));
       default:
-        return list.sort((a, b) => dayOf(b.createdAt) - dayOf(a.createdAt));
+        return list.sort((a, b) => b.placedAt.localeCompare(a.placedAt));
     }
   });
 
@@ -158,10 +171,16 @@ export default function AdminOrderListPage() {
     { header: "Customer Name", value: (o) => o.customer.name },
     { header: "Date", value: (o) => o.createdAt },
     { header: "Items", value: (o) => o.items.length },
+    { header: "Subtotal", value: (o) => o.totals.subtotal },
+    { header: "Coupon", value: (o) => (o.totals.couponDiscount > 0 ? `${o.totals.couponCode ?? ""} -${o.totals.couponDiscount}` : "") },
+    { header: "Charmiss Coin", value: (o) => (o.totals.coinDiscount > 0 ? `${o.totals.coinsRedeemed} คอยน์ -${o.totals.coinDiscount}` : "") },
     { header: "Total", value: (o) => o.totals.grandTotal },
+    { header: "Payment Method", value: (o) => o.payment.method },
+    { header: "DHL Tracking", value: (o) => o.shipping.trackingNumber ?? "" },
     { header: "Order Status", value: (o) => ORDER_STATUS_META[o.orderStatus].label },
     { header: "Payment Status", value: (o) => PAYMENT_STATUS_META[o.paymentStatus].label },
     { header: "Fulfillment Status", value: (o) => FULFILLMENT_STATUS_META[o.fulfillmentStatus].label },
+    { header: "Return", value: (o) => (o.returnRequest ? RETURN_STATUS_META[o.returnRequest.status].label : "") },
   ];
 
   const totalPages = createMemo(() => Math.max(1, Math.ceil(sorted().length / pageSize())));
@@ -184,9 +203,9 @@ export default function AdminOrderListPage() {
     });
   const clearSelection = () => setSelectedIds(new Set<string>());
 
-  /** PART 4 — bulk Cancel only ever applies where every selected order can actually reach `cancelled` next; otherwise the action stays disabled per Global Rule #4 rather than silently skipping orders it can't touch. */
+  /** PART 4 — bulk Cancel only ever applies where every selected order can still be cancelled (storefront rule: before hand-over to DHL); otherwise the action stays disabled per Global Rule #4 rather than silently skipping orders it can't touch. */
   const selectedOrders = createMemo(() => store.orders().filter((o) => selectedIds().has(o.id)));
-  const canBulkCancel = createMemo(() => selectedOrders().length > 0 && selectedOrders().every((o) => VALID_NEXT_ORDER_STATUS[o.orderStatus].includes("cancelled")));
+  const canBulkCancel = createMemo(() => selectedOrders().length > 0 && selectedOrders().every(canCancelOrder));
 
   const confirmBulkCancelAction = async () => {
     const ids = [...selectedIds()];
@@ -266,7 +285,14 @@ export default function AdminOrderListPage() {
     {
       key: "status",
       label: "Order Status",
-      render: (row) => <StatusBadge tone={ORDER_STATUS_META[row.orderStatus].tone}>{ORDER_STATUS_META[row.orderStatus].label}</StatusBadge>,
+      render: (row) => (
+        <div class="flex flex-col items-start gap-1">
+          <StatusBadge tone={ORDER_STATUS_META[row.orderStatus].tone}>{ORDER_STATUS_META[row.orderStatus].label}</StatusBadge>
+          <Show when={row.returnRequest}>
+            {(r) => <StatusBadge tone={RETURN_STATUS_META[r().status].tone}>{RETURN_STATUS_META[r().status].label}</StatusBadge>}
+          </Show>
+        </div>
+      ),
     },
     {
       key: "action",
@@ -301,7 +327,7 @@ export default function AdminOrderListPage() {
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
         <div class="flex-1">
           <FilterBar
-            search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาเลขที่คำสั่งซื้อ, ลูกค้า, อีเมล, เบอร์โทร, SKU..." }}
+            search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาเลขที่คำสั่งซื้อ, ลูกค้า, อีเมล, เบอร์โทร, เลขพัสดุ, SKU..." }}
             filters={[
               {
                 id: "payment",
@@ -316,6 +342,12 @@ export default function AdminOrderListPage() {
                 options: [{ value: "all", label: "ทุกสถานะการจัดส่ง" }, ...Object.entries(FULFILLMENT_STATUS_META).map(([value, meta]) => ({ value, label: meta.label }))],
               },
               {
+                id: "return",
+                label: "การคืนสินค้า",
+                value: returnFilter(),
+                options: RETURN_FILTER_OPTIONS,
+              },
+              {
                 id: "value",
                 label: "ยอดสั่งซื้อ",
                 value: valueFilter(),
@@ -326,6 +358,7 @@ export default function AdminOrderListPage() {
               if (id === "payment") setPaymentFilter(value);
               if (id === "fulfillment") setFulfillmentFilter(value);
               if (id === "value") setValueFilter(value);
+              if (id === "return") setReturnFilter(value);
             }}
             sort={{ value: sort(), options: SORT_OPTIONS, onChange: setSort }}
           />
@@ -402,6 +435,9 @@ export default function AdminOrderListPage() {
                       <StatusBadge tone={ORDER_STATUS_META[row.orderStatus].tone}>{ORDER_STATUS_META[row.orderStatus].label}</StatusBadge>
                       <StatusBadge tone={PAYMENT_STATUS_META[row.paymentStatus].tone}>{PAYMENT_STATUS_META[row.paymentStatus].label}</StatusBadge>
                       <StatusBadge tone={FULFILLMENT_STATUS_META[row.fulfillmentStatus].tone}>{FULFILLMENT_STATUS_META[row.fulfillmentStatus].label}</StatusBadge>
+                      <Show when={row.returnRequest}>
+                        {(r) => <StatusBadge tone={RETURN_STATUS_META[r().status].tone}>{RETURN_STATUS_META[r().status].label}</StatusBadge>}
+                      </Show>
                     </div>
                     <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">
                       ดูรายละเอียด

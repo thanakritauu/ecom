@@ -10,7 +10,7 @@ import { MISSION_STATUS_META } from "~/lib/adminLoyaltyMissions";
 import { useAdminMissions } from "~/lib/adminLoyaltyMissionStore";
 import { pushToast } from "~/lib/toast";
 
-/** Read-only Detail — Mission Rule/Business Logic is entirely Cordy's; no edit affordance anywhere. */
+/** Read-only Detail — Mission Rule/Business Logic is entirely the CRM's; no edit affordance anywhere. */
 export default function AdminLoyaltyMissionDetailPage() {
   const params = useParams<{ id: string }>();
   const store = useAdminMissions();
@@ -25,10 +25,10 @@ export default function AdminLoyaltyMissionDetailPage() {
     setSyncing(true);
     await store.syncSelected([m.id]);
     setSyncing(false);
-    pushToast("Sync ข้อมูลจาก Cordy CRM เรียบร้อยแล้ว", "success");
+    pushToast("Sync ข้อมูลจาก Charmiss Club CRM เรียบร้อยแล้ว", "success");
   };
 
-  const openCordyCrm = () => pushToast("(จำลอง) กำลังเปิด Cordy CRM ในแท็บใหม่", "success");
+  const openCrm = () => pushToast("(จำลอง) กำลังเปิด Charmiss Club CRM ในแท็บใหม่", "success");
 
   return (
     <Show
@@ -36,7 +36,7 @@ export default function AdminLoyaltyMissionDetailPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สะสมแต้ม", href: "/admin/loyalty" }, { label: "ภารกิจ", href: "/admin/loyalty/missions" }]} />
-          <EmptyState icon={<MissionFlagIcon />} title="ไม่พบภารกิจนี้" description="ข้อมูลอาจยังไม่ได้ Sync มาจาก Cordy CRM หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าภารกิจ" onAction={() => navigate("/admin/loyalty/missions")} class="bg-surface-card shadow-card" />
+          <EmptyState icon={<MissionFlagIcon />} title="ไม่พบภารกิจนี้" description="ข้อมูลอาจยังไม่ได้ Sync มาจาก Charmiss Club CRM หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าภารกิจ" onAction={() => navigate("/admin/loyalty/missions")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -53,8 +53,8 @@ export default function AdminLoyaltyMissionDetailPage() {
                   <Button variant="outline" onClick={handleSync} loading={syncing()}>
                     <RefreshIcon class="size-4" /> Sync
                   </Button>
-                  <Button variant="primary" onClick={openCordyCrm}>
-                    จัดการใน Cordy CRM
+                  <Button variant="primary" onClick={openCrm}>
+                    จัดการใน Charmiss Club CRM
                   </Button>
                 </div>
               }

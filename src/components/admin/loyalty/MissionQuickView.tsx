@@ -2,7 +2,7 @@ import { StatusBadge } from "~/components/admin/StatusBadge";
 import { MissionFlagIcon } from "~/components/admin/icons";
 import { MISSION_STATUS_META, type AdminMission } from "~/lib/adminLoyaltyMissions";
 
-/** Read-only — every field here is Cordy CRM's own Mission data. */
+/** Read-only — every field here is Charmiss Club CRM's own Mission data. */
 export function MissionQuickView(props: { mission: AdminMission }) {
   const m = () => props.mission;
 

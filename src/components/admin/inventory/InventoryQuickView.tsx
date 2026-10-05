@@ -1,7 +1,7 @@
 import { Show } from "solid-js";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { ImageIcon } from "~/components/admin/icons";
-import { STOCK_STATUS_META, getAvailableStock, type AdminInventoryStock } from "~/lib/adminInventoryStock";
+import { STOCK_STATUS_META, getAvailableStock, inventoryStatusLabel, type AdminInventoryStock } from "~/lib/adminInventoryStock";
 import type { AdminProduct } from "~/lib/adminProductStore";
 
 /** Read-only — every field here is the Inventory System's own Stock data; Product name/SKU/image are looked up live, never duplicated. */
@@ -27,7 +27,7 @@ export function InventoryQuickView(props: { stock: AdminInventoryStock; product:
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
-        <StatusBadge tone={STOCK_STATUS_META[s().status].tone}>{STOCK_STATUS_META[s().status].label}</StatusBadge>
+        <StatusBadge tone={STOCK_STATUS_META[s().status].tone}>{inventoryStatusLabel(s())}</StatusBadge>
         <StatusBadge tone="info">Source: {s().source}</StatusBadge>
       </div>
 

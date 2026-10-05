@@ -114,7 +114,7 @@ export function NotificationItemFormDrawer(props: {
                     value={linkUrl()}
                     onInput={(e) => setLinkUrl(e.currentTarget.value)}
                     error={errors().linkUrl}
-                    placeholder="/promotions"
+                    placeholder="/promotion/promotions"
                     disabled={props.saving}
                   />
                 </Show>

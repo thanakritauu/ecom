@@ -30,6 +30,18 @@ export type AdminInventoryStock = {
   syncedAt: string;
 };
 
+/** Same low-stock line as the storefront cart ("เหลือ X ชิ้นสุดท้าย" at ≤ 5) and Product Management's default. */
+export const INVENTORY_LOW_STOCK_THRESHOLD = 5;
+
+export function getInventoryStockStatus(available: number): StockStatus {
+  return available <= 0 ? "out_of_stock" : available <= INVENTORY_LOW_STOCK_THRESHOLD ? "low_stock" : "in_stock";
+}
+
+/** Badge text — a low-stock row reads like the storefront cart ("เหลือ X ชิ้นสุดท้าย"); the filter keeps the short "ใกล้หมด". */
+export function inventoryStatusLabel(s: Pick<AdminInventoryStock, "status" | "onHand" | "reserved">): string {
+  return s.status === "low_stock" ? `เหลือ ${getAvailableStock(s)} ชิ้นสุดท้าย` : STOCK_STATUS_META[s.status].label;
+}
+
 /** "Available" is always derived as On Hand minus Reserved — never a third stored number that could drift out of sync (same rule as Loyalty's `getLoyaltyCoinsUsed`). */
 export function getAvailableStock(s: Pick<AdminInventoryStock, "onHand" | "reserved">): number {
   return Math.max(0, s.onHand - s.reserved);
@@ -69,7 +81,7 @@ export function buildMockInventoryStock(products: { id: string; stockLeft?: numb
     const left = hasMockStock ? (p.stockLeft ?? 0) : FALLBACK_STOCK_ROTATION[i % FALLBACK_STOCK_ROTATION.length];
     const onHand = Math.max(p.stockTotal ?? 0, left);
     const reserved = Math.max(0, onHand - left);
-    const status: StockStatus = left <= 0 ? "out_of_stock" : left <= 10 ? "low_stock" : "in_stock";
+    const status = getInventoryStockStatus(left);
     return {
       id: `inv-${p.id}`,
       productId: p.id,
@@ -97,13 +109,12 @@ export const LINE_ITEM_STOCK_STATUS_META: Record<MockLineItemStockStatus, { labe
 export function getMockLineItemStockStatus(orderStatus: string): MockLineItemStockStatus {
   switch (orderStatus) {
     case "pending_payment":
-    case "confirmed":
       return "reserved";
-    case "processing":
-    case "packed":
+    case "preparing":
       return "preparing";
-    case "shipped":
-    case "delivered":
+    case "handed_over":
+    case "shipping":
+    case "completed":
       return "deducted";
     case "cancelled":
     case "refunded":

@@ -36,7 +36,7 @@ export function buildMockPromotionStripState(): PromotionStripState {
       icon: promoBadge99,
       text: "Charmiss MEGA SALE ลดสูงสุด 70% รับคูปองลดเพิ่ม 25%",
       linkLabel: "ช็อปเลย!",
-      linkUrl: "/promotions",
+      linkUrl: "/promotion/promotions",
       enabled: true,
     },
     pink: {
@@ -50,11 +50,14 @@ export function buildMockPromotionStripState(): PromotionStripState {
 }
 
 /** A state persisted before a field existed on it comes back with it `undefined` unless backfilled — same root-cause guard every other Admin store's `normalize*` applies. */
+/** `/promotions` never had a route — saved bars from before the fix point at the real promotions page instead. */
+const fixLegacyLink = <T extends { linkUrl?: string }>(bar: T): T => (bar.linkUrl === "/promotions" ? { ...bar, linkUrl: "/promotion/promotions" } : bar);
+
 export function normalizePromotionStripState(state: PromotionStripState): PromotionStripState {
   const seed = buildMockPromotionStripState();
   return {
-    purple: { ...seed.purple, ...state.purple, enabled: state.purple?.enabled ?? true },
-    pink: { ...seed.pink, ...state.pink },
+    purple: fixLegacyLink({ ...seed.purple, ...state.purple, enabled: state.purple?.enabled ?? true }),
+    pink: fixLegacyLink({ ...seed.pink, ...state.pink }),
     updatedAt: state.updatedAt ?? TODAY_LABEL,
   };
 }

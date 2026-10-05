@@ -1,18 +1,20 @@
 import { createEffect, createSignal, For, on, Show } from "solid-js";
-import type { Coupon } from "~/lib/cartSelectors";
+import { isCouponActive, type Coupon } from "~/lib/cartSelectors";
 import { SheetModal } from "../shared/SheetModal";
-import { CouponCard, type CouponCardAction } from "../shared/CouponCard";
+import { CouponCard, couponTicket, type CouponCardAction } from "../shared/CouponCard";
 import { formatTHB } from "../shared/PriceDisplay";
 import { Button } from "../shared/Button";
 import { TextField } from "../shared/TextField";
+import { pushToast } from "~/lib/toast";
 
 /**
  * Checkout coupon picker — the shared modal frame (`SheetModal`, same as the
  * Product Option Modal) listing Home's coupon ticket (`CouponCard`). One
- * coupon per order: "ใช้เลย" applies it and closes; the applied one shows
+ * coupon per order: "ใช้เลย" applies it, closes and confirms with a toast; the applied one shows
  * "ยกเลิก". A coupon whose minimum spend isn't met yet stays visible but
  * can't be used, with how much more to buy. A code can also be typed in
- * (top of the modal) — same coupons, same rules, case-insensitive.
+ * (top of the modal) — same coupons, same rules, case-insensitive. An
+ * expired coupon is never listed, and its code is refused when typed.
  */
 export function CouponPickerSheet(props: {
   open: boolean;
@@ -23,6 +25,17 @@ export function CouponPickerSheet(props: {
   onApply: (coupon: Coupon) => void;
   onRemove: () => void;
 }) {
+  const usable = () => props.coupons.filter((c) => isCouponActive(c));
+  const apply = (coupon: Coupon, via: "code" | "pick") => {
+    props.onApply(coupon);
+    props.onOpenChange(false);
+    pushToast(
+      via === "code" ? `ใช้โค้ด ${coupon.code} แล้ว` : "ใช้คูปองแล้ว",
+      "success",
+      `${coupon.label} จากยอดสั่งซื้อนี้`,
+    );
+  };
+
   // Typed code
   const [code, setCode] = createSignal("");
   const [codeError, setCodeError] = createSignal<string>();
@@ -33,10 +46,10 @@ export function CouponPickerSheet(props: {
     if (!typed) return setCodeError("กรุณากรอกโค้ดส่วนลด");
     const coupon = props.coupons.find((c) => c.code.toUpperCase() === typed);
     if (!coupon) return setCodeError("ไม่พบโค้ดส่วนลดนี้ กรุณาตรวจสอบอีกครั้ง");
+    if (!isCouponActive(coupon)) return setCodeError("โค้ดส่วนลดนี้หมดอายุแล้ว");
     if (props.subtotal < coupon.minSpend)
       return setCodeError(`โค้ดนี้ใช้ได้เมื่อซื้อครบ ฿${coupon.minSpend.toLocaleString("th-TH")} (ซื้อเพิ่มอีก ${formatTHB(coupon.minSpend - props.subtotal)})`);
-    props.onApply(coupon);
-    props.onOpenChange(false);
+    apply(coupon, "code");
   };
 
   const action = (coupon: Coupon): CouponCardAction => {
@@ -45,10 +58,7 @@ export function CouponPickerSheet(props: {
       label: "ใช้เลย",
       variant: "primary",
       disabled: props.subtotal < coupon.minSpend,
-      onClick: () => {
-        props.onApply(coupon);
-        props.onOpenChange(false);
-      },
+      onClick: () => apply(coupon, "pick"),
     };
   };
 
@@ -58,7 +68,7 @@ export function CouponPickerSheet(props: {
       onOpenChange={props.onOpenChange}
       height="auto"
       title="คูปองส่วนลด"
-      description={`ใช้ได้ ${props.coupons.length} คูปอง · เลือกได้ 1 คูปองต่อคำสั่งซื้อ`}
+      description={`ใช้ได้ ${usable().length} คูปอง · เลือกได้ 1 คูปองต่อคำสั่งซื้อ`}
     >
       <form onSubmit={applyCode} novalidate class="flex flex-col gap-1.5">
         <div class="flex items-end gap-2">
@@ -97,22 +107,14 @@ export function CouponPickerSheet(props: {
 
       {/* gap-6 between tickets / gap-4 to a note: each ticket's artwork (with its shadow) is drawn ~10px above and ~14px below its box. */}
       <ul class="flex flex-col gap-6 pt-1" aria-label="คูปองที่ใช้ได้">
-        <For each={props.coupons}>
+        <For each={usable()}>
           {(coupon) => {
             const shortfall = () => coupon.minSpend - props.subtotal;
             const applied = () => props.applied?.code === coupon.code;
             return (
               <li class="flex list-none flex-col gap-4">
                 <div classList={{ "opacity-50": shortfall() > 0 && !applied() }}>
-                  <CouponCard
-                    coupon={{
-                      id: coupon.code,
-                      amountLabel: `ลด ${formatTHB(coupon.discount)}`,
-                      minSpendLabel: `ขั้นต่ำ ฿${coupon.minSpend.toLocaleString("th-TH")}`,
-                      expiryLabel: coupon.expiresLabel,
-                    }}
-                    action={action(coupon)}
-                  />
+                  <CouponCard coupon={couponTicket(coupon)} action={action(coupon)} />
                 </div>
                 <Show when={applied()}>
                   <p class="px-1 text-xs font-medium text-brand-pink">กำลังใช้คูปองนี้</p>

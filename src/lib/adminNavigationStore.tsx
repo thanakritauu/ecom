@@ -7,7 +7,7 @@ import {
   normalizeNavigationItem,
 } from "./adminNavigation";
 
-const STORAGE_KEY = "charmiss:admin:navigation";
+const STORAGE_KEY = "charmiss:admin:navigation:v6"; // v6 = Figma 132:2352 menu + คุชชั่น / ลิป / แก้ม / ตาและคิ้ว / ดูแลผิว / กันแดดและบอดี้แคร์
 const TODAY_LABEL = "20 ก.ย. 2569";
 let nextId = 1000;
 

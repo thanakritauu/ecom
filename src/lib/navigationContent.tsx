@@ -8,7 +8,7 @@ import { useCollectionContent } from "./collectionContent";
 import { useProductCatalog } from "./productCatalog";
 
 /** Same key `adminNavigationStore.tsx` (Admin's source of truth) persists to — read-only here, never written from the customer side. */
-const STORAGE_KEY = "charmiss:admin:navigation";
+const STORAGE_KEY = "charmiss:admin:navigation:v6"; // v6 = Figma 132:2352 menu + คุชชั่น / ลิป / แก้ม / ตาและคิ้ว / ดูแลผิว / กันแดดและบอดี้แคร์
 
 /** Same "fallback to the real baseline, used as both the SSR value and the empty-storage fallback" fix already applied to every other `*Content.tsx` provider — a fresh browser that never opened Admin still sees the real seeded menu, not an empty flash. */
 function fallbackItems(): NavigationItem[] {

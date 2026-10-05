@@ -1,5 +1,5 @@
 import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
-import type { ResolvedCartLine, CheckoutTotals, Coupon } from "~/lib/cartSelectors";
+import type { ResolvedCartLine, CheckoutTotals, Coupon, GiftPromotionState } from "~/lib/cartSelectors";
 import { AVAILABLE_COUPONS, MOCK_COIN_BALANCE, MAX_COIN_REDEMPTION } from "~/lib/cartSelectors";
 import { formatTHB } from "../shared/PriceDisplay";
 import { clientOnly } from "@solidjs/start";
@@ -19,6 +19,8 @@ const CouponPickerSheet = clientOnly(() => import("./CouponPickerSheet").then((m
  */
 export function CheckoutOrderSummary(props: {
   lines: ResolvedCartLine[];
+  /** Unlocked free gift only — shown as a ฿0 line, never added to the totals. */
+  gift?: GiftPromotionState;
   totals: CheckoutTotals;
   coupon: Coupon | undefined;
   onApplyCoupon: (coupon: Coupon) => void;
@@ -72,6 +74,23 @@ export function CheckoutOrderSummary(props: {
               </li>
             )}
           </For>
+          <Show when={props.gift}>
+            {(g) => (
+              <li class="flex list-none items-center gap-2">
+                <img
+                  src={g().product.image}
+                  alt={g().product.name}
+                  loading="lazy"
+                  class="size-[66px] shrink-0 rounded-media border border-surface-gray object-cover"
+                />
+                <div class="min-w-0 flex-1">
+                  <p class="line-clamp-1 text-sm font-medium leading-[1.75] text-ink">{g().product.name}</p>
+                  <p class="text-xs text-ink-gray">ของแถมฟรี · x{g().qty}</p>
+                </div>
+                <p class="shrink-0 text-base font-semibold text-system-red">ฟรี</p>
+              </li>
+            )}
+          </Show>
         </ul>
       </Show>
 
@@ -90,7 +109,7 @@ export function CheckoutOrderSummary(props: {
             </div>
           </div>
           <PerkButton tone="pink" onClick={() => setCouponPickerOpen(true)} aria-haspopup="dialog">
-            {props.coupon ? "เปลี่ยนคูปอง" : `ใช้ได้ ${AVAILABLE_COUPONS.length} คูปอง`}
+            {props.coupon ? "เปลี่ยนคูปอง" : "เลือกคูปอง"}
           </PerkButton>
         </div>
         <CouponPickerSheet

@@ -224,9 +224,9 @@ export function CampaignForm(props: {
 
           <Section title="02 · Hero Banner">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <BannerUploader label="Desktop Banner" hint="แนะนำ 1920×840px" value={bannerDesktop()} onChange={setBannerDesktop} />
-              <BannerUploader label="Tablet Banner" hint="แนะนำ 1024×600px" value={bannerTablet()} onChange={setBannerTablet} />
-              <BannerUploader label="Mobile Banner" hint="แนะนำ 750×960px" value={bannerMobile()} onChange={setBannerMobile} />
+              <BannerUploader label="Desktop Banner" device="desktop" value={bannerDesktop()} onChange={setBannerDesktop} />
+              <BannerUploader label="Tablet Banner" device="tablet" value={bannerTablet()} onChange={setBannerTablet} />
+              <BannerUploader label="Mobile Banner" device="mobile" value={bannerMobile()} onChange={setBannerMobile} />
             </div>
           </Section>
 

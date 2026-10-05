@@ -20,7 +20,6 @@ import { AdminMissionProvider } from "~/lib/adminLoyaltyMissionStore";
 import { AdminRewardProvider } from "~/lib/adminLoyaltyRewardStore";
 import { AdminInventoryStockProvider } from "~/lib/adminInventoryStockStore";
 import { AdminNotificationBarProvider } from "~/lib/adminNotificationBarStore";
-import { AdminFeaturedReviewProvider } from "~/lib/adminFeaturedReviewStore";
 import { AdminUIProvider } from "~/lib/adminUI";
 import { AdminNotificationProvider } from "~/lib/adminNotifications";
 import { AdminLayout } from "~/layouts/AdminLayout";
@@ -119,9 +118,7 @@ export default function AdminRouteGroup(props: { children: JSX.Element }) {
                                       <AdminMissionProvider>
                                         <AdminRewardProvider>
                                           <AdminNotificationBarProvider>
-                                            <AdminFeaturedReviewProvider>
-                                              <AdminGate>{props.children}</AdminGate>
-                                            </AdminFeaturedReviewProvider>
+                                            <AdminGate>{props.children}</AdminGate>
                                           </AdminNotificationBarProvider>
                                         </AdminRewardProvider>
                                       </AdminMissionProvider>

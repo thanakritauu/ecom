@@ -2,6 +2,7 @@ import { DropdownMenu } from "@kobalte/core/dropdown-menu";
 import { createSignal, For, onMount } from "solid-js";
 import { isServer } from "solid-js/web";
 import { ChevronIcon } from "./ChevronIcon";
+import { CheckIcon } from "./icons";
 
 export type Language = "th" | "en";
 
@@ -68,9 +69,7 @@ export function LanguageSwitcher(props: { tone?: "bar" | "menu" }) {
                   {lang.flag()}
                   <span class="flex-1">{lang.label}</span>
                   <DropdownMenu.ItemIndicator class="text-brand-pink">
-                    <svg viewBox="0 0 16 16" fill="none" class="size-4" aria-hidden="true">
-                      <path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
+                    <CheckIcon class="size-4" />
                   </DropdownMenu.ItemIndicator>
                 </DropdownMenu.RadioItem>
               )}

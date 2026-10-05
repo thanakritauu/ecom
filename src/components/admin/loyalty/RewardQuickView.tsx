@@ -3,7 +3,7 @@ import { StatusBadge } from "~/components/admin/StatusBadge";
 import { ImageIcon } from "~/components/admin/icons";
 import { REWARD_STATUS_META, REWARD_TYPE_META, type AdminReward } from "~/lib/adminLoyaltyRewards";
 
-/** Cordy-owned fields (name/type/coinCost/stockRemaining/status) shown read-only; Charmiss-owned Presentation fields (displayName/displayDescription/image/visible) shown as what a customer would actually see. */
+/** Charmiss Club CRM-owned fields (name/type/coinCost/stockRemaining/status) shown read-only; Charmiss-owned Presentation fields (displayName/displayDescription/image/visible) shown as what a customer would actually see. */
 export function RewardQuickView(props: { reward: AdminReward }) {
   const r = () => props.reward;
 

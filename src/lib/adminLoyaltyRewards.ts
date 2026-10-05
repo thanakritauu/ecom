@@ -1,9 +1,9 @@
 import type { StatusTone } from "~/components/admin/StatusBadge";
 
 /**
- * Loyalty (Phase 08.4) — "ของรางวัล" as a Cordy CRM + Charmiss Ecommerce
+ * Loyalty (Phase 08.4) — "ของรางวัล" as a Charmiss Club CRM + Charmiss Ecommerce
  * integration view. Split ownership, unlike Coin Rules/Members/Missions
- * (which are *entirely* Cordy-owned): Cordy owns the Coin/Redemption Logic
+ * (which are *entirely* Charmiss Club CRM-owned): Charmiss Club CRM owns the Coin/Redemption Logic
  * (`name`/`rewardType`/`coinCost`/`stockRemaining`/`status`/dates — refreshed
  * only by Sync, never editable here), while Charmiss owns the
  * Presentation/Ecommerce layer (`displayName`/`displayDescription`/`image`/
@@ -28,7 +28,7 @@ export const REWARD_TYPE_META: Record<RewardType, { label: string }> = {
 
 export type AdminReward = {
   id: string;
-  // Cordy-owned — read-only, refreshed only via Sync.
+  // Charmiss Club CRM-owned — read-only, refreshed only via Sync.
   name: string;
   rewardType: RewardType;
   coinCost: number;
@@ -36,7 +36,7 @@ export type AdminReward = {
   status: RewardStatus;
   startDate: string;
   endDate: string;
-  source: "Cordy CRM";
+  source: "Charmiss Club CRM";
   syncedAt: string;
   // Charmiss-owned — the Presentation/Ecommerce layer, editable via `updatePresentation`.
   displayName: string;
@@ -59,7 +59,7 @@ export function normalizeReward(r: Partial<AdminReward> & { id: string }): Admin
     status: r.status ?? "active",
     startDate: r.startDate ?? "",
     endDate: r.endDate ?? "",
-    source: "Cordy CRM",
+    source: "Charmiss Club CRM",
     syncedAt: r.syncedAt ?? "",
     displayName: r.displayName ?? r.name ?? "",
     displayDescription: r.displayDescription ?? "",
@@ -80,7 +80,7 @@ const REWARD_SEEDS: AdminReward[] = [
     status: "active",
     startDate: "1 ก.ย. 2569",
     endDate: "31 ธ.ค. 2569",
-    source: "Cordy CRM",
+    source: "Charmiss Club CRM",
     syncedAt: "18 ก.ย. 2569 08:00 น.",
     displayName: "คูปองส่วนลด 50 บาท",
     displayDescription: "แลกคอยน์รับส่วนลด 50 บาท สำหรับการสั่งซื้อครั้งถัดไป",
@@ -96,7 +96,7 @@ const REWARD_SEEDS: AdminReward[] = [
     status: "active",
     startDate: "1 ก.ย. 2569",
     endDate: "31 ธ.ค. 2569",
-    source: "Cordy CRM",
+    source: "Charmiss Club CRM",
     syncedAt: "18 ก.ย. 2569 08:00 น.",
     displayName: "ส่งฟรี! ไม่มีขั้นต่ำ",
     displayDescription: "แลกคอยน์เพื่อรับสิทธิ์จัดส่งฟรีในคำสั่งซื้อถัดไป",
@@ -112,7 +112,7 @@ const REWARD_SEEDS: AdminReward[] = [
     status: "active",
     startDate: "1 ก.ย. 2569",
     endDate: "30 พ.ย. 2569",
-    source: "Cordy CRM",
+    source: "Charmiss Club CRM",
     syncedAt: "17 ก.ย. 2569 21:45 น.",
     displayName: "ลิปกลอสไซส์ทดลอง (คอลแลบ Sanrio)",
     displayDescription: "แลกคอยน์รับลิปกลอสไซส์ทดลองจากคอลเลกชันคอลแลบ Sanrio",
@@ -128,7 +128,7 @@ const REWARD_SEEDS: AdminReward[] = [
     status: "inactive",
     startDate: "1 มิ.ย. 2569",
     endDate: "31 ส.ค. 2569",
-    source: "Cordy CRM",
+    source: "Charmiss Club CRM",
     syncedAt: "10 ก.ย. 2569 10:00 น.",
     displayName: "กระเป๋าผ้า Charmiss ลิมิเต็ด",
     displayDescription: "ของแถมสุดพิเศษ หมดเขตร่วมสนุกแล้ว",

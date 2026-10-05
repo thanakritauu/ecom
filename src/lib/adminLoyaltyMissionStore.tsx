@@ -25,7 +25,7 @@ type AdminMissionContextValue = {
 
 const AdminMissionContext = createContext<AdminMissionContextValue>();
 
-/** Loyalty (Phase 08.3) — "ภารกิจ" as a Cordy CRM Integration view. Same read-only, sync-only shape as `adminLoyaltyStore.tsx`/`adminLoyaltyMemberStore.tsx`. */
+/** Loyalty (Phase 08.3) — "ภารกิจ" as a Charmiss Club CRM Integration view. Same read-only, sync-only shape as `adminLoyaltyStore.tsx`/`adminLoyaltyMemberStore.tsx`. */
 export function AdminMissionProvider(props: { children: JSX.Element }) {
   const [missions, setMissions] = createSignal<AdminMission[]>(baseline());
 

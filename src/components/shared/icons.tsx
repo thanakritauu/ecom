@@ -153,3 +153,26 @@ export function DocumentIcon(props: { class?: string }) {
     </svg>
   );
 }
+
+/**
+ * Design system rule — the one check mark (✓) on the site: the selected-tile
+ * tick from QuickAddSheet / payment methods (16×16, 2px round stroke, in
+ * `currentColor`). As a "done/selected" marker it sits white on a pink
+ * circle (`CheckBadge`); never a text "✓" glyph.
+ */
+export function CheckIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" class={props.class ?? "size-3.5"} aria-hidden="true">
+      <path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+/** Pink (or `class`-overridden) circle with the DSL check — selected tile, completed step. */
+export function CheckBadge(props: { class?: string }) {
+  return (
+    <span class={`flex shrink-0 items-center justify-center rounded-pill text-white ${props.class ?? "size-6 bg-brand-pink"}`} aria-hidden="true">
+      <CheckIcon />
+    </span>
+  );
+}

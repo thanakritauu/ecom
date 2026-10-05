@@ -5,9 +5,11 @@ import { Button } from "~/components/shared/Button";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { PrintIcon, DownloadIcon, OrdersIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { PAYMENT_STATUS_META } from "~/lib/adminOrders";
+import { PAYMENT_STATUS_META, formatOrderAddress } from "~/lib/adminOrders";
 import { useAdminOrders } from "~/lib/adminOrderStore";
-import { getReceiptData, downloadReceiptHtml } from "~/lib/receiptResolver";
+import { getReceiptData } from "~/lib/receiptResolver";
+import { downloadOrderReceiptHtml } from "~/components/admin/orders/orderReceiptDocument";
+import { OrderTotalsBreakdown } from "~/components/admin/orders/OrderTotalsBreakdown";
 import logoCharmiss from "~/assets/icons/logo-charmiss-pink.svg";
 
 /**
@@ -61,7 +63,7 @@ export default function AdminOrderReceiptPage() {
                 <Button variant="outline" onClick={() => window.print()}>
                   <PrintIcon class="size-4" /> พิมพ์
                 </Button>
-                <Button variant="outline" onClick={() => downloadReceiptHtml(data(), formatAdminCurrency)}>
+                <Button variant="outline" onClick={() => downloadOrderReceiptHtml(data(), formatAdminCurrency)}>
                   <DownloadIcon class="size-4" /> ดาวน์โหลด
                 </Button>
               </div>
@@ -89,13 +91,22 @@ export default function AdminOrderReceiptPage() {
                 <p class="text-sm text-ink-gray">{data().customer.phone}</p>
               </div>
               <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">ที่อยู่ออกใบเสร็จรับเงิน</p>
+                <Show when={data().order.billingAddress} fallback={<p class="mt-1 text-sm text-ink-gray">ออกในชื่อลูกค้า</p>}>
+                  {(b) => (
+                    <>
+                      <p class="mt-1 text-sm font-medium text-ink">{b().recipientName}</p>
+                      <p class="text-sm text-ink-gray">{b().phone}</p>
+                      <p class="text-sm text-ink-gray">{formatOrderAddress(b())}</p>
+                    </>
+                  )}
+                </Show>
+              </div>
+              <div class="sm:col-span-2">
                 <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">ที่อยู่จัดส่ง</p>
                 <p class="mt-1 text-sm font-medium text-ink">{data().shipping.address.recipientName}</p>
                 <p class="text-sm text-ink-gray">{data().shipping.address.phone}</p>
-                <p class="text-sm text-ink-gray">
-                  {data().shipping.address.addressLine} {data().shipping.address.subDistrict} {data().shipping.address.district}{" "}
-                  {data().shipping.address.province} {data().shipping.address.postalCode}
-                </p>
+                <p class="text-sm text-ink-gray">{formatOrderAddress(data().shipping.address)}</p>
               </div>
             </div>
 
@@ -117,41 +128,33 @@ export default function AdminOrderReceiptPage() {
                         <Show when={item.variantLabel}>
                           <p class="text-xs text-ink-gray">{item.variantLabel}</p>
                         </Show>
+                        <Show when={item.isFreeGift}>
+                          <p class="text-xs font-semibold text-success">ของแถมฟรี</p>
+                        </Show>
                       </td>
                       <td class="py-2 text-right text-ink-gray">{item.qty}</td>
-                      <td class="py-2 text-right text-ink-gray">{formatAdminCurrency(item.unitPrice)}</td>
-                      <td class="py-2 text-right font-medium text-ink">{formatAdminCurrency(item.lineTotal)}</td>
+                      <td class="py-2 pl-3 text-right text-ink-gray">{formatAdminCurrency(item.unitPrice)}</td>
+                      <td class="py-2 pl-3 text-right font-medium text-ink">{item.isFreeGift ? "ฟรี" : formatAdminCurrency(item.lineTotal)}</td>
                     </tr>
                   )}
                 </For>
               </tbody>
             </table>
 
-            <div class="ml-auto mt-4 flex w-full max-w-xs flex-col gap-1.5 text-sm">
-              <div class="flex items-center justify-between">
-                <span class="text-ink-gray">ยอดรวมสินค้า</span>
-                <span class="text-ink">{formatAdminCurrency(data().totals.subtotal)}</span>
-              </div>
-              <Show when={data().totals.discount > 0}>
-                <div class="flex items-center justify-between">
-                  <span class="text-ink-gray">ส่วนลด</span>
-                  <span class="text-ink">-{formatAdminCurrency(data().totals.discount)}</span>
-                </div>
-              </Show>
-              <div class="flex items-center justify-between">
-                <span class="text-ink-gray">ค่าจัดส่ง</span>
-                <span class="text-ink">{data().totals.shippingFee > 0 ? formatAdminCurrency(data().totals.shippingFee) : "ฟรี"}</span>
-              </div>
-              <div class="flex items-center justify-between border-t border-border pt-2 text-base font-bold text-ink">
-                <span>ยอดรวมทั้งหมด</span>
-                <span>{formatAdminCurrency(data().totals.grandTotal)}</span>
-              </div>
+            <div class="ml-auto mt-4 w-full max-w-sm">
+              <OrderTotalsBreakdown order={data().order} showCoinsEarned={false} />
             </div>
 
             <div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 text-sm">
               <div>
                 <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">การชำระเงิน</p>
-                <p class="mt-1 text-ink">{data().payment.method}</p>
+                <p class="mt-1 text-ink">
+                  {data().payment.method}
+                  {data().payment.detail ? ` · ${data().payment.detail}` : ""}
+                </p>
+                <Show when={data().payment.transactionId}>
+                  <p class="text-xs text-ink-gray">เลขอ้างอิง {data().payment.transactionId}</p>
+                </Show>
               </div>
               <p class="font-medium text-ink">{PAYMENT_STATUS_META[data().order.paymentStatus].label}</p>
             </div>

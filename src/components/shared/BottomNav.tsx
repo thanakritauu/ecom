@@ -14,16 +14,14 @@ import { useNavigationContent } from "~/lib/navigationContent";
  * rather than hiding it, so it can't affect Desktop layout.
  *
  * "โปรโมชั่น" resolves through the *same* Navigation config Header's own
- * category row reads (`useNavigationContent`) — the admin-managed item
- * already labeled "โปรโมชั่น" — instead of a new hardcoded destination, per
- * "ห้ามสร้าง menu ใหม่ถ้ามี existing navigation config". Falls back to the
- * product listing only if that item is ever renamed/hidden, so the tab
- * never links nowhere.
+ * category row reads (`useNavigationContent`) — the Flash Sale item — and
+ * falls back to `/promotion/flash-sale` if that item is ever hidden.
  */
 export function BottomNav() {
   const cart = useCart();
   const navigation = useNavigationContent();
-  const promotionHref = () => navigation.visibleTree().find((item) => item.label === "โปรโมชั่น")?.href ?? "/products";
+  // "โปรโมชั่น" opens the Flash Sale page — the nav's Flash Sale item (same Navigation config), so an Admin change to it follows.
+  const promotionHref = () => navigation.visibleTree().find((item) => item.id === "nav-102")?.href ?? "/promotion/flash-sale";
 
   const itemClass =
     "flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-ink-gray transition-colors duration-150 [&.active]:text-brand-pink";

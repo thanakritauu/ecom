@@ -12,7 +12,7 @@ import { useAdminMarketing } from "~/lib/adminMarketingStore";
 /**
  * Edits *only* the Charmiss-owned Presentation/Ecommerce fields on a Reward
  * — never `name`/`rewardType`/`coinCost`/`stockRemaining`/`status`/dates
- * (Cordy's own Coin/Redemption Logic, shown read-only elsewhere on this
+ * (the CRM's own Coin/Redemption Logic, shown read-only elsewhere on this
  * page, refreshed only by Sync). §3 of Phase 08.4's spec.
  */
 export function RewardPresentationForm(props: { reward: AdminReward; onSubmit: (values: RewardPresentationValues) => Promise<void>; onCancel: () => void }) {
@@ -109,7 +109,7 @@ export function RewardPresentationForm(props: { reward: AdminReward; onSubmit: (
             </div>
           </label>
         </div>
-        <p class="text-xs text-ink-placeholder">การเชื่อมนี้เป็นข้อมูลฝั่ง Charmiss เท่านั้น ไม่มีผลกับ Coin Rule หรือ Redemption Logic ของ Cordy CRM</p>
+        <p class="text-xs text-ink-placeholder">การเชื่อมนี้เป็นข้อมูลฝั่ง Charmiss เท่านั้น ไม่มีผลกับ Coin Rule หรือ Redemption Logic ของ Charmiss Club CRM</p>
       </Section>
 
       <Show when={submitError()}>

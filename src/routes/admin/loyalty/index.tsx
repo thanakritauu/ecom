@@ -12,8 +12,9 @@ import { Skeleton } from "~/components/admin/Skeleton";
 import { AdminBulkActionBar } from "~/components/admin/AdminBulkActionBar";
 import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
 import { CoinRuleQuickView } from "~/components/admin/loyalty/CoinRuleQuickView";
+import { TierOverview } from "~/components/admin/loyalty/TierOverview";
 import { RefreshIcon, PointsCoinIcon, EyeIcon, CheckCircleIcon } from "~/components/admin/icons";
-import { COIN_RULE_STATUS_META, type AdminCoinRule, type CoinRuleStatus } from "~/lib/adminLoyaltyRules";
+import { COIN_RULE_STATUS_META, formatCoinRuleAmount, type AdminCoinRule, type CoinRuleStatus } from "~/lib/adminLoyaltyRules";
 import { useAdminLoyalty } from "~/lib/adminLoyaltyStore";
 import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
@@ -38,9 +39,9 @@ const STATUS_FILTER_OPTIONS: SelectFilterConfig = {
 };
 
 /**
- * Loyalty (Phase 08.1) — "สะสมคอยน์" as a Cordy CRM Integration view.
+ * Loyalty (Phase 08.1) — "สะสมคอยน์" as a Charmiss Club CRM Integration view.
  * List/Search/Filter/Sort/Pagination/Select — same shell as `brands/index.tsx`
- * — but every Cordy-owned field (name/condition/coinAmount/status) is
+ * — but every Charmiss Club CRM-owned field (name/condition/coinAmount/status) is
  * read-only: no Add button, no per-row edit/delete, no bulk status/delete.
  * The only mutation available anywhere on this page is a mock re-sync,
  * which only ever touches `syncedAt` (see `adminLoyaltyStore.tsx`).
@@ -140,7 +141,7 @@ export default function AdminLoyaltyListPage() {
     setSyncingAll(true);
     await store.syncAll();
     setSyncingAll(false);
-    pushToast("Sync ข้อมูลจาก Cordy CRM เรียบร้อยแล้ว", "success");
+    pushToast("Sync ข้อมูลจาก Charmiss Club CRM เรียบร้อยแล้ว", "success");
   };
 
   const handleSyncSelected = async () => {
@@ -152,7 +153,7 @@ export default function AdminLoyaltyListPage() {
     pushToast(`Sync ${ids.length} รายการที่เลือกเรียบร้อยแล้ว`, "success");
   };
 
-  const openCordyCrm = () => pushToast("(จำลอง) กำลังเปิด Cordy CRM ในแท็บใหม่", "success");
+  const openCrm = () => pushToast("(จำลอง) กำลังเปิด Charmiss Club CRM ในแท็บใหม่", "success");
 
   const columns: DataTableColumn<AdminCoinRule>[] = [
     {
@@ -182,7 +183,7 @@ export default function AdminLoyaltyListPage() {
         </div>
       ),
     },
-    { key: "coinAmount", label: "คอยน์ที่ได้รับ", align: "right", render: (row) => <span class="font-medium text-ink">+{row.coinAmount.toLocaleString("th-TH")}</span> },
+    { key: "coinAmount", label: "คอยน์ที่ได้รับ", align: "right", render: (row) => <span class="whitespace-nowrap font-medium text-ink">{formatCoinRuleAmount(row)}</span> },
     { key: "status", label: "สถานะ", render: (row) => <StatusBadge tone={COIN_RULE_STATUS_META[row.status].tone}>{COIN_RULE_STATUS_META[row.status].label}</StatusBadge> },
     { key: "source", label: "Source", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.source}</span> },
     { key: "syncedAt", label: "Sync ล่าสุด", align: "right", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.syncedAt}</span> },
@@ -206,13 +207,13 @@ export default function AdminLoyaltyListPage() {
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สะสมคอยน์" }]} />
-      <PageHeader title="สะสมคอยน์" description="กติกาการได้รับคอยน์ที่ Sync มาจาก Cordy CRM" />
+      <PageHeader title="สะสมคอยน์" description="กติกาการได้รับและใช้คอยน์ที่ Sync มาจาก Charmiss Club CRM และระดับสมาชิก" />
 
       <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div class="flex flex-col gap-2">
           <div class="flex items-center gap-2">
             <CheckCircleIcon class="size-5 text-success" />
-            <p class="text-sm font-semibold text-ink">เชื่อมต่อกับ Cordy CRM แล้ว</p>
+            <p class="text-sm font-semibold text-ink">เชื่อมต่อกับ Charmiss Club CRM แล้ว</p>
           </div>
           <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-gray">
             <span>Sync ล่าสุด: {store.lastSyncedAt()}</span>
@@ -220,8 +221,8 @@ export default function AdminLoyaltyListPage() {
           </div>
         </div>
         <div class="flex shrink-0 flex-wrap gap-2">
-          <Button variant="outline" onClick={openCordyCrm}>
-            จัดการใน Cordy CRM
+          <Button variant="outline" onClick={openCrm}>
+            จัดการใน Charmiss Club CRM
           </Button>
           <Button variant="primary" onClick={handleSyncAll} loading={syncingAll()}>
             <RefreshIcon class="size-4" /> Sync ข้อมูล
@@ -248,8 +249,8 @@ export default function AdminLoyaltyListPage() {
             fallback={
               <EmptyState
                 icon={<PointsCoinIcon />}
-                title={hasActiveFilters() ? "ไม่พบรายการที่ตรงกับการค้นหา" : "ยังไม่มีข้อมูลจาก Cordy CRM"}
-                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "ลอง Sync ข้อมูลจาก Cordy CRM อีกครั้ง"}
+                title={hasActiveFilters() ? "ไม่พบรายการที่ตรงกับการค้นหา" : "ยังไม่มีข้อมูลจาก Charmiss Club CRM"}
+                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "ลอง Sync ข้อมูลจาก Charmiss Club CRM อีกครั้ง"}
                 actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "Sync ข้อมูล"}
                 onAction={hasActiveFilters() ? clearFilters : handleSyncAll}
                 class="bg-surface-card shadow-card"
@@ -284,7 +285,7 @@ export default function AdminLoyaltyListPage() {
                       </div>
                       <StatusBadge tone={COIN_RULE_STATUS_META[row.status].tone}>{COIN_RULE_STATUS_META[row.status].label}</StatusBadge>
                     </div>
-                    <p class="text-sm font-medium text-ink">+{row.coinAmount.toLocaleString("th-TH")} คอยน์</p>
+                    <p class="text-sm font-medium text-ink">{row.amountLabel ?? `${formatCoinRuleAmount(row)} คอยน์`}</p>
                     <p class="text-xs text-ink-placeholder">Sync ล่าสุด: {row.syncedAt}</p>
                     <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>
                   </button>
@@ -296,6 +297,8 @@ export default function AdminLoyaltyListPage() {
           </Show>
         </Show>
       </Show>
+
+      <TierOverview />
 
       <AdminBulkActionBar
         count={selectedIds().size}

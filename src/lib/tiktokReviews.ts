@@ -1,3 +1,5 @@
+import { RAIL_ASSIGNMENTS } from "./watsonsCatalog";
+
 /**
  * TikTok review clips — embedded with TikTok's official player
  * (`tiktok.com/player/v1/:id`), so the clips stay hosted and credited on
@@ -16,10 +18,15 @@ export type TikTokReviewClip = {
   productIds?: string[];
 };
 
-// The mock catalog lists "Charming Iconic Glow Cushion" (the pink cushion)
-// as 10 copies (`feature-1`…`feature-10`, see products.ts) — they're all the
-// same real product, so a clip of it maps to every copy.
-const GLOW_CUSHION_IDS = Array.from({ length: 10 }, (_, i) => `feature-${i + 1}`);
+/** Mock slot ids that show a given real product (Watsons code), across every merchandising rail. */
+export function productIdsForWatsonsCode(code: string): string[] {
+  return Object.entries(RAIL_ASSIGNMENTS).flatMap(([prefix, codes]) => codes.flatMap((c, i) => (c === code ? [`${prefix}${i + 1}`] : [])));
+}
+
+// The Iconic Glow cushion (the pink cushion, Watsons 331785) — only the slots
+// that really show it (`feature-1`, `feature-10`, `best-2`); the other
+// `feature-*` slots are different products.
+const GLOW_CUSHION_IDS = productIdsForWatsonsCode("331785");
 
 export const TIKTOK_REVIEW_CLIPS: TikTokReviewClip[] = [
   {

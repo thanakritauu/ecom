@@ -11,6 +11,10 @@ import {
   type HeroAsset,
   type HeroAssetType,
 } from "~/lib/pageSections";
+import { BANNER_DEVICE_SPECS } from "~/lib/adminBanners";
+
+/** Which field of an image asset a file pick writes to — Desktop is `source`; Tablet/Mobile are the optional storefront crops (`HeroBanner.tsx` falls back to `source` when empty). */
+type ImageSlot = "source" | "tabletSource" | "mobileSource";
 
 /**
  * Hero Banner — Multi-Asset Support. Same native-file-browser + Object URL
@@ -19,10 +23,15 @@ import {
  * image/video/YouTube items with add/remove/reorder — the multi-item pattern
  * `ProductImageUploader` already established, extended with a per-item type
  * instead of a flat `string[]`.
+ *
+ * Storefront sync — an image asset now also takes its own Tablet (1024×768,
+ * 4:3) and Mobile (750×1000, 3:4) crops, the same three sizes the live hero
+ * slides ship with; the thumbnail itself is the Desktop 3:1 crop.
  */
 export function HeroAssetsEditor(props: { assets: HeroAsset[]; onChange: (assets: HeroAsset[]) => void }) {
   const [pendingUrls, setPendingUrls] = createSignal<Set<string>>(new Set());
   const [replaceIndex, setReplaceIndex] = createSignal<number | null>(null);
+  const [replaceSlot, setReplaceSlot] = createSignal<ImageSlot>("source");
   let imageInputRef: HTMLInputElement | undefined;
   let videoInputRef: HTMLInputElement | undefined;
 
@@ -61,9 +70,10 @@ export function HeroAssetsEditor(props: { assets: HeroAsset[]; onChange: (assets
     }, 600);
   };
 
-  const openFilePicker = (type: "image" | "video", index: number | null) => {
+  const openFilePicker = (type: "image" | "video", index: number | null, slot: ImageSlot = "source") => {
     if (index === null && atLimit()) return;
     setReplaceIndex(index);
+    setReplaceSlot(type === "image" ? slot : "source");
     const ref = type === "image" ? imageInputRef : videoInputRef;
     ref!.value = "";
     ref!.click();
@@ -75,8 +85,9 @@ export function HeroAssetsEditor(props: { assets: HeroAsset[]; onChange: (assets
     const url = URL.createObjectURL(file);
     const index = replaceIndex();
     if (index !== null) {
-      const oldUrl = props.assets[index]?.source;
-      patchAt(index, { type, source: url });
+      const slot = replaceSlot();
+      const oldUrl = props.assets[index]?.[slot];
+      patchAt(index, slot === "source" ? { type, source: url } : { [slot]: url });
       if (oldUrl?.startsWith("blob:")) URL.revokeObjectURL(oldUrl);
     } else {
       addAsset({ ...emptyHeroAsset(type), source: url });
@@ -88,7 +99,7 @@ export function HeroAssetsEditor(props: { assets: HeroAsset[]; onChange: (assets
   const addYoutube = () => addAsset(emptyHeroAsset("youtube"));
 
   const thumbClass =
-    "group relative aspect-[16/9] w-40 shrink-0 overflow-hidden rounded-media border border-border bg-surface-gray/40 sm:w-48";
+    "group relative aspect-[3/1] w-60 shrink-0 overflow-hidden rounded-media border border-border bg-surface-gray/40 sm:w-72";
 
   return (
     <div class="flex flex-col gap-3">
@@ -210,8 +221,27 @@ export function HeroAssetsEditor(props: { assets: HeroAsset[]; onChange: (assets
                     value={asset.source}
                     onInput={(e) => patchAt(i(), { source: e.currentTarget.value })}
                     error={youtubeError() ? "ลิงก์ YouTube ไม่ถูกต้อง" : undefined}
-                    class="w-40 sm:w-48"
+                    class="w-60 sm:w-72"
                   />
+                </Show>
+
+                <Show when={asset.type === "image"}>
+                  <div class="flex items-end gap-2">
+                    <CropSlot
+                      label={`${BANNER_DEVICE_SPECS.tablet.label} ${BANNER_DEVICE_SPECS.tablet.size}`}
+                      src={asset.tabletSource}
+                      class="aspect-[4/3] w-24"
+                      onPick={() => openFilePicker("image", i(), "tabletSource")}
+                      onClear={() => patchAt(i(), { tabletSource: undefined })}
+                    />
+                    <CropSlot
+                      label={`${BANNER_DEVICE_SPECS.mobile.label} ${BANNER_DEVICE_SPECS.mobile.size}`}
+                      src={asset.mobileSource}
+                      class="aspect-[3/4] w-[54px]"
+                      onPick={() => openFilePicker("image", i(), "mobileSource")}
+                      onClear={() => patchAt(i(), { mobileSource: undefined })}
+                    />
+                  </div>
                 </Show>
               </div>
             );
@@ -247,8 +277,35 @@ export function HeroAssetsEditor(props: { assets: HeroAsset[]; onChange: (assets
       </div>
 
       <p class="text-xs text-ink-gray">
-        {props.assets.length}/{MAX_HERO_ASSETS} รายการ — รองรับรูปภาพ วิดีโอ และ YouTube สูงสุด {MAX_HERO_ASSETS} รายการ
+        {props.assets.length}/{MAX_HERO_ASSETS} รายการ — รองรับรูปภาพ วิดีโอ และ YouTube สูงสุด {MAX_HERO_ASSETS} รายการ · รูปภาพแนะนำ Desktop {BANNER_DEVICE_SPECS.desktop.size} (3:1),
+        Tablet {BANNER_DEVICE_SPECS.tablet.size} (4:3), Mobile {BANNER_DEVICE_SPECS.mobile.size} (3:4) — ถ้าไม่ใส่ Tablet/Mobile จะใช้รูป Desktop แทน
       </p>
+    </div>
+  );
+}
+
+/** One optional Tablet/Mobile crop for an image asset — click to pick/replace, × to clear back to the Desktop fallback. */
+function CropSlot(props: { label: string; src?: string; class: string; onPick: () => void; onClear: () => void }) {
+  return (
+    <div class="flex flex-col gap-1">
+      <span class="text-[10px] leading-tight text-ink-gray">{props.label}</span>
+      <div class={`relative shrink-0 overflow-hidden rounded-media border border-border bg-surface-gray/40 ${props.class}`}>
+        <button type="button" onClick={props.onPick} aria-label={`เลือกรูป ${props.label}`} class="flex size-full items-center justify-center text-ink-gray hover:text-brand-pink">
+          <Show when={props.src} fallback={<ImageIcon class="size-4" />}>
+            <img src={props.src} alt="" class="size-full object-cover" />
+          </Show>
+        </button>
+        <Show when={props.src}>
+          <button
+            type="button"
+            onClick={props.onClear}
+            aria-label={`ลบรูป ${props.label}`}
+            class="absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded-pill bg-ink/70 text-white"
+          >
+            <CloseXIcon class="size-2" />
+          </button>
+        </Show>
+      </div>
     </div>
   );
 }

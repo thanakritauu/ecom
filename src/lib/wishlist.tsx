@@ -1,14 +1,19 @@
-import { createContext, createSignal, onMount, useContext, type JSX } from "solid-js";
+import { createContext, createEffect, createSignal, onMount, useContext, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
 import { useAuth } from "./auth";
+import { pushToast } from "./toast";
 
 type WishlistContextValue = {
   has: (productId: string) => boolean;
   count: () => number;
+  /** Saved product ids, oldest first. */
+  ids: () => string[];
   /** Resolves/rejects like a real `POST /wishlist/:id` toggle call. */
   toggle: (productId: string) => Promise<void>;
   /** Wishlist requires an account — backed by the real Auth state now that one exists. */
   isLoggedIn: () => boolean;
+  /** Guest tapped a heart: opens login, and saves this product as soon as they're signed in (dropped if they close the popup). */
+  saveAfterLogin: (productId: string) => void;
 };
 
 const WishlistContext = createContext<WishlistContextValue>();
@@ -57,9 +62,26 @@ export function WishlistProvider(props: { children: JSX.Element }) {
     );
   };
 
+  const [pendingId, setPendingId] = createSignal<string>();
+  const saveAfterLogin = (productId: string) => {
+    setPendingId(productId);
+    auth.openAuthModal();
+  };
+  createEffect(() => {
+    const id = pendingId();
+    if (!id) return;
+    if (auth.isAuthenticated()) {
+      setPendingId(undefined);
+      if (!ids().includes(id)) persist([...ids(), id]);
+      pushToast("บันทึกในรายการโปรดแล้ว");
+    } else if (!auth.isAuthModalOpen()) {
+      setPendingId(undefined); // closed the login popup without signing in
+    }
+  });
+
   return (
     <WishlistContext.Provider
-      value={{ has: (id) => ids().includes(id), count: () => ids().length, toggle, isLoggedIn: auth.isAuthenticated }}
+      value={{ has: (id) => ids().includes(id), count: () => ids().length, ids, toggle, isLoggedIn: auth.isAuthenticated, saveAfterLogin }}
     >
       {props.children}
     </WishlistContext.Provider>

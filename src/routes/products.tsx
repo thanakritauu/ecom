@@ -6,6 +6,7 @@ import { Container } from "~/components/shared/Container";
 import { FilterPanel } from "~/components/products/FilterPanel";
 import { MobileFilterDrawer } from "~/components/products/MobileFilterDrawer";
 import { AppliedFilters } from "~/components/products/AppliedFilters";
+import { ListingHeading } from "~/components/products/ListingHeading";
 import { ProductListingToolbar, type ListingView } from "~/components/products/ProductListingToolbar";
 import { ProductListingGrid } from "~/components/products/ProductListingGrid";
 import { useProductCatalog } from "~/lib/productCatalog";
@@ -206,11 +207,12 @@ export default function ProductsPage() {
   return (
     <>
       <Header />
-      <main class="flex flex-col overflow-x-hidden bg-white py-6">
-        <Container width="wide" class="flex flex-col gap-4">
+      <main class="flex flex-col overflow-x-hidden bg-white pb-6 pt-6 sm:pt-8 lg:pt-10">
+        <Container width="wide" class="flex flex-col gap-3 sm:gap-4">
+          <ListingHeading title="สินค้าทั้งหมด" description="รวมทุกผลิตภัณฑ์ความงามจาก Charmiss ไว้ในที่เดียว เลือกช้อปได้ตามใจ" />
           <ProductListingToolbar
-            resultCount={filteredSorted().length}
-            totalCount={products().length}
+            hideTitle
+            totalCount={filteredSorted().length}
             view={view()}
             onViewChange={setView}
             sort={sort()}

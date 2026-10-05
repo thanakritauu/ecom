@@ -24,7 +24,7 @@ function buildMockNotifications(): AdminNotification[] {
     {
       id: "notif-001",
       title: "มีคำสั่งซื้อใหม่",
-      description: "คำสั่งซื้อ ORD-2026-1024 รอการยืนยัน",
+      description: "คำสั่งซื้อ ORD-2026-1035 รอชำระเงิน",
       createdAt: now - 12 * 60 * 1000,
       read: false,
     },

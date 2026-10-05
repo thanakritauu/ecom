@@ -1,11 +1,13 @@
-import { For, Show } from "solid-js";
+import { Show } from "solid-js";
 import { A } from "@solidjs/router";
 import { Header } from "~/components/shared/Header";
 import { Footer } from "~/components/shared/Footer";
 import { Container } from "~/components/shared/Container";
-import { ProductCard } from "~/components/shared/ProductCard";
 import { AdminHeroSlide } from "~/components/home/HeroBanner";
-import { HomepageSections } from "~/components/home/HomepageSections";
+import { HomepageSections, useSectionProducts } from "~/components/home/HomepageSections";
+import { ListingHeading } from "~/components/products/ListingHeading";
+import { ProductCollectionListing } from "~/components/products/ProductCollectionListing";
+import type { HomepageSection } from "~/lib/pageSections";
 import { useProductCatalog } from "~/lib/productCatalog";
 import type { PromotionPage } from "~/lib/adminContent";
 import { ResponsiveBanner } from "~/components/shared/ResponsiveBanner";
@@ -16,9 +18,10 @@ import { ResponsiveBanner } from "~/components/shared/ResponsiveBanner";
  * separate "which renderer" flag an admin has to set):
  *
  * - `sections.length === 0` (every page created before the Section Builder
- *   existed, including all 5 migrated seeds): the original flat Hero Banner
- *   → Title → Description → Product Grid, byte-for-byte unchanged — zero
- *   behavior change for existing pages.
+ *   existed): flat Hero Banner → centred Title + Description → the shared
+ *   product listing (view/sort + grid), same as every nav page.
+ * - exactly one enabled product section and no hero (Flash Sale, ขายดี,
+ *   มาใหม่, กำลังฮิต): the same listing layout, fed by that section.
  * - `sections.length > 0`: renders via `HomepageSections` — the *exact* same
  *   renderer the real Homepage uses ("Admin Preview ≈ Frontend Render",
  *   §18, extended to the real page too) — with an enabled `hero`-type
@@ -27,40 +30,82 @@ import { ResponsiveBanner } from "~/components/shared/ResponsiveBanner";
  *   but go unused once a page adopts the Section Builder, so switching back
  *   is just deleting the sections again.
  */
+/** Video id from a YouTube watch / short / embed / youtu.be link; undefined if it isn't one. */
+function youtubeId(url: string): string | undefined {
+  const match = url.trim().match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+  return match?.[1];
+}
+
+/** The one product section's products, title and intro, as a listing. */
+function SectionListing(props: { section: HomepageSection }) {
+  const products = useSectionProducts(props.section);
+  return (
+    <>
+      <ListingHeading title={props.section.title || props.section.name} description={props.section.description} />
+      <ProductCollectionListing products={products()} />
+    </>
+  );
+}
+
 export function PromotionPageView(props: { page: PromotionPage }) {
   const p = () => props.page;
   const catalog = useProductCatalog();
   const hasSections = () => p().sections.length > 0;
   const heroSection = () => p().sections.find((s) => s.type === "hero" && s.enabled);
   const products = () => catalog.getByIds(p().products.map((ref) => ref.productId));
+  // A page that is just one product section (Flash Sale, ขายดี, มาใหม่, กำลังฮิต) is a product listing, not a section-built page.
+  const listingSection = () => {
+    const enabled = p().sections.filter((s) => s.enabled);
+    return !heroSection() && enabled.length === 1 && enabled[0].type === "product" ? enabled[0] : undefined;
+  };
 
   return (
     <>
       <Header />
       <Show
-        when={hasSections()}
+        when={hasSections() && !listingSection()}
         fallback={
           <>
-            <Show when={p().banners.desktop || p().banners.tablet || p().banners.mobile}>
-              <div class="w-full overflow-hidden bg-surface-gray/40">
-                <ResponsiveBanner banners={p().banners} alt={p().title || p().name} loading="eager" />
-              </div>
+            {/* A YouTube video takes the banner's place (the banner stays saved, just hidden). */}
+            <Show
+              when={!hasSections() && youtubeId(p().videoUrl)}
+              fallback={
+                <Show when={!hasSections() && (p().banners.desktop || p().banners.tablet || p().banners.mobile)}>
+                  <div class="w-full overflow-hidden bg-surface-gray/40">
+                    <ResponsiveBanner banners={p().banners} alt={p().title || p().name} loading="eager" />
+                  </div>
+                </Show>
+              }
+            >
+              {(id) => (
+                <div class="aspect-video w-full bg-ink">
+                  <iframe
+                    src={`https://www.youtube-nocookie.com/embed/${id()}?rel=0&playsinline=1`}
+                    title={p().title || p().name}
+                    class="size-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen
+                  />
+                </div>
+              )}
             </Show>
 
-            <Container width="wide" class="flex flex-col gap-6 py-6 sm:gap-8 sm:py-8 lg:py-10">
-              <div class="flex flex-col gap-2 text-center">
-                <h1 class="text-2xl font-bold text-ink sm:text-3xl">{p().title || p().name}</h1>
-                <Show when={p().description}>
-                  <p class="text-ink-gray">{p().description}</p>
+            {/* Listing layout (same as every nav page): centred heading + intro, then view/sort, then the products. */}
+            <main class="flex flex-col overflow-x-hidden bg-white pb-6 pt-6 sm:pt-8 lg:pt-10">
+              <Container width="wide" class="flex flex-col gap-3 sm:gap-4">
+                <Show
+                  when={listingSection()}
+                  fallback={
+                    <>
+                      <ListingHeading title={p().title || p().name} description={p().description} />
+                      <ProductCollectionListing products={products()} />
+                    </>
+                  }
+                >
+                  {(section) => <SectionListing section={section()} />}
                 </Show>
-              </div>
-
-              <Show when={products().length > 0} fallback={<p class="py-10 text-center text-ink-gray">ยังไม่มีสินค้าในหน้านี้</p>}>
-                <div class="grid grid-cols-2 gap-4 md:grid-cols-3 md:gap-5 lg:grid-cols-4">
-                  <For each={products()}>{(product) => <ProductCard product={product} variant="grid" />}</For>
-                </div>
-              </Show>
-            </Container>
+              </Container>
+            </main>
           </>
         }
       >

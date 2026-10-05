@@ -10,9 +10,11 @@ import { BannerUploader } from "./BannerUploader";
 import { PromotionPageProductPicker } from "./PromotionPageProductPicker";
 import { HomepageSectionCard } from "./HomepageSectionCard";
 import { HomepageSectionsPreview } from "./HomepageSectionsPreview";
-import { HOMEPAGE_SECTION_TYPE_META, genHomepageSectionId, type HomepageSection, type HomepageSectionType } from "~/lib/adminHomepage";
+import { HomepageFixedSectionsPanel } from "./HomepageFixedSectionsPanel";
+import { PromotionPagePreviewBody, isListingModePage } from "./PromotionPagePreviewBody";
+import { HOMEPAGE_FIXED_SECTIONS, HOMEPAGE_SECTION_TYPE_META, genHomepageSectionId, isValidYoutubeUrl, type HomepageSection, type HomepageSectionType } from "~/lib/adminHomepage";
 import { isValidDateRange } from "~/lib/adminMarketing";
-import { slugify, isReservedSlug, validatePublishRequirements, type LandingPage, type LandingPageFormValues, type LandingPageStatus, type PromotionPage } from "~/lib/adminContent";
+import { slugify, isReservedSlug, promotionPageHref, validatePublishRequirements, type LandingPage, type LandingPageFormValues, type LandingPageStatus, type PromotionPage } from "~/lib/adminContent";
 import { writePreviewDraft } from "~/lib/adminPreviewDraft";
 import { pushToast } from "~/lib/toast";
 
@@ -87,6 +89,7 @@ export function LandingPageForm(props: {
   const [bannerMobile, setBannerMobile] = createSignal(props.initial?.banners.mobile ?? "");
   const [title, setTitle] = createSignal(props.initial?.title ?? "");
   const [description, setDescription] = createSignal(props.initial?.description ?? "");
+  const [videoUrl, setVideoUrl] = createSignal(props.initial?.videoUrl ?? "");
   const [products, setProducts] = createSignal(props.initial?.products ?? []);
   const [startDate, setStartDate] = createSignal(props.initial?.startDate ?? "");
   const [startTime, setStartTime] = createSignal(props.initial?.startTime ?? "00:00");
@@ -174,6 +177,7 @@ export function LandingPageForm(props: {
     banners: { desktop: bannerDesktop(), tablet: bannerTablet(), mobile: bannerMobile() },
     title: title().trim(),
     description: description().trim(),
+    videoUrl: videoUrl().trim(),
     products: products(),
     sections: sections(),
     startDate: startDate(),
@@ -236,6 +240,7 @@ export function LandingPageForm(props: {
     // §35 — reserved-route check doesn't apply to the Homepage's own record (it never routes through `/promotion/:slug`).
     else if (!isHomepage() && isReservedSlug(cleanSlug)) next.slug = "Slug นี้ตรงกับ Route ที่ระบบใช้งานอยู่แล้ว กรุณาเลือก Slug อื่น";
     if (startDate() && endDate() && !dateRangeValid()) next.endDate = "วันสิ้นสุดต้องอยู่หลังวันเริ่ม";
+    if (videoUrl().trim() && !isValidYoutubeUrl(videoUrl())) next.videoUrl = "ลิงก์ YouTube ไม่ถูกต้อง";
     return next;
   };
 
@@ -307,6 +312,11 @@ export function LandingPageForm(props: {
                 disabled={saving()}
                 class="sm:col-span-2"
               />
+              <Show when={!isHomepage()}>
+                <p class="-mt-2 text-xs text-ink-gray sm:col-span-2">
+                  URL หน้าร้าน: <span class="font-medium text-ink">{promotionPageHref({ isHomepage: false, slug: slugify(slug()) || "{slug}" })}</span>
+                </p>
+              </Show>
               <Show when={isHomepage()}>
                 <p class="text-xs text-ink-gray sm:col-span-2">
                   หน้านี้คือหน้าแรก — ลูกค้าเข้าถึงผ่าน <span class="font-medium text-ink">/</span> เสมอ ไม่ผ่าน /promotion/{"{slug}"} เหมือนหน้าอื่น (Slug ด้านบนใช้เพื่อความสมบูรณ์ของข้อมูลภายในเท่านั้น)
@@ -342,10 +352,21 @@ export function LandingPageForm(props: {
 
           <Section title="แบนเนอร์หลัก">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <BannerUploader label="แบนเนอร์เดสก์ท็อป" hint="แนะนำ 1920×840px" value={bannerDesktop()} onChange={setBannerDesktop} />
-              <BannerUploader label="แบนเนอร์แท็บเล็ต" hint="แนะนำ 1024×600px" value={bannerTablet()} onChange={setBannerTablet} />
-              <BannerUploader label="แบนเนอร์มือถือ" hint="แนะนำ 750×960px" value={bannerMobile()} onChange={setBannerMobile} />
+              <BannerUploader label="แบนเนอร์เดสก์ท็อป" device="desktop" value={bannerDesktop()} onChange={setBannerDesktop} />
+              <BannerUploader label="แบนเนอร์แท็บเล็ต" device="tablet" value={bannerTablet()} onChange={setBannerTablet} />
+              <BannerUploader label="แบนเนอร์มือถือ" device="mobile" value={bannerMobile()} onChange={setBannerMobile} />
             </div>
+            <TextField
+              label="วิดีโอ YouTube (แสดงแทนแบนเนอร์)"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={videoUrl()}
+              onInput={(e) => setVideoUrl(e.currentTarget.value)}
+              error={errors().videoUrl ?? (videoUrl().trim() && !isValidYoutubeUrl(videoUrl()) ? "ลิงก์ YouTube ไม่ถูกต้อง" : undefined)}
+              disabled={saving()}
+            />
+            <p class="text-xs text-ink-gray">
+              ใส่ลิงก์แล้วหน้าเว็บจะแสดงวิดีโอแทนแบนเนอร์ (แบนเนอร์ยังเก็บไว้ ลบลิงก์เพื่อกลับไปแสดงแบนเนอร์) — มีวิดีโอแล้วไม่ต้องอัปโหลดแบนเนอร์ก็เผยแพร่ได้ · ใช้กับหน้าที่ไม่มี Section เท่านั้น
+            </p>
           </Section>
 
           <Section title="เนื้อหาหน้า">
@@ -369,6 +390,12 @@ export function LandingPageForm(props: {
             <PromotionPageProductPicker selected={products()} onChange={setProducts} />
             <p class="text-xs text-ink-gray">รายการสินค้านี้ใช้เมื่อยังไม่มีส่วนเนื้อหาด้านล่าง — เมื่อเพิ่มส่วนเนื้อหาแล้ว หน้าเว็บจะแสดงผลตามส่วนเนื้อหาแทน</p>
           </Section>
+
+          <Show when={isHomepage()}>
+            <Section title="โครงสร้างหน้าแรกบนหน้าร้าน">
+              <HomepageFixedSectionsPanel sections={sections()} />
+            </Section>
+          </Show>
 
           <Section title="ส่วนประกอบของหน้า">
             <div class="flex flex-col gap-4">
@@ -443,7 +470,31 @@ export function LandingPageForm(props: {
       <Button type="button" variant="outline" onClick={openFullPagePreview}>
         <EyeIcon class="size-4" /> เปิดดูตัวอย่างเต็มหน้า (แท็บใหม่)
       </Button>
-      <HomepageSectionsPreview sections={effectiveSections()} />
+      {/* Storefront sync — a page `PromotionPageView` shows as a listing (flat, or one product section) previews as that listing, YouTube video included; everything else through the section renderer. */}
+      <HomepageSectionsPreview
+        sections={effectiveSections()}
+        content={
+          !isHomepage() && isListingModePage(sections()) ? (
+            <PromotionPagePreviewBody
+              name={name()}
+              title={title()}
+              description={description()}
+              banners={{ desktop: bannerDesktop(), tablet: bannerTablet(), mobile: bannerMobile() }}
+              videoUrl={videoUrl()}
+              products={products()}
+              sections={sections()}
+            />
+          ) : undefined
+        }
+      />
+      <Show when={isHomepage()}>
+        <p class="text-xs text-ink-gray">
+          ตัวอย่างนี้แสดงเฉพาะส่วนที่แก้ไขได้ — บนหน้าร้านจะต่อด้วยส่วนคงที่:{" "}
+          {HOMEPAGE_FIXED_SECTIONS.filter((f) => !f.editable)
+            .map((f) => f.label)
+            .join(" → ")}
+        </p>
+      </Show>
       <Show when={startDate() && endDate()}>
         <p class="text-xs text-ink-gray">
           {startDate()} {startTime()} — {endDate()} {endTime()}

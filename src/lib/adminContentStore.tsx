@@ -8,9 +8,14 @@ import {
   normalizePromotionPage,
   isSlugTaken,
   isHomepageAssigned,
+  withLateSeedPages,
+  upgradePromotionPageSeeds,
+  PROMOTION_PAGE_SEED_VERSION,
 } from "./adminContent";
 
 const STORAGE_KEY = "charmiss:admin:content:promotionPages";
+/** Separate key, so the storefront's read-only mirror (`promotionPages.tsx`) keeps reading `STORAGE_KEY` unchanged. Missing = v1 (before seed versioning existed). */
+const SEED_VERSION_KEY = "charmiss:admin:content:promotionPages:seedVersion";
 const TODAY_LABEL = "17 ก.ย. 2569";
 let nextId = 1000;
 
@@ -38,7 +43,18 @@ export function AdminContentProvider(props: { children: JSX.Element }) {
   onMount(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setPages((JSON.parse(raw) as PromotionPage[]).map(normalizePromotionPage));
+      const storedVersion = Number(localStorage.getItem(SEED_VERSION_KEY) ?? "1") || 1;
+      if (raw) {
+        const loaded = withLateSeedPages((JSON.parse(raw) as PromotionPage[]).map(normalizePromotionPage));
+        if (storedVersion < PROMOTION_PAGE_SEED_VERSION) {
+          const upgraded = upgradePromotionPageSeeds(loaded, storedVersion).map(normalizePromotionPage);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(upgraded));
+          setPages(upgraded);
+        } else {
+          setPages(loaded);
+        }
+      }
+      localStorage.setItem(SEED_VERSION_KEY, String(PROMOTION_PAGE_SEED_VERSION));
     } catch {
       // storage unavailable — stays in-memory for this tab.
     }

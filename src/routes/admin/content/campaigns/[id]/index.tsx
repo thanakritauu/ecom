@@ -108,14 +108,14 @@ export default function AdminCampaignDetailPage() {
             <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div class="flex flex-col gap-6 lg:col-span-2">
                 <Section title="Hero Banner">
-                  <div class="aspect-[16/6] w-full overflow-hidden rounded-media bg-surface-gray/60">
+                  <div class="aspect-[3/1] w-full overflow-hidden rounded-media bg-surface-gray/60">
                     <Show when={c().banners.desktop} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-8" /></div>}>
                       <img src={c().banners.desktop} alt="" class="size-full object-cover" />
                     </Show>
                   </div>
                   <div class="grid grid-cols-2 gap-3">
-                    <BannerThumb label="Tablet Banner" src={c().banners.tablet} />
-                    <BannerThumb label="Mobile Banner" src={c().banners.mobile} />
+                    <BannerThumb label="Tablet Banner" src={c().banners.tablet} aspectClass="aspect-[4/3]" />
+                    <BannerThumb label="Mobile Banner" src={c().banners.mobile} aspectClass="aspect-[3/4] max-w-[60%]" />
                   </div>
                 </Section>
 
@@ -224,11 +224,12 @@ function Row(props: { label: string; value: string }) {
   );
 }
 
-function BannerThumb(props: { label: string; src: string }) {
+/** `aspectClass` — the storefront crop ratio for this slot (Tablet 4:3, Mobile 3:4 — `BANNER_DEVICE_SPECS`). */
+function BannerThumb(props: { label: string; src: string; aspectClass: string }) {
   return (
     <div class="flex flex-col gap-1.5">
       <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">{props.label}</p>
-      <div class="aspect-[16/10] w-full overflow-hidden rounded-media bg-surface-gray/60">
+      <div class={`${props.aspectClass} w-full overflow-hidden rounded-media bg-surface-gray/60`}>
         <Show when={props.src} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-5" /></div>}>
           <img src={props.src} alt="" class="size-full object-cover" />
         </Show>

@@ -34,7 +34,7 @@ const faqItems = [
 
 export function FAQSection() {
   return (
-    <section aria-labelledby="faq-heading" class="pb-6 pt-0 sm:pb-8 lg:pb-10">
+    <section aria-labelledby="faq-heading" class="pb-6 pt-0">
       {/* Figma 124:7017 — 1140px content, 40px pink centered title, 16px title→list */}
       <Container width="narrow" class="lg:max-w-container-wide">
         <div class="mx-auto flex w-full flex-col gap-3 sm:gap-4 lg:max-w-[1140px]">

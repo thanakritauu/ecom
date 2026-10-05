@@ -1,6 +1,6 @@
 import { createContext, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
-import { normalizePromotionPage, buildMockPromotionPages, type PromotionPage } from "./adminContent";
+import { normalizePromotionPage, buildMockPromotionPages, withLateSeedPages, type PromotionPage } from "./adminContent";
 
 /** Same key `adminContentStore.tsx` (the Admin side's source of truth) persists to — read-only here, never written from the customer side. */
 const STORAGE_KEY = "charmiss:admin:content:promotionPages";
@@ -27,7 +27,7 @@ function readStoredPages(): PromotionPage[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return fallbackPages();
-    return (JSON.parse(raw) as PromotionPage[]).map(normalizePromotionPage);
+    return withLateSeedPages((JSON.parse(raw) as PromotionPage[]).map(normalizePromotionPage));
   } catch {
     return fallbackPages();
   }

@@ -4,7 +4,7 @@ import { ImageIcon } from "~/components/admin/icons";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { formatMarketingDate } from "~/lib/adminMarketing";
-import { LANDING_PAGE_STATUS_META, type LandingPage } from "~/lib/adminContent";
+import { LANDING_PAGE_STATUS_META, type LandingPage, promotionPageHref } from "~/lib/adminContent";
 import { HOMEPAGE_SECTION_TYPE_META } from "~/lib/adminHomepage";
 
 /** Landing Page Architecture & Promotion Page Migration — was `PromotionPageQuickView.tsx`. Same reused `QuickViewDrawer` pattern as Product/Order, no new drawer shape. */
@@ -29,7 +29,7 @@ export function LandingPageQuickView(props: { page: LandingPage }) {
 
   return (
     <div class="flex flex-col gap-5">
-      <div class="aspect-[16/7] w-full overflow-hidden rounded-card bg-surface-gray/60">
+      <div class="aspect-[3/1] w-full overflow-hidden rounded-card bg-surface-gray/60">
         <Show when={heroImage()} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-8" /></div>}>
           <img src={heroImage()} alt="" class="size-full object-cover" />
         </Show>
@@ -37,7 +37,7 @@ export function LandingPageQuickView(props: { page: LandingPage }) {
 
       <div>
         <p class="text-base font-semibold text-ink">{p().name}</p>
-        <p class="text-sm text-ink-gray">{p().isHomepage ? "/" : `/${p().slug}`}</p>
+        <p class="text-sm text-ink-gray">{promotionPageHref(p())}</p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">

@@ -2,12 +2,13 @@ import { Dialog } from "@kobalte/core/dialog";
 import { For, Show, createMemo } from "solid-js";
 import { A } from "@solidjs/router";
 import { useCart } from "~/lib/cart";
-import { resolveCartLines, computeCartTotal } from "~/lib/cartSelectors";
+import { resolveCartLines, computeCartTotal, resolveGiftPromotion } from "~/lib/cartSelectors";
 import { useProductCatalog } from "~/lib/productCatalog";
 import { Button } from "./Button";
 import { formatTHB } from "./PriceDisplay";
 import { CartItemRow } from "./CartItemRow";
-import { FreeShippingBanner } from "./FreeShippingBanner";
+import { GiftPromotionBanner } from "./GiftPromotionBanner";
+import { GiftItemRow } from "./GiftItemRow";
 
 /**
  * Figma node 153:19197. Global — opened from the Header cart icon, from
@@ -21,6 +22,7 @@ export function CartDrawer() {
   const catalog = useProductCatalog();
   const resolvedLines = createMemo(() => resolveCartLines(cart.lines(), catalog.products()));
   const total = createMemo(() => computeCartTotal(resolvedLines()));
+  const gift = createMemo(() => resolveGiftPromotion(total(), catalog.products()));
 
   return (
     <Dialog open={cart.drawerOpen()} onOpenChange={(open) => (open ? cart.openDrawer() : cart.closeDrawer())}>
@@ -40,7 +42,7 @@ export function CartDrawer() {
 
             <Show when={resolvedLines().length > 0} fallback={<EmptyCart />}>
               <div class="flex flex-1 flex-col gap-4 overflow-y-auto p-6">
-                <FreeShippingBanner total={total()} />
+                <Show when={gift()}>{(g) => <GiftPromotionBanner gift={g()} total={total()} />}</Show>
 
                 <ul class="flex flex-col gap-4">
                   <For each={resolvedLines()}>
@@ -53,6 +55,14 @@ export function CartDrawer() {
                       </>
                     )}
                   </For>
+                  <Show when={gift()?.unlocked && gift()}>
+                    {(g) => (
+                      <>
+                        <li class="h-px shrink-0 list-none bg-surface-gray" aria-hidden="true" />
+                        <GiftItemRow gift={g()} variant="drawer" />
+                      </>
+                    )}
+                  </Show>
                 </ul>
               </div>
 

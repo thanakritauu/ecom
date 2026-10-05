@@ -12,11 +12,15 @@ export function BestSellersSection() {
   const categories = useCategoryContent();
   const [activeTab, setActiveTab] = createSignal<string>("all");
 
+  const bestSellers = createMemo(() => catalog.products().filter(isBestSeller));
+  // Only categories that actually have a best seller get a tab — a new, still-empty category never shows an empty tab.
   const tabs = createMemo(() => [
     { id: "all", label: "ทั้งหมด" },
-    ...categories.categories().filter((c) => c.status === "active").map((c) => ({ id: c.id, label: c.name })),
+    ...categories
+      .categories()
+      .filter((c) => c.status === "active" && bestSellers().some((p) => p.categoryId === c.id))
+      .map((c) => ({ id: c.id, label: c.name })),
   ]);
-  const bestSellers = createMemo(() => catalog.products().filter(isBestSeller));
   const filtered = createMemo(() =>
     activeTab() === "all"
       ? bestSellers()
@@ -27,7 +31,7 @@ export function BestSellersSection() {
     <section aria-labelledby="best-sellers-heading" class="pb-8 pt-0 sm:pb-11 lg:pb-14">
       {/* Figma 124:6526 — 88px header (title + 34px tabs), 24px to the cards, 56px below them */}
       <Container width="wide" class="flex flex-col gap-4 sm:gap-5 lg:gap-6">
-        <SectionHeader title="สินค้าขายดี" href="/best-sellers" headingId="best-sellers-heading">
+        <SectionHeader title="สินค้าขายดี" href="/promotion/best-sellers" headingId="best-sellers-heading">
           <div class="scroll-rail !mx-0 !px-0" role="tablist" aria-label="กรองสินค้าขายดีตามหมวดหมู่">
             <For each={tabs()}>
               {(tab) => (

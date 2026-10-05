@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import { A } from "@solidjs/router";
 import { clientOnly } from "@solidjs/start";
 import { SearchBar } from "./SearchBar";
@@ -23,7 +23,6 @@ import { createDialogOpenState } from "~/lib/focusRestore";
 import { useNavigationContent } from "~/lib/navigationContent";
 import { NavIcon } from "./NavIcon";
 import logo from "~/assets/icons/logo-charmiss.svg";
-import navBadgeFlourish from "~/assets/images/footer/nav-badge-flourish.png";
 
 /**
  * `minimal` matches the Checkout frame (node 146:8484), which drops the
@@ -37,9 +36,31 @@ import navBadgeFlourish from "~/assets/images/footer/nav-badge-flourish.png";
  * already shows the same guest state — swapping only here would be a
  * one-off fake login state rather than a real feature.
  */
+/**
+ * Every page renders its own <Header />, so the category row remounts on each navigation. Its sideways scroll
+ * position is kept here (module scope survives client-side navigation) so tapping a menu far along the row
+ * doesn't snap the row back to the first items.
+ */
+let navScrollLeft = 0;
+
 export function Header(props: { minimal?: boolean }) {
   const cart = useCart();
   const navigation = useNavigationContent();
+  let navRail: HTMLElement | undefined;
+  // Restore the row where the shopper left it; if the current page's menu is out of view, bring it to the middle.
+  const syncNavScroll = () => {
+    if (!navRail) return;
+    navRail.scrollLeft = navScrollLeft;
+    const active = navRail.querySelector<HTMLElement>("a[aria-current='page']");
+    if (!active) return;
+    const item = active.getBoundingClientRect();
+    const rail = navRail.getBoundingClientRect();
+    if (item.left < rail.left || item.right > rail.right) {
+      navRail.scrollLeft += item.left - rail.left - (rail.width - item.width) / 2;
+      navScrollLeft = navRail.scrollLeft;
+    }
+  };
+  createEffect(on(() => navigation.visibleTree().length, () => requestAnimationFrame(syncNavScroll)));
   const [menuOpen, setMenuOpen] = createDialogOpenState();
   const [mobileSearchOpen, setMobileSearchOpen] = createDialogOpenState();
   const [headerHidden, setHeaderHidden] = createSignal(false);
@@ -155,7 +176,10 @@ export function Header(props: { minimal?: boolean }) {
       </div>
 
       {/* Category quick-nav — matches Figma node 132:2352: pink bar,
-          centered row, 48px gap, 150px side padding, 16px vertical padding.
+          centered row, 48px gap, 120px side padding from 1680px (all 12 menus need
+          ~1650px at that spacing); below it 24px gaps (32px from 1440) + 40px padding
+          so the row fits from ~1280px. 16px vertical padding; icon items are 32px
+          artwork + SemiBold label, text-only items Medium.
           Kept horizontally scrollable (not `overflow-visible`) even at
           desktop widths as a safety net — at exactly-Figma spacing this row
           only fits comfortably from ~1440px up (Figma's own canvas width);
@@ -163,10 +187,11 @@ export function Header(props: { minimal?: boolean }) {
           instead of wrapping, spilling outside the bar, or shrinking type. */}
       <Show when={!props.minimal}>
         <nav
+          ref={navRail}
+          onScroll={(e) => (navScrollLeft = e.currentTarget.scrollLeft)}
           aria-label="หมวดหมู่สินค้า"
-          class="scroll-rail !mx-0 !px-4 bg-brand-pink py-3 lg:justify-center lg:gap-12 lg:px-[150px] lg:py-4"
+          class="scroll-rail !mx-0 !px-4 bg-brand-pink py-3 lg:justify-center lg:gap-6 lg:!px-10 lg:py-4 2xl:gap-8 min-[1680px]:gap-12 min-[1680px]:!px-[120px]"
         >
-          <img src={navBadgeFlourish} alt="" class="hidden h-6 shrink-0 lg:block" aria-hidden="true" />
           {/* Navigation Architecture (Blueprint v1 FINAL) — a single resolved,
               already-filtered (visible + target-available) list from the
               standalone Navigation module (`~/lib/navigationContent`), never
@@ -180,9 +205,13 @@ export function Header(props: { minimal?: boolean }) {
             {(item) => (
               <A
                 href={item.href}
-                class="flex min-h-[44px] shrink-0 items-center gap-1 whitespace-nowrap px-2 text-sm font-medium text-white transition-opacity duration-200 hover:opacity-80 lg:min-h-0 lg:px-0 lg:text-base [&.active]:underline [&.active]:underline-offset-4"
+                end
+                // An in-page link ("/#flash-sale") would otherwise read as active on every visit to its page.
+                activeClass={item.href.includes("#") ? "" : "underline underline-offset-4"}
+                class="flex min-h-[44px] shrink-0 items-center gap-1 whitespace-nowrap px-2 text-sm text-white transition-opacity duration-200 lg:min-h-0 lg:px-0 lg:text-base lg:hover:opacity-80"
+                classList={{ "font-semibold": !!item.icon, "font-medium": !item.icon }}
               >
-                <NavIcon icon={item.icon} class="size-5 shrink-0 rounded-full lg:size-6" />
+                <NavIcon icon={item.icon} class="size-6 shrink-0 lg:size-8" />
                 {item.label}
               </A>
             )}

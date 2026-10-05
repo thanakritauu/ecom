@@ -1,7 +1,7 @@
-export function StockProgressBar(props: { stockLeft: number; stockTotal: number }) {
+export function StockProgressBar(props: { stockLeft: number; stockTotal: number; /** Smaller label for tight spots (list-view product card). */ compact?: boolean }) {
   const percent = () => Math.max(4, Math.min(100, (props.stockLeft / props.stockTotal) * 100));
   return (
-    <div class="flex w-full flex-col gap-2">
+    <div class="flex w-full flex-col" classList={{ "gap-2": !props.compact, "gap-1": props.compact }}>
       <div
         class="h-1.5 w-full overflow-hidden rounded-pill bg-surface-gray"
         role="progressbar"
@@ -15,7 +15,9 @@ export function StockProgressBar(props: { stockLeft: number; stockTotal: number 
           style={{ width: `${percent()}%` }}
         />
       </div>
-      <p class="text-base text-system-red">เหลืออีก {props.stockLeft} ชิ้น</p>
+      <p class="text-system-red" classList={{ "text-base": !props.compact, "text-xs font-medium": props.compact }}>
+        เหลืออีก {props.stockLeft} ชิ้น
+      </p>
     </div>
   );
 }

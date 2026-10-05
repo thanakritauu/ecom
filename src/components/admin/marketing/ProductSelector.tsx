@@ -15,8 +15,11 @@ import { formatAdminCurrency } from "~/lib/adminDashboard";
  * "ดูรายละเอียดทั้งหมด" opens the full Product page in a new tab rather than
  * navigating this tab away, since that would otherwise abandon whatever
  * Promotion/Flash Sale/Bundle form is still open around this selector.
+ * `single` turns it into a one-product picker (the gift of a "ซื้อครบรับ
+ * ของแถม" promotion): radio rows, picking one replaces the previous, no
+ * Select All.
  */
-export function ProductSelector(props: { selectedIds: string[]; onChange: (ids: string[]) => void }) {
+export function ProductSelector(props: { selectedIds: string[]; onChange: (ids: string[]) => void; single?: boolean }) {
   const store = useAdminProducts();
   const [search, setSearch] = createSignal("");
   const [quickViewId, setQuickViewId] = createSignal<string | null>(null);
@@ -32,6 +35,7 @@ export function ProductSelector(props: { selectedIds: string[]; onChange: (ids: 
   const allFilteredSelected = createMemo(() => filtered().length > 0 && filtered().every((p) => selectedSet().has(p.id)));
 
   const toggle = (id: string) => {
+    if (props.single) return props.onChange([id]);
     const set = new Set(props.selectedIds);
     if (set.has(id)) set.delete(id);
     else set.add(id);
@@ -48,20 +52,22 @@ export function ProductSelector(props: { selectedIds: string[]; onChange: (ids: 
   return (
     <div class="flex flex-col gap-3">
       <SearchInput value={search()} onInput={setSearch} placeholder="ค้นหาสินค้า, SKU..." />
-      <div class="flex items-center justify-between text-sm">
-        <label class="flex items-center gap-2 text-ink-gray">
-          <input type="checkbox" checked={allFilteredSelected()} onChange={toggleAll} class="size-4 rounded accent-brand-pink" />
-          เลือกทั้งหมด
-        </label>
-        <span class="font-medium text-ink">เลือกแล้ว {props.selectedIds.length} รายการ</span>
-      </div>
+      <Show when={!props.single}>
+        <div class="flex items-center justify-between text-sm">
+          <label class="flex items-center gap-2 text-ink-gray">
+            <input type="checkbox" checked={allFilteredSelected()} onChange={toggleAll} class="size-4 rounded accent-brand-pink" />
+            เลือกทั้งหมด
+          </label>
+          <span class="font-medium text-ink">เลือกแล้ว {props.selectedIds.length} รายการ</span>
+        </div>
+      </Show>
       <div class="flex max-h-80 flex-col gap-1 overflow-y-auto rounded-card border border-border p-2">
         <Show when={filtered().length > 0} fallback={<p class="p-4 text-center text-sm text-ink-gray">ไม่พบสินค้า</p>}>
           <For each={filtered()}>
             {(product) => (
               <div class="flex items-center gap-3 rounded-card p-2 transition-colors duration-150 hover:bg-surface-pink/30">
                 <input
-                  type="checkbox"
+                  type={props.single ? "radio" : "checkbox"}
                   aria-label={`เลือก ${product.name}`}
                   checked={selectedSet().has(product.id)}
                   onChange={() => toggle(product.id)}

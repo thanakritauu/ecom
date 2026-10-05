@@ -19,7 +19,7 @@ export function BannerQuickView(props: { banner: Banner }) {
 
   return (
     <div class="flex flex-col gap-5">
-      <div class="aspect-[16/7] w-full overflow-hidden rounded-card bg-surface-gray/60">
+      <div class="aspect-[3/1] w-full overflow-hidden rounded-card bg-surface-gray/60">
         <Show when={b().banners.desktop} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-8" /></div>}>
           <img src={b().banners.desktop} alt="" class="size-full object-cover" />
         </Show>

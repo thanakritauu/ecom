@@ -8,16 +8,17 @@ import iconTiktok from "~/assets/icons/social-tiktok.svg";
 import iconFacebook from "~/assets/icons/social-facebook.svg";
 import iconYoutube from "~/assets/icons/social-youtube.svg";
 
-// `href` on every link so none of them fall back to a dead `href="#"` — items
-// that already have a real destination elsewhere in the nav (กำลังฮิต/มาใหม่/
-// โปรโมชัน) point at that same URL; everything else routes to the
-// catch-all's out-of-scope screen instead of going nowhere.
+// `href` on every link so none of them fall back to a dead `href="#"` — the
+// order-tracking and ช้อปปิ้ง links point at real storefront pages (the
+// Account order history, `/products`, the `/promotion/:slug` landing pages);
+// help/about/legal/social have no page yet and route to the catch-all's
+// out-of-scope screen instead of going nowhere.
 const footerColumns = [
   {
     id: "help",
     title: "ช่วยเหลือ",
     links: [
-      { label: "ติดตามคำสั่งซื้อ", href: "/account/orders" },
+      { label: "ติดตามคำสั่งซื้อ", href: "/account" },
       { label: "วิธีสั่งซื้อ", href: "/help/how-to-order" },
       { label: "การจัดส่ง", href: "/help/shipping" },
       { label: "คำถามที่พบบ่อย", href: "/help/faq" },
@@ -27,10 +28,10 @@ const footerColumns = [
     id: "shop",
     title: "ช้อปปิ้ง",
     links: [
-      { label: "สินค้าทั้งหมด", href: "/category/all" },
-      { label: "กำลังฮิต", href: "/trending" },
-      { label: "มาใหม่", href: "/new" },
-      { label: "โปรโมชัน", href: "/promotions" },
+      { label: "สินค้าทั้งหมด", href: "/products" },
+      { label: "กำลังฮิต", href: "/promotion/trending" },
+      { label: "มาใหม่", href: "/promotion/new-arrivals" },
+      { label: "โปรโมชัน", href: "/promotion/promotions" },
     ],
   },
   {
@@ -187,7 +188,7 @@ export function NewsletterForm() {
   return (
     <div class="flex flex-col gap-4 lg:w-[280px]">
       <p class="font-medium text-white">รับข่าวสารเพิ่มเติม</p>
-      <p class="text-sm text-white/90">สมัครรับข่าวสารเพื่อรับโค้ดส่วนลดและสิทธิพิเศษสำหรับ CharmissClub</p>
+      <p class="text-sm text-white/90">สมัครรับข่าวสารเพื่อรับโค้ดส่วนลดและสิทธิพิเศษสำหรับ Charmiss Club</p>
 
       <Show
         when={status() !== "success"}

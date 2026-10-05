@@ -6,22 +6,21 @@ import { Button } from "~/components/shared/Button";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { MemberBadgeIcon, RefreshIcon } from "~/components/admin/icons";
-import { CUSTOMER_TIER_META, getCustomerFullName, getCustomerInitials } from "~/lib/adminCustomers";
-import { LOYALTY_MEMBER_STATUS_META } from "~/lib/adminLoyaltyMembers";
+import { TierBadge } from "~/components/admin/loyalty/TierBadge";
+import { getCustomerInitials } from "~/lib/adminCustomers";
+import { COIN_ENTRY_STATE_META, LOYALTY_MEMBER_STATUS_META, memberIdLabel, memberName } from "~/lib/adminLoyaltyMembers";
 import { useAdminLoyaltyMembers } from "~/lib/adminLoyaltyMemberStore";
-import { useAdminCustomers } from "~/lib/adminCustomerStore";
 import { pushToast } from "~/lib/toast";
 
-/** Read-only Detail — every field on the Member is Cordy CRM's own Membership data; Customer info is read-only here too, and "ดูข้อมูลลูกค้า" is the only way to reach the real Customer Detail page. */
+/** Read-only Detail — every field on the Member is Charmiss Club CRM's own Membership data; Customer info is read-only here too, and "ดูข้อมูลลูกค้า" is the only way to reach the real Customer Detail page. */
 export default function AdminLoyaltyMemberDetailPage() {
   const params = useParams<{ id: string }>();
   const store = useAdminLoyaltyMembers();
-  const customerStore = useAdminCustomers();
   const navigate = useNavigate();
   const member = createMemo(() => store.getById(params.id));
   const customer = createMemo(() => {
     const m = member();
-    return m ? customerStore.getById(m.customerId) : undefined;
+    return m ? store.customerOf(m) : undefined;
   });
 
   const [syncing, setSyncing] = createSignal(false);
@@ -32,10 +31,10 @@ export default function AdminLoyaltyMemberDetailPage() {
     setSyncing(true);
     await store.syncSelected([m.id]);
     setSyncing(false);
-    pushToast("Sync ข้อมูลจาก Cordy CRM เรียบร้อยแล้ว", "success");
+    pushToast("Sync ข้อมูลจาก Charmiss Club CRM เรียบร้อยแล้ว", "success");
   };
 
-  const openCordyCrm = () => pushToast("(จำลอง) กำลังเปิด Cordy CRM ในแท็บใหม่", "success");
+  const openCrm = () => pushToast("(จำลอง) กำลังเปิด Charmiss Club CRM ในแท็บใหม่", "success");
 
   return (
     <Show
@@ -43,20 +42,20 @@ export default function AdminLoyaltyMemberDetailPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สะสมแต้ม", href: "/admin/loyalty" }, { label: "สมาชิก", href: "/admin/loyalty/members" }]} />
-          <EmptyState icon={<MemberBadgeIcon />} title="ไม่พบสมาชิกนี้" description="ข้อมูลอาจยังไม่ได้ Sync มาจาก Cordy CRM หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าสมาชิก" onAction={() => navigate("/admin/loyalty/members")} class="bg-surface-card shadow-card" />
+          <EmptyState icon={<MemberBadgeIcon />} title="ไม่พบสมาชิกนี้" description="ข้อมูลอาจยังไม่ได้ Sync มาจาก Charmiss Club CRM หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าสมาชิก" onAction={() => navigate("/admin/loyalty/members")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
       {(current) => {
         const m = current;
         const c = customer;
-        const name = () => (c() ? getCustomerFullName(c()!) : "(ไม่พบข้อมูลลูกค้า)");
+        const name = () => memberName(m(), c());
         return (
           <div class="flex flex-col gap-6">
             <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สะสมแต้ม", href: "/admin/loyalty" }, { label: "สมาชิก", href: "/admin/loyalty/members" }, { label: name() }]} />
             <PageHeader
               title={name()}
-              description={m().memberId}
+              description={memberIdLabel(m())}
               actions={
                 <div class="flex flex-wrap items-center gap-2">
                   <Show when={c()}>
@@ -67,8 +66,8 @@ export default function AdminLoyaltyMemberDetailPage() {
                   <Button variant="outline" onClick={handleSync} loading={syncing()}>
                     <RefreshIcon class="size-4" /> Sync
                   </Button>
-                  <Button variant="primary" onClick={openCordyCrm}>
-                    จัดการใน Cordy CRM
+                  <Button variant="primary" onClick={openCrm}>
+                    จัดการใน Charmiss Club CRM
                   </Button>
                 </div>
               }
@@ -79,14 +78,17 @@ export default function AdminLoyaltyMemberDetailPage() {
                 <Section title="ข้อมูลลูกค้า (Read-only)">
                   <div class="flex items-center gap-3">
                     <span class="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-pink text-base font-semibold text-white">
-                      {c() ? getCustomerInitials(c()!) : "?"}
+                      {c() ? getCustomerInitials(c()!) : (m().crmProfile?.name.charAt(0) ?? "?")}
                     </span>
                     <div class="min-w-0">
                       <p class="truncate font-medium text-ink">{name()}</p>
-                      <p class="truncate text-sm text-ink-gray">{c()?.email ?? "-"}</p>
+                      <p class="truncate text-sm text-ink-gray">{c()?.email ?? m().crmProfile?.email ?? "-"}</p>
                     </div>
                   </div>
-                  <Row label="เบอร์โทร" value={c()?.phone || "-"} />
+                  <Row label="เบอร์โทร" value={c()?.phone || m().crmProfile?.phone || "-"} />
+                  <Show when={!c()}>
+                    <p class="text-sm text-ink-gray">สมาชิกเดิมใน Charmiss Club CRM ที่ยังไม่เคยเข้าสู่ระบบบนเว็บไซต์ — เมื่อเข้าสู่ระบบด้วยเบอร์โทร อีเมล หรือ LINE ที่ตรงกัน ระบบจะสร้างข้อมูลลูกค้าและย้ายคอยน์ให้อัตโนมัติ</p>
+                  </Show>
                 </Section>
 
                 <Section title="ประวัติคอยน์ (Mock)">
@@ -97,12 +99,22 @@ export default function AdminLoyaltyMemberDetailPage() {
                           <div class="flex items-center justify-between gap-3 py-2.5 text-sm">
                             <div class="min-w-0">
                               <p class="truncate text-ink">{entry.label}</p>
-                              <p class="text-xs text-ink-placeholder">{entry.date}</p>
+                              <p class="text-xs text-ink-placeholder">
+                                {entry.orderId ? `${entry.orderId} · ` : ""}
+                                {entry.date}
+                              </p>
                             </div>
-                            <span class={`shrink-0 font-medium ${entry.amount >= 0 ? "text-success" : "text-system-red"}`}>
-                              {entry.amount >= 0 ? "+" : ""}
-                              {entry.amount.toLocaleString("th-TH")}
-                            </span>
+                            <div class="flex shrink-0 items-center gap-2">
+                              <StatusBadge tone={COIN_ENTRY_STATE_META[entry.state].tone}>{COIN_ENTRY_STATE_META[entry.state].label}</StatusBadge>
+                              {/* Same colours as the storefront history: credited green, pending grey, redeemed red. */}
+                              <span
+                                class="w-16 text-right font-medium"
+                                classList={{ "text-success": entry.state === "earned", "text-ink-gray": entry.state === "pending", "text-system-red": entry.state === "used" }}
+                              >
+                                {entry.amount > 0 ? "+" : ""}
+                                {entry.amount.toLocaleString("th-TH")}
+                              </span>
+                            </div>
                           </div>
                         )}
                       </For>
@@ -119,22 +131,20 @@ export default function AdminLoyaltyMemberDetailPage() {
                 </Section>
 
                 <Section title="ระดับสมาชิก">
-                  <StatusBadge tone="info" class="w-fit">
-                    {CUSTOMER_TIER_META[m().tier].label}
-                  </StatusBadge>
+                  <TierBadge tier={m().tier} />
                 </Section>
 
                 <Section title="คอยน์">
                   <Row label="คอยน์ที่ได้รับ" value={`+${m().coinsEarned.toLocaleString("th-TH")}`} />
-                  <Row label="คอยน์ที่ใช้" value={m().coinsUsed.toLocaleString("th-TH")} />
+                  <Row label="คอยน์ที่ใช้ไป" value={m().coinsUsed.toLocaleString("th-TH")} />
                   <Row label="คอยน์คงเหลือ" value={m().coinsRemaining.toLocaleString("th-TH")} />
                 </Section>
 
                 <Section title="ข้อมูลการเชื่อมต่อ">
-                  <Row label="Member ID" value={m().memberId} />
+                  <Row label="รหัส CRM" value={memberIdLabel(m())} />
                   <Row label="เข้าร่วมเมื่อ" value={m().joinedAt || "-"} />
                   <Row label="Source" value={m().source} />
-                  <Row label="Sync ล่าสุด" value={m().syncedAt} />
+                  <Row label="Sync ล่าสุด" value={m().syncedAt || "-"} />
                 </Section>
               </div>
             </div>

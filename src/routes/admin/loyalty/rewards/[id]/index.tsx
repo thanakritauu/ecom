@@ -12,7 +12,7 @@ import { useAdminProducts } from "~/lib/adminProductStore";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
 import { pushToast } from "~/lib/toast";
 
-/** Cordy-owned fields (name/type/coinCost/stockRemaining/status/dates) read-only; "แก้ไขการแสดงผล" is the only edit affordance, scoped to the Presentation layer alone. */
+/** Charmiss Club CRM-owned fields (name/type/coinCost/stockRemaining/status/dates) read-only; "แก้ไขการแสดงผล" is the only edit affordance, scoped to the Presentation layer alone. */
 export default function AdminLoyaltyRewardDetailPage() {
   const params = useParams<{ id: string }>();
   const store = useAdminRewards();
@@ -29,10 +29,10 @@ export default function AdminLoyaltyRewardDetailPage() {
     setSyncing(true);
     await store.syncSelected([r.id]);
     setSyncing(false);
-    pushToast("Sync ข้อมูลจาก Cordy CRM เรียบร้อยแล้ว", "success");
+    pushToast("Sync ข้อมูลจาก Charmiss Club CRM เรียบร้อยแล้ว", "success");
   };
 
-  const openCordyCrm = () => pushToast("(จำลอง) กำลังเปิด Cordy CRM ในแท็บใหม่", "success");
+  const openCrm = () => pushToast("(จำลอง) กำลังเปิด Charmiss Club CRM ในแท็บใหม่", "success");
 
   return (
     <Show
@@ -40,7 +40,7 @@ export default function AdminLoyaltyRewardDetailPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สะสมแต้ม", href: "/admin/loyalty" }, { label: "ของรางวัล", href: "/admin/loyalty/rewards" }]} />
-          <EmptyState icon={<RewardGiftIcon />} title="ไม่พบของรางวัลนี้" description="ข้อมูลอาจยังไม่ได้ Sync มาจาก Cordy CRM หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าของรางวัล" onAction={() => navigate("/admin/loyalty/rewards")} class="bg-surface-card shadow-card" />
+          <EmptyState icon={<RewardGiftIcon />} title="ไม่พบของรางวัลนี้" description="ข้อมูลอาจยังไม่ได้ Sync มาจาก Charmiss Club CRM หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าของรางวัล" onAction={() => navigate("/admin/loyalty/rewards")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -62,8 +62,8 @@ export default function AdminLoyaltyRewardDetailPage() {
                   <Button variant="outline" onClick={handleSync} loading={syncing()}>
                     <RefreshIcon class="size-4" /> Sync
                   </Button>
-                  <Button variant="outline" onClick={openCordyCrm}>
-                    จัดการใน Cordy CRM
+                  <Button variant="outline" onClick={openCrm}>
+                    จัดการใน Charmiss Club CRM
                   </Button>
                 </div>
               }
@@ -97,18 +97,18 @@ export default function AdminLoyaltyRewardDetailPage() {
                   </div>
                 </Section>
 
-                <Section title="ประเภทของรางวัล (Cordy)">
+                <Section title="ประเภทของรางวัล (Charmiss Club CRM)">
                   <StatusBadge tone="info" class="w-fit">
                     {REWARD_TYPE_META[r().rewardType].label}
                   </StatusBadge>
                 </Section>
 
-                <Section title="คอยน์และจำนวน (Cordy)">
+                <Section title="คอยน์และจำนวน (Charmiss Club CRM)">
                   <Row label="จำนวนคอยน์ที่ใช้" value={r().coinCost.toLocaleString("th-TH")} />
                   <Row label="จำนวนคงเหลือ" value={r().stockRemaining.toLocaleString("th-TH")} />
                 </Section>
 
-                <Section title="ระยะเวลา (Cordy)">
+                <Section title="ระยะเวลา (Charmiss Club CRM)">
                   <Row label="เริ่ม" value={r().startDate} />
                   <Row label="สิ้นสุด" value={r().endDate} />
                 </Section>

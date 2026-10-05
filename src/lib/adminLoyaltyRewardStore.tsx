@@ -19,16 +19,16 @@ type AdminRewardContextValue = {
   rewards: Accessor<AdminReward[]>;
   getById: (id: string) => AdminReward | undefined;
   lastSyncedAt: Accessor<string>;
-  /** Refreshes only the Cordy-owned fields (mock: just bumps `syncedAt`) — never touches the Presentation layer. */
+  /** Refreshes only the Charmiss Club CRM-owned fields (mock: just bumps `syncedAt`) — never touches the Presentation layer. */
   syncSelected: (ids: string[]) => Promise<void>;
   syncAll: () => Promise<void>;
-  /** The *only* write path into a Reward's Charmiss-owned Presentation/Ecommerce fields — never `name`/`rewardType`/`coinCost`/`stockRemaining`/`status`/dates (Cordy's Coin/Redemption Logic, read-only). */
+  /** The *only* write path into a Reward's Charmiss-owned Presentation/Ecommerce fields — never `name`/`rewardType`/`coinCost`/`stockRemaining`/`status`/dates (the CRM's Coin/Redemption Logic, read-only). */
   updatePresentation: (id: string, input: RewardPresentationValues) => Promise<void>;
 };
 
 const AdminRewardContext = createContext<AdminRewardContextValue>();
 
-/** Loyalty (Phase 08.4) — "ของรางวัล". Split-ownership store: Cordy-owned fields are sync-only (same shape as every other Loyalty module here); Presentation/Ecommerce fields are the one thing Charmiss can actually edit. */
+/** Loyalty (Phase 08.4) — "ของรางวัล". Split-ownership store: Charmiss Club CRM-owned fields are sync-only (same shape as every other Loyalty module here); Presentation/Ecommerce fields are the one thing Charmiss can actually edit. */
 export function AdminRewardProvider(props: { children: JSX.Element }) {
   const [rewards, setRewards] = createSignal<AdminReward[]>(baseline());
 

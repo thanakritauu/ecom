@@ -1,7 +1,7 @@
 import type { StatusTone } from "~/components/admin/StatusBadge";
 import { isValidDateRange } from "./adminMarketing";
-import { normalizeHomepageSection, validateHeroAssets, type HomepageSection, type HomepageDestination } from "./pageSections";
-import { buildHomepageSectionBaseline } from "./adminHomepage";
+import { normalizeHomepageSection, validateHeroAssets, isValidYoutubeUrl, type HomepageSection, type HomepageDestination } from "./pageSections";
+import { buildHomepageSectionBaseline, buildLiveHeroAssets, HOMEPAGE_HERO_SECTION_ID } from "./adminHomepage";
 import heroBanner1 from "~/assets/images/hero/hero-banner-1.png";
 import heroBanner2 from "~/assets/images/hero/hero-banner-2.png";
 import heroBanner3 from "~/assets/images/hero/hero-banner-3.png";
@@ -92,6 +92,8 @@ export type PromotionPage = {
    */
   title: string;
   description: string;
+  /** YouTube link shown at the top of a flat page in place of the banner (the banner stays saved, just hidden). Empty = banner as usual. */
+  videoUrl: string;
   products: PromotionPageProductRef[];
   /**
    * Landing Page Admin Management §9/§24 — Page Section Builder. Purely
@@ -135,6 +137,8 @@ export function slugify(input: string): string {
  */
 const RETIRED_SECTION_IDS = new Set(["home-sec-campaign-99"]);
 
+const SEED_VIDEO_URLS: Record<string, string> = { "promo-page-003": "https://www.youtube.com/watch?v=xv8R0w-4Sqw" };
+
 export function normalizePromotionPage(p: Partial<PromotionPage> & { id: string }): PromotionPage {
   return {
     id: p.id,
@@ -149,6 +153,8 @@ export function normalizePromotionPage(p: Partial<PromotionPage> & { id: string 
     }),
     title: p.title ?? "",
     description: p.description ?? "",
+    // A page saved before `videoUrl` existed picks up its seeded video (Iconic Glow → Charmiss x Sanrio).
+    videoUrl: p.videoUrl ?? SEED_VIDEO_URLS[p.id] ?? "",
     products: Array.isArray(p.products)
       ? p.products.map((ref) => ({ productId: ref.productId, variantIds: Array.isArray(ref.variantIds) ? ref.variantIds : [] }))
       : [],
@@ -181,6 +187,11 @@ export function isHomepageAssigned(pages: PromotionPage[], excludeId?: string): 
   return pages.some((p) => p.id !== excludeId && p.isHomepage);
 }
 
+/** The customer URL exactly as the storefront routes it — `/` for the Homepage, `/promotion/{slug}` for every other page. The one place Admin spells it out. */
+export function promotionPageHref(p: Pick<PromotionPage, "isHomepage" | "slug">): string {
+  return p.isHomepage ? "/" : `/promotion/${p.slug}`;
+}
+
 /**
  * §28/§33 — a Draft can be saved with almost nothing filled in; only
  * *Publish* demands the page is actually presentable. Returns Thai messages
@@ -195,7 +206,7 @@ export function isHomepageAssigned(pages: PromotionPage[], excludeId?: string): 
  * (including Homepage, which always uses sections).
  */
 export function validatePublishRequirements(
-  values: Pick<PromotionPageFormValues, "name" | "slug" | "title" | "banners" | "products" | "sections" | "startDate" | "startTime" | "endDate" | "endTime" | "isHomepage">,
+  values: Pick<PromotionPageFormValues, "name" | "slug" | "title" | "banners" | "videoUrl" | "products" | "sections" | "startDate" | "startTime" | "endDate" | "endTime" | "isHomepage">,
 ): string[] {
   const errors: string[] = [];
   if (!values.name.trim()) errors.push("กรุณากรอกชื่อหน้า");
@@ -203,9 +214,11 @@ export function validatePublishRequirements(
   else if (!values.isHomepage && isReservedSlug(values.slug)) errors.push("Slug นี้ตรงกับ Route ที่ระบบใช้งานอยู่แล้ว กรุณาเลือก Slug อื่น");
   if (values.sections.length === 0) {
     if (!values.title.trim()) errors.push("กรุณากรอก Title");
-    if (!values.banners.desktop) errors.push("กรุณาอัปโหลด Desktop Banner");
+    // A YouTube video takes the banner's place on the storefront (`PromotionPageView`), so it satisfies the banner requirement on its own.
+    if (!values.banners.desktop && !values.videoUrl.trim()) errors.push("กรุณาอัปโหลด Desktop Banner หรือใส่ลิงก์วิดีโอ YouTube");
     if (values.products.length === 0) errors.push("กรุณาเลือกสินค้าอย่างน้อย 1 รายการ");
   }
+  if (values.videoUrl.trim() && !isValidYoutubeUrl(values.videoUrl)) errors.push("ลิงก์วิดีโอ YouTube ไม่ถูกต้อง");
   if (values.startDate && values.endDate && !isValidDateRange(values.startDate, values.startTime, values.endDate, values.endTime)) {
     errors.push("ช่วงวันที่ไม่ถูกต้อง");
   }
@@ -264,7 +277,13 @@ const TODAY_LABEL = "17 ก.ย. 2569";
  * runtime-only and non-deterministic) — same "baseline builder purity" rule
  * every other seed in this file already follows.
  */
-function seedAutoProductSection(id: string, title: string, productSource: "new_arrival" | "trending" | "featured"): HomepageSection {
+function seedAutoProductSection(
+  id: string,
+  title: string,
+  productSource: "new_arrival" | "trending" | "featured" | "best_seller" | "flash_sale",
+  /** Shown under the section title — the page's one-line intro, like Charmiss x Sanrio's. */
+  description = "",
+): HomepageSection {
   return {
     id,
     type: "product",
@@ -272,7 +291,7 @@ function seedAutoProductSection(id: string, title: string, productSource: "new_a
     enabled: true,
     eyebrow: "",
     title,
-    description: "",
+    description,
     banners: { desktop: "", tablet: "", mobile: "" },
     assets: [],
     cta: { label: "", destination: { type: "none" } },
@@ -306,10 +325,12 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
     isHomepage: false,
     name: "9.9 Beauty Sale",
     slug: "9-9-beauty-sale",
-    status: "published",
+    // Storefront sync — the 9.9 campaign is over (ended 9 ก.ย.) and nothing on the storefront links to it any more.
+    status: "unpublished",
     banners: { desktop: heroBanner1, tablet: heroBanner1, mobile: heroBanner1 },
     title: "Beauty Sale",
     description: "รวมไอเทมดูแลผิวและสุขภาพในราคาพิเศษ ลดสูงสุด 50% เฉพาะวันที่ 9.9 นี้เท่านั้น",
+    videoUrl: "",
     products: [
       { productId: "best-1", variantIds: [] },
       { productId: "best-3", variantIds: [] },
@@ -331,6 +352,7 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
     banners: { desktop: heroBanner2, tablet: heroBanner2, mobile: "" },
     title: "Long Weekend Glow",
     description: "เตรียมผิวสวยก่อนวันหยุดยาว พร้อมส่วนลดพิเศษเฉพาะแคมเปญนี้",
+    videoUrl: "",
     products: [
       { productId: "best-5", variantIds: [] },
       { productId: "feature-2", variantIds: [] },
@@ -348,8 +370,10 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
     slug: "charmiss-x-sanrio",
     status: "published",
     banners: { desktop: heroBanner3, tablet: heroBanner3, mobile: heroBanner3 },
-    title: "Charmiss x Sanrio",
-    description: "คอลเลกชันลิขสิทธิ์แท้ Sanrio จำนวนจำกัด ช้อปก่อนหมด",
+    title: "Charming Iconic Glow",
+    description:
+      "CHARMISS CHARMING ICONIC GLOW CUSHION SPF50+ PA++++\nที่สุดงานผิวโกลว์แห่งปี ที่ใช้แล้วรอดกับทุกสภาพผิว\nคุชชั่นผิวโกลว์เรียกแสง เผยเสน่ห์แรงทุกองศา",
+    videoUrl: SEED_VIDEO_URLS["promo-page-003"],
     products: [
       { productId: "best-1", variantIds: ["coral"] },
       { productId: "best-3", variantIds: [] },
@@ -370,6 +394,7 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
     banners: { desktop: "", tablet: "", mobile: "" },
     title: "",
     description: "",
+    videoUrl: "",
     products: [],
     sections: [],
     startDate: "",
@@ -386,6 +411,7 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
     banners: { desktop: heroBanner2, tablet: "", mobile: "" },
     title: "New Year New Glow",
     description: "แคมเปญปีใหม่ที่ปิดไปแล้ว เก็บไว้เป็นข้อมูลอ้างอิง",
+    videoUrl: "",
     products: [{ productId: "best-1", variantIds: [] }],
     sections: [],
     startDate: "2026-01-01",
@@ -402,8 +428,44 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
     banners: { desktop: "", tablet: "", mobile: "" },
     title: "สินค้ามาใหม่",
     description: "อัปเดตสินค้าใหม่ล่าสุดจาก Charmiss",
+    videoUrl: "",
     products: [],
-    sections: [seedAutoProductSection("landing-sec-new-arrivals-001", "สินค้ามาใหม่ทั้งหมด", "new_arrival")],
+    sections: [seedAutoProductSection("landing-sec-new-arrivals-001", "สินค้ามาใหม่", "new_arrival", "อัปเดตสินค้าใหม่ล่าสุดจาก Charmiss")],
+    startDate: "",
+    startTime: "00:00",
+    endDate: "",
+    endTime: "23:59",
+  },
+  // Same template as "สินค้ามาใหม่" (promo-page-006) — one auto product section — for the nav's Flash Sale / ขายดี.
+  {
+    id: "promo-page-009",
+    isHomepage: false,
+    name: "Flash Sale",
+    slug: "flash-sale",
+    status: "published",
+    banners: { desktop: "", tablet: "", mobile: "" },
+    title: "Flash Sale",
+    description: "ดีลราคาพิเศษเวลาจำกัด รีบช้อปก่อนหมดเวลา",
+    videoUrl: "",
+    products: [],
+    sections: [seedAutoProductSection("landing-sec-flash-sale-001", "สินค้า Flash Sale", "flash_sale", "ดีลราคาพิเศษเวลาจำกัด รีบช้อปก่อนหมดเวลา")],
+    startDate: "",
+    startTime: "00:00",
+    endDate: "",
+    endTime: "23:59",
+  },
+  {
+    id: "promo-page-010",
+    isHomepage: false,
+    name: "สินค้าขายดี",
+    slug: "best-sellers",
+    status: "published",
+    banners: { desktop: "", tablet: "", mobile: "" },
+    title: "สินค้าขายดี",
+    description: "สินค้าที่ลูกค้า Charmiss เลือกซื้อมากที่สุด",
+    videoUrl: "",
+    products: [],
+    sections: [seedAutoProductSection("landing-sec-best-sellers-001", "สินค้าขายดี", "best_seller", "สินค้าที่ลูกค้า Charmiss เลือกซื้อมากที่สุด")],
     startDate: "",
     startTime: "00:00",
     endDate: "",
@@ -418,8 +480,9 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
     banners: { desktop: "", tablet: "", mobile: "" },
     title: "กำลังฮิตสัปดาห์นี้",
     description: "สินค้าที่กำลังเป็นที่นิยมในตอนนี้",
+    videoUrl: "",
     products: [],
-    sections: [seedAutoProductSection("landing-sec-trending-001", "สินค้ากำลังฮิต", "trending")],
+    sections: [seedAutoProductSection("landing-sec-trending-001", "สินค้ากำลังฮิต", "trending", "สินค้าที่กำลังเป็นที่นิยมในตอนนี้")],
     startDate: "",
     startTime: "00:00",
     endDate: "",
@@ -434,6 +497,7 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
     banners: { desktop: "", tablet: "", mobile: "" },
     title: "โปรโมชั่นแนะนำ",
     description: "รวมสินค้าและโปรโมชั่นแนะนำจาก Charmiss",
+    videoUrl: "",
     products: [],
     sections: [seedAutoProductSection("landing-sec-promotions-001", "สินค้าแนะนำ", "featured")],
     startDate: "",
@@ -462,6 +526,7 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
     banners: { desktop: "", tablet: "", mobile: "" },
     title: "หน้าแรก",
     description: "",
+    videoUrl: "",
     products: [],
     sections: buildHomepageSectionBaseline(),
     startDate: "",
@@ -470,6 +535,52 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
     endTime: "23:59",
   },
 ];
+
+/** Seed pages added after launch (nav Flash Sale / ขายดี). A browser that already saved its pages gets them appended once, by id — an existing page is never overwritten. */
+const LATE_SEED_PAGE_IDS = ["promo-page-009", "promo-page-010"];
+
+export function withLateSeedPages(stored: PromotionPage[]): PromotionPage[] {
+  const missing = buildMockPromotionPages().filter((p) => LATE_SEED_PAGE_IDS.includes(p.id) && !stored.some((s) => s.id === p.id));
+  return missing.length ? [...stored, ...missing] : stored;
+}
+
+/**
+ * Storefront sync seed upgrade. Bump `PROMOTION_PAGE_SEED_VERSION` whenever a
+ * seed change must also reach a browser that already saved its pages;
+ * `adminContentStore.tsx` runs this once per version step (tracked under its
+ * own localStorage key) and writes the result back. Each step only touches a
+ * record still in its old seed shape, so an admin's own edits survive.
+ *  - v2: 9.9 page → unpublished (expired); Homepage's disabled sample hero →
+ *    the three live `HeroBanner.tsx` slides, enabled.
+ */
+export const PROMOTION_PAGE_SEED_VERSION = 3;
+
+export function upgradePromotionPageSeeds(stored: PromotionPage[], fromVersion: number): PromotionPage[] {
+  if (fromVersion >= 3) return stored;
+  return stored.map((p) => {
+    // v2 briefly shipped the hero enabled, which routed `/` through `AdminHeroSlide` — v3 turns that untouched seed back off.
+    if (fromVersion === 2 && p.isHomepage) {
+      return {
+        ...p,
+        sections: p.sections.map((sec) =>
+          sec.id === HOMEPAGE_HERO_SECTION_ID && sec.enabled && sec.assets.every((a) => a.id.startsWith("hero-asset-")) ? { ...sec, enabled: false } : sec,
+        ),
+      };
+    }
+    if (p.id === "promo-page-001" && p.status === "published" && p.endDate === "2026-09-09") return { ...p, status: "unpublished" };
+    if (p.isHomepage) {
+      return {
+        ...p,
+        sections: p.sections.map((sec) =>
+          sec.id === HOMEPAGE_HERO_SECTION_ID && !sec.enabled && sec.assets.length === 0 && sec.title === "New Year New Glow"
+            ? { ...sec, name: "Hero Banner หน้าแรก", enabled: false, title: "", description: "", banners: { desktop: "", tablet: "", mobile: "" }, assets: buildLiveHeroAssets(), cta: { label: "", destination: { type: "none" } } }
+            : sec,
+        ),
+      };
+    }
+    return p;
+  });
+}
 
 export function buildMockPromotionPages(): PromotionPage[] {
   return PROMOTION_PAGE_SEEDS.map((seed) => ({ ...seed, createdAt: TODAY_LABEL, updatedAt: TODAY_LABEL }));

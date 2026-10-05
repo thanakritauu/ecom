@@ -14,6 +14,7 @@ import { AdminBulkActionBar } from "~/components/admin/AdminBulkActionBar";
 import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
 import { CustomerRowActionsMenu } from "~/components/admin/customers/CustomerRowActionsMenu";
 import { CustomerQuickView } from "~/components/admin/customers/CustomerQuickView";
+import { TierBadge } from "~/components/admin/loyalty/TierBadge";
 import { RefreshIcon, CustomersIcon } from "~/components/admin/icons";
 import { ExportMenu } from "~/components/admin/ExportMenu";
 import { ImportExcelDialog, type ImportRowResult } from "~/components/admin/ImportExcelDialog";
@@ -23,7 +24,9 @@ import { useAdminCustomers } from "~/lib/adminCustomerStore";
 import { useAdminOrders } from "~/lib/adminOrderStore";
 import type { AdminOrder } from "~/lib/adminOrders";
 import {
+  CUSTOMER_SOURCE_META,
   CUSTOMER_STATUS_META,
+  CUSTOMER_TIER_META,
   getCustomerFullName,
   getCustomerInitials,
   isCustomerEmailTaken,
@@ -32,6 +35,7 @@ import {
   parseThaiDateLabel,
   type Customer,
   type CustomerFormValues,
+  type CustomerSource,
   type CustomerStatus,
 } from "~/lib/adminCustomers";
 import { getCustomerLastOrder, getCustomerOrderCount, getCustomerTotalSpent } from "~/lib/customerResolvers";
@@ -79,6 +83,7 @@ export default function AdminCustomerListPage() {
   const [search, setSearchRaw] = createSignal("");
   const [statusFilter, setStatusFilterRaw] = createSignal("all");
   const [hasOrdersFilter, setHasOrdersFilterRaw] = createSignal("all");
+  const [sourceFilter, setSourceFilterRaw] = createSignal("all");
   const [sort, setSortRaw] = createSignal("name-asc");
   const [page, setPage] = createSignal(1);
   const [pageSize, setPageSizeRaw] = createSignal(20);
@@ -139,7 +144,7 @@ export default function AdminCustomerListPage() {
       status: rowStatus,
       messages,
       preview: { firstName: firstName || "-", lastName: lastName || "-", email: email || "-", phone: phone || "-", status: statusRaw || "-" },
-      data: { firstName: firstName || `ลูกค้า #${rowIndex}`, lastName: lastName || "-", email, phone, status: resolvedStatus ?? "active" },
+      data: { firstName: firstName || `ลูกค้า #${rowIndex}`, lastName: lastName || "-", email, phone, status: resolvedStatus ?? "active", addresses: [] },
     };
   };
 
@@ -163,6 +168,8 @@ export default function AdminCustomerListPage() {
     { header: "Email", value: (c) => c.email },
     { header: "Phone", value: (c) => c.phone },
     { header: "Status", value: (c) => CUSTOMER_STATUS_META[c.status].label },
+    { header: "Tier", value: (c) => (c.tier ? CUSTOMER_TIER_META[c.tier].name : "") },
+    { header: "Source", value: (c) => CUSTOMER_SOURCE_META[c.source].label },
     { header: "Orders", value: (c) => c.orderCount },
     { header: "Total Spent", value: (c) => c.totalSpent },
     { header: "Member Since", value: (c) => c.memberSince },
@@ -178,14 +185,16 @@ export default function AdminCustomerListPage() {
   const setSearch = (v: string) => { setSearchRaw(v); resetPage(); };
   const setStatusFilter = (v: string) => { setStatusFilterRaw(v); resetPage(); };
   const setHasOrdersFilter = (v: string) => { setHasOrdersFilterRaw(v); resetPage(); };
+  const setSourceFilter = (v: string) => { setSourceFilterRaw(v); resetPage(); };
   const setSort = (v: string) => { setSortRaw(v); resetPage(); };
   const setPageSize = (v: number) => { setPageSizeRaw(v); resetPage(); };
 
-  const hasActiveFilters = () => search().trim() !== "" || statusFilter() !== "all" || hasOrdersFilter() !== "all";
+  const hasActiveFilters = () => search().trim() !== "" || statusFilter() !== "all" || hasOrdersFilter() !== "all" || sourceFilter() !== "all";
   const clearFilters = () => {
     setSearchRaw("");
     setStatusFilterRaw("all");
     setHasOrdersFilterRaw("all");
+    setSourceFilterRaw("all");
     resetPage();
   };
 
@@ -193,12 +202,13 @@ export default function AdminCustomerListPage() {
     const q = search().trim().toLowerCase();
     return rows().filter((c) => {
       if (q) {
-        const haystack = `${getCustomerFullName(c)} ${c.email} ${c.phone} ${c.id}`.toLowerCase();
+        const haystack = `${getCustomerFullName(c)} ${c.email} ${c.phone} ${c.id} ${c.crmMemberId ?? ""}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       if (statusFilter() !== "all" && c.status !== statusFilter()) return false;
       if (hasOrdersFilter() === "has" && c.orderCount === 0) return false;
       if (hasOrdersFilter() === "none" && c.orderCount > 0) return false;
+      if (sourceFilter() !== "all" && c.source !== sourceFilter()) return false;
       return true;
     });
   });
@@ -347,6 +357,12 @@ export default function AdminCustomerListPage() {
         </div>
       ),
     },
+    {
+      key: "source",
+      label: "ที่มา",
+      render: (row) => <StatusBadge tone={CUSTOMER_SOURCE_META[row.source].tone}>{CUSTOMER_SOURCE_META[row.source].label}</StatusBadge>,
+    },
+    { key: "tier", label: "ระดับสมาชิก", hideBelowXl: true, render: (row) => (row.tier ? <TierBadge tier={row.tier} short /> : <span class="text-ink-gray">-</span>) },
     { key: "email", label: "Email", hideBelowXl: true, render: (row) => <span class="truncate text-ink-gray">{row.email}</span> },
     { key: "phone", label: "Phone", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.phone}</span> },
     { key: "orders", label: "Orders", align: "right", render: (row) => <span class="text-ink">{row.orderCount}</span> },
@@ -377,13 +393,19 @@ export default function AdminCustomerListPage() {
       />
 
       <FilterBar
-        search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาชื่อ, อีเมล, เบอร์โทร, Customer ID..." }}
+        search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาชื่อ, อีเมล, เบอร์โทร, Customer ID, รหัส CRM..." }}
         filters={[
           {
             id: "status",
             label: "สถานะ",
             value: statusFilter(),
             options: [{ value: "all", label: "ทุกสถานะ" }, ...(Object.keys(CUSTOMER_STATUS_META) as CustomerStatus[]).map((s) => ({ value: s, label: CUSTOMER_STATUS_META[s].label }))],
+          },
+          {
+            id: "source",
+            label: "ที่มา",
+            value: sourceFilter(),
+            options: [{ value: "all", label: "ทุกที่มา" }, ...(Object.keys(CUSTOMER_SOURCE_META) as CustomerSource[]).map((v) => ({ value: v, label: CUSTOMER_SOURCE_META[v].label }))],
           },
           {
             id: "hasOrders",
@@ -399,6 +421,7 @@ export default function AdminCustomerListPage() {
         onFilterChange={(id, value) => {
           if (id === "status") setStatusFilter(value);
           if (id === "hasOrders") setHasOrdersFilter(value);
+          if (id === "source") setSourceFilter(value);
         }}
         sort={{ value: sort(), options: SORT_OPTIONS, onChange: setSort }}
       />
@@ -460,6 +483,8 @@ export default function AdminCustomerListPage() {
                       <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
                         <span class="whitespace-nowrap text-sm text-ink-gray">{row.orderCount} คำสั่งซื้อ</span>
                         <StatusBadge tone={CUSTOMER_STATUS_META[row.status].tone}>{CUSTOMER_STATUS_META[row.status].label}</StatusBadge>
+                        <StatusBadge tone={CUSTOMER_SOURCE_META[row.source].tone}>{CUSTOMER_SOURCE_META[row.source].label}</StatusBadge>
+                        <Show when={row.tier}>{(tier) => <TierBadge tier={tier()} short />}</Show>
                       </div>
                     </div>
                   </button>

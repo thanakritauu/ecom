@@ -12,11 +12,11 @@ import { Skeleton } from "~/components/admin/Skeleton";
 import { AdminBulkActionBar } from "~/components/admin/AdminBulkActionBar";
 import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
 import { LoyaltyMemberQuickView } from "~/components/admin/loyalty/LoyaltyMemberQuickView";
+import { TierBadge } from "~/components/admin/loyalty/TierBadge";
 import { RefreshIcon, MemberBadgeIcon, EyeIcon, CheckCircleIcon } from "~/components/admin/icons";
-import { CUSTOMER_TIER_META, getCustomerFullName, getCustomerInitials, type Customer, type CustomerTier } from "~/lib/adminCustomers";
-import { LOYALTY_MEMBER_STATUS_META, type AdminLoyaltyMember, type LoyaltyMemberStatus } from "~/lib/adminLoyaltyMembers";
+import { CUSTOMER_TIER_META, getCustomerInitials, type Customer, type CustomerTier } from "~/lib/adminCustomers";
+import { LOYALTY_MEMBER_STATUS_META, memberIdLabel, memberName, type AdminLoyaltyMember, type LoyaltyMemberStatus } from "~/lib/adminLoyaltyMembers";
 import { useAdminLoyaltyMembers } from "~/lib/adminLoyaltyMemberStore";
-import { useAdminCustomers } from "~/lib/adminCustomerStore";
 import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
 
@@ -32,7 +32,7 @@ const TIER_FILTER_OPTIONS: SelectFilterConfig = {
   id: "tier",
   label: "ระดับสมาชิก",
   value: "all",
-  options: [{ value: "all", label: "ทุกระดับ" }, ...(Object.keys(CUSTOMER_TIER_META) as CustomerTier[]).map((t) => ({ value: t, label: CUSTOMER_TIER_META[t].label }))],
+  options: [{ value: "all", label: "ทุกระดับ" }, ...(Object.keys(CUSTOMER_TIER_META) as CustomerTier[]).map((t) => ({ value: t, label: CUSTOMER_TIER_META[t].name }))],
 };
 
 const STATUS_FILTER_OPTIONS: SelectFilterConfig = {
@@ -47,16 +47,17 @@ const STATUS_FILTER_OPTIONS: SelectFilterConfig = {
 };
 
 /**
- * Loyalty (Phase 08.2) — "สมาชิก" as a Cordy CRM Integration view. Same
+ * Loyalty (Phase 08.2) — "สมาชิก" as a Charmiss Club CRM Integration view. Same
  * read-only list shell as Phase 08.1's "สะสมคอยน์": no Add, no per-row
  * edit/delete, no bulk status change — the only mutation anywhere is a mock
- * re-sync. Member rows come from `useAdminLoyaltyMembers()` (Cordy-owned);
- * name/email are looked up live from `useAdminCustomers()` by `customerId`,
- * never duplicated.
+ * re-sync. Member rows come from `useAdminLoyaltyMembers()` (CRM-synced,
+ * plus a derived row for every website member not synced yet); name/email
+ * are looked up live from the Customer store, never duplicated — only a
+ * CRM member who hasn't signed in on the website falls back to the CRM's
+ * own profile.
  */
 export default function AdminLoyaltyMembersListPage() {
   const store = useAdminLoyaltyMembers();
-  const customerStore = useAdminCustomers();
   const navigate = useNavigate();
 
   const [search, setSearchRaw] = createSignal("");
@@ -78,12 +79,9 @@ export default function AdminLoyaltyMembersListPage() {
   };
   onMount(loadList);
 
-  const customerOf = (m: AdminLoyaltyMember): Customer | undefined => customerStore.getById(m.customerId);
-  const nameOf = (m: AdminLoyaltyMember) => {
-    const c = customerOf(m);
-    return c ? getCustomerFullName(c) : "(ไม่พบข้อมูลลูกค้า)";
-  };
-  const emailOf = (m: AdminLoyaltyMember) => customerOf(m)?.email ?? "-";
+  const customerOf = (m: AdminLoyaltyMember): Customer | undefined => store.customerOf(m);
+  const nameOf = (m: AdminLoyaltyMember) => memberName(m, customerOf(m));
+  const emailOf = (m: AdminLoyaltyMember) => customerOf(m)?.email ?? m.crmProfile?.email ?? "-";
 
   const resetPage = () => setPage(1);
   const setSearch = (v: string) => { setSearchRaw(v); resetPage(); };
@@ -164,7 +162,7 @@ export default function AdminLoyaltyMembersListPage() {
     setSyncingAll(true);
     await store.syncAll();
     setSyncingAll(false);
-    pushToast("Sync ข้อมูลจาก Cordy CRM เรียบร้อยแล้ว", "success");
+    pushToast("Sync ข้อมูลจาก Charmiss Club CRM เรียบร้อยแล้ว", "success");
   };
 
   const handleSyncSelected = async () => {
@@ -176,7 +174,7 @@ export default function AdminLoyaltyMembersListPage() {
     pushToast(`Sync ${ids.length} รายการที่เลือกเรียบร้อยแล้ว`, "success");
   };
 
-  const openCordyCrm = () => pushToast("(จำลอง) กำลังเปิด Cordy CRM ในแท็บใหม่", "success");
+  const openCrm = () => pushToast("(จำลอง) กำลังเปิด Charmiss Club CRM ในแท็บใหม่", "success");
 
   const columns: DataTableColumn<AdminLoyaltyMember>[] = [
     {
@@ -203,19 +201,22 @@ export default function AdminLoyaltyMembersListPage() {
         const c = customerOf(row);
         return (
           <div class="flex items-center gap-3">
-            <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-pink text-xs font-semibold text-white">{c ? getCustomerInitials(c) : "?"}</span>
+            <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-pink text-xs font-semibold text-white">{c ? getCustomerInitials(c) : (row.crmProfile?.name.charAt(0) ?? "?")}</span>
             <div class="min-w-0">
               <p class="truncate font-medium text-ink">{nameOf(row)}</p>
-              <p class="truncate text-xs text-ink-gray">{row.memberId}</p>
+              <p class="truncate text-xs text-ink-gray">
+                {memberIdLabel(row)}
+                {c ? "" : " · ยังไม่เข้าใช้เว็บไซต์"}
+              </p>
             </div>
           </div>
         );
       },
     },
-    { key: "tier", label: "ระดับสมาชิก", render: (row) => <StatusBadge tone="info">{CUSTOMER_TIER_META[row.tier].label}</StatusBadge> },
+    { key: "tier", label: "ระดับสมาชิก", render: (row) => <TierBadge tier={row.tier} short /> },
     { key: "remaining", label: "คอยน์คงเหลือ", align: "right", render: (row) => <span class="font-medium text-ink">{row.coinsRemaining.toLocaleString("th-TH")}</span> },
     { key: "earned", label: "คอยน์ที่ได้รับ", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">+{row.coinsEarned.toLocaleString("th-TH")}</span> },
-    { key: "used", label: "คอยน์ที่ใช้", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.coinsUsed.toLocaleString("th-TH")}</span> },
+    { key: "used", label: "คอยน์ที่ใช้ไป", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.coinsUsed.toLocaleString("th-TH")}</span> },
     { key: "status", label: "สถานะ", render: (row) => <StatusBadge tone={LOYALTY_MEMBER_STATUS_META[row.status].tone}>{LOYALTY_MEMBER_STATUS_META[row.status].label}</StatusBadge> },
     { key: "syncedAt", label: "Sync ล่าสุด", align: "right", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.syncedAt}</span> },
     {
@@ -238,22 +239,22 @@ export default function AdminLoyaltyMembersListPage() {
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สะสมแต้ม", href: "/admin/loyalty" }, { label: "สมาชิก" }]} />
-      <PageHeader title="สมาชิก" description="ข้อมูลสมาชิกที่ Sync มาจาก Cordy CRM" />
+      <PageHeader title="สมาชิก" description="ข้อมูลสมาชิกที่ Sync มาจาก Charmiss Club CRM" />
 
       <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div class="flex flex-col gap-2">
           <div class="flex items-center gap-2">
             <CheckCircleIcon class="size-5 text-success" />
-            <p class="text-sm font-semibold text-ink">เชื่อมต่อกับ Cordy CRM แล้ว</p>
+            <p class="text-sm font-semibold text-ink">เชื่อมต่อกับ Charmiss Club CRM แล้ว</p>
           </div>
           <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-gray">
             <span>Sync ล่าสุด: {store.lastSyncedAt()}</span>
-            <span>จำนวนข้อมูลที่ Sync: {store.members().length.toLocaleString("th-TH")} สมาชิก</span>
+            <span>สมาชิกทั้งหมด: {store.members().length.toLocaleString("th-TH")} คน</span>
           </div>
         </div>
         <div class="flex shrink-0 flex-wrap gap-2">
-          <Button variant="outline" onClick={openCordyCrm}>
-            จัดการใน Cordy CRM
+          <Button variant="outline" onClick={openCrm}>
+            จัดการใน Charmiss Club CRM
           </Button>
           <Button variant="primary" onClick={handleSyncAll} loading={syncingAll()}>
             <RefreshIcon class="size-4" /> Sync ข้อมูล
@@ -262,7 +263,7 @@ export default function AdminLoyaltyMembersListPage() {
       </div>
 
       <FilterBar
-        search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาชื่อ, อีเมล, Member ID..." }}
+        search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาชื่อ, อีเมล, รหัส CRM..." }}
         filters={[{ ...TIER_FILTER_OPTIONS, value: tierFilter() }, { ...STATUS_FILTER_OPTIONS, value: statusFilter() }]}
         onFilterChange={handleFilterChange}
         sort={{ value: sort(), options: SORT_OPTIONS, onChange: setSort }}
@@ -280,8 +281,8 @@ export default function AdminLoyaltyMembersListPage() {
             fallback={
               <EmptyState
                 icon={<MemberBadgeIcon />}
-                title={hasActiveFilters() ? "ไม่พบสมาชิกที่ตรงกับการค้นหา" : "ยังไม่มีข้อมูลจาก Cordy CRM"}
-                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "ลอง Sync ข้อมูลจาก Cordy CRM อีกครั้ง"}
+                title={hasActiveFilters() ? "ไม่พบสมาชิกที่ตรงกับการค้นหา" : "ยังไม่มีข้อมูลจาก Charmiss Club CRM"}
+                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "ลอง Sync ข้อมูลจาก Charmiss Club CRM อีกครั้ง"}
                 actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "Sync ข้อมูล"}
                 onAction={hasActiveFilters() ? clearFilters : handleSyncAll}
                 class="bg-surface-card shadow-card"
@@ -312,14 +313,17 @@ export default function AdminLoyaltyMembersListPage() {
                     />
                     <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-2 text-left">
                       <div class="flex items-start gap-3">
-                        <span class="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand-pink text-sm font-semibold text-white">{c ? getCustomerInitials(c) : "?"}</span>
+                        <span class="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand-pink text-sm font-semibold text-white">{c ? getCustomerInitials(c) : (row.crmProfile?.name.charAt(0) ?? "?")}</span>
                         <div class="min-w-0 flex-1">
                           <div class="flex items-start justify-between gap-2">
                             <p class="truncate font-semibold text-ink">{nameOf(row)}</p>
                             <StatusBadge tone={LOYALTY_MEMBER_STATUS_META[row.status].tone}>{LOYALTY_MEMBER_STATUS_META[row.status].label}</StatusBadge>
                           </div>
-                          <p class="truncate text-xs text-ink-gray">{row.memberId}</p>
-                          <p class="mt-1 text-xs text-ink-gray">{CUSTOMER_TIER_META[row.tier].label} · คงเหลือ {row.coinsRemaining.toLocaleString("th-TH")} คอยน์</p>
+                          <p class="truncate text-xs text-ink-gray">{memberIdLabel(row)}</p>
+                          <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                            <TierBadge tier={row.tier} short />
+                            <span class="text-xs text-ink-gray">คงเหลือ {row.coinsRemaining.toLocaleString("th-TH")} คอยน์</span>
+                          </div>
                         </div>
                       </div>
                       <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>

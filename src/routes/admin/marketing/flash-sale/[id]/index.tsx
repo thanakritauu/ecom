@@ -10,7 +10,7 @@ import { MarketingRowActionsMenu } from "~/components/admin/marketing/MarketingR
 import { LoyaltyIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { useAdminProducts } from "~/lib/adminProductStore";
-import { MARKETING_STATUS_META, formatMarketingDate, type MarketingStatus } from "~/lib/adminMarketing";
+import { MARKETING_STATUS_META, flashSaleDiscountPercent, flashSaleOriginalPrice, formatMarketingDate, type MarketingStatus } from "~/lib/adminMarketing";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
 import { pushToast } from "~/lib/toast";
 
@@ -100,7 +100,7 @@ export default function AdminFlashSaleDetailPage() {
                     <For each={f().items}>
                       {(item) => {
                         const product = productStore.getById(item.productId);
-                        const discountPct = product ? Math.round((1 - item.salePrice / product.price) * 100) : 0;
+                        const discountPct = product ? flashSaleDiscountPercent(product, item.salePrice) : 0;
                         return (
                           <div class="flex gap-3">
                             <img src={product?.image} alt="" class="size-14 shrink-0 rounded-media object-cover" />
@@ -108,11 +108,13 @@ export default function AdminFlashSaleDetailPage() {
                               <p class="truncate text-sm font-medium text-ink">{product?.name ?? item.productId}</p>
                               <p class="text-xs text-ink-gray">{product?.sku}</p>
                               <Show when={item.saleLimit}>
-                                <p class="text-xs text-ink-gray">ขายแล้ว {item.soldCount} / {item.saleLimit}</p>
+                                <p class="text-xs text-ink-gray">
+                                  ขายแล้ว {item.soldCount} / {item.saleLimit} · {item.soldCount >= item.saleLimit! ? "สินค้าหมด" : `เหลือ ${item.saleLimit! - item.soldCount} ชิ้น`}
+                                </p>
                               </Show>
                             </div>
                             <div class="shrink-0 text-right">
-                              <p class="text-xs text-ink-placeholder line-through">{product ? formatAdminCurrency(product.price) : ""}</p>
+                              <p class="text-xs text-ink-placeholder line-through">{product ? formatAdminCurrency(flashSaleOriginalPrice(product)) : ""}</p>
                               <p class="text-sm font-semibold text-system-red">{formatAdminCurrency(item.salePrice)}</p>
                               {discountPct > 0 ? <p class="text-xs text-ink-gray">-{discountPct}%</p> : null}
                             </div>

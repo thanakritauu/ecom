@@ -1,6 +1,6 @@
 import { createUniqueId, For, Show } from "solid-js";
 import type { AdminVariant } from "~/lib/adminProductStore";
-import { TrashIcon, PlusIcon } from "~/components/admin/icons";
+import { ArrowDownIcon, ArrowUpIcon, TrashIcon, PlusIcon } from "~/components/admin/icons";
 import { ProductImageUploader } from "./ProductImageUploader";
 import { SingleImageUploader } from "~/components/admin/SingleImageUploader";
 
@@ -21,7 +21,12 @@ import { SingleImageUploader } from "~/components/admin/SingleImageUploader";
  *    other value so flipping back loses nothing).
  * 2. "รูปสินค้าใน Modal ตัวเลือกสินค้า" — the variant's real product photos
  *    (`images`), shown as the option tile in the Product Option Modal.
+ *
+ * Row order is the storefront's order (card shade row, Option Modal) — the
+ * card has 5 circle slots, so with more than 5 options it shows the first 4
+ * plus "+N" (ProductCard's MAX_SHADE_SLOTS).
  */
+const CARD_SHADE_SLOTS = 5;
 export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChange: (variants: AdminVariant[]) => void }) {
   const update = (id: string, patch: Partial<AdminVariant>) => {
     props.onChange(props.variants.map((v) => (v.id === id ? { ...v, ...patch } : v)));
@@ -30,6 +35,17 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
   const remove = (id: string) => {
     props.onChange(props.variants.filter((v) => v.id !== id));
   };
+
+  const move = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= props.variants.length) return;
+    const next = [...props.variants];
+    [next[index], next[target]] = [next[target], next[index]];
+    props.onChange(next);
+  };
+
+  /** How many leading rows the card shows as circles — 5 when they all fit, otherwise 4 + "+N". */
+  const cardVisibleCount = () => (props.variants.length > CARD_SHADE_SLOTS ? CARD_SHADE_SLOTS - 1 : props.variants.length);
 
   const add = () => {
     props.onChange([...props.variants, { id: createUniqueId(), label: "", sku: "", stock: 0, images: [], color: "#CCCCCC", mode: "color" }]);
@@ -40,11 +56,42 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
 
   return (
     <div class="flex flex-col gap-4">
+      <Show when={props.variants.length > 1}>
+        <p class="text-xs text-ink-gray">
+          ลำดับนี้คือลำดับที่แสดงบนหน้าร้าน — การ์ดสินค้าแสดงวงสีได้ {CARD_SHADE_SLOTS} วง ถ้ามีมากกว่า {CARD_SHADE_SLOTS} ตัวเลือกจะแสดง {CARD_SHADE_SLOTS - 1} วงแรก + "+N"
+        </p>
+      </Show>
       <For each={props.variants}>
         {(variant, i) => (
           <div class="flex flex-col gap-3 rounded-card border border-border p-3">
             <div class="flex items-center justify-between gap-2">
-              <p class="text-sm font-semibold text-ink">{variant.label || `ตัวเลือกที่ ${i() + 1}`}</p>
+              <div class="flex min-w-0 items-center gap-2">
+                <p class="truncate text-sm font-semibold text-ink">{variant.label || `ตัวเลือกที่ ${i() + 1}`}</p>
+                <Show when={props.variants.length > CARD_SHADE_SLOTS && i() >= cardVisibleCount()}>
+                  <span class="shrink-0 rounded-pill bg-surface-gray px-2 py-0.5 text-[11px] text-ink-gray">รวมใน "+N" บนการ์ด</span>
+                </Show>
+              </div>
+              <div class="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => move(i(), -1)}
+                disabled={i() === 0}
+                aria-label="เลื่อนขึ้น"
+                title="เลื่อนขึ้น"
+                class="flex size-9 items-center justify-center rounded-card border border-border text-ink-gray hover:bg-surface-pink disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ArrowUpIcon class="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => move(i(), 1)}
+                disabled={i() === props.variants.length - 1}
+                aria-label="เลื่อนลง"
+                title="เลื่อนลง"
+                class="flex size-9 items-center justify-center rounded-card border border-border text-ink-gray hover:bg-surface-pink disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ArrowDownIcon class="size-4" />
+              </button>
               <button
                 type="button"
                 onClick={() => remove(variant.id)}
@@ -54,6 +101,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                 <TrashIcon class="size-4" />
                 ลบ
               </button>
+              </div>
             </div>
 
             <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -96,6 +144,17 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                 />
               </label>
             </div>
+
+            <label class="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={!!variant.soldOut}
+                onChange={(e) => update(variant.id, { soldOut: e.currentTarget.checked || undefined })}
+                class="size-4 accent-brand-pink"
+              />
+              ตัวเลือกนี้สินค้าหมด
+              <span class="text-xs text-ink-gray">(หน้าร้านแสดงแต่เลือกไม่ได้ — สต๊อก 0 ก็นับว่าหมด)</span>
+            </label>
 
             {/* 1 — Product Card shade circle: color or its own small swatch image. */}
             <div class="border-t border-dashed border-border pt-3">

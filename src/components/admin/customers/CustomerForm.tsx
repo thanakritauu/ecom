@@ -1,16 +1,49 @@
-import { createSignal, Show } from "solid-js";
+import { createResource, createSignal, For, Index, onMount, Show, type JSX } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { ChevronDownIcon } from "~/components/admin/icons";
-import { CUSTOMER_STATUS_META, isValidEmail, type Customer, type CustomerFormValues, type CustomerStatus } from "~/lib/adminCustomers";
+import {
+  CUSTOMER_STATUS_META,
+  GENDER_LABEL,
+  isValidEmail,
+  type Customer,
+  type CustomerAddress,
+  type CustomerFormValues,
+  type CustomerGender,
+  type CustomerStatus,
+} from "~/lib/adminCustomers";
+import { isBangkok, THAI_PROVINCES } from "~/lib/checkoutData";
+import { districtsOf, loadThaiAddressData, postalCodesOf, stripAreaPrefix, subDistrictsOf } from "~/lib/thaiAddress";
 
 const STATUS_OPTIONS: { value: CustomerStatus; label: string }[] = (Object.keys(CUSTOMER_STATUS_META) as CustomerStatus[]).map((value) => ({
   value,
   label: CUSTOMER_STATUS_META[value].label,
 }));
 
-/** One Create/Edit form shared by `/new` and `/:id/edit` — same shape as `CategoryForm`/`BrandForm`. */
+const GENDER_OPTIONS: { value: CustomerGender; label: string }[] = (Object.keys(GENDER_LABEL) as CustomerGender[]).map((value) => ({ value, label: GENDER_LABEL[value] }));
+
+let draftAddressId = 0;
+const emptyAddress = (kind?: "billing"): CustomerAddress => ({
+  id: `addr-admin-${Date.now()}-${draftAddressId++}`,
+  label: kind === "billing" ? "ที่อยู่ออกใบเสร็จรับเงิน" : "",
+  recipientName: "",
+  phone: "",
+  addressLine: "",
+  province: "",
+  district: "",
+  subDistrict: "",
+  postalCode: "",
+  kind,
+});
+
+/**
+ * One Create/Edit form shared by `/new` and `/:id/edit` — same shape as
+ * `CategoryForm`/`BrandForm`. Profile fields mirror the storefront's
+ * "ข้อมูลส่วนตัว" page (birth date + gender, same labels); the address book
+ * mirrors `/account/address` (shipping addresses + ที่อยู่ออกใบเสร็จ, which may
+ * be a company and never holds the default).
+ */
 export function CustomerForm(props: {
   initial?: Customer;
   mode: "create" | "edit";
@@ -23,7 +56,24 @@ export function CustomerForm(props: {
   const [lastName, setLastName] = createSignal(props.initial?.lastName ?? "");
   const [email, setEmail] = createSignal(props.initial?.email ?? "");
   const [phone, setPhone] = createSignal(props.initial?.phone ?? "");
-  const [address, setAddress] = createSignal(props.initial?.address ?? "");
+  const [birthDate, setBirthDate] = createSignal(props.initial?.birthDate ?? "");
+  const [gender, setGender] = createSignal<CustomerGender | "">(props.initial?.gender ?? "");
+  // Bare district/sub-district names, to match the lookup dataset (saved addresses may carry a เขต/แขวง prefix).
+  const [addresses, setAddresses] = createSignal<CustomerAddress[]>(
+    (props.initial?.addresses ?? []).map((a) => ({ ...a, district: stripAreaPrefix(a.district), subDistrict: stripAreaPrefix(a.subDistrict) })),
+  );
+
+  // Same cascade as the storefront address form (AddressSection): province → district → sub-district → postal
+  // code, each level only offering what belongs to the one above. Lazy-loaded on the client (onMount), so SSR
+  // and hydration render the same selects.
+  const [loadGeo, setLoadGeo] = createSignal(false);
+  onMount(() => setLoadGeo(true));
+  const [geo] = createResource(loadGeo, (go) => (go ? loadThaiAddressData() : undefined));
+
+  const patchAddress = (index: number, patch: Partial<CustomerAddress>) =>
+    setAddresses((list) => list.map((a, i) => (i === index ? { ...a, ...patch } : patch.isDefault ? { ...a, isDefault: false } : a)));
+  const removeAddress = (index: number) => setAddresses((list) => list.filter((_, i) => i !== index));
+  const addAddress = (kind?: "billing") => setAddresses((list) => [...list, emptyAddress(kind)]);
   const [status, setStatus] = createSignal<CustomerStatus>(props.initial?.status ?? "active");
 
   const [errors, setErrors] = createSignal<Record<string, string>>({});
@@ -44,6 +94,18 @@ export function CustomerForm(props: {
     if (!cleanPhone) next.phone = "กรุณากรอกเบอร์โทรศัพท์";
     else if (props.isPhoneTaken(cleanPhone)) next.phone = "เบอร์โทรศัพท์นี้ถูกใช้งานแล้ว";
 
+    // Same required fields as the storefront address form.
+    addresses().forEach((a, i) => {
+      const billing = a.kind === "billing";
+      if (!a.recipientName.trim()) next[`addr-${i}-recipientName`] = billing ? "กรุณากรอกชื่อ หรือชื่อบริษัท" : "กรุณากรอกชื่อผู้รับ";
+      if (!a.phone.trim()) next[`addr-${i}-phone`] = "กรุณากรอกเบอร์โทรศัพท์";
+      if (!a.addressLine.trim()) next[`addr-${i}-addressLine`] = "กรุณากรอกที่อยู่";
+      if (!a.province) next[`addr-${i}-province`] = "กรุณาเลือกจังหวัด";
+      if (!a.district.trim()) next[`addr-${i}-district`] = isBangkok(a.province) ? "กรุณาเลือกเขต" : "กรุณาเลือกอำเภอ";
+      if (!a.subDistrict.trim()) next[`addr-${i}-subDistrict`] = isBangkok(a.province) ? "กรุณาเลือกแขวง" : "กรุณาเลือกตำบล";
+      if (!/^\d{5}$/.test(a.postalCode.trim())) next[`addr-${i}-postalCode`] = "กรุณาเลือกรหัสไปรษณีย์";
+    });
+
     return next;
   };
 
@@ -59,7 +121,22 @@ export function CustomerForm(props: {
       email: email().trim(),
       phone: phone().trim(),
       status: status(),
-      address: address().trim() || undefined,
+      birthDate: birthDate() || undefined,
+      gender: gender() || undefined,
+      addresses: withDefault(
+        addresses().map((a) => ({
+          ...a,
+          label: a.label.trim() || (a.kind === "billing" ? "ที่อยู่ออกใบเสร็จรับเงิน" : "ที่อยู่"),
+          recipientName: a.recipientName.trim(),
+          phone: a.phone.trim(),
+          addressLine: a.addressLine.trim(),
+          district: a.district.trim(),
+          subDistrict: a.subDistrict.trim(),
+          postalCode: a.postalCode.trim(),
+          // Billing never holds the default — same rule as the storefront.
+          isDefault: a.kind === "billing" ? undefined : a.isDefault || undefined,
+        })),
+      ),
     };
 
     setSaving(true);
@@ -114,17 +191,11 @@ export function CustomerForm(props: {
             error={errors().phone}
             disabled={saving()}
           />
-          <label class="flex flex-col gap-1.5 sm:col-span-2">
-            <span class="text-sm font-medium text-ink">ที่อยู่ (ไม่บังคับ)</span>
-            <textarea
-              value={address()}
-              disabled={saving()}
-              placeholder="88/12 ซอยสุขุมวิท 31 ..."
-              onInput={(e) => setAddress(e.currentTarget.value)}
-              rows={2}
-              class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-            />
-          </label>
+          <TextField label="วันเกิด" type="date" value={birthDate()} onInput={(e) => setBirthDate(e.currentTarget.value)} disabled={saving()} />
+          <SelectField label="เพศ" value={gender()} disabled={saving()} onChange={(v) => setGender(v as CustomerGender | "")}>
+            <option value="">ยังไม่ระบุข้อมูล</option>
+            <For each={GENDER_OPTIONS}>{(opt) => <option value={opt.value}>{opt.label}</option>}</For>
+          </SelectField>
           <label class="flex flex-col gap-1.5">
             <span class="text-sm font-medium text-ink">สถานะ</span>
             <div class="relative">
@@ -141,6 +212,116 @@ export function CustomerForm(props: {
               <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
             </div>
           </label>
+        </div>
+      </Section>
+
+      <Section title="สมุดที่อยู่">
+        <Show when={addresses().length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่มีที่อยู่ — ลูกค้าเพิ่มเองได้ที่หน้าร้าน (บัญชีของฉัน › ที่อยู่) หรือเพิ่มที่นี่</p>}>
+          <div class="flex flex-col gap-4">
+            <Index each={addresses()}>
+              {(a, i) => {
+                const err = (field: string) => errors()[`addr-${i}-${field}`];
+                const billing = () => a().kind === "billing";
+                const bkk = () => isBangkok(a().province);
+                // A saved value missing from the dataset stays selectable instead of silently blanking the field.
+                const withCurrent = (options: string[], current: string) => (current && !options.includes(current) ? [current, ...options] : options);
+                const districtOptions = () => withCurrent(geo() ? districtsOf(geo()!, a().province) : [], a().district);
+                const subDistrictOptions = () => withCurrent(geo() ? subDistrictsOf(geo()!, a().province, a().district) : [], a().subDistrict);
+                const postalOptions = () => withCurrent(geo() && a().district ? postalCodesOf(geo()!, a().province, a().district, a().subDistrict) : [], a().postalCode);
+                // Changing a level clears everything below it; a single possible postal code fills itself in.
+                const pickSubDistrict = (value: string) => {
+                  const codes = geo() ? postalCodesOf(geo()!, a().province, a().district, value) : [];
+                  patchAddress(i, { subDistrict: value, postalCode: codes.length === 1 ? codes[0] : codes.includes(a().postalCode) ? a().postalCode : "" });
+                };
+                return (
+                  <div class="flex flex-col gap-4 rounded-card border border-border p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <p class="text-sm font-semibold text-ink">{billing() ? "ที่อยู่ออกใบเสร็จรับเงิน" : "ที่อยู่จัดส่ง"}</p>
+                      <Button type="button" variant="outline" size="sm" onClick={() => removeAddress(i)} disabled={saving()}>
+                        ลบที่อยู่
+                      </Button>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <TextField label="ชื่อที่อยู่" placeholder={billing() ? "ที่อยู่ออกใบเสร็จรับเงิน" : "บ้าน, ที่ทำงาน"} value={a().label} onInput={(e) => patchAddress(i, { label: e.currentTarget.value })} disabled={saving()} />
+                      <SelectField
+                        label="ประเภท"
+                        value={billing() ? "billing" : "shipping"}
+                        disabled={saving()}
+                        onChange={(v) => patchAddress(i, v === "billing" ? { kind: "billing", isDefault: false } : { kind: undefined })}
+                      >
+                        <option value="shipping">ที่อยู่จัดส่ง</option>
+                        <option value="billing">ที่อยู่ออกใบเสร็จรับเงิน</option>
+                      </SelectField>
+                      <TextField
+                        label={billing() ? "ชื่อ หรือชื่อบริษัท" : "ชื่อผู้รับ"}
+                        required
+                        value={a().recipientName}
+                        onInput={(e) => patchAddress(i, { recipientName: e.currentTarget.value })}
+                        error={err("recipientName")}
+                        disabled={saving()}
+                      />
+                      <TextField label="เบอร์โทรศัพท์" required placeholder="081-234-5678" value={a().phone} onInput={(e) => patchAddress(i, { phone: e.currentTarget.value })} error={err("phone")} disabled={saving()} />
+                      <div class="sm:col-span-2">
+                        <TextField
+                          label="ที่อยู่ (บ้านเลขที่ อาคาร ซอย ถนน)"
+                          required
+                          placeholder="88/12 ซอยสุขุมวิท 31"
+                          value={a().addressLine}
+                          onInput={(e) => patchAddress(i, { addressLine: e.currentTarget.value })}
+                          error={err("addressLine")}
+                          disabled={saving()}
+                        />
+                      </div>
+                      <SelectField
+                        label="จังหวัด"
+                        required
+                        value={a().province}
+                        error={err("province")}
+                        disabled={saving()}
+                        onChange={(v) => patchAddress(i, { province: v, district: "", subDistrict: "", postalCode: "" })}
+                      >
+                        <option value="">เลือกจังหวัด</option>
+                        <For each={THAI_PROVINCES}>{(p) => <option value={p} selected={p === a().province}>{p}</option>}</For>
+                      </SelectField>
+                      <SelectField
+                        label={bkk() ? "เขต" : "อำเภอ"}
+                        required
+                        value={a().district}
+                        error={err("district")}
+                        disabled={saving() || !a().province || !geo()}
+                        onChange={(v) => patchAddress(i, { district: v, subDistrict: "", postalCode: "" })}
+                      >
+                        <option value="">{!a().province ? "—" : geo.loading ? "…" : bkk() ? "เลือกเขต" : "เลือกอำเภอ"}</option>
+                        <For each={districtOptions()}>{(d) => <option value={d} selected={d === a().district}>{d}</option>}</For>
+                      </SelectField>
+                      <SelectField label={bkk() ? "แขวง" : "ตำบล"} required value={a().subDistrict} error={err("subDistrict")} disabled={saving() || !a().district} onChange={pickSubDistrict}>
+                        <option value="">{!a().district ? "—" : bkk() ? "เลือกแขวง" : "เลือกตำบล"}</option>
+                        <For each={subDistrictOptions()}>{(d) => <option value={d} selected={d === a().subDistrict}>{d}</option>}</For>
+                      </SelectField>
+                      <SelectField label="รหัสไปรษณีย์" required value={a().postalCode} error={err("postalCode")} disabled={saving() || !a().district} onChange={(v) => patchAddress(i, { postalCode: v })}>
+                        <option value="">{!a().district ? "—" : "เลือกรหัสไปรษณีย์"}</option>
+                        <For each={postalOptions()}>{(c) => <option value={c} selected={c === a().postalCode}>{c}</option>}</For>
+                      </SelectField>
+                    </div>
+                    <Show when={!billing()}>
+                      <label class="flex items-center gap-2 text-sm text-ink">
+                        <input type="checkbox" checked={!!a().isDefault} disabled={saving()} onChange={(e) => patchAddress(i, { isDefault: e.currentTarget.checked })} class="size-4 rounded accent-brand-pink" />
+                        ตั้งเป็นที่อยู่จัดส่งหลัก
+                      </label>
+                    </Show>
+                  </div>
+                );
+              }}
+            </Index>
+          </div>
+        </Show>
+        <div class="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => addAddress()} disabled={saving()}>
+            เพิ่มที่อยู่จัดส่ง
+          </Button>
+          <Button type="button" variant="outline" onClick={() => addAddress("billing")} disabled={saving()}>
+            เพิ่มที่อยู่ออกใบเสร็จ
+          </Button>
         </div>
       </Section>
 
@@ -165,7 +346,47 @@ export function CustomerForm(props: {
   );
 }
 
-function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
+/** Exactly one shipping address is the default whenever any exists — the first one if none was ticked. */
+function withDefault(list: CustomerAddress[]): CustomerAddress[] {
+  const shipping = list.filter((a) => a.kind !== "billing");
+  if (shipping.length === 0 || shipping.some((a) => a.isDefault)) return list;
+  return list.map((a) => (a === shipping[0] ? { ...a, isDefault: true } : a));
+}
+
+/** Same native-select styling as the Status field. */
+function SelectField(props: { label: string; value: string; required?: boolean; error?: string; disabled?: boolean; onChange: (value: string) => void; children: JSX.Element }) {
+  return (
+    <label class="flex flex-col gap-1.5">
+      <span class="text-sm font-medium text-ink">
+        {props.label}
+        <Show when={props.required}>
+          <span class="text-system-red" aria-hidden="true">
+            {" "}
+            *
+          </span>
+        </Show>
+      </span>
+      <div class="relative">
+        <select
+          value={props.value}
+          disabled={props.disabled}
+          aria-invalid={!!props.error}
+          onChange={(e) => props.onChange(e.currentTarget.value)}
+          class="h-11 w-full appearance-none rounded-card border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+          classList={{ "border-system-red": !!props.error, "border-border": !props.error }}
+        >
+          {props.children}
+        </select>
+        <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+      </div>
+      <Show when={props.error}>
+        <p role="alert" class="text-sm text-system-red">{props.error}</p>
+      </Show>
+    </label>
+  );
+}
+
+function Section(props: { title: string; children: JSX.Element }) {
   return (
     <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>

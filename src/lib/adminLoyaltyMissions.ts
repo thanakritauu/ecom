@@ -1,8 +1,8 @@
 import type { StatusTone } from "~/components/admin/StatusBadge";
 
 /**
- * Loyalty (Phase 08.3) — "ภารกิจ" as a Cordy CRM Integration view. Same
- * read-only shape as Coin Rules/Members: Cordy owns Mission Logic
+ * Loyalty (Phase 08.3) — "ภารกิจ" as a Charmiss Club CRM Integration view. Same
+ * read-only shape as Coin Rules/Members: Charmiss Club CRM owns Mission Logic
  * (name/description/coinReward/participantCount/status/dates), Charmiss only
  * displays the last synced snapshot. No add/edit/delete anywhere.
  */
@@ -20,7 +20,7 @@ export type AdminMission = {
   coinReward: number;
   participantCount: number;
   status: MissionStatus;
-  source: "Cordy CRM";
+  source: "Charmiss Club CRM";
   syncedAt: string;
   startDate: string;
   endDate: string;
@@ -34,7 +34,7 @@ export function normalizeMission(m: Partial<AdminMission> & { id: string }): Adm
     coinReward: typeof m.coinReward === "number" ? m.coinReward : 0,
     participantCount: typeof m.participantCount === "number" ? m.participantCount : 0,
     status: m.status ?? "active",
-    source: "Cordy CRM",
+    source: "Charmiss Club CRM",
     syncedAt: m.syncedAt ?? "",
     startDate: m.startDate ?? "",
     endDate: m.endDate ?? "",
@@ -49,7 +49,7 @@ const MISSION_SEEDS: AdminMission[] = [
     coinReward: 150,
     participantCount: 86,
     status: "active",
-    source: "Cordy CRM",
+    source: "Charmiss Club CRM",
     syncedAt: "18 ก.ย. 2569 08:00 น.",
     startDate: "1 ก.ย. 2569",
     endDate: "30 ก.ย. 2569",
@@ -61,7 +61,7 @@ const MISSION_SEEDS: AdminMission[] = [
     coinReward: 60,
     participantCount: 42,
     status: "active",
-    source: "Cordy CRM",
+    source: "Charmiss Club CRM",
     syncedAt: "18 ก.ย. 2569 08:00 น.",
     startDate: "1 ก.ย. 2569",
     endDate: "15 ต.ค. 2569",
@@ -73,7 +73,7 @@ const MISSION_SEEDS: AdminMission[] = [
     coinReward: 300,
     participantCount: 19,
     status: "inactive",
-    source: "Cordy CRM",
+    source: "Charmiss Club CRM",
     syncedAt: "17 ก.ย. 2569 21:45 น.",
     startDate: "1 ส.ค. 2569",
     endDate: "31 ส.ค. 2569",

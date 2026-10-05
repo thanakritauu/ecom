@@ -7,7 +7,7 @@ import { ChevronDownIcon } from "~/components/admin/icons";
 import { BannerUploader } from "./BannerUploader";
 import { DestinationSelector } from "./DestinationSelector";
 import { isValidDateRange } from "~/lib/adminMarketing";
-import { validateBannerPublish, BANNER_PLACEMENT_META, type Banner, type BannerFormValues, type BannerPlacement, type BannerStatus } from "~/lib/adminBanners";
+import { validateBannerPublish, BANNER_PLACEMENT_META, BANNER_DEVICE_SPECS, type Banner, type BannerFormValues, type BannerPlacement, type BannerStatus } from "~/lib/adminBanners";
 import { emptyBanners, type HomepageDestination, type HomepageSection } from "~/lib/adminHomepage";
 import { HomepageSections } from "~/components/home/HomepageSections";
 import { AdminHeroSlide } from "~/components/home/HeroBanner";
@@ -202,6 +202,7 @@ export function BannerForm(props: {
                   </select>
                   <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
                 </div>
+                <span class="text-xs text-ink-gray">ใช้จัดกลุ่มในคลังเท่านั้น — ไม่ได้นำ Banner ไปแสดงบนหน้าร้านเอง</span>
               </label>
               <label class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">Status</span>
@@ -233,9 +234,9 @@ export function BannerForm(props: {
 
           <Section title="02 · Device Images">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <BannerUploader label="Desktop Banner" hint="แนะนำ 1920×840px" value={bannerDesktop()} onChange={setBannerDesktop} />
-              <BannerUploader label="Tablet Banner" hint="แนะนำ 1024×600px" value={bannerTablet()} onChange={setBannerTablet} />
-              <BannerUploader label="Mobile Banner" hint="แนะนำ 750×960px" value={bannerMobile()} onChange={setBannerMobile} />
+              <BannerUploader label="Desktop Banner" device="desktop" value={bannerDesktop()} onChange={setBannerDesktop} />
+              <BannerUploader label="Tablet Banner" device="tablet" value={bannerTablet()} onChange={setBannerTablet} />
+              <BannerUploader label="Mobile Banner" device="mobile" value={bannerMobile()} onChange={setBannerMobile} />
             </div>
           </Section>
 
@@ -282,11 +283,30 @@ export function BannerForm(props: {
         when={previewDeviceUrl()}
         fallback={<p class="py-6 text-center text-sm text-ink-gray">ยังไม่ได้อัปโหลดรูปสำหรับ {PREVIEW_DEVICES.find((d) => d.value === previewDevice())?.label}</p>}
       >
-        <div class="overflow-hidden rounded-media border border-border">
-          <Show when={placement() === "homepage_hero"} fallback={<HomepageSections sections={[previewSection()]} />}>
-            <AdminHeroSlide section={previewSection()} />
-          </Show>
-        </div>
+        {/* Desktop renders through the real Hero/Promotion Banner component.
+            Tablet/Mobile are shown in a box of the storefront's own crop ratio
+            (4:3 / 3:4) instead — the real component sizes itself off the
+            browser viewport, which Admin's desktop window would never switch. */}
+        <Show
+          when={previewDevice() === "desktop"}
+          fallback={
+            <div
+              class={`mx-auto w-full overflow-hidden rounded-media border border-border bg-surface-gray/40 ${BANNER_DEVICE_SPECS[previewDevice()].aspectClass}`}
+              classList={{ "max-w-[320px]": previewDevice() === "tablet", "max-w-[220px]": previewDevice() === "mobile" }}
+            >
+              <img src={previewDeviceUrl()} alt="" class="size-full object-contain" />
+            </div>
+          }
+        >
+          <div class="overflow-hidden rounded-media border border-border">
+            <Show when={placement() === "homepage_hero"} fallback={<HomepageSections sections={[previewSection()]} />}>
+              <AdminHeroSlide section={previewSection()} />
+            </Show>
+          </div>
+        </Show>
+        <p class="text-center text-xs text-ink-gray">
+          {BANNER_DEVICE_SPECS[previewDevice()].label} · {BANNER_DEVICE_SPECS[previewDevice()].size} ({BANNER_DEVICE_SPECS[previewDevice()].ratio})
+        </p>
       </Show>
 
       <Show when={destination().type === "none"}>

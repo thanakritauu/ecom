@@ -3,6 +3,7 @@ import { Button } from "./Button";
 import ticketShape from "~/assets/icons/coupon-ticket-shape.svg";
 import dashedLine from "~/assets/icons/coupon-dashed-line.svg";
 import percentIcon from "~/assets/icons/coupon-percent.svg";
+import type { Coupon as StoreCoupon } from "~/lib/cartSelectors";
 
 export type Coupon = {
   id: string;
@@ -10,6 +11,11 @@ export type Coupon = {
   minSpendLabel: string;
   expiryLabel: string;
 };
+
+/** The ticket for one of `AVAILABLE_COUPONS` — Home's section and Checkout's picker print the exact same three lines. */
+export function couponTicket(c: StoreCoupon): Coupon {
+  return { id: c.code, amountLabel: c.label, minSpendLabel: `ขั้นต่ำ ฿${c.minSpend.toLocaleString("th-TH")}`, expiryLabel: c.expiresLabel };
+}
 
 /**
  * Figma 124:6565 — 104px ticket. The ticket shape SVG carries its own notches

@@ -1,7 +1,7 @@
 import { createContext, createSignal, onMount, useContext, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
-import { allProducts, getDiscountPercent } from "./products";
-import type { Product } from "./types";
+import { allProducts, flashSaleRoundEndsAt, getDiscountPercent } from "./products";
+import type { Product, ProductVariant } from "./types";
 import { buildMockCategories } from "./adminCategories";
 import { buildMockBrands } from "./adminBrands";
 import categoryBrow from "~/assets/images/category/category-brow.png";
@@ -41,6 +41,8 @@ export type AdminVariant = {
    * `"color"`.
    */
   mode: "color" | "image";
+  /** Sold out regardless of `stock` — the storefront greys this option out (card circle, Option Modal tile). */
+  soldOut?: boolean;
 };
 
 /**
@@ -53,6 +55,13 @@ export type AdminVariant = {
  */
 export type AdminProduct = Product & {
   sku: string;
+  /**
+   * Flash Sale runs in the storefront's daily round (ends at the next Bangkok
+   * midnight, `flashSaleRoundEndsAt`). `flashSaleEndsAt` is then re-derived
+   * every time products are read, so a saved product never carries a stale
+   * end time past midnight. Unset/false = a one-off end time set by Admin.
+   */
+  flashSaleDaily?: boolean;
   /**
    * Admin Master Data Foundation — `categoryId`/`brandId` are the *real*
    * relationship into `~/lib/adminCategories`/`~/lib/adminBrands` (empty
@@ -78,6 +87,15 @@ export type AdminProduct = Product & {
   adminVariants: AdminVariant[];
 };
 
+/** Same "low stock" line the storefront cart draws ("เหลือ X ชิ้นสุดท้าย" at ≤ 5, CartItemRow.tsx) — the default every product starts from. */
+export const LOW_STOCK_THRESHOLD = 5;
+
+/** The storefront's own low-stock wording (CartItemRow.tsx), reused wherever Admin shows a low-stock count. */
+export const lowStockLabel = (left: number) => `เหลือ ${left} ชิ้นสุดท้าย`;
+
+/** Category slugs the storefront actually reads (`Product["category"]`) — a Category with any other slug saves `categoryId` only. */
+export const STOREFRONT_CATEGORY_SLUGS: NonNullable<Product["category"]>[] = ["cushion", "lip", "cheek", "eye", "skincare", "suncare-bodycare"];
+
 export function getStockStatus(product: Pick<AdminProduct, "stockLeft" | "lowStockThreshold">): StockStatus {
   const left = product.stockLeft ?? 0;
   if (left <= 0) return "out_of_stock";
@@ -86,10 +104,16 @@ export function getStockStatus(product: Pick<AdminProduct, "stockLeft" | "lowSto
 }
 
 export const STOCK_STATUS_META: Record<StockStatus, { label: string; tone: "success" | "warning" | "danger" }> = {
-  in_stock: { label: "In Stock", tone: "success" },
-  low_stock: { label: "Low Stock", tone: "warning" },
-  out_of_stock: { label: "Out of Stock", tone: "danger" },
+  in_stock: { label: "มีสินค้า", tone: "success" },
+  low_stock: { label: "ใกล้หมด", tone: "warning" },
+  out_of_stock: { label: "สินค้าหมด", tone: "danger" },
 };
+
+/** Badge text — low stock reads like the storefront cart ("เหลือ X ชิ้นสุดท้าย"); the filter keeps the short labels above. */
+export function stockStatusLabel(product: Pick<AdminProduct, "stockLeft" | "lowStockThreshold">): string {
+  const status = getStockStatus(product);
+  return status === "low_stock" ? lowStockLabel(product.stockLeft ?? 0) : STOCK_STATUS_META[status].label;
+}
 
 export const ADMIN_PRODUCT_STATUS_META: Record<AdminProductStatus, { label: string; tone: "success" | "info" | "neutral" }> = {
   active: { label: "Active", tone: "success" },
@@ -148,6 +172,7 @@ function seedAdminVariants(product: Product, sku: string, productIndex: number):
       color: v.color || "#CCCCCC",
       // The card circle stays the seeded shade color; the photos above are the modal's option photos.
       mode: "color",
+      soldOut: v.soldOut || undefined,
     };
   });
 }
@@ -183,16 +208,18 @@ export function buildAdminProductBaseline(): AdminProduct[] {
     // sections, but Admin's Category assignment needs every row to belong to
     // something. Backfilled deterministically, not stored back onto the
     // shared catalog.
-    const category = product.category ?? FALLBACK_CATEGORIES[i % FALLBACK_CATEGORIES.length];
+    // Cushions (the Iconic Glow line) are their own menu category; everything else as before.
+    const category = product.category ?? (/cushion/i.test(product.name) ? "cushion" : FALLBACK_CATEGORIES[i % FALLBACK_CATEGORIES.length]);
     return {
       ...product,
+      flashSaleDaily: product.flashSaleEndsAt !== undefined || undefined,
       category,
       categoryId: CATEGORY_SLUG_TO_ID[category] ?? "",
       sku,
       brand: "Charmiss",
       brandId: (product.name.includes("Sanrio") ? COLLAB_BRAND_ID : CORE_BRAND_ID) || "",
       status: "active",
-      lowStockThreshold: 10,
+      lowStockThreshold: LOW_STOCK_THRESHOLD,
       updatedAt: TODAY_LABEL,
       adminVariants: seedAdminVariants(product, sku, i),
     };
@@ -225,10 +252,55 @@ function normalizeVariant(v: Partial<AdminVariant> & { id: string }): AdminVaria
     color: v.color || "#CCCCCC",
     swatchImage: typeof v.swatchImage === "string" && v.swatchImage ? v.swatchImage : undefined,
     mode,
+    soldOut: v.soldOut === true ? true : undefined,
   };
 }
 
+/**
+ * The storefront lists a product's options from `variants` (resolveVariantOptions
+ * in productVariants.ts maps over it and only overlays `adminVariants` by id),
+ * so whatever Admin saves in `adminVariants` — added, removed, renamed,
+ * reordered, sold out — has to be written back to `variants` too, or the card,
+ * Option Modal and cart keep showing the old list. `image` (the photo the card
+ * swaps to when a shade is picked) keeps the previous variant's photo when
+ * there was one, so a seed shade doesn't start swapping the card to its mock
+ * option photo; a new option uses its own first photo.
+ */
+export function deriveStorefrontVariants(adminVariants: AdminVariant[], previous: ProductVariant[] = []): ProductVariant[] | undefined {
+  if (adminVariants.length === 0) return undefined;
+  const prevById = new Map(previous.map((v) => [v.id, v]));
+  return adminVariants.map((v) => {
+    const prev = prevById.get(v.id);
+    return {
+      id: v.id,
+      label: v.label.trim() || "ตัวเลือก",
+      color: v.color || "#CCCCCC",
+      swatchImage: v.mode === "image" ? v.swatchImage : undefined,
+      image: prev ? prev.image : v.images[0],
+      soldOut: v.soldOut || v.stock <= 0 || undefined,
+    };
+  });
+}
+
+/** Slug of a seed Category id — the fallback when a caller (e.g. Excel import) only sets `categoryId`. */
+function storefrontCategoryOf(categoryId: string): Product["category"] {
+  const slug = Object.entries(CATEGORY_SLUG_TO_ID).find(([, id]) => id === categoryId)?.[0];
+  return STOREFRONT_CATEGORY_SLUGS.find((s) => s === slug);
+}
+
 /** Exported for the same reason as `buildAdminProductBaseline` — `productCatalog.tsx` reads the same `localStorage` key and must guard against the identical stale-shape landmine this store already guards against. */
+/** Daily-round products get today's end time (next Bangkok midnight) on every read — see `AdminProduct.flashSaleDaily`. */
+export function withDailyFlashSaleEnd(p: AdminProduct): AdminProduct {
+  return p.flashSaleDaily ? { ...p, flashSaleEndsAt: flashSaleRoundEndsAt() } : p;
+}
+
+function flashSaleFields(input: Pick<ProductFormValues, "flashSaleEndsAt" | "flashSaleDaily">): Pick<AdminProduct, "flashSaleEndsAt" | "flashSaleDaily"> {
+  if (input.flashSaleEndsAt === undefined && !input.flashSaleDaily) return { flashSaleEndsAt: undefined, flashSaleDaily: undefined };
+  return input.flashSaleDaily
+    ? { flashSaleEndsAt: flashSaleRoundEndsAt(), flashSaleDaily: true }
+    : { flashSaleEndsAt: input.flashSaleEndsAt, flashSaleDaily: undefined };
+}
+
 export function normalizeAdminProduct(p: AdminProduct): AdminProduct {
   return {
     ...p,
@@ -259,6 +331,14 @@ export type ProductFormValues = {
   adminVariants: AdminVariant[];
   /** REAL-TIME LIVE PREVIEW SYSTEM §4/§8 — epoch ms; unset/undefined = no Flash Sale. */
   flashSaleEndsAt?: number;
+  /** See `AdminProduct.flashSaleDaily` — when true, `flashSaleEndsAt` is ignored and re-derived on read. */
+  flashSaleDaily?: boolean;
+  /** Flash Sale progress bar's "of N" — defaults to the larger of the old total and `stockLeft`. */
+  stockTotal?: number;
+  /** Mock merchandising numbers the Product Card's rating/sold row shows (unset = row hidden). */
+  rating?: number;
+  soldCount?: number;
+  reviewCount?: number;
 };
 
 type AdminProductContextValue = {
@@ -280,12 +360,18 @@ const STORAGE_KEY = "charmiss:admin:products";
  * seed products. v3: the Lip Tint showcase SKU (`best-1`) is no longer a
  * Flash Sale product. v4: every option has 3–4 mock reviews. v5: the
  * Product Card swatch (`mode`/`color`/`swatchImage`) is split from the
- * modal's option photos (`images`). Written
+ * modal's option photos (`images`). v7: seed products take the real Charmiss
+ * range's name, photos, prices and category (mock content, `watsonsCatalog.ts`). v8: storefront
+ * `variants` re-derived from `adminVariants` (Admin edits used to save only
+ * the latter) and the seed's low-stock threshold drops 10 → 5. v9: seed
+ * reviews re-taken (option labels always from the product's own options)
+ * and seed Flash Sale end times reset to the daily round (a stored epoch
+ * goes stale). Written
  * alongside every persist, so once Admin has saved, anything it changed on
  * purpose stays as Admin left it.
  */
 const SEED_VERSION_KEY = "charmiss:admin:products:seed-version";
-const SEED_VERSION = 5;
+const SEED_VERSION = 10;
 let nextId = 1000;
 
 function persist(products: AdminProduct[]) {
@@ -330,8 +416,40 @@ function migrateSeedFields(list: AdminProduct[], fromVersion: number): AdminProd
       next.reviewCount = seed.reviewCount;
       next.ratingBreakdown = seed.ratingBreakdown;
     }
+    if (fromVersion < 7) {
+      next.name = seed.name;
+      next.image = seed.image;
+      next.images = seed.images;
+      next.price = seed.price;
+      next.compareAtPrice = seed.compareAtPrice;
+      next.discountPercent = getDiscountPercent(next);
+      if (seed.category) {
+        next.category = seed.category;
+        next.categoryId = CATEGORY_SLUG_TO_ID[seed.category] ?? next.categoryId;
+      }
+    }
+    if (fromVersion < 8 && p.lowStockThreshold === 10) next.lowStockThreshold = LOW_STOCK_THRESHOLD;
+    if (fromVersion < 9) {
+      next.reviews = seed.reviews;
+      if (next.flashSaleEndsAt !== undefined && seed.flashSaleEndsAt !== undefined) next.flashSaleEndsAt = seed.flashSaleEndsAt;
+    }
+    // v10 — seed Flash Sale products join the daily round, so a saved one stops expiring at the first midnight.
+    if (fromVersion < 10 && next.flashSaleEndsAt !== undefined && seed.flashSaleEndsAt !== undefined) next.flashSaleDaily = true;
     return next;
-  }).map((p) => (fromVersion < 5 ? splitSwatchFromPhotos(p, seedById.get(p.id)) : p));
+  })
+    .map((p) => (fromVersion < 5 ? splitSwatchFromPhotos(p, seedById.get(p.id)) : p))
+    .map((p) => (fromVersion < 8 ? syncStorefrontVariants(p) : p));
+}
+
+/**
+ * v8 — any product (seed or Admin-created) whose saved `adminVariants`
+ * drifted from `variants`. Only when it has `adminVariants`: a product with
+ * none keeps its `variants` as they are, since an empty list here can't tell
+ * "Admin removed every option" from "never had per-option rows".
+ */
+function syncStorefrontVariants(p: AdminProduct): AdminProduct {
+  if (p.adminVariants.length === 0) return p;
+  return { ...p, variants: deriveStorefrontVariants(p.adminVariants, p.variants), discountPercent: getDiscountPercent(p) };
 }
 
 /**
@@ -368,7 +486,7 @@ export function readPersistedAdminProducts(): AdminProduct[] | null {
     // reaches a component.
     const stored = (JSON.parse(raw) as AdminProduct[]).map(normalizeAdminProduct);
     const version = Number(localStorage.getItem(SEED_VERSION_KEY) ?? 1);
-    return version < SEED_VERSION ? migrateSeedFields(stored, version) : stored;
+    return (version < SEED_VERSION ? migrateSeedFields(stored, version) : stored).map(withDailyFlashSaleEnd);
   } catch {
     return null;
   }
@@ -419,9 +537,10 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
       mainImage: input.mainImage,
       price: input.price,
       compareAtPrice: input.compareAtPrice,
+      discountPercent: getDiscountPercent(input),
       stockLeft: input.stockLeft,
-      stockTotal: input.stockLeft,
-      category: input.category,
+      stockTotal: Math.max(input.stockTotal ?? 0, input.stockLeft),
+      category: input.category ?? storefrontCategoryOf(input.categoryId),
       categoryId: input.categoryId,
       description: input.description,
       sku: input.sku,
@@ -431,7 +550,11 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
       lowStockThreshold: input.lowStockThreshold,
       updatedAt: TODAY_LABEL,
       adminVariants: input.adminVariants,
-      flashSaleEndsAt: input.flashSaleEndsAt,
+      variants: deriveStorefrontVariants(input.adminVariants),
+      ...flashSaleFields(input),
+      rating: input.rating,
+      soldCount: input.soldCount,
+      reviewCount: input.reviewCount,
     };
     mutate((list) => [created, ...list]);
     return created;
@@ -450,20 +573,26 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
           sku: input.sku,
           brand: input.brand,
           brandId: input.brandId,
-          category: input.category,
+          category: input.category ?? storefrontCategoryOf(input.categoryId),
           categoryId: input.categoryId,
           description: input.description,
           price: input.price,
           compareAtPrice: input.compareAtPrice,
+          // Stored too (not only derived) — a few readers still take the stored percent as-is.
+          discountPercent: getDiscountPercent(input),
           stockLeft: input.stockLeft,
-          stockTotal: Math.max(p.stockTotal ?? 0, input.stockLeft),
+          stockTotal: Math.max(input.stockTotal ?? p.stockTotal ?? 0, input.stockLeft),
           lowStockThreshold: input.lowStockThreshold,
           status: input.status,
           images: input.images,
           image: input.images[0] ?? p.image,
           mainImage: input.mainImage,
           adminVariants: input.adminVariants,
-          flashSaleEndsAt: input.flashSaleEndsAt,
+          variants: deriveStorefrontVariants(input.adminVariants, p.variants),
+          ...flashSaleFields(input),
+          rating: input.rating,
+          soldCount: input.soldCount,
+          reviewCount: input.reviewCount,
           updatedAt: TODAY_LABEL,
         };
         return updated;

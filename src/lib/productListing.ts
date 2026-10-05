@@ -12,11 +12,6 @@ import { isNewArrival } from "./products";
  * the Category's own `slug` (matches `categoryListHref`'s URL shape, so
  * `/products?category=<slug>` from Navigation/a Promotion Page CTA/the
  * Header's category row all resolve here identically).
- *
- * Figma (node 146:13795) additionally shows 3 more "ประเภทการใช้งาน" labels
- * (foundation, bronzer, tools) with no corresponding Category in the catalog
- * at all — kept as inert, always-false, disabled placeholders purely so the
- * filter list still matches Figma's visual, same reasoning as before.
  */
 export type CategoryFacetKey = string;
 
@@ -26,20 +21,13 @@ export type CategoryFacet = {
   matches: (product: Product) => boolean;
 };
 
-const PLACEHOLDER_FACETS: CategoryFacet[] = [
-  { key: "foundation", label: "รองพื้น / คุมมัน", matches: () => false },
-  { key: "bronzer", label: "บอนเซอร์ / เฉดสี", matches: () => false },
-  { key: "tools", label: "อุปกรณ์แต่งหน้า", matches: () => false },
-];
-
-/** Real Category facets first (in the order the caller passes them, i.e. storage order — Category has no Display Order field), then the 3 inert Figma-only placeholders. */
+/** Real Category facets, in the order the caller passes them (storage order — Category has no Display Order field). */
 export function buildCategoryFacets(activeCategories: { id: string; slug: string; name: string }[]): CategoryFacet[] {
-  const real = activeCategories.map((c) => ({
+  return activeCategories.map((c) => ({
     key: c.slug,
     label: c.name,
     matches: (p: Product) => p.categoryId === c.id,
   }));
-  return [...real, ...PLACEHOLDER_FACETS];
 }
 
 /**
@@ -162,4 +150,4 @@ export function sortProducts(products: Product[], sort: SortValue): Product[] {
 }
 
 /** Matches Figma's 3x3 (9-card) grid exactly — "Load More" reveals another 9. */
-export const PAGE_SIZE = 9;
+export const PAGE_SIZE = 12; // divides evenly into the 2/3/4-column grids

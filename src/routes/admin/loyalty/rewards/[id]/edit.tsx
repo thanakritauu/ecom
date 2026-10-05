@@ -27,7 +27,7 @@ export default function AdminLoyaltyRewardEditPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สะสมแต้ม", href: "/admin/loyalty" }, { label: "ของรางวัล", href: "/admin/loyalty/rewards" }]} />
-          <EmptyState icon={<RewardGiftIcon />} title="ไม่พบของรางวัลนี้" description="ข้อมูลอาจยังไม่ได้ Sync มาจาก Cordy CRM หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าของรางวัล" onAction={() => navigate("/admin/loyalty/rewards")} class="bg-surface-card shadow-card" />
+          <EmptyState icon={<RewardGiftIcon />} title="ไม่พบของรางวัลนี้" description="ข้อมูลอาจยังไม่ได้ Sync มาจาก Charmiss Club CRM หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าของรางวัล" onAction={() => navigate("/admin/loyalty/rewards")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -42,7 +42,7 @@ export default function AdminLoyaltyRewardEditPage() {
               { label: "แก้ไขการแสดงผล" },
             ]}
           />
-          <PageHeader title={`แก้ไขการแสดงผล: ${current().displayName}`} description="แก้ไขได้เฉพาะรูปภาพ ชื่อ รายละเอียด Visibility และการเชื่อม Ecommerce — ไม่แก้ไข Coin Rule ของ Cordy" />
+          <PageHeader title={`แก้ไขการแสดงผล: ${current().displayName}`} description="แก้ไขได้เฉพาะรูปภาพ ชื่อ รายละเอียด Visibility และการเชื่อม Ecommerce — ไม่แก้ไข Coin Rule ของ Charmiss Club CRM" />
           <RewardPresentationForm reward={current()} onSubmit={handleSubmit} onCancel={() => navigate(`/admin/loyalty/rewards/${current().id}`)} />
         </div>
       )}

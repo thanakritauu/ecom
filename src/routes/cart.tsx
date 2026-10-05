@@ -5,11 +5,12 @@ import { Container } from "~/components/shared/Container";
 import { Button } from "~/components/shared/Button";
 import { ProductRail } from "~/components/shared/ProductRail";
 import { CartItemRow } from "~/components/shared/CartItemRow";
-import { FreeShippingBanner } from "~/components/shared/FreeShippingBanner";
+import { GiftPromotionBanner } from "~/components/shared/GiftPromotionBanner";
+import { GiftItemRow } from "~/components/shared/GiftItemRow";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
 import { formatTHB } from "~/components/shared/PriceDisplay";
 import { useCart } from "~/lib/cart";
-import { resolveCartLines, computeCartTotal } from "~/lib/cartSelectors";
+import { resolveCartLines, computeCartTotal, resolveGiftPromotion } from "~/lib/cartSelectors";
 import { useProductCatalog } from "~/lib/productCatalog";
 
 /**
@@ -30,6 +31,7 @@ export default function CartPage() {
   const catalog = useProductCatalog();
   const resolvedLines = createMemo(() => resolveCartLines(cart.lines(), catalog.products()));
   const total = createMemo(() => computeCartTotal(resolvedLines()));
+  const gift = createMemo(() => resolveGiftPromotion(total(), catalog.products()));
   const hasUnavailableItem = createMemo(() =>
     resolvedLines().some(({ product }) => product.stockLeft !== undefined && product.stockLeft <= 0),
   );
@@ -42,29 +44,18 @@ export default function CartPage() {
   return (
     <>
       <Header />
-      {/* `fixed` positioning (the floating bar below) isn't affected by
-          `overflow-x-hidden` the way `position: sticky` elements can be, so
-          no `overflow-x-clip` swap is needed here just for the bar itself.
-          Bottom padding reserved only while it actually renders (cart has
-          items), matching Checkout's `showFloatingBar()` gating. */}
-      <main
-        class="flex flex-col overflow-x-hidden"
-        // +64px (BottomNav's own height) folded into the Tablet/Mobile steps
-        // only — `stackAboveBottomNav` shifts the floating bar up by exactly
-        // that much below `lg:`; `lg:pb-24` restores the original Desktop
-        // reservation, where the bar still sits flush at `bottom-0`.
-        classList={{ "pb-52 md:pb-40 lg:pb-24": resolvedLines().length > 0 }}
-      >
+      <main class="flex flex-col overflow-x-hidden">
         <div class="bg-surface-gray/60 py-6 sm:py-8">
           <Container width="wide" class="flex flex-col gap-4 sm:gap-5 lg:gap-6">
             <h1 class="text-2xl font-bold text-ink lg:text-[31px]">ตะกร้าสินค้า</h1>
 
             <Show when={resolvedLines().length > 0} fallback={<EmptyCartPage />}>
-              <FreeShippingBanner total={total()} showAmounts />
+              <Show when={gift()}>{(g) => <GiftPromotionBanner gift={g()} total={total()} showAmounts />}</Show>
 
               <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
                 <ul class="flex flex-1 flex-col gap-4 rounded-card bg-white p-4 lg:p-6">
                   <For each={resolvedLines()}>{(entry) => <CartItemRow entry={entry} variant="page" />}</For>
+                  <Show when={gift()?.unlocked && gift()}>{(g) => <GiftItemRow gift={g()} variant="page" />}</Show>
                 </ul>
 
                 <div class="flex flex-col gap-0 rounded-card border border-surface-gray bg-white lg:sticky lg:top-6 lg:w-[390px] lg:shrink-0">
@@ -113,7 +104,7 @@ export default function CartPage() {
         </div>
 
         <Show when={recommended().length > 0}>
-          <section aria-labelledby="cart-recommended-heading" class="bg-gradient-to-b from-surface-pink to-white py-6 sm:py-8 lg:py-10">
+          <section aria-labelledby="cart-recommended-heading" class="bg-gradient-to-b from-surface-pink to-white pb-6 pt-6 sm:pt-8 lg:pt-10">
             <Container width="wide" class="flex flex-col gap-4 sm:gap-5 lg:gap-6">
               <h2 id="cart-recommended-heading" class="text-xl font-bold text-ink lg:text-2xl">
                 ช็อปเพิ่มอีกนิด...ให้ครบดีล
@@ -142,6 +133,11 @@ export default function CartPage() {
       </Show>
 
       <Footer />
+      {/* Room for the fixed floating bar — kept below the Footer so the content→Footer gap stays the site-wide 24px.
+          +64px (BottomNav's height) below `lg:`, where `stackAboveBottomNav` lifts the bar; footer-pink so it reads as the footer's end. */}
+      <Show when={resolvedLines().length > 0}>
+        <div class="h-52 bg-brand-pink md:h-40 lg:h-24" aria-hidden="true" />
+      </Show>
       {/* `position: fixed` bars don't reserve their own space in document
           flow — the padding reserved on `<main>` above only protects content
           *before* the Footer. Since the Footer is the last thing on the

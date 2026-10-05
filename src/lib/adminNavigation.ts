@@ -143,6 +143,15 @@ export function describeNavigationReference(item: NavigationItem, items: Navigat
 const TODAY_LABEL = "20 ก.ย. 2569";
 
 /**
+ * Storefront sync — `BottomNav.tsx` (mobile/tablet bottom bar) points its
+ * "โปรโมชั่น" tab at whatever this one item resolves to (id hardcoded there),
+ * falling back to `/promotion/flash-sale` when the item is hidden or its
+ * target isn't live. Admin flags this item so editing it isn't a surprise.
+ */
+export const BOTTOM_NAV_PROMOTION_ITEM_ID = "nav-102";
+export const BOTTOM_NAV_PROMOTION_FALLBACK_HREF = "/promotion/flash-sale";
+
+/**
  * Deterministic seed — fixed string-literal ids, not an incrementing
  * counter, same "baseline builder purity" rule every other content module's
  * `buildMock*()` follows (see `adminCategories.ts`'s own note on this).
@@ -159,19 +168,25 @@ const TODAY_LABEL = "20 ก.ย. 2569";
  * — a pure data migration, not a new menu structure.
  */
 const NAVIGATION_SEEDS: (Omit<NavigationItem, "createdAt" | "updatedAt"> & { id: string })[] = [
-  { id: "nav-001", label: "9.9", icon: "tag", order: 1, visible: true, targetType: "promotion_page", targetId: "promo-page-001" },
-  { id: "nav-002", label: "วันหยุดยาว", icon: "gift", order: 2, visible: true, targetType: "promotion_page", targetId: "promo-page-002" },
-  { id: "nav-003", label: "Sanrio", icon: "star", order: 3, visible: true, targetType: "promotion_page", targetId: "promo-page-003" },
-  { id: "nav-004", label: "ร่าง", icon: "fire", order: 4, visible: true, targetType: "promotion_page", targetId: "promo-page-004" },
-  { id: "nav-005", label: "ปีใหม่", icon: "sparkle", order: 5, visible: true, targetType: "promotion_page", targetId: "promo-page-005" },
-  { id: "nav-006", label: "มาใหม่", icon: "sparkle", order: 6, visible: true, targetType: "promotion_page", targetId: "promo-page-006" },
-  { id: "nav-007", label: "กำลังฮิต", icon: "fire", order: 7, visible: true, targetType: "promotion_page", targetId: "promo-page-007" },
-  { id: "nav-008", label: "โปรโมชั่น", icon: "tag", order: 8, visible: true, targetType: "promotion_page", targetId: "promo-page-008" },
-  { id: "nav-009", label: "ปาก", icon: "", order: 9, visible: true, targetType: "category", targetId: "category-001" },
-  { id: "nav-010", label: "ตา", icon: "", order: 10, visible: true, targetType: "category", targetId: "category-002" },
-  { id: "nav-011", label: "แก้ม", icon: "", order: 11, visible: true, targetType: "category", targetId: "category-003" },
-  { id: "nav-012", label: "คิ้ว", icon: "", order: 12, visible: true, targetType: "category", targetId: "category-004" },
-  { id: "nav-013", label: "ดูสินค้าทั้งหมด", icon: "", order: 13, visible: true, targetType: "product_listing" },
+  // Figma node 132:2352 — the storefront nav, left to right; each label links to the page it names.
+  { id: "nav-101", label: "Iconic Glow", icon: "glow", order: 1, visible: true, targetType: "promotion_page", targetId: "promo-page-003" },
+  { id: "nav-102", label: "Flash Sale", icon: "flashsale", order: 2, visible: true, targetType: "promotion_page", targetId: "promo-page-009" },
+  { id: "nav-103", label: "ขายดี", icon: "bestseller", order: 3, visible: true, targetType: "promotion_page", targetId: "promo-page-010" },
+  { id: "nav-006", label: "มาใหม่", icon: "new", order: 4, visible: true, targetType: "promotion_page", targetId: "promo-page-006" },
+  { id: "nav-007", label: "กำลังฮิต", icon: "hot", order: 5, visible: true, targetType: "promotion_page", targetId: "promo-page-007" },
+  { id: "nav-201", label: "คุชชั่น", icon: "", order: 6, visible: true, targetType: "category", targetId: "category-005" },
+  { id: "nav-009", label: "ลิป", icon: "", order: 7, visible: true, targetType: "category", targetId: "category-001" },
+  { id: "nav-011", label: "แก้ม", icon: "", order: 8, visible: true, targetType: "category", targetId: "category-003" },
+  { id: "nav-010", label: "ตาและคิ้ว", icon: "", order: 9, visible: true, targetType: "category", targetId: "category-002" },
+  { id: "nav-202", label: "ดูแลผิว", icon: "", order: 10, visible: true, targetType: "category", targetId: "category-006" },
+  { id: "nav-203", label: "กันแดดและบอดี้แคร์", icon: "", order: 11, visible: true, targetType: "category", targetId: "category-007" },
+  { id: "nav-013", label: "ดูสินค้าทั้งหมด", icon: "", order: 12, visible: true, targetType: "product_listing" },
+  // Earlier campaign menus — kept (hidden) so Admin can switch them back on.
+  { id: "nav-001", label: "9.9", icon: "nine-nine", order: 13, visible: false, targetType: "promotion_page", targetId: "promo-page-001" },
+  { id: "nav-002", label: "วันหยุดยาว", icon: "gift", order: 14, visible: false, targetType: "promotion_page", targetId: "promo-page-002" },
+  { id: "nav-004", label: "ร่าง", icon: "fire", order: 16, visible: false, targetType: "promotion_page", targetId: "promo-page-004" },
+  { id: "nav-005", label: "ปีใหม่", icon: "sparkle", order: 17, visible: false, targetType: "promotion_page", targetId: "promo-page-005" },
+  { id: "nav-008", label: "โปรโมชั่น", icon: "tag", order: 18, visible: false, targetType: "promotion_page", targetId: "promo-page-008" },
 ];
 
 export function buildMockNavigationItems(): NavigationItem[] {

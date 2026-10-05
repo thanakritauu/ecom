@@ -72,6 +72,7 @@ export default function AdminPromotionDetailPage() {
     >
       {(current) => {
         const p = current;
+        const gift = () => (p().giftProductId ? productStore.getById(p().giftProductId!) : undefined);
         const scopeProducts = () => p().productIds.map((id) => productStore.getById(id)).filter((x) => x !== undefined);
 
         return (
@@ -113,6 +114,23 @@ export default function AdminPromotionDetailPage() {
                   <p class="text-sm text-ink-gray">{p().description ?? "ยังไม่มีคำอธิบาย"}</p>
                 </Section>
 
+                <Show when={p().type === "gift_with_purchase"}>
+                  <Section title="ของแถม">
+                    <Show when={gift()} fallback={<p class="text-sm text-ink-gray">ยังไม่ได้เลือกสินค้าของแถม</p>}>
+                      {(g) => (
+                        <div class="flex items-center gap-3">
+                          <img src={g().image} alt="" class="size-11 shrink-0 rounded-media object-cover" />
+                          <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-medium text-ink">{g().name}</p>
+                            <p class="text-xs text-ink-gray">{g().sku}</p>
+                          </div>
+                          <span class="shrink-0 text-sm font-medium text-ink">x{p().giftQty ?? 1}</span>
+                        </div>
+                      )}
+                    </Show>
+                  </Section>
+                </Show>
+
                 <Section title="สินค้าที่เข้าร่วม">
                   <Show when={p().productIds.length > 0} fallback={<p class="text-sm text-ink-gray">ใช้กับสินค้าทั้งหมด</p>}>
                     <div class="flex flex-col gap-3">
@@ -140,7 +158,11 @@ export default function AdminPromotionDetailPage() {
                 </Section>
 
                 <Section title="ส่วนลด">
-                  <p class="text-2xl font-bold text-ink">{formatPromotionDiscount(p())}</p>
+                  <p class="text-2xl font-bold text-ink">{formatPromotionDiscount(p(), gift()?.name)}</p>
+                </Section>
+
+                <Section title="การแสดงผลหน้าร้าน">
+                  <Row label="แสดงในตะกร้า" value={p().showInCart ? "แสดง" : "ไม่แสดง"} />
                 </Section>
 
                 <Section title="ระยะเวลา">

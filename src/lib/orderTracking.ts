@@ -1,4 +1,5 @@
 import type { Order, OrderStatus, Shipment, ShipmentStatus, TrackingStatus } from "./types";
+import { ORDER_STATUS_META } from "./accountData";
 
 /**
  * Phase 05 — turns an order's raw `Shipment.events` (mock today, DHL API
@@ -9,8 +10,8 @@ import type { Order, OrderStatus, Shipment, ShipmentStatus, TrackingStatus } fro
 
 export const TRACKING_STEPS: { status: TrackingStatus; title: string }[] = [
   { status: "ordered", title: "สั่งซื้อสำเร็จ" },
-  { status: "preparing", title: "กำลังเตรียมสินค้า" },
-  { status: "shipped", title: "ส่งสินค้าแล้ว" },
+  { status: "preparing", title: "กำลังเตรียมการจัดส่ง" },
+  { status: "shipped", title: "ส่งให้บริษัทขนส่ง" },
   { status: "in_transit", title: "อยู่ระหว่างขนส่ง" },
   { status: "out_for_delivery", title: "กำลังนำส่ง" },
   { status: "delivered", title: "จัดส่งสำเร็จ" },
@@ -18,9 +19,9 @@ export const TRACKING_STEPS: { status: TrackingStatus; title: string }[] = [
 
 export const SHIPMENT_STATUS_META: Record<ShipmentStatus, { label: string; badgeClass: string }> = {
   awaiting_shipment: { label: "รอจัดส่ง", badgeClass: "bg-surface-gray text-ink-gray" },
-  shipped: { label: "ส่งแล้ว", badgeClass: "bg-[#f1eeff] text-brand-purple" },
-  in_transit: { label: "อยู่ระหว่างขนส่ง", badgeClass: "bg-[#f1eeff] text-brand-purple" },
-  out_for_delivery: { label: "กำลังนำส่ง", badgeClass: "bg-surface-pink text-brand-pink" },
+  shipped: { label: "ส่งให้บริษัทขนส่ง", badgeClass: "bg-warning-soft text-ink" },
+  in_transit: { label: "อยู่ระหว่างขนส่ง", badgeClass: "bg-warning-soft text-ink" },
+  out_for_delivery: { label: "กำลังนำส่ง", badgeClass: "bg-warning-soft text-ink" },
   delivered: { label: "จัดส่งสำเร็จ", badgeClass: "bg-success-soft text-success" },
 };
 
@@ -68,7 +69,18 @@ export function getTrackingHistory(shipment: Shipment) {
   return [...shipment.events].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 }
 
-const CANCELLABLE: OrderStatus[] = ["pending_payment", "paid", "preparing"];
+/**
+ * One status per order for the purchase-history card — the order's own
+ * status until the parcel is with the carrier (รอชำระเงิน / กำลังเตรียมการจัดส่ง /
+ * ยกเลิกแล้ว), then DHL's live status (ส่งให้บริษัทขนส่ง → … → จัดส่งสำเร็จ).
+ */
+export function getOrderDisplayStatus(order: Order): { label: string; badgeClass: string } {
+  if (order.status === "pending_payment" || order.status === "cancelled") return ORDER_STATUS_META[order.status];
+  const shipment = getShipmentStatus(order.shipment);
+  return shipment === "awaiting_shipment" ? ORDER_STATUS_META.preparing : SHIPMENT_STATUS_META[shipment];
+}
+
+const CANCELLABLE: OrderStatus[] = ["pending_payment", "preparing"];
 
 /** Cancellable until the parcel is handed to the carrier. */
 export function canCancelOrder(order: Order): boolean {

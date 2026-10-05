@@ -38,7 +38,7 @@ export function ProductListingGrid(props: {
       ? "grid grid-cols-1 gap-4"
       : props.fullWidth
         ? "grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-5 xl:grid-cols-5 xl:gap-6"
-        : "grid grid-cols-2 gap-4 lg:grid-cols-3 lg:gap-5";
+        : "grid grid-cols-2 gap-4 lg:grid-cols-3 lg:gap-5 xl:grid-cols-4"; // beside the filter sidebar: 4 across from 1280px
 
   return (
     <div class="flex w-full flex-col items-center gap-6">

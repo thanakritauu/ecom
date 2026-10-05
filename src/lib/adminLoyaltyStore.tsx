@@ -3,6 +3,9 @@ import { isServer } from "solid-js/web";
 import { type AdminCoinRule, buildMockCoinRules, normalizeCoinRule } from "./adminLoyaltyRules";
 
 const STORAGE_KEY = "charmiss:admin:loyalty:coinRules";
+/** v2 = rules aligned to the storefront (earn/multiplier/redemption, no sign-up bonus). Sync-only mirror, so an older copy is replaced by today's seeds. */
+const SEED_VERSION_KEY = "charmiss:admin:loyalty:coinRules:seed-version";
+const SEED_VERSION = 2;
 
 function baseline(): AdminCoinRule[] {
   return buildMockCoinRules();
@@ -21,7 +24,7 @@ type AdminLoyaltyContextValue = {
   getById: (id: string) => AdminCoinRule | undefined;
   /** The most recent `syncedAt` across every rule — never a separately-stored field that could disagree with the rules themselves. */
   lastSyncedAt: Accessor<string>;
-  /** Re-syncs only the given rules — used by the list's bulk "Sync ที่เลือก" action. Mock-only: touches `syncedAt` alone, never `name`/`condition`/`coinAmount`/`status` (those are Cordy's business rule and stay read-only). */
+  /** Re-syncs only the given rules — used by the list's bulk "Sync ที่เลือก" action. Mock-only: touches `syncedAt` alone, never `name`/`condition`/`coinAmount`/`status` (those are the CRM's business rule and stay read-only). */
   syncSelected: (ids: string[]) => Promise<void>;
   /** Re-syncs every rule — the Integration Status card's "Sync ข้อมูล" button. */
   syncAll: () => Promise<void>;
@@ -30,12 +33,12 @@ type AdminLoyaltyContextValue = {
 const AdminLoyaltyContext = createContext<AdminLoyaltyContextValue>();
 
 /**
- * Loyalty (Phase 08.1) — "สะสมคอยน์" as a Cordy CRM Integration view. Cordy
- * is the Loyalty Source of Truth; this store only ever mirrors what Cordy
+ * Loyalty (Phase 08.1) — "สะสมคอยน์" as a Charmiss Club CRM Integration view. Charmiss Club CRM
+ * is the Loyalty Source of Truth; this store only ever mirrors what Charmiss Club CRM
  * last synced (`buildMockCoinRules`'s seed, standing in for a real sync
  * payload) and lets the admin re-trigger a mock sync. There is deliberately
  * no `add`/`update`/`remove`/`setStatus` here — see `adminLoyaltyRules.ts`'s
- * doc comment for why editing a Cordy rule from Charmiss is out of scope.
+ * doc comment for why editing a Charmiss Club CRM rule from Charmiss is out of scope.
  * Same SSR-safe localStorage-persisted shape as `adminBrandStore.tsx`.
  */
 export function AdminLoyaltyProvider(props: { children: JSX.Element }) {
@@ -44,7 +47,10 @@ export function AdminLoyaltyProvider(props: { children: JSX.Element }) {
   onMount(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setCoinRules((JSON.parse(raw) as AdminCoinRule[]).map(normalizeCoinRule));
+      const version = Number(localStorage.getItem(SEED_VERSION_KEY) ?? 1);
+      if (raw && version >= SEED_VERSION) setCoinRules((JSON.parse(raw) as AdminCoinRule[]).map(normalizeCoinRule));
+      else if (raw) localStorage.removeItem(STORAGE_KEY);
+      localStorage.setItem(SEED_VERSION_KEY, String(SEED_VERSION));
     } catch {
       // storage unavailable — stays in-memory for this tab.
     }

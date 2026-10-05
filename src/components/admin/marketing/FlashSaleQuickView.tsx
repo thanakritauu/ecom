@@ -2,9 +2,9 @@ import { For, Show } from "solid-js";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { useAdminProducts } from "~/lib/adminProductStore";
-import { MARKETING_STATUS_META, formatMarketingDate, type FlashSale } from "~/lib/adminMarketing";
+import { MARKETING_STATUS_META, flashSaleDiscountPercent, flashSaleOriginalPrice, formatMarketingDate, type FlashSale } from "~/lib/adminMarketing";
 
-/** Phase 07 #25 — Flash Sale Quick View: per-item Original/Sale price + discount %, same Right Drawer pattern. */
+/** Phase 07 #25 — Flash Sale Quick View: per-item Original/Sale price + discount % and stock-bar numbers, as the storefront's Flash Sale card shows them. */
 export function FlashSaleQuickView(props: { flashSale: FlashSale }) {
   const f = () => props.flashSale;
   const productStore = useAdminProducts();
@@ -36,19 +36,21 @@ export function FlashSaleQuickView(props: { flashSale: FlashSale }) {
         <For each={f().items}>
           {(item) => {
             const product = productStore.getById(item.productId);
-            const discountPct = product ? Math.round((1 - item.salePrice / product.price) * 100) : 0;
+            const discountPct = product ? flashSaleDiscountPercent(product, item.salePrice) : 0;
             return (
               <div class="flex gap-3">
                 <img src={product?.image} alt="" class="size-11 shrink-0 rounded-media object-cover" />
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-medium text-ink">{product?.name ?? item.productId}</p>
                   <p class="text-xs text-ink-gray">
-                    <span class="text-ink-placeholder line-through">{product ? formatAdminCurrency(product.price) : ""}</span>{" "}
+                    <span class="text-ink-placeholder line-through">{product ? formatAdminCurrency(flashSaleOriginalPrice(product)) : ""}</span>{" "}
                     <span class="font-semibold text-system-red">{formatAdminCurrency(item.salePrice)}</span>
                     {discountPct > 0 ? ` (-${discountPct}%)` : ""}
                   </p>
                   <Show when={item.saleLimit}>
-                    <p class="text-xs text-ink-gray">ขายแล้ว {item.soldCount} / {item.saleLimit}</p>
+                    <p class="text-xs text-ink-gray">
+                      ขายแล้ว {item.soldCount} / {item.saleLimit} · {item.soldCount >= item.saleLimit! ? "สินค้าหมด" : `เหลือ ${item.saleLimit! - item.soldCount} ชิ้น`}
+                    </p>
                   </Show>
                 </div>
               </div>

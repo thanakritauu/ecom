@@ -1,8 +1,10 @@
 import { createContext, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
-import { type Banner, type BannerStatus, type BannerFormValues, buildMockBanners, normalizeBanner } from "./adminBanners";
+import { type Banner, type BannerStatus, type BannerFormValues, buildMockBanners, normalizeBanner, upgradeBannerSeeds, BANNER_SEED_VERSION } from "./adminBanners";
 
 const STORAGE_KEY = "charmiss:admin:content:banners";
+/** Missing = v1 (before seed versioning existed). See `upgradeBannerSeeds`. */
+const SEED_VERSION_KEY = "charmiss:admin:content:banners:seedVersion";
 const TODAY_LABEL = "18 ก.ย. 2569";
 let nextId = 1000;
 
@@ -30,7 +32,14 @@ export function AdminBannerProvider(props: { children: JSX.Element }) {
   onMount(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setBanners((JSON.parse(raw) as Banner[]).map(normalizeBanner));
+      const storedVersion = Number(localStorage.getItem(SEED_VERSION_KEY) ?? "1") || 1;
+      if (raw) {
+        const loaded = (JSON.parse(raw) as Banner[]).map(normalizeBanner);
+        const upgraded = storedVersion < BANNER_SEED_VERSION ? upgradeBannerSeeds(loaded, storedVersion).map(normalizeBanner) : loaded;
+        if (upgraded !== loaded) localStorage.setItem(STORAGE_KEY, JSON.stringify(upgraded));
+        setBanners(upgraded);
+      }
+      localStorage.setItem(SEED_VERSION_KEY, String(BANNER_SEED_VERSION));
     } catch {
       // storage unavailable — stays in-memory for this tab.
     }

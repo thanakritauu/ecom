@@ -16,6 +16,7 @@ import productCushionHero from "~/assets/images/hero/hero-banner-1.png";
 // locally from the three UGC photos above (no external/stock footage).
 import reviewDemoVideo from "~/assets/videos/review-demo.mp4";
 import type { Product, ProductVariant, Review } from "./types";
+import { applyWatsonsItem } from "./watsonsCatalog";
 
 /**
  * The Figma export only shipped one real product photograph — every
@@ -23,7 +24,20 @@ import type { Product, ProductVariant, Review } from "./types";
  * copy. We do the same here rather than pulling in stock/AI imagery; swap
  * `image` per SKU once the real catalog photos come from the backend/CMS.
  */
-const FLASH_SALE_ENDS_AT = Date.now() + (8 * 60 + 24) * 60 * 1000 + 15 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000; // Asia/Bangkok is UTC+7 all year (no DST)
+
+/**
+ * Flash Sale runs as a daily round, 00:00–23:59 Bangkok time (matches the
+ * Admin "Flash Sale วันนี้" seed), so every countdown targets the next local
+ * midnight. Derived from the calendar day rather than "now + N hours", so
+ * reloading doesn't restart the timer and SSR + client agree on the target.
+ */
+export function flashSaleRoundEndsAt(now = Date.now()) {
+  return (Math.floor((now + BANGKOK_OFFSET_MS) / DAY_MS) + 1) * DAY_MS - BANGKOK_OFFSET_MS;
+}
+
+const FLASH_SALE_ENDS_AT = flashSaleRoundEndsAt();
 
 /**
  * Lip gloss shade family. Figma's own export didn't include per-shade swatch
@@ -67,30 +81,32 @@ const showcaseDescription =
   "ลิปทินท์เนื้อบางเบา เกลี่ยง่าย ให้สีชัดในปาดเดียว บำรุงริมฝีปากด้วย Hyaluronic Acid ลดปัญหาปากแห้ง คล้ำ แตก มาพร้อมพวงกุญแจคาแรกเตอร์ Sanrio ลิขสิทธิ์แท้";
 const showcaseReviewCount = 2146;
 const showcaseRatingBreakdown: [number, number, number, number, number] = [1759, 279, 64, 28, 16];
-const showcaseReviews = [
+/**
+ * Product-level reviews shared by every product without options — no option
+ * named (`variantLabel` unset) and copy that fits any SKU, since these land
+ * on lips, cushions, blush and suncare alike.
+ */
+const showcaseReviews: Review[] = [
   {
     id: "review-1",
     name: "ปาล์มมี่ ก.",
     rating: 5,
     date: "12 ส.ค. 2569",
-    variantLabel: "04 Sugar Coral",
-    text: "เนื้อบางเบาจริง ทาแล้วไม่รู้สึกหนักปากเลย สีตรงปกมาก ติดทนทั้งวันแม้กินข้าวก็ยังไม่จางไปหมด ชอบพวงกุญแจที่แถมมาด้วยน่ารักมาก",
+    text: "ใช้ง่ายมาก เนื้อบางเบา ไม่หนักผิว ของจริงตรงปก ติดทนทั้งวัน แพ็กเกจน่ารัก ประทับใจตั้งแต่แกะกล่อง",
   },
   {
     id: "review-2",
     name: "Nutcha S.",
     rating: 5,
     date: "3 ส.ค. 2569",
-    variantLabel: "01 Melody Pink",
-    text: "ซื้อเพราะพวงกุญแจ My Melody แต่ตัวทินท์ดีเกินคาด โทนสีหวานมากใส่แล้วปากดูอิ่มฟู ไม่แห้งตึงเหมือนทินท์ยี่ห้ออื่นที่เคยลอง",
+    text: "ซื้อตามรีวิวแล้วดีเกินคาด ใช้แล้วไม่แห้งตึง ไม่ระคายเคือง ราคาน่ารักเมื่อเทียบกับคุณภาพ",
   },
   {
     id: "review-3",
     name: "ฝ้าย ธ.",
     rating: 4,
     date: "28 ก.ค. 2569",
-    variantLabel: "05 Cherry Kiss",
-    text: "สีสวยมากสำหรับคนผิวสองสี ติดทนดี แต่ต้องทาลิปบาล์มรองพื้นก่อนไม่งั้นจะเห็นเนื้อปากแห้งเป็นขุยนิดหน่อย โดยรวมยังประทับใจอยู่",
+    text: "โดยรวมดี ติดทนพอสมควร ระหว่างวันเติมนิดหน่อยก็สวยแล้ว อยากให้มีขนาดพกพาเพิ่มอีกนิด",
   },
   {
     id: "review-4",
@@ -110,7 +126,16 @@ const showcaseReviews = [
  * Media reuse this project's own photos + the locally rendered demo clip.
  */
 const lipTintReviews: Review[] = [
-  { ...showcaseReviews[1], id: "lt-review-1", productId: "best-1", variantId: "lip-tint-01", photos: [productLipTintUgc2] },
+  {
+    id: "lt-review-1",
+    productId: "best-1",
+    variantId: "lip-tint-01",
+    name: "Nutcha S.",
+    rating: 5,
+    date: "3 ส.ค. 2569",
+    text: "ซื้อเพราะพวงกุญแจ My Melody แต่ตัวทินท์ดีเกินคาด โทนสีหวานมากใส่แล้วปากดูอิ่มฟู ไม่แห้งตึงเหมือนทินท์ยี่ห้ออื่นที่เคยลอง",
+    photos: [productLipTintUgc2],
+  },
   {
     id: "lt-review-2",
     productId: "best-1",
@@ -118,7 +143,6 @@ const lipTintReviews: Review[] = [
     name: "Pimchanok R.",
     rating: 5,
     date: "30 ก.ค. 2569",
-    variantLabel: "01 Melody Pink",
     text: "สีชมพูหวานใส่ทุกวันได้ ถ่ายคลิปสวอชมาให้ดูค่ะ ปาดเดียวสีขึ้นเลย",
     videos: [{ src: reviewDemoVideo, poster: productLipTintUgc1 }],
   },
@@ -129,16 +153,27 @@ const lipTintReviews: Review[] = [
     name: "มายด์ ว.",
     rating: 4,
     date: "25 ก.ค. 2569",
-    variantLabel: "02 Kuromi Purple",
     text: "สีม่วงอมชมพูแปลกตาดี ทาบาง ๆ แล้วเบลอขอบจะสวยมาก พวงกุญแจคุโรมิน่ารักสุด ๆ",
     photos: [productLipTintUgc3, productLipTintMain],
   },
-  { ...showcaseReviews[0], id: "lt-review-4", productId: "best-1", variantId: "lip-tint-04", photos: [productLipTintUgc1, productLipTintMain, productPhoto] },
   {
-    ...showcaseReviews[2],
+    id: "lt-review-4",
+    productId: "best-1",
+    variantId: "lip-tint-04",
+    name: "ปาล์มมี่ ก.",
+    rating: 5,
+    date: "12 ส.ค. 2569",
+    text: "เนื้อบางเบาจริง ทาแล้วไม่รู้สึกหนักปากเลย สีตรงปกมาก ติดทนทั้งวันแม้กินข้าวก็ยังไม่จางไปหมด ชอบพวงกุญแจที่แถมมาด้วยน่ารักมาก",
+    photos: [productLipTintUgc1, productLipTintMain, productPhoto],
+  },
+  {
     id: "lt-review-5",
     productId: "best-1",
     variantId: "lip-tint-05",
+    name: "ฝ้าย ธ.",
+    rating: 4,
+    date: "28 ก.ค. 2569",
+    text: "สีสวยมากสำหรับคนผิวสองสี ติดทนดี แต่ต้องทาลิปบาล์มรองพื้นก่อนไม่งั้นจะเห็นเนื้อปากแห้งเป็นขุยนิดหน่อย โดยรวมยังประทับใจอยู่",
     videos: [{ src: reviewDemoVideo, poster: productLipTintUgc3 }],
     photos: [productLipTintUgc2],
   },
@@ -189,6 +224,22 @@ function topUpOptionReviews(product: Product, existing: Review[]): Review[] {
   return reviews;
 }
 
+/**
+ * A review's option name always comes from its own product's options: the
+ * label is (re)set from `variantId`, a review naming an option this product
+ * doesn't have is dropped, and a product-level review carries no label —
+ * so no review can show another product's shade name.
+ */
+function withOwnOptionLabels(product: Product, reviews: Review[]): Review[] {
+  const labels = new Map((product.variants ?? []).map((v) => [v.id, v.label]));
+  return reviews.flatMap((review) => {
+    const { variantLabel: _label, ...rest } = review;
+    if (!review.variantId) return [rest];
+    const label = labels.get(review.variantId);
+    return label ? [{ ...rest, variantLabel: label }] : [];
+  });
+}
+
 const cushionReviews: Review[] = [
   {
     id: "cs-review-1",
@@ -197,7 +248,6 @@ const cushionReviews: Review[] = [
     name: "Kanokwan T.",
     rating: 5,
     date: "14 ก.ย. 2569",
-    variantLabel: "เบอร์ 01",
     text: "ผิวขาวเหลืองใช้เบอร์ 01 พอดีมาก บางเบา ปกปิดรอยแดงได้ดี ไม่ดรอประหว่างวัน",
     photos: [productCushionMain, productCushionHero],
     videos: [{ src: reviewDemoVideo, poster: productCushionHero }],
@@ -209,7 +259,6 @@ const cushionReviews: Review[] = [
     name: "ฟ้า ส.",
     rating: 4,
     date: "9 ก.ย. 2569",
-    variantLabel: "เบอร์ 02",
     text: "สีกลางๆ เข้ากับผิวสองสี ฟินิชโกลว์สวย แต่คนผิวมันอาจต้องซับแป้งทับเล็กน้อย",
     photos: [productCushionHero],
   },
@@ -220,7 +269,6 @@ const cushionReviews: Review[] = [
     name: "Jirapat K.",
     rating: 5,
     date: "2 ก.ย. 2569",
-    variantLabel: "เบอร์ 04",
     text: "เบอร์ 04 สำหรับผิวแทนคือดีมาก ไม่ลอย ไม่เทา ตลับสวยพกง่าย",
     photos: [productCushionMain],
   },
@@ -435,6 +483,10 @@ export const allProducts: Product[] = [
   ...featuredCollectionProducts,
 ];
 
+// Mock content: every product shows a real Charmiss product (name, photo, price, category) from the
+// Watsons listing — see `watsonsCatalog.ts`. Runs before the filler loop below, so galleries come from there.
+for (const product of allProducts) applyWatsonsItem(product);
+
 // Per explicit direction: give every remaining catalog item (everything
 // besides the 3 SKUs already hand-enriched above) the same PDP-detail
 // fields too — same shared description/reviews, and a 10-image gallery
@@ -474,6 +526,7 @@ for (const product of allProducts) {
   if (product.variants?.length) {
     product.reviews = topUpOptionReviews(product, product.reviews ?? []);
   }
+  product.reviews = withOwnOptionLabels(product, product.reviews ?? []);
 }
 
 /**

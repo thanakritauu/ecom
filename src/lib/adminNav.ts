@@ -29,6 +29,8 @@ import {
   ShieldUserIcon,
   KeyIcon,
   BellIcon,
+  LayersIcon,
+  StarIcon,
 } from "~/components/admin/icons";
 
 export type AdminNavItem = {
@@ -114,6 +116,8 @@ export const adminNavGroups: AdminNavGroup[] = [
       // its own top-level sidebar group; it lives here, under "จัดการเนื้อหา",
       // renamed to "โปรโมชั่นแถบ" (internal route/model name unchanged).
       { label: "โปรโมชั่นแถบ", href: "/admin/notifications", icon: BellIcon },
+      // Read-only mirror of the storefront Footer (no Footer CMS yet).
+      { label: "Footer", href: "/admin/content/footer", icon: LayersIcon },
     ],
   },
   {
@@ -126,7 +130,10 @@ export const adminNavGroups: AdminNavGroup[] = [
     id: "reviews",
     label: "รีวิว",
     icon: ReviewsIcon,
-    items: [{ label: "รีวิวสินค้า", href: "/admin/reviews" }],
+    items: [
+      { label: "รีวิวสินค้า", href: "/admin/reviews", end: true, icon: StarIcon },
+      { label: "คลิปรีวิว TikTok", href: "/admin/reviews/tiktok", icon: ImageIcon },
+    ],
   },
   // CMS Dashboard & Admin UX Refinement §23-24 — "คลังสินค้า"/"สะสมแต้ม" moved
   // here, directly before "ตั้งค่า", from their previous spot between
@@ -144,7 +151,7 @@ export const adminNavGroups: AdminNavGroup[] = [
   },
   {
     id: "loyalty",
-    label: "สะสมแต้ม",
+    label: "สะสมคอยน์",
     icon: LoyaltyIcon,
     items: [
       { label: "สะสมคอยน์", href: "/admin/loyalty", end: true, icon: PointsCoinIcon },

@@ -28,7 +28,7 @@ export function PromoStrip() {
           <img src={promoBadge99} alt="" class="h-6 w-auto shrink-0" />
           <p class="min-w-0 truncate text-xs sm:text-sm">
             Charmiss MEGA SALE ลดสูงสุด 70% รับคูปองลดเพิ่ม 25%{" "}
-            <a href="/promotions" class="font-bold underline">
+            <a href="/promotion/promotions" class="font-bold underline">
               ช็อปเลย!
             </a>
           </p>

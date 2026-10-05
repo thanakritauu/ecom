@@ -2,7 +2,7 @@ import { createContext, createSignal, onMount, useContext, type Accessor, type J
 import { isServer } from "solid-js/web";
 import { type AdminCategory, type CategoryFormValues, type CategoryStatus, buildMockCategories, normalizeCategory } from "./adminCategories";
 
-const STORAGE_KEY = "charmiss:admin:catalog:categories";
+const STORAGE_KEY = "charmiss:admin:catalog:categories:v2"; // v2 = คุชชั่น / ลิป / แก้ม / ตาและคิ้ว / ดูแลผิว / กันแดดและบอดี้แคร์
 const TODAY_LABEL = "18 ก.ย. 2569";
 let nextId = 1000;
 

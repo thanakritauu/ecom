@@ -1,12 +1,11 @@
-import { createMemo, createSignal } from "solid-js";
+import { createMemo } from "solid-js";
 import { Header } from "~/components/shared/Header";
 import { Footer } from "~/components/shared/Footer";
 import { Container } from "~/components/shared/Container";
-import { ProductListingToolbar, type ListingView } from "~/components/products/ProductListingToolbar";
-import { ProductListingGrid } from "~/components/products/ProductListingGrid";
+import { ListingHeading } from "~/components/products/ListingHeading";
+import { ProductCollectionListing } from "~/components/products/ProductCollectionListing";
 import { useProductCatalog } from "~/lib/productCatalog";
 import { useCategoryContent } from "~/lib/categoryContent";
-import { PAGE_SIZE, sortProducts, type SortValue } from "~/lib/productListing";
 
 /**
  * Reusable Category Product Listing template (FACE/BROW/EYE/CHEEK/LIP) —
@@ -33,59 +32,19 @@ export function CategoryListingPage(props: { categorySlug: string; categoryTitle
   const categoryContent = useCategoryContent();
 
   const category = createMemo(() => categoryContent.categories().find((c) => c.slug === props.categorySlug));
-  const allProducts = createMemo(() => {
+  const products = createMemo(() => {
     const c = category();
     return c ? catalog.getByCategory(c.id) : [];
   });
 
-  const [sort, setSort] = createSignal<SortValue>("popular");
-  const [view, setView] = createSignal<ListingView>("grid");
-  const [visibleCount, setVisibleCount] = createSignal(PAGE_SIZE);
-  const [loadingMore, setLoadingMore] = createSignal(false);
-
-  const sorted = createMemo(() => sortProducts(allProducts(), sort()));
-  const visibleProducts = createMemo(() => sorted().slice(0, visibleCount()));
-
-  const handleSortChange = (next: SortValue) => {
-    setSort(next);
-    setVisibleCount(PAGE_SIZE);
-  };
-
-  const loadMore = async () => {
-    setLoadingMore(true);
-    await new Promise((resolve) => setTimeout(resolve, 350 + Math.random() * 200));
-    setVisibleCount((n) => n + PAGE_SIZE);
-    setLoadingMore(false);
-  };
-
   return (
     <>
       <Header />
-      <main class="flex flex-col overflow-x-hidden bg-white py-6">
-        <Container width="wide" class="flex flex-col gap-4">
-          <ProductListingToolbar
-            title={props.categoryTitle}
-            resultCount={sorted().length}
-            totalCount={allProducts().length}
-            view={view()}
-            onViewChange={setView}
-            sort={sort()}
-            onSortChange={handleSortChange}
-            activeFilterCount={0}
-          />
-
-          <ProductListingGrid
-            products={visibleProducts()}
-            view={view()}
-            status="idle"
-            hasActiveFilters={false}
-            hasMore={visibleCount() < sorted().length}
-            loadingMore={loadingMore()}
-            onLoadMore={loadMore}
-            onRetry={() => {}}
-            onClearFilters={() => {}}
-            fullWidth
-          />
+      {/* Same layout as every nav page: centred heading, then the view/sort row, then the products. */}
+      <main class="flex flex-col overflow-x-hidden bg-white pb-6 pt-6 sm:pt-8 lg:pt-10">
+        <Container width="wide" class="flex flex-col gap-3 sm:gap-4">
+          <ListingHeading title={category()?.name || props.categoryTitle} description={category()?.description} />
+          <ProductCollectionListing products={products()} />
         </Container>
       </main>
       <Footer />

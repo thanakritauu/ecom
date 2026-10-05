@@ -9,7 +9,7 @@ import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { MarketingRowActionsMenu } from "~/components/admin/marketing/MarketingRowActionsMenu";
 import { InventoryIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { MARKETING_STATUS_META, formatMarketingDate, formatCouponDiscount, type MarketingStatus } from "~/lib/adminMarketing";
+import { MARKETING_STATUS_META, formatMarketingDate, formatCouponDiscount, formatMarketingDateShort, type MarketingStatus } from "~/lib/adminMarketing";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
 import { pushToast } from "~/lib/toast";
 
@@ -98,6 +98,15 @@ export default function AdminCouponDetailPage() {
                   <Row label="ส่วนลดสูงสุด" value={c().maxDiscount ? formatAdminCurrency(c().maxDiscount!) : "ไม่จำกัด"} />
                   <Row label="จำนวนสิทธิ์ทั้งหมด" value={c().usageLimit ? c().usageLimit!.toLocaleString("th-TH") : "ไม่จำกัด"} />
                   <Row label="จำกัดต่อลูกค้า" value={c().perCustomerLimit ? `${c().perCustomerLimit} ครั้ง` : "ไม่จำกัด"} />
+                </Section>
+
+                <Section title="การแสดงผลหน้าร้าน">
+                  <Row label="แสดงในหน้าแรก" value={c().showOnHome ? "แสดง" : "ไม่แสดง"} />
+                  <Row label="แสดงในหน้าชำระเงิน" value={c().showAtCheckout ? "แสดง" : "ไม่แสดง"} />
+                  <Row label="ข้อความวันหมดอายุบนคูปอง" value={`หมดอายุ ${formatMarketingDateShort(c().endDate)}`} />
+                  <Show when={c().discountType === "percentage"}>
+                    <p class="text-xs text-ink-gray">หน้าชำระเงินของร้านตอนนี้รองรับเฉพาะคูปองลดเป็นจำนวนเงิน (฿)</p>
+                  </Show>
                 </Section>
               </div>
 

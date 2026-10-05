@@ -11,6 +11,8 @@ import { NavIcon } from "~/components/shared/NavIcon";
 import {
   NAVIGATION_TARGET_TYPE_LABELS,
   NAVIGATION_VISIBILITY_META,
+  BOTTOM_NAV_PROMOTION_ITEM_ID,
+  BOTTOM_NAV_PROMOTION_FALLBACK_HREF,
   type NavigationItem,
   type NavigationItemFormValues,
 } from "~/lib/adminNavigation";
@@ -51,6 +53,9 @@ export default function AdminNavigationPage() {
 
   const tree = createMemo(() => buildNavigationTree(navigation.items(), lookups));
   const rows = createMemo(() => flattenNavigationTree(tree()));
+  /** Exactly what the storefront's `navigationContent.visibleTree()` keeps — visible + target live, top level only (Header's rail never renders children). */
+  const storefrontItems = createMemo(() => tree().filter((i) => i.visible && i.available));
+  const bottomNavPromotionHref = () => storefrontItems().find((i) => i.id === BOTTOM_NAV_PROMOTION_ITEM_ID)?.href ?? BOTTOM_NAV_PROMOTION_FALLBACK_HREF;
 
   const [formOpen, setFormOpen] = createSignal(false);
   const [editing, setEditing] = createSignal<NavigationItem | undefined>(undefined);
@@ -174,6 +179,9 @@ export default function AdminNavigationPage() {
                         <StatusBadge tone={NAVIGATION_VISIBILITY_META[item.visible ? "visible" : "hidden"].tone}>
                           {NAVIGATION_VISIBILITY_META[item.visible ? "visible" : "hidden"].label}
                         </StatusBadge>
+                        <Show when={item.id === BOTTOM_NAV_PROMOTION_ITEM_ID}>
+                          <span class="rounded-pill bg-surface-pink px-2 py-0.5 text-[11px] font-medium text-brand-pink">แท็บ “โปรโมชั่น” แถบล่าง</span>
+                        </Show>
                         <Show when={childCount(item.id) > 0}>
                           <span class="text-xs text-ink-placeholder">{childCount(item.id)} เมนูย่อย</span>
                         </Show>
@@ -221,6 +229,36 @@ export default function AdminNavigationPage() {
           </For>
         </div>
       </Show>
+
+      {/* Storefront sync — same filter, same `NavIcon`, same sizes (24px mobile / 32px desktop) and weight rule (semibold when the item has an icon) as Header.tsx's pink category rail. */}
+      <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+        <h2 class="text-base font-semibold text-ink">ตัวอย่างแถบเมนูบนหน้าร้าน</h2>
+        <p class="text-xs text-ink-gray">แสดงเฉพาะเมนูที่เปิดแสดงและปลายทางพร้อมใช้งาน ตามลำดับเดียวกับหน้าร้าน (เมนูย่อยไม่แสดงในแถบนี้)</p>
+        <For each={[{ label: "Desktop", icon: "size-8", text: "text-base", gap: "gap-6" }, { label: "Mobile", icon: "size-6", text: "text-sm", gap: "gap-2" }]}>
+          {(device) => (
+            <div class="flex flex-col gap-1.5">
+              <p class="text-xs font-medium text-ink-gray">{device.label}</p>
+              <div class={`flex overflow-x-auto rounded-card bg-brand-pink px-4 py-3 ${device.gap}`}>
+                <For each={storefrontItems()} fallback={<span class="text-sm text-white/80">ไม่มีเมนูที่แสดงบนหน้าร้าน</span>}>
+                  {(item) => (
+                    <span
+                      class={`flex shrink-0 items-center gap-1 whitespace-nowrap px-2 text-white ${device.text}`}
+                      classList={{ "font-semibold": !!item.icon, "font-medium": !item.icon }}
+                    >
+                      <NavIcon icon={item.icon} class={`${device.icon} shrink-0`} />
+                      {item.label}
+                    </span>
+                  )}
+                </For>
+              </div>
+            </div>
+          )}
+        </For>
+        <p class="text-xs text-ink-gray">
+          แถบเมนูด้านล่าง (มือถือ/แท็บเล็ต): แท็บ “โปรโมชั่น” ไปที่ <span class="font-medium text-ink">{bottomNavPromotionHref()}</span> — ตามเมนู {BOTTOM_NAV_PROMOTION_ITEM_ID} (Flash Sale)
+          ถ้าเมนูนั้นถูกซ่อนหรือปลายทางยังไม่พร้อม จะใช้ {BOTTOM_NAV_PROMOTION_FALLBACK_HREF}
+        </p>
+      </div>
 
       <NavigationItemFormDrawer
         open={formOpen()}

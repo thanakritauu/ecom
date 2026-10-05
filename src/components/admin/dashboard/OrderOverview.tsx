@@ -4,8 +4,8 @@ import { ORDER_STATUS_META, type OrderStatus } from "~/lib/adminOrders";
 import { useAdminOrders } from "~/lib/adminOrderStore";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 
-/** A lean, representative slice of the full 8-status model (Phase 04) — enough to answer "what needs attention right now" without turning this widget into the full Orders list. */
-const STATUS_ORDER: OrderStatus[] = ["pending_payment", "processing", "shipped", "delivered", "cancelled"];
+/** The storefront's full 6-status model (same order as the customer's timeline) — small enough to show every status. */
+const STATUS_ORDER: OrderStatus[] = ["pending_payment", "preparing", "handed_over", "shipping", "completed", "cancelled"];
 
 /**
  * PART 9 (Phase 02) / PART 22 (Phase 04) — a live snapshot of order counts by
@@ -21,7 +21,7 @@ export function OrderOverview() {
   });
 
   return (
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       <For each={STATUS_ORDER}>
         {(status) => {
           const meta = ORDER_STATUS_META[status];

@@ -36,7 +36,7 @@ const STATUS_FILTER_OPTIONS: SelectFilterConfig = {
   ],
 };
 
-/** Loyalty (Phase 08.3) — "ภารกิจ" as a Cordy CRM Integration view. Same read-only shell as "สะสมคอยน์"/"สมาชิก": no Add, no per-row edit/delete, only a mock re-sync. */
+/** Loyalty (Phase 08.3) — "ภารกิจ" as a Charmiss Club CRM Integration view. Same read-only shell as "สะสมคอยน์"/"สมาชิก": no Add, no per-row edit/delete, only a mock re-sync. */
 export default function AdminLoyaltyMissionsListPage() {
   const store = useAdminMissions();
   const navigate = useNavigate();
@@ -130,7 +130,7 @@ export default function AdminLoyaltyMissionsListPage() {
     setSyncingAll(true);
     await store.syncAll();
     setSyncingAll(false);
-    pushToast("Sync ข้อมูลจาก Cordy CRM เรียบร้อยแล้ว", "success");
+    pushToast("Sync ข้อมูลจาก Charmiss Club CRM เรียบร้อยแล้ว", "success");
   };
 
   const handleSyncSelected = async () => {
@@ -142,7 +142,7 @@ export default function AdminLoyaltyMissionsListPage() {
     pushToast(`Sync ${ids.length} รายการที่เลือกเรียบร้อยแล้ว`, "success");
   };
 
-  const openCordyCrm = () => pushToast("(จำลอง) กำลังเปิด Cordy CRM ในแท็บใหม่", "success");
+  const openCrm = () => pushToast("(จำลอง) กำลังเปิด Charmiss Club CRM ในแท็บใหม่", "success");
 
   const columns: DataTableColumn<AdminMission>[] = [
     {
@@ -197,13 +197,13 @@ export default function AdminLoyaltyMissionsListPage() {
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สะสมแต้ม", href: "/admin/loyalty" }, { label: "ภารกิจ" }]} />
-      <PageHeader title="ภารกิจ" description="ภารกิจที่ Sync มาจาก Cordy CRM" />
+      <PageHeader title="ภารกิจ" description="ภารกิจที่ Sync มาจาก Charmiss Club CRM" />
 
       <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div class="flex flex-col gap-2">
           <div class="flex items-center gap-2">
             <CheckCircleIcon class="size-5 text-success" />
-            <p class="text-sm font-semibold text-ink">เชื่อมต่อกับ Cordy CRM แล้ว</p>
+            <p class="text-sm font-semibold text-ink">เชื่อมต่อกับ Charmiss Club CRM แล้ว</p>
           </div>
           <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-gray">
             <span>Sync ล่าสุด: {store.lastSyncedAt()}</span>
@@ -211,8 +211,8 @@ export default function AdminLoyaltyMissionsListPage() {
           </div>
         </div>
         <div class="flex shrink-0 flex-wrap gap-2">
-          <Button variant="outline" onClick={openCordyCrm}>
-            จัดการใน Cordy CRM
+          <Button variant="outline" onClick={openCrm}>
+            จัดการใน Charmiss Club CRM
           </Button>
           <Button variant="primary" onClick={handleSyncAll} loading={syncingAll()}>
             <RefreshIcon class="size-4" /> Sync ข้อมูล
@@ -239,8 +239,8 @@ export default function AdminLoyaltyMissionsListPage() {
             fallback={
               <EmptyState
                 icon={<MissionFlagIcon />}
-                title={hasActiveFilters() ? "ไม่พบภารกิจที่ตรงกับการค้นหา" : "ยังไม่มีข้อมูลจาก Cordy CRM"}
-                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "ลอง Sync ข้อมูลจาก Cordy CRM อีกครั้ง"}
+                title={hasActiveFilters() ? "ไม่พบภารกิจที่ตรงกับการค้นหา" : "ยังไม่มีข้อมูลจาก Charmiss Club CRM"}
+                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "ลอง Sync ข้อมูลจาก Charmiss Club CRM อีกครั้ง"}
                 actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "Sync ข้อมูล"}
                 onAction={hasActiveFilters() ? clearFilters : handleSyncAll}
                 class="bg-surface-card shadow-card"

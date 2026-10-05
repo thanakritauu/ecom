@@ -4,12 +4,14 @@ import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { ChevronDownIcon, CloseXIcon } from "~/components/admin/icons";
 import { IconImageUploader } from "~/components/admin/IconImageUploader";
+import { PROMOTION_NAV_ICON_OPTIONS } from "~/lib/promotionNavIcons";
 import {
   NAVIGATION_TARGET_TYPES,
   NAVIGATION_TARGET_TYPE_LABELS,
   targetRequiresId,
   targetRequiresExternalUrl,
   collectDescendantIds,
+  BOTTOM_NAV_PROMOTION_ITEM_ID,
   type NavigationItem,
   type NavigationItemFormValues,
   type NavigationTargetType,
@@ -172,9 +174,42 @@ export function NavigationItemFormDrawer(props: {
                   disabled={props.saving}
                 />
 
-                <div class="flex flex-col gap-1.5">
+                <div class="flex flex-col gap-2">
                   <span class="text-sm font-medium text-ink">ไอคอน (ไม่บังคับ)</span>
+                  {/* Storefront sync — the preset artwork keys Header/MobileMenu render through `NavIcon` (Iconic Glow, Flash Sale, ...), picked by key; uploading an image below is the alternative. */}
+                  <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="ไอคอนสำเร็จรูป">
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={icon() === NO_ICON_KEY}
+                      disabled={props.saving}
+                      onClick={() => setIcon(NO_ICON_KEY)}
+                      class="flex h-14 w-16 flex-col items-center justify-center gap-0.5 rounded-media border text-[10px] text-ink-gray transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50"
+                      classList={{ "border-brand-pink bg-surface-pink": icon() === NO_ICON_KEY, "border-border hover:border-brand-pink": icon() !== NO_ICON_KEY }}
+                    >
+                      <span class="text-base leading-none">—</span>
+                      ไม่มี
+                    </button>
+                    <For each={PROMOTION_NAV_ICON_OPTIONS}>
+                      {(opt) => (
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={icon() === opt.key}
+                          disabled={props.saving}
+                          onClick={() => setIcon(opt.key)}
+                          class="flex h-14 w-16 flex-col items-center justify-center gap-0.5 rounded-media border text-[10px] text-ink transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50"
+                          classList={{ "border-brand-pink bg-surface-pink": icon() === opt.key, "border-border hover:border-brand-pink": icon() !== opt.key }}
+                        >
+                          <opt.Icon class="size-6" />
+                          <span class="max-w-full truncate px-1">{opt.label}</span>
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                  <span class="text-xs text-ink-gray">หรืออัปโหลดรูปไอคอนเอง</span>
                   <IconImageUploader value={icon()} onChange={setIcon} disabled={props.saving} />
+                  <span class="text-xs text-ink-gray">หน้าร้านแสดงไอคอนขนาด 24px (มือถือ) / 32px (เดสก์ท็อป) และชื่อเมนูที่มีไอคอนเป็นตัวหนา (semibold)</span>
                 </div>
 
                 <label class="flex flex-col gap-1.5">
@@ -193,6 +228,12 @@ export function NavigationItemFormDrawer(props: {
                     <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
                   </div>
                 </label>
+
+                <Show when={props.initial?.id === BOTTOM_NAV_PROMOTION_ITEM_ID}>
+                  <p class="rounded-card bg-surface-pink px-3 py-2 text-xs text-ink">
+                    เมนูนี้กำหนดปลายทางของแท็บ “โปรโมชั่น” ในแถบเมนูด้านล่างบนมือถือ/แท็บเล็ตด้วย — ถ้าซ่อนเมนูนี้ แท็บจะไปที่ /promotion/flash-sale
+                  </p>
+                </Show>
 
                 <Show when={needsTarget()}>
                   <label class="flex flex-col gap-1.5">

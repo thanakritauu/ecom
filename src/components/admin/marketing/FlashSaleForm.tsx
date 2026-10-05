@@ -6,7 +6,7 @@ import { ChevronDownIcon } from "~/components/admin/icons";
 import { ProductSelector } from "./ProductSelector";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { isValidDateRange, formatMarketingDate, type FlashSale, type FlashSaleItem, type MarketingStatus } from "~/lib/adminMarketing";
+import { isValidDateRange, formatMarketingDate, flashSaleOriginalPrice, type FlashSale, type FlashSaleItem, type MarketingStatus } from "~/lib/adminMarketing";
 
 const STATUS_OPTIONS: { value: MarketingStatus; label: string }[] = [
   { value: "draft", label: "แบบร่าง" },
@@ -21,6 +21,10 @@ export type FlashSaleFormValues = Omit<FlashSale, "id" | "createdAt" | "updatedA
  * Phase 07 #22/24 — Campaign fields + Product Selection, then a per-selected-
  * product Sale Price/Limit row (each product needs its own price, not one
  * shared discount) using real prices from the admin Product store.
+ * Mirrors the storefront's Flash Sale card: the sale price is the price on
+ * the card and can't be above the product's own storefront price; the
+ * quantity is the card's stock-bar total (sold out = "สินค้าหมด"); the end
+ * time is what the section's countdown counts down to.
  */
 export function FlashSaleForm(props: {
   initial?: FlashSale;
@@ -47,7 +51,7 @@ export function FlashSaleForm(props: {
   const setSelectedIds = (ids: string[]) => {
     setItems((current) => {
       const byId = new Map(current.map((i) => [i.productId, i]));
-      return ids.map((id) => byId.get(id) ?? { productId: id, salePrice: productStore.getById(id)?.price ?? 0, soldCount: 0 });
+      return ids.map((id) => byId.get(id) ?? { productId: id, salePrice: productStore.getById(id)?.price ?? 0, saleLimit: 30, soldCount: 0 });
     });
   };
 
@@ -62,6 +66,12 @@ export function FlashSaleForm(props: {
     if (!endDate()) next.endDate = "กรุณาเลือกวันสิ้นสุด";
     if (startDate() && endDate() && !dateRangeValid()) next.endDate = "วันสิ้นสุดต้องอยู่หลังวันเริ่ม";
     if (items().length === 0) next.items = "กรุณาเลือกสินค้าอย่างน้อย 1 รายการ";
+    for (const item of items()) {
+      const price = productStore.getById(item.productId)?.price;
+      if (!(item.salePrice > 0)) next[`price:${item.productId}`] = "กรุณากรอกราคาแฟลชเซล";
+      else if (price !== undefined && item.salePrice > price) next[`price:${item.productId}`] = `ต้องไม่สูงกว่าราคาหน้าร้าน ${formatAdminCurrency(price)}`;
+      if (item.saleLimit !== undefined && item.soldCount > item.saleLimit) next[`limit:${item.productId}`] = "ต้องไม่น้อยกว่าจำนวนที่ขายไปแล้ว";
+    }
     return next;
   };
 
@@ -117,6 +127,7 @@ export function FlashSaleForm(props: {
           </Section>
 
           <Section title="วันที่เริ่มต้น - สิ้นสุด">
+            <p class="text-sm text-ink-gray">เวลาสิ้นสุดคือเวลาที่ตัวนับถอยหลังในส่วน Flash Sale หน้าแรกนับลงไปถึง</p>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <TextField label="วันเริ่ม" required type="date" value={startDate()} onInput={(e) => setStartDate(e.currentTarget.value)} error={errors().startDate} disabled={saving()} />
               <TextField label="เวลาเริ่ม" type="time" value={startTime()} onInput={(e) => setStartTime(e.currentTarget.value)} disabled={saving()} />
@@ -134,6 +145,9 @@ export function FlashSaleForm(props: {
 
           <Show when={items().length > 0}>
             <Section title="ราคาแฟลชเซลต่อสินค้า">
+              <p class="text-sm text-ink-gray">
+                ราคาแฟลชเซลคือราคาที่แสดงบนการ์ดสินค้าในส่วน Flash Sale (ต้องไม่สูงกว่าราคาหน้าร้าน) ส่วนจำนวนสำหรับแฟลชเซลคือยอดรวมของแถบสต็อกบนการ์ด — ขายครบแล้วการ์ดจะแสดง "สินค้าหมด"
+              </p>
               <div class="flex flex-col gap-3">
                 <For each={items()}>
                   {(item) => {
@@ -145,9 +159,12 @@ export function FlashSaleForm(props: {
                           <p class="min-w-0 truncate text-sm text-ink">{product()?.name}</p>
                         </div>
                         <label class="flex flex-col gap-1 text-xs font-medium text-ink-gray">
-                          ราคาปกติ
-                          <span class="flex h-10 items-center rounded-card border border-border bg-surface-gray/40 px-2.5 text-sm text-ink-gray">
+                          ราคาหน้าร้าน
+                          <span class="flex h-10 items-center gap-1.5 rounded-card border border-border bg-surface-gray/40 px-2.5 text-sm text-ink-gray">
                             {formatAdminCurrency(product()?.price ?? 0)}
+                            <Show when={product()?.compareAtPrice}>
+                              <span class="text-xs text-ink-placeholder line-through">{formatAdminCurrency(flashSaleOriginalPrice(product()!))}</span>
+                            </Show>
                           </span>
                         </label>
                         <label class="flex flex-col gap-1 text-xs font-medium text-ink-gray">
@@ -160,9 +177,12 @@ export function FlashSaleForm(props: {
                             onInput={(e) => updateItem(item.productId, { salePrice: Number(e.currentTarget.value) })}
                             class="h-10 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                           />
+                          <Show when={errors()[`price:${item.productId}`]}>
+                            <span class="font-normal text-system-red">{errors()[`price:${item.productId}`]}</span>
+                          </Show>
                         </label>
                         <label class="flex flex-col gap-1 text-xs font-medium text-ink-gray">
-                          จำกัดจำนวน (ไม่บังคับ)
+                          จำนวนสำหรับแฟลชเซล
                           <input
                             type="number"
                             min="0"
@@ -170,6 +190,12 @@ export function FlashSaleForm(props: {
                             onInput={(e) => updateItem(item.productId, { saleLimit: e.currentTarget.value === "" ? undefined : Number(e.currentTarget.value) })}
                             class="h-10 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                           />
+                          <Show when={errors()[`limit:${item.productId}`]}>
+                            <span class="font-normal text-system-red">{errors()[`limit:${item.productId}`]}</span>
+                          </Show>
+                          <Show when={item.saleLimit !== undefined && !errors()[`limit:${item.productId}`]}>
+                            <span class="font-normal">ขายแล้ว {item.soldCount} · {item.soldCount >= item.saleLimit! ? "สินค้าหมด" : `เหลือ ${item.saleLimit! - item.soldCount}`}</span>
+                          </Show>
                         </label>
                       </div>
                     );

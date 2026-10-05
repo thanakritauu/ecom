@@ -16,7 +16,7 @@ import { MarketingStatusSummary } from "~/components/admin/marketing/MarketingSt
 import { MarketingRowActionsMenu } from "~/components/admin/marketing/MarketingRowActionsMenu";
 import { CouponQuickView } from "~/components/admin/marketing/CouponQuickView";
 import { RefreshIcon, InventoryIcon, PlusIcon } from "~/components/admin/icons";
-import { MARKETING_STATUS_META, formatMarketingDate, formatCouponDiscount, type Coupon, type MarketingStatus } from "~/lib/adminMarketing";
+import { MARKETING_STATUS_META, formatMarketingDate, formatCouponDiscount, formatCouponPlacement, type Coupon, type MarketingStatus } from "~/lib/adminMarketing";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
 import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
@@ -181,6 +181,7 @@ export default function AdminCouponListPage() {
     },
     { key: "code", label: "Code", render: (row) => <p class="font-mono font-medium text-ink">{row.code}</p> },
     { key: "discount", label: "Discount", render: (row) => <span class="font-medium text-ink">{formatCouponDiscount(row)}</span> },
+    { key: "placement", label: "Placement", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{formatCouponPlacement(row)}</span> },
     {
       key: "usage",
       label: "Usage",
@@ -277,7 +278,7 @@ export default function AdminCouponListPage() {
                       <p class="truncate font-mono font-semibold text-ink">{row.code}</p>
                       <StatusBadge class="shrink-0" tone={MARKETING_STATUS_META[row.status].tone}>{MARKETING_STATUS_META[row.status].label}</StatusBadge>
                     </div>
-                    <p class="truncate text-sm text-ink-gray">{formatCouponDiscount(row)}</p>
+                    <p class="truncate text-sm text-ink-gray">{formatCouponDiscount(row)} · แสดงที่ {formatCouponPlacement(row)}</p>
                     <p class="truncate text-xs text-ink-gray">{formatMarketingDate(row.startDate)} - {formatMarketingDate(row.endDate)}</p>
                     <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>
                   </button>

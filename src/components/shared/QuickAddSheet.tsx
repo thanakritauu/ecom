@@ -5,6 +5,7 @@ import { reviewsOfProduct } from "~/lib/productReviews";
 import { PurchaseFooter } from "./PurchaseFooter";
 import { SheetModal } from "./SheetModal";
 import { ReviewList, ReviewMediaViewer, type ReviewMediaViewerState } from "./ReviewList";
+import { CheckIcon } from "./icons";
 
 /**
  * Product Option Modal — a shortcut of the Product Detail Page: the same
@@ -237,9 +238,7 @@ function OptionTile(props: { option: VariantOption; selected: boolean; onSelect:
           <img src={props.option.image} alt="" loading="lazy" class="size-full object-cover" />
           <Show when={props.selected}>
             <span class="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-brand-pink text-white shadow-sm" aria-hidden="true">
-              <svg viewBox="0 0 16 16" fill="none" class="size-3">
-                <path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
+              <CheckIcon class="size-3" />
             </span>
           </Show>
         </span>

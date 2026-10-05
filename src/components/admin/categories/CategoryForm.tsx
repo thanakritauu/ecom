@@ -3,7 +3,7 @@ import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { Toggle } from "~/components/admin/Toggle";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
-import { slugifyCategory, type AdminCategory, type CategoryFormValues, type CategoryStatus } from "~/lib/adminCategories";
+import { slugifyCategory, categorySlugRouteWarning, categoryStorefrontHref, type AdminCategory, type CategoryFormValues, type CategoryStatus } from "~/lib/adminCategories";
 
 /**
  * One Create/Edit form shared by `/new` and `/:id/edit` — same "one form,
@@ -52,6 +52,7 @@ export function CategoryForm(props: {
     const cleanSlug = slugifyCategory(slug());
     if (!cleanSlug) next.slug = "กรุณากรอก Slug";
     else if (props.isSlugTaken(cleanSlug)) next.slug = "Slug นี้ถูกใช้ไปแล้ว กรุณาเลือก Slug อื่น";
+    else if (categorySlugRouteWarning(cleanSlug)?.tone === "error") next.slug = categorySlugRouteWarning(cleanSlug)!.message;
     return next;
   };
 
@@ -102,6 +103,15 @@ export function CategoryForm(props: {
             error={errors().slug}
             disabled={saving()}
           />
+          {/* Storefront sync — category pages live at the site root, one static route file per slug. */}
+          <div class="flex flex-col gap-1 text-xs sm:col-span-2">
+            <p class="text-ink-gray">
+              URL หน้าร้าน: <span class="font-medium text-ink">{categoryStorefrontHref(slugifyCategory(slug()) || "{slug}")}</span>
+            </p>
+            <Show when={!errors().slug && categorySlugRouteWarning(slugifyCategory(slug()))}>
+              {(w) => <p class={w().tone === "error" ? "font-medium text-system-red" : "font-medium text-system-yellow"}>⚠ {w().message}</p>}
+            </Show>
+          </div>
           <label class="flex flex-col gap-1.5 sm:col-span-2">
             <span class="text-sm font-medium text-ink">คำอธิบาย</span>
             <textarea
@@ -121,8 +131,10 @@ export function CategoryForm(props: {
             <label class="flex flex-col gap-1.5">
               <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
               <Toggle checked={status() === "active"} onChange={(checked) => setStatus(checked ? "active" : "inactive")} disabled={saving()} />
+              <span class="text-xs text-ink-gray">ปิดใช้งาน = ซ่อนจากเมนูหน้าร้าน</span>
             </label>
           </Show>
+          <p class="text-xs text-ink-gray sm:col-span-2">รูปหมวดหมู่: หน้าร้านไม่ได้แสดงรูปหมวดหมู่ในตอนนี้ จึงไม่มีช่องอัปโหลด (รูปเดิมที่มีอยู่จะถูกเก็บไว้)</p>
         </div>
       </Section>
 
