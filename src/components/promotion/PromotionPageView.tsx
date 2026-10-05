@@ -42,7 +42,7 @@ function SectionListing(props: { section: HomepageSection }) {
   return (
     <>
       <ListingHeading title={props.section.title || props.section.name} description={props.section.description} />
-      <ProductCollectionListing products={products()} />
+      <ProductCollectionListing products={products()} flashSale={props.section.productSource === "flash_sale"} />
     </>
   );
 }

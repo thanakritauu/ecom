@@ -119,6 +119,21 @@ export default function ProductsPage() {
   const visibleProducts = createMemo(() => filteredSorted().slice(0, visibleCount()));
   const draftResultCount = createMemo(() => filterProducts(products(), draftFilters(), facets()).length);
 
+  // A new search from the header while already on this page only changes `?search=` — pick it up (the
+  // effect below writes the same value back, so the two never loop).
+  createEffect(
+    on(
+      () => (typeof searchParams.search === "string" ? searchParams.search : ""),
+      (search) => {
+        if (search === appliedFilters().search) return;
+        setAppliedFilters((f) => ({ ...f, search }));
+        setDraftFilters((f) => ({ ...f, search }));
+        setVisibleCount(PAGE_SIZE);
+      },
+      { defer: true },
+    ),
+  );
+
   // Keep the URL in sync with applied state — real navigation (refresh, back/forward, share link) all work.
   createEffect(
     on([appliedFilters, sort, view, collectionId, brandSlug], ([filters, sortValue, viewValue, collection, brand]) => {
@@ -209,7 +224,12 @@ export default function ProductsPage() {
       <Header />
       <main class="flex flex-col overflow-x-hidden bg-white pb-6 pt-6 sm:pt-8 lg:pt-10">
         <Container width="wide" class="flex flex-col gap-3 sm:gap-4">
-          <ListingHeading title="สินค้าทั้งหมด" description="รวมทุกผลิตภัณฑ์ความงามจาก Charmiss ไว้ในที่เดียว เลือกช้อปได้ตามใจ" />
+          <Show
+            when={appliedFilters().search.trim()}
+            fallback={<ListingHeading title="สินค้าทั้งหมด" description="รวมทุกผลิตภัณฑ์ความงามจาก Charmiss ไว้ในที่เดียว เลือกช้อปได้ตามใจ" />}
+          >
+            {(q) => <ListingHeading title={`ผลการค้นหา “${q()}”`} description={`พบสินค้า ${filteredSorted().length} รายการ`} />}
+          </Show>
           <ProductListingToolbar
             hideTitle
             totalCount={filteredSorted().length}

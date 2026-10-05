@@ -150,9 +150,9 @@ export default function AdminComponentPreviewPage() {
         </Show>
       </Gallery>
 
-      <Gallery title="Product Card + Flash Sale Badge" description="ริบบอนแฟลชเซล + ตัวนับถอยหลัง (หากเวลาสิ้นสุดของข้อมูลตัวอย่างผ่านไปแล้ว ตัวนับอาจแสดง 0 — เป็นพฤติกรรมจริงของ Component เดียวกับหน้าร้าน ไม่ใช่ข้อผิดพลาด)">
+      <Gallery title="Product Card แบบ Flash Sale" description="การ์ด Flash Sale — แถบนับถอยหลังบนรูป + แถบสต๊อก &quot;เหลืออีก X ชิ้น&quot; แสดงเฉพาะใน Section Flash Sale หน้าแรก และเมนู Flash Sale เท่านั้น (หน้าอื่นแสดงเป็นการ์ดปกติ)">
         <Show when={flashSaleProduct()} fallback={<EmptyNote />}>
-          {(p) => <div class="max-w-[260px]"><ProductCard product={p()} /></div>}
+          {(p) => <div class="max-w-[260px]"><ProductCard product={p()} flashSale /></div>}
         </Show>
       </Gallery>
 

@@ -41,6 +41,8 @@ export function ProductRail(props: {
   rows?: number;
   /** Home only — mobile/tablet show a horizontal swipe rail instead of the 2-column grid. */
   swipe?: boolean;
+  /** Flash Sale cards (countdown + stock bar) — only Flash Sale sections pass this; see `ProductCard`. */
+  flashSale?: boolean;
 }) {
   const products = () => (props.rows ? props.products.slice(0, props.rows * 5) : props.products);
   const desktopGridClass = props.rows
@@ -71,14 +73,14 @@ export function ProductRail(props: {
           <For each={products()}>
             {(product) => (
               <div class="w-[44%] min-w-[150px] max-w-[260px]">
-                <ProductCard product={product} />
+                <ProductCard product={product} flashSale={props.flashSale} />
               </div>
             )}
           </For>
         </div>
       </Show>
       <div class={gridClass()}>
-        <For each={products()}>{(product) => <ProductCard product={product} />}</For>
+        <For each={products()}>{(product) => <ProductCard product={product} flashSale={props.flashSale} />}</For>
       </div>
     </>
   );

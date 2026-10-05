@@ -381,7 +381,7 @@ export function ProductForm(props: {
       fallback={<p class="p-4 text-sm text-ink-gray sm:p-5">อัปโหลดรูปสินค้าอย่างน้อย 1 รูปเพื่อดูตัวอย่าง Product Card</p>}
     >
       <div class="p-4 sm:p-5">
-        <ProductCard product={previewProduct()} />
+        <ProductCard product={previewProduct()} flashSale={flashSaleEnabled()} />
       </div>
     </Show>
   );

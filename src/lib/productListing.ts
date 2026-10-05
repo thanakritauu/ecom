@@ -1,5 +1,6 @@
 import type { Product } from "./types";
 import { isNewArrival } from "./products";
+import { matchesSearch } from "./productSearch";
 
 /**
  * Product / Category / Brand / Collection Source-of-Truth Cleanup (§4/§8/§26)
@@ -98,9 +99,9 @@ export function hasActiveFilters(filters: ProductFilters): boolean {
 }
 
 export function filterProducts(products: Product[], filters: ProductFilters, facets: CategoryFacet[]): Product[] {
-  const query = filters.search.trim().toLowerCase();
   return products.filter((product) => {
-    if (query && !product.name.toLowerCase().includes(query)) return false;
+    // Same matcher as the header autocomplete, so its "ดูผลการค้นหาทั้งหมด (N)" equals this page's count.
+    if (!matchesSearch(product.name, filters.search)) return false;
     if (filters.categories.length > 0) {
       const matchesCategory = filters.categories.some((key) => facets.find((f) => f.key === key)?.matches(product));
       if (!matchesCategory) return false;

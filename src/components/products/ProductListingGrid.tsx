@@ -24,6 +24,8 @@ export function ProductListingGrid(props: {
    * established, not a new one invented here.
    */
   fullWidth?: boolean;
+  /** Flash Sale cards (countdown + stock bar) — the Flash Sale menu page only. */
+  flashSale?: boolean;
 }) {
   /**
    * User-test feedback (Global Responsive pass) — Tablet must stay at 2
@@ -70,7 +72,7 @@ export function ProductListingGrid(props: {
               }
             >
               <div class={`w-full ${gridClass()}`}>
-                <For each={props.products}>{(product) => <ProductCard product={product} variant={props.view} />}</For>
+                <For each={props.products}>{(product) => <ProductCard product={product} variant={props.view} flashSale={props.flashSale} />}</For>
               </div>
             </Show>
           }

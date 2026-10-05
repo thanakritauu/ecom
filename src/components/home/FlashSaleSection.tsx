@@ -49,7 +49,7 @@ export function FlashSaleSection() {
           </div>
 
           <div class="flex flex-col gap-3 sm:gap-4">
-            <ProductRail products={flashSaleProducts()} rows={2} swipe />
+            <ProductRail products={flashSaleProducts()} rows={2} swipe flashSale />
             <a
               href="/promotion/flash-sale"
               class="flex min-h-[44px] w-full items-center justify-center rounded-pill bg-gradient-to-r from-brand-pink to-[#ffb700] px-4 py-2 text-lg font-medium leading-[normal] text-white transition-opacity duration-200 hover:opacity-90 sm:text-xl sm:leading-[normal]"

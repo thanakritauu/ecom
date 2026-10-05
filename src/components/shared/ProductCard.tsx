@@ -44,7 +44,14 @@ const MAX_SHADE_SLOTS = 5;
  * wishlist stays subtly visible there and the whole image/name is always the
  * "view detail" tap target).
  */
-export function ProductCard(props: { product: Product; variant?: "grid" | "list" }) {
+/**
+ * Two kinds of card: the normal card, and the Flash Sale card (countdown bar
+ * over the photo + stock progress bar "เหลืออีก X ชิ้น"). `flashSale` opts a
+ * card into the Flash Sale kind — only the Home Flash Sale section and the
+ * Flash Sale menu page (sections sourced from `flash_sale`) pass it, so a
+ * flash-sale product shows as a normal card everywhere else.
+ */
+export function ProductCard(props: { product: Product; variant?: "grid" | "list"; flashSale?: boolean }) {
   const variant = () => props.variant ?? "grid";
   const cart = useCart();
   const wishlist = useWishlist();
@@ -66,7 +73,8 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
   const discountPercent = () => getDiscountPercent(props.product);
   // Same sale state as before: shown while `flashSaleEndsAt` is set and the
   // product is in stock; the countdown clamps at 00:00:00 on expiry.
-  const flashSaleActive = () => !!props.product.flashSaleEndsAt && !outOfStock();
+  const flashSaleActive = () => !!props.flashSale && !!props.product.flashSaleEndsAt && !outOfStock();
+  const showStockProgress = () => flashSaleActive() && !!props.product.stockLeft && !!props.product.stockTotal;
   const selectedVariant = () => props.product.variants?.find((v) => v.id === selectedVariantId());
   // Falls back to the default photo whenever the selected shade has no photo
   // of its own — today that's every SKU (see products.ts), so this is wired
@@ -318,8 +326,16 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
 
             <ProductMeta rating={props.product.rating} soldCount={props.product.soldCount} />
 
-            {/* Below sm the card is ~150px wide — the CTA scales with it (14px, tighter padding) instead of wrapping to two lines. */}
-            <CardAddToCart class="mt-auto w-full" />
+            {/* Stock bar + CTA are pinned to the card's bottom together, so the bar sits at the same height on every
+                card in a row whether or not that card has a shade row above it. */}
+            <div class="mt-auto flex flex-col gap-2">
+              <Show when={showStockProgress()}>
+                <StockProgressBar stockLeft={props.product.stockLeft!} stockTotal={props.product.stockTotal!} />
+              </Show>
+
+              {/* Below sm the card is ~150px wide — the CTA scales with it (14px, tighter padding) instead of wrapping to two lines. */}
+              <CardAddToCart class="w-full" />
+            </div>
           </div>
 
           {quickAddSheet}
@@ -345,7 +361,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
 
           <ShadeSelector compact />
 
-          <Show when={props.product.stockLeft && props.product.stockTotal}>
+          <Show when={showStockProgress()}>
             <div class="sm:max-w-[280px]">
               <StockProgressBar compact stockLeft={props.product.stockLeft!} stockTotal={props.product.stockTotal!} />
             </div>

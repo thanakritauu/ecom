@@ -122,6 +122,7 @@ function ProductSectionBlock(props: { section: HomepageSection; productRows?: nu
   const gridProducts = () => (props.productRows ? products().slice(0, props.productRows * 5) : products());
   const href = () => useDestinationHref(props.section.cta.destination);
   const isGrid = () => props.section.productSource === "manual";
+  const flashSale = () => props.section.productSource === "flash_sale";
   const emptyMessage = () => {
     if (props.section.productSource === "collection") return "ยังไม่มีสินค้าในคอลเลกชันนี้";
     if (props.section.productSource === "category") return "ยังไม่มีสินค้าในหมวดหมู่นี้";
@@ -144,7 +145,7 @@ function ProductSectionBlock(props: { section: HomepageSection; productRows?: nu
         <Show when={products().length > 0} fallback={<p class="py-10 text-center text-ink-gray">{emptyMessage()}</p>}>
           <Show
             when={isGrid()}
-            fallback={<ProductRail products={products()} columns={5} rows={props.productRows} swipe={props.swipe} />}
+            fallback={<ProductRail products={products()} columns={5} rows={props.productRows} swipe={props.swipe} flashSale={flashSale()} />}
           >
             <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 xl:grid-cols-5 xl:gap-6">
               <For each={gridProducts()}>{(product) => <ProductCard product={product} />}</For>
