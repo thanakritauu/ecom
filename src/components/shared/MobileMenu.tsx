@@ -5,7 +5,9 @@ import { A } from "@solidjs/router";
 import { useAuth } from "~/lib/auth";
 import { useNavigationContent } from "~/lib/navigationContent";
 import { NavIcon } from "./NavIcon";
+import { ChevronIcon } from "./ChevronIcon";
 import type { ResolvedNavigationItem } from "~/lib/navigationResolver";
+import { pushToast } from "~/lib/toast";
 
 export function MobileMenu(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const auth = useAuth();
@@ -41,10 +43,12 @@ export function MobileMenu(props: { open: boolean; onOpenChange: (open: boolean)
             >
               <A
                 href="/account"
-                class="flex min-h-[44px] items-center rounded-pill bg-surface-pink px-4 font-medium text-ink"
+                class="flex min-h-[44px] items-center justify-between gap-2 rounded-pill bg-surface-pink pl-4 pr-3 font-medium text-ink"
                 onClick={() => props.onOpenChange(false)}
               >
-                {auth.user()?.name}
+                <span class="min-w-0 truncate">{auth.user()?.name}</span>
+                {/* Shows the row opens the account page. */}
+                <ChevronIcon direction="right" class="size-5 text-ink-gray" />
               </A>
             </Show>
 
@@ -59,6 +63,23 @@ export function MobileMenu(props: { open: boolean; onOpenChange: (open: boolean)
             </nav>
 
             <LanguageSwitcher tone="menu" />
+
+            {/* Signed-in only — same sign-out as the Account sidebar, pinned to the drawer's bottom. */}
+            <Show when={auth.isAuthenticated()}>
+              <div class="mt-auto border-t border-surface-gray pt-4">
+                <button
+                  type="button"
+                  class="flex min-h-[44px] w-full items-center rounded-lg px-2 text-left text-base font-medium text-danger-strong lg:hover:bg-danger-soft"
+                  onClick={() => {
+                    auth.logout();
+                    props.onOpenChange(false);
+                    pushToast("ออกจากระบบสำเร็จ", "success", "แล้วพบกันใหม่นะ 👋");
+                  }}
+                >
+                  ออกจากระบบ
+                </button>
+              </div>
+            </Show>
           </Dialog.Content>
         </div>
       </Dialog.Portal>

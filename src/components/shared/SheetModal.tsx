@@ -24,12 +24,17 @@ export function SheetModal(props: {
   layer?: JSX.Element;
   height?: "fixed" | "auto";
   onEscapeKeyDown?: (e: KeyboardEvent) => void;
+  /** Opened from inside another SheetModal (e.g. a coupon's details over the coupon picker): sits one layer higher so its overlay dims the sheet underneath. */
+  nested?: boolean;
 }) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay class="fixed inset-0 z-40 bg-ink/40 data-[expanded]:animate-toast-in" />
-        <div class="fixed inset-x-0 bottom-0 z-50 flex justify-center sm:inset-0 sm:items-center sm:p-4">
+        <Dialog.Overlay class="fixed inset-0 bg-ink/40 data-[expanded]:animate-toast-in" classList={{ "z-40": !props.nested, "z-[60]": props.nested }} />
+        <div
+          class="fixed inset-x-0 bottom-0 flex justify-center sm:inset-0 sm:items-center sm:p-4"
+          classList={{ "z-50": !props.nested, "z-[70]": props.nested }}
+        >
           <Dialog.Content
             onEscapeKeyDown={props.onEscapeKeyDown}
             class="relative flex w-full max-w-[668px] flex-col overflow-hidden rounded-t-card bg-white py-4 shadow-card sm:rounded-card"

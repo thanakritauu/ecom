@@ -9,6 +9,7 @@ import {
 } from "~/lib/productListing";
 import type { Product } from "~/lib/types";
 import { Button } from "../shared/Button";
+import { CheckIcon } from "../shared/icons";
 
 /**
  * Shared Filter UI — the exact same component renders inline in the desktop
@@ -16,9 +17,10 @@ import { Button } from "../shared/Button";
  * PART 23/24's "one Filter System, not two".
  *
  * "ประเภทการใช้งาน" (category) is an Instant Filter per direct request —
- * `onToggleCategory` applies immediately, no Apply step. Search and price
- * range stay on the explicit "ใช้ตัวกรอง" / "ล้างตัวกรอง" Apply flow
- * Figma shows for them; only the category group's interaction model changed.
+ * `onToggleCategory` applies immediately, no Apply step. Price range stays
+ * on the explicit "ใช้ตัวกรอง" / "ล้างตัวกรอง" Apply flow Figma shows for it.
+ * No search box here — searching is the header's autocomplete search
+ * (`/products?search=`), shown above the grid as a removable chip.
  */
 export function FilterPanel(props: {
   products: Product[];
@@ -33,18 +35,6 @@ export function FilterPanel(props: {
   const bounds = () => getPriceBounds(props.products);
   return (
     <div class="flex w-full flex-col gap-4 rounded-2xl bg-surface-pink p-4">
-      <div class="flex h-11 items-center overflow-hidden rounded-pill border border-surface-gray bg-white px-4">
-        <SearchIcon class="size-5 shrink-0 text-ink-placeholder" />
-        <input
-          type="search"
-          value={props.draft.search}
-          onInput={(e) => props.onChange({ ...props.draft, search: e.currentTarget.value })}
-          placeholder="ค้นหาในหมวดนี้..."
-          aria-label="ค้นหาในหมวดนี้"
-          class="ml-2 h-full w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-placeholder"
-        />
-      </div>
-
       <div class="flex flex-col gap-2">
         <p class="text-base font-semibold text-ink">ประเภทการใช้งาน</p>
         <div class="flex flex-col gap-1">
@@ -174,22 +164,5 @@ export function FilterPanel(props: {
         </Button>
       </div>
     </div>
-  );
-}
-
-function SearchIcon(props: { class?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" class={props.class} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <circle cx="11" cy="11" r="7" />
-      <path d="M21 21l-4.3-4.3" stroke-linecap="round" />
-    </svg>
-  );
-}
-
-function CheckIcon(props: { class?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" class={props.class} fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-      <path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
   );
 }

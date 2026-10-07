@@ -188,9 +188,11 @@ export function QuickAddSheet(props: {
       </Show>
 
       <section aria-labelledby="qa-reviews-heading" class="flex flex-col gap-2">
+        {/* `-top-4` cancels SheetModal's body `pt-4`: a sticky box stops at the scroll container's padding edge, so
+            `top-0` left a 16px strip of scrolling reviews visible between the modal header and this bar. */}
         <h3
           id="qa-reviews-heading"
-          class="sticky top-0 z-10 -mx-6 border-b border-border bg-white px-6 pt-2"
+          class="sticky -top-4 z-10 -mx-6 border-b border-border bg-white px-6 pt-2"
         >
           <span class="-mb-px flex h-8 w-fit items-center border-b border-brand-pink text-sm font-medium text-ink">
             รีวิว

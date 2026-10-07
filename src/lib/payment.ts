@@ -3,16 +3,18 @@ import type { PaymentMethodId } from "./cartSelectors";
 /**
  * Payment layer for the one-page Checkout (prototype) — card, PromptPay, TrueMoney Wallet.
  *
- * Checkout and the payment UI only talk to `PaymentProvider`; nothing
- * Beam-specific lives anywhere else. Today's provider is a mock: no Beam
- * API, no keys, no merchant id, no webhook, no verification. To go live,
- * implement `PaymentProvider` against Beam (charges/QR sessions created
- * server-side, card data tokenized by Beam's own client SDK — never by us)
- * and swap `getPaymentProvider()`'s return value.
+ * Payment is a hosted redirect: Checkout (and the account pay-later page)
+ * only picks a method, then opens Beam's payment page in a new window with
+ * the order ref, amount and method. Beam collects the card / shows the
+ * PromptPay QR / asks for the TrueMoney wallet — none of that is on our
+ * pages — and reports the result back. Today that page is our own mock
+ * (`/payment/beam`): no Beam API, no keys, no merchant id, no webhook, no
+ * verification. To go live, create the Beam checkout session server-side,
+ * open its URL instead of `beamCheckoutUrl()`, and confirm the result from
+ * Beam's webhook — never from the browser message alone.
  *
- * Card data: the UI hands the provider only a mock token + last 4 digits +
- * brand. Full card numbers/CVV live only in the form's in-memory signals
- * and are never stored or sent anywhere.
+ * Card data never touches the storefront. (The card helpers at the bottom
+ * are only for the account "saved cards" page's mock vault.)
  */
 
 export type PaymentRequest = {
@@ -26,29 +28,11 @@ export type CardBrand = "visa" | "mastercard" | "jcb" | "amex" | "unknown";
 
 export type CardToken = { token: string; last4: string; brand: CardBrand };
 
-export type PaymentFailureReason = "card_declined" | "insufficient_funds" | "expired" | "wallet_failed" | "network_error";
+export type PaymentFailureReason = "card_declined" | "insufficient_funds" | "expired" | "wallet_failed" | "network_error" | "cancelled";
 
 export type PaymentResult =
   | { status: "succeeded"; reference: string; method: PaymentMethodId; detail?: string }
   | { status: "failed"; reason: PaymentFailureReason };
-
-export type PromptPaySession = {
-  id: string;
-  /** Opaque string the QR encodes. Mock today — NOT a real PromptPay/EMV payload. */
-  qrPayload: string;
-  /** Epoch ms. */
-  expiresAt: number;
-};
-
-export type PromptPayStatus = "pending" | "succeeded" | "expired";
-
-export interface PaymentProvider {
-  chargeCard(request: PaymentRequest, card: CardToken): Promise<PaymentResult>;
-  createPromptPaySession(request: PaymentRequest): Promise<PromptPaySession>;
-  getPromptPayStatus(sessionId: string): Promise<PromptPayStatus>;
-  /** TrueMoney Wallet — the gateway sends a payment request to the wallet linked to this phone; resolves once the customer approves (or it fails/times out). */
-  chargeTrueMoney(request: PaymentRequest, phone: string): Promise<PaymentResult>;
-}
 
 export const FAILURE_MESSAGES: Record<PaymentFailureReason, { title: string; body: string }> = {
   card_declined: { title: "ธนาคารปฏิเสธรายการ", body: "ลองตรวจสอบข้อมูลบัตรอีกครั้ง ใช้บัตรใบอื่น หรือเปลี่ยนเป็นช่องทางชำระเงินอื่น" },
@@ -56,68 +40,106 @@ export const FAILURE_MESSAGES: Record<PaymentFailureReason, { title: string; bod
   expired: { title: "QR Code หมดอายุแล้ว", body: "รายการยังไม่ถูกเรียกเก็บเงิน กดลองอีกครั้งเพื่อสร้าง QR ใหม่" },
   wallet_failed: { title: "TrueMoney Wallet ชำระไม่สำเร็จ", body: "ยอดเงินใน Wallet อาจไม่พอ หรือคำขอชำระหมดเวลา ลองอีกครั้งหรือเปลี่ยนช่องทางชำระเงิน" },
   network_error: { title: "การเชื่อมต่อขัดข้อง", body: "ยังไม่มีการเรียกเก็บเงิน กรุณาลองอีกครั้งในอีกสักครู่" },
+  cancelled: { title: "ยกเลิกการชำระเงินแล้ว", body: "ยังไม่มีการเรียกเก็บเงิน กดลองอีกครั้งเพื่อเปิดหน้าชำระเงินของ Beam ใหม่ หรือเปลี่ยนช่องทางชำระเงิน" },
 };
 
 // ---------------------------------------------------------------------------
-// Mock provider (prototype only)
+// Beam hosted payment page (mock today — `/payment/beam`)
 // ---------------------------------------------------------------------------
 
-/** Test cards for UX review — same idea as a gateway's sandbox test numbers. */
-export const MOCK_TEST_CARDS = {
-  success: "4242 4242 4242 4242",
-  declined: "4000 0000 0000 0002",
-  insufficientFunds: "4000 0000 0000 9995",
-} as const;
+/** `postMessage` type the Beam page sends its opener. */
+export const BEAM_RESULT_TYPE = "charmiss:beam-result";
+/** localStorage — same message, for same-tab mode (popup blocked) and if the opener lost its reference. */
+export const BEAM_RESULT_KEY = "charmiss:beam-result";
+/** sessionStorage — the payment a same-tab redirect left to pick up on return. */
+const BEAM_PENDING_KEY = "charmiss:beam-pending";
+const BEAM_WINDOW_NAME = "charmiss-beam";
 
-/** TrueMoney test numbers: any valid mobile number succeeds; one ending in 0000 fails. */
-export const MOCK_TRUEMONEY_FAIL_SUFFIX = "0000";
+export type BeamResultMessage = { type: typeof BEAM_RESULT_TYPE; orderRef: string; result: PaymentResult };
+export type BeamPending = PaymentRequest & { returnPath: string };
 
-export type MockPaymentOptions = {
-  /** Forces every payment to fail (`?mockPayment=fail`). */
-  forceFail?: boolean;
-  /** Short QR lifetime to review the expired state (`?mockPayment=expire`). */
-  shortQrExpiry?: boolean;
-};
+/** Only order ref, amount, method and where to come back to — never anything personal. */
+export function beamCheckoutUrl(request: PaymentRequest, returnPath: string): string {
+  const q = new URLSearchParams({ ref: request.orderNumber, amount: request.amount.toFixed(2), method: request.method, return: returnPath });
+  return `/payment/beam?${q}`;
+}
 
-export type MockPaymentProvider = PaymentProvider;
+/** Same-origin relative path only, so `?return=` can't send the shopper anywhere else. */
+export const safeReturnPath = (path: string | undefined) => (path && path.startsWith("/") && !path.startsWith("//") ? path : "/checkout");
 
-/** Mock only: a PromptPay QR counts as "scanned and paid" this long after it's created (no on-screen test control). */
-const MOCK_PROMPTPAY_AUTO_PAID_MS = 8000;
+/**
+ * Opens Beam in a new window — call it synchronously inside the click
+ * handler, or popup blockers stop it. Blocked → same-tab navigation; the
+ * pending payment is kept so the page can pick the result up on return.
+ * Returns the window (popup mode) or `null` (navigating away).
+ */
+export function openBeamCheckout(request: PaymentRequest, returnPath: string): Window | null {
+  const url = beamCheckoutUrl(request, returnPath);
+  try {
+    localStorage.removeItem(BEAM_RESULT_KEY);
+  } catch {
+    /* storage blocked — postMessage still works */
+  }
+  // No `noopener`: Beam's page needs `window.opener` to post the result back.
+  const win = window.open(url, BEAM_WINDOW_NAME, "popup,width=480,height=760");
+  if (win) return win;
+  try {
+    sessionStorage.setItem(BEAM_PENDING_KEY, JSON.stringify({ ...request, returnPath } satisfies BeamPending));
+  } catch {
+    /* without storage the result can't be picked up — the shopper retries */
+  }
+  window.location.assign(url);
+  return null;
+}
 
-export function createMockPaymentProvider(opts: MockPaymentOptions = {}): MockPaymentProvider {
-  const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  const ref = () => `MOCK-${Date.now().toString(36).toUpperCase()}`;
-  const sessions = new Map<string, { expiresAt: number; paidAt: number }>();
+export function parseBeamMessage(data: unknown): BeamResultMessage | undefined {
+  const m = data as BeamResultMessage | null;
+  return m && typeof m === "object" && m.type === BEAM_RESULT_TYPE && typeof m.orderRef === "string" && m.result ? m : undefined;
+}
 
-  return {
-    async chargeCard(request, card) {
-      await delay(1800);
-      if (opts.forceFail || card.token.endsWith("0002")) return { status: "failed", reason: "card_declined" };
-      if (card.token.endsWith("9995")) return { status: "failed", reason: "insufficient_funds" };
-      return { status: "succeeded", reference: ref(), method: request.method, detail: `${card.brand.toUpperCase()} •••• ${card.last4}` };
-    },
-    async createPromptPaySession(request) {
-      await delay(600);
-      const id = `pp_${Date.now().toString(36)}`;
-      const expiresAt = Date.now() + (opts.shortQrExpiry ? 20_000 : 10 * 60_000);
-      sessions.set(id, { expiresAt, paidAt: Date.now() + MOCK_PROMPTPAY_AUTO_PAID_MS });
-      return { id, expiresAt, qrPayload: `MOCK|CHARMISS|${request.orderNumber}|${request.amount.toFixed(2)}` };
-    },
-    async getPromptPayStatus(sessionId) {
-      const s = sessions.get(sessionId);
-      if (!s) return "expired";
-      if (Date.now() >= s.expiresAt) return "expired";
-      if (opts.shortQrExpiry) return "pending"; // `?mockPayment=expire`: let the QR run out
-      if (Date.now() >= s.paidAt) return opts.forceFail ? "expired" : "succeeded";
-      return "pending";
-    },
-    async chargeTrueMoney(request, phone) {
-      await delay(2200);
-      const digits = phone.replace(/\D/g, "");
-      if (opts.forceFail || digits.endsWith(MOCK_TRUEMONEY_FAIL_SUFFIX)) return { status: "failed", reason: "wallet_failed" };
-      return { status: "succeeded", reference: ref(), method: request.method, detail: `TrueMoney •••• ${digits.slice(-4)}` };
-    },
-  };
+export function readBeamResult(): BeamResultMessage | undefined {
+  try {
+    const raw = localStorage.getItem(BEAM_RESULT_KEY);
+    return raw ? parseBeamMessage(JSON.parse(raw)) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Same-tab return: the pending payment for this page (if any) and its result (if Beam already answered). */
+export function takeBeamReturn(returnPath: string): { pending: BeamPending; message?: BeamResultMessage } | undefined {
+  let pending: BeamPending | undefined;
+  try {
+    const raw = sessionStorage.getItem(BEAM_PENDING_KEY);
+    pending = raw ? (JSON.parse(raw) as BeamPending) : undefined;
+  } catch {
+    return undefined;
+  }
+  if (!pending || pending.returnPath !== returnPath) return undefined;
+  const message = readBeamResult();
+  return { pending, message: message?.orderRef === pending.orderNumber ? message : undefined };
+}
+
+export function clearBeamState() {
+  try {
+    localStorage.removeItem(BEAM_RESULT_KEY);
+    sessionStorage.removeItem(BEAM_PENDING_KEY);
+  } catch {
+    /* nothing to clear */
+  }
+}
+
+/** Beam page side: localStorage first (fallback), then the opener if there is one. Returns whether it went to an opener. */
+export function reportBeamResult(message: BeamResultMessage): boolean {
+  try {
+    localStorage.setItem(BEAM_RESULT_KEY, JSON.stringify(message));
+  } catch {
+    /* opener message below still carries it */
+  }
+  const opener = window.opener as Window | null;
+  if (!opener || opener.closed) return false;
+  opener.postMessage(message, window.location.origin);
+  return true;
 }
 
 /** Mock tokenization — stands in for the gateway SDK. Keeps only last 4 + brand; the token is NOT derived from the full number. */

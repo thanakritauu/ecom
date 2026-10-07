@@ -41,14 +41,16 @@ export function BottomNav() {
         <span class="text-xs font-medium">โปรโมชั่น</span>
       </A>
       <A href="/cart" class={itemClass}>
-        <span class="relative">
+        {/* Fly-to-cart target on tablet / mobile (see ~/lib/flyToCart). */}
+        <span class="relative" data-cart-target="bottom-nav">
           <CartIcon class="size-6" />
-          <Show when={cart.count() > 0}>
+          <Show when={cart.badgeCount() > 0}>
             <span
-              class="absolute -right-2 -top-1.5 flex size-4 items-center justify-center rounded-pill bg-system-red text-[10px] font-medium text-white"
+              data-cart-badge
+              class="absolute -right-2 -top-1.5 flex size-4 animate-badge-pop items-center justify-center rounded-pill bg-system-red text-[10px] font-medium text-white"
               aria-hidden="true"
             >
-              {cart.count()}
+              {cart.badgeCount()}
             </span>
           </Show>
         </span>

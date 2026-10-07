@@ -7,7 +7,7 @@ import { useProductCatalog } from "~/lib/productCatalog";
 import { Button } from "./Button";
 import { formatTHB } from "./PriceDisplay";
 import { CartItemRow } from "./CartItemRow";
-import { GiftPromotionBanner } from "./GiftPromotionBanner";
+import { GiftPromotionBanner, rearmGiftCelebration } from "./GiftPromotionBanner";
 import { GiftItemRow } from "./GiftItemRow";
 
 /**
@@ -23,6 +23,8 @@ export function CartDrawer() {
   const resolvedLines = createMemo(() => resolveCartLines(cart.lines(), catalog.products()));
   const total = createMemo(() => computeCartTotal(resolvedLines()));
   const gift = createMemo(() => resolveGiftPromotion(total(), catalog.products()));
+  // Always mounted (Header renders the drawer on every page), so it sees every unlocked → locked drop.
+  rearmGiftCelebration(() => gift()?.unlocked);
 
   return (
     <Dialog open={cart.drawerOpen()} onOpenChange={(open) => (open ? cart.openDrawer() : cart.closeDrawer())}>
@@ -84,13 +86,14 @@ export function CartDrawer() {
                   >
                     ชำระเงิน
                   </A>
-                  <A
-                    href="/cart"
+                  {/* Keeps the shopper where they are — just closes the mini cart. */}
+                  <button
+                    type="button"
                     onClick={() => cart.closeDrawer()}
-                    class="flex h-12 shrink-0 items-center justify-center rounded-pill border border-white px-5 text-sm font-medium text-white transition-colors duration-150 hover:bg-white/10"
+                    class="flex h-12 shrink-0 items-center justify-center rounded-pill border border-white px-5 text-sm font-medium text-white transition-colors duration-150 lg:hover:bg-white/10"
                   >
-                    ดูตะกร้า
-                  </A>
+                    เลือกสินค้าต่อ
+                  </button>
                 </div>
               </div>
             </Show>

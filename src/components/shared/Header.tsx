@@ -157,17 +157,19 @@ export function Header(props: { minimal?: boolean }) {
             <button
               type="button"
               onClick={() => cart.openDrawer()}
+              data-cart-target="header"
               aria-label={`ตะกร้าสินค้า มี ${cart.count()} ชิ้น`}
               class="relative flex min-h-[44px] items-center gap-1 rounded-pill px-2 text-white lg:bg-white lg:px-4 lg:py-2 lg:text-brand-pink"
             >
               <CartIcon class="size-6" />
               <span class="hidden text-sm font-medium lg:inline">ตะกร้า</span>
-              <Show when={cart.count() > 0}>
+              <Show when={cart.badgeCount() > 0}>
                 <span
+                  data-cart-badge
                   class="absolute -right-1 -top-1 flex size-5 animate-badge-pop items-center justify-center rounded-pill bg-system-red text-[11px] font-medium text-white lg:static lg:ml-1 lg:size-6 lg:text-sm"
                   aria-hidden="true"
                 >
-                  {cart.count()}
+                  {cart.badgeCount()}
                 </span>
               </Show>
             </button>

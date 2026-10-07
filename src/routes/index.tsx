@@ -10,6 +10,7 @@ import { NewArrivalsSection } from "~/components/home/NewArrivalsSection";
 import { TrendingSection } from "~/components/home/TrendingSection";
 import { ReviewsSection } from "~/components/home/ReviewsSection";
 import { FAQSection } from "~/components/home/FAQSection";
+import { PromoPopup } from "~/components/home/PromoPopup";
 
 export default function Home() {
   const homepage = useHomepageContent();
@@ -38,6 +39,7 @@ export default function Home() {
         <FAQSection />
       </main>
       <Footer />
+      <PromoPopup />
     </>
   );
 }

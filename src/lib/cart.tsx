@@ -1,4 +1,4 @@
-import { createContext, createMemo, createSignal, onMount, useContext, type JSX } from "solid-js";
+import { createContext, createEffect, createMemo, createSignal, onMount, useContext, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
 import type { CartLine } from "./types";
 
@@ -6,12 +6,19 @@ type CartContextValue = {
   lines: () => CartLine[];
   count: () => number;
   /**
+   * What the Header / BottomNav cart badges show — `count()`, except that
+   * right after an add it holds the old number until the fly-to-cart photo
+   * lands (`releaseCartBadge` in ~/lib/flyToCart), so the number changes as
+   * the product "arrives".
+   */
+  badgeCount: () => number;
+  /**
    * Stands in for `POST /cart/lines`. Resolves ~500ms later like a real
    * network call and has a small chance to reject so the Quick Add UI has a
-   * real error path to recover from until the backend is wired up. Opens
-   * the shared Cart Drawer on success by default — every "Add to Cart" entry
-   * point (Product Card, Product Detail, ...) gets that for free instead of
-   * each one remembering to open it itself.
+   * real error path to recover from until the backend is wired up. Does NOT
+   * open the Cart Drawer — add-to-cart feedback is the fly-to-cart animation
+   * (`~/lib/flyToCart`), which each entry point plays on success; the Drawer
+   * only opens from Header's cart button. `openDrawer: true` opts back in.
    */
   addLine: (productId: string, variantId?: string, qty?: number, opts?: { openDrawer?: boolean }) => Promise<void>;
   /** Clamped to >=1 by the caller (QuantityStepper already does this) — this just persists whatever it's given. */
@@ -36,6 +43,22 @@ function readInitial(): CartLine[] {
   } catch {
     return [];
   }
+}
+
+// Module-level so ~/lib/flyToCart (plain module, no context) can release it. Only ever flipped on the client.
+const [badgeHeld, setBadgeHeld] = createSignal(false);
+let badgeHoldTimer: ReturnType<typeof setTimeout> | undefined;
+
+function holdCartBadge() {
+  setBadgeHeld(true);
+  clearTimeout(badgeHoldTimer);
+  // Safety net: never leave the badge stale if no flight ever lands (e.g. the add came from somewhere without one).
+  badgeHoldTimer = setTimeout(() => setBadgeHeld(false), 2500);
+}
+
+export function releaseCartBadge() {
+  clearTimeout(badgeHoldTimer);
+  setBadgeHeld(false);
 }
 
 export function CartProvider(props: { children: JSX.Element }) {
@@ -86,6 +109,8 @@ export function CartProvider(props: { children: JSX.Element }) {
     if (Math.random() < 0.06) {
       throw new Error("ADD_TO_CART_FAILED");
     }
+    // The fly-to-cart animation releases this when it lands; opening the drawer instead shows the new count at once.
+    if (!opts?.openDrawer) holdCartBadge();
     const current = lines();
     const existing = current.find((l) => l.productId === productId && l.variantId === variantId);
     if (existing) {
@@ -97,7 +122,7 @@ export function CartProvider(props: { children: JSX.Element }) {
     } else {
       persist([...current, { productId, variantId, qty }]);
     }
-    if (opts?.openDrawer !== false) openDrawer();
+    if (opts?.openDrawer) openDrawer();
   };
 
   const updateQty: CartContextValue["updateQty"] = (productId, variantId, qty) => {
@@ -113,12 +138,18 @@ export function CartProvider(props: { children: JSX.Element }) {
   const clearCart = () => persist([]);
 
   const count = createMemo(() => lines().reduce((sum, l) => sum + l.qty, 0));
+  const [badgeCount, setBadgeCount] = createSignal(0);
+  createEffect(() => {
+    const current = count();
+    if (!badgeHeld()) setBadgeCount(current);
+  });
 
   return (
     <CartContext.Provider
       value={{
         lines,
         count,
+        badgeCount,
         addLine,
         updateQty,
         removeLine,

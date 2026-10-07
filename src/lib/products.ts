@@ -16,7 +16,7 @@ import productCushionHero from "~/assets/images/hero/hero-banner-1.png";
 // locally from the three UGC photos above (no external/stock footage).
 import reviewDemoVideo from "~/assets/videos/review-demo.mp4";
 import type { Product, ProductVariant, Review } from "./types";
-import { applyWatsonsItem } from "./watsonsCatalog";
+import { applyWatsonsItem, watsonsPhoto } from "./watsonsCatalog";
 
 /**
  * The Figma export only shipped one real product photograph — every
@@ -54,9 +54,8 @@ const shadeVariants = [
 /**
  * Cushion-foundation shade family — hex values pulled directly from the
  * Figma "ColorOption" swatch export (node 65:1491–1499) so this one is
- * pixel-accurate, not approximated. Shades 06–08 are appended purely to give
- * the card's shade row (max 5 slots, the 5th becomes "+N") its overflow
- * state in this catalog; drop them once real SKUs define how many shades exist.
+ * pixel-accurate, not approximated. Only 01–05 are used (the Iconic Glow
+ * cushion, see `PRODUCT_OPTIONS`); 06–08 stay as spare swatch data.
  */
 const cushionShadeVariants = [
   { id: "cushion-01", label: "เบอร์ 01", color: "#FBDBC4" },
@@ -483,9 +482,81 @@ export const allProducts: Product[] = [
   ...featuredCollectionProducts,
 ];
 
+/**
+ * Which products have options, and what their swatch is — decided per SKU by
+ * product type, not by which rail a mock id sits in (every id showing the same
+ * Watsons item gets the same options):
+ *
+ * - No options: single-version products — setting spray, cleanser, toner pad,
+ *   body serum, black eyeliner, the pH-changing blush gel (one gel, the color
+ *   comes from your skin) and the one-colorway Blooming Heart palette.
+ * - Color swatch (flat hex): anything sold in shades — cushion / foundation /
+ *   concealer / powder (skin tones), lip, blush, highlighter, brow pencil.
+ * - Image swatch: eyeshadow palettes, whose "shade" is a whole palette — the
+ *   circle shows that palette's own photo (both Glowlogram palettes are real).
+ *
+ * `strip` is the shade written into the Watsons name; it's removed from the
+ * product name (the chosen option is shown separately), and that shade is
+ * always one of the options. Shade names/hexes beyond the one in the name are
+ * mock stand-ins until real SKU data arrives. Ids are stable per SKU; the two
+ * Figma-sourced sets keep their original ids so hand-written reviews still match.
+ */
+type OptionSpec = { strip?: string; options: ProductVariant[] };
+
+const shades = (code: string, list: [string, string][], soldOut: string[] = []): ProductVariant[] =>
+  list.map(([label, color], i) => ({ id: `${code}-${String(i + 1).padStart(2, "0")}`, label, color, soldOut: soldOut.includes(label) || undefined }));
+
+const PRODUCT_OPTIONS: Record<string, OptionSpec> = {
+  // Face — skin-tone swatches
+  "331785": { strip: " 01 ไลท์เบจ", options: cushionShadeVariants.slice(0, 5) },
+  "321317": { strip: " 01 ไอวอรี่", options: shades("321317", [["01 ไอวอรี่", "#F6DCC8"], ["02 เนเชอรัล", "#EBC3A3"], ["03 แซนด์", "#DDAE88"]]) },
+  "318246": { strip: " 01 ไอวอรี่", options: shades("318246", [["01 ไอวอรี่", "#F5D9C3"], ["02 เบจ", "#E9C09F"], ["03 ฮันนี่", "#D8A57F"]]) },
+  "315574": { strip: " 01 ไอวอรี่", options: shades("315574", [["01 ไอวอรี่", "#F4D8C1"], ["02 เนเชอรัล เบจ", "#E6BC99"], ["03 ฮันนี่ เบจ", "#D6A27B"]]) },
+  "319696": { strip: " 03 ฮันนี่ เบจ", options: shades("319696", [["01 ไอวอรี่", "#F4D8C1"], ["02 เนเชอรัล เบจ", "#E6BC99"], ["03 ฮันนี่ เบจ", "#D6A27B"]]) },
+  "315871": { strip: " 03 มีเดียม เบจ", options: shades("315871", [["01 ไลท์ เบจ", "#F2D3BA"], ["02 เนเชอรัล เบจ", "#E7BE9D"], ["03 มีเดียม เบจ", "#D7A47F"]]) },
+  "331796": { strip: " 01 ไอวอรี่", options: shades("331796", [["01 ไอวอรี่", "#F4DAC4"], ["02 เบจ", "#E5BC98"]]) },
+  "321337": { strip: " 01 พิงค์ เพเทิล", options: shades("321337", [["01 พิงค์ เพเทิล", "#F6D3D6"], ["02 ทรานส์ลูเซนท์", "#F2E6DC"]]) },
+  // Lip — lip-color swatches
+  "321336": { strip: " 01 เชอร์รี่ บลอสซั่ม", options: lipTintVariants },
+  "329293": { strip: " 01 พิ้งค์ กวาว่า สแปลช", options: shades("329293", [["01 พิ้งค์ กวาว่า สแปลช", "#F06A8A"], ["02 พีช ซันเซ็ท", "#F28C6B"], ["03 เชอร์รี่ ค็อกเทล", "#C93A52"]]) },
+  "324429": { strip: " 01 โรส เมอแร็งก์", options: shades("324429", [["01 โรส เมอแร็งก์", "#D9788B"], ["02 พีช เมอแร็งก์", "#E9967A"], ["03 มอคค่า เมอแร็งก์", "#A86A5E"]]) },
+  "321356": { strip: " 01 โรซี่", options: shades("321356", [["01 โรซี่", "#F29BB0"], ["02 พีชชี่", "#F7B48F"], ["03 เคลียร์ สปาร์คเคิล", "#F3E3E8"]]) },
+  "320523": { strip: " 02 มูนเบอร์รี่", options: shades("320523", [["01 สตรอว์เบอร์รี่", "#E8516B"], ["02 มูนเบอร์รี่", "#B4476A"], ["03 พีช มูน", "#F09A7C"]]) },
+  "319697": { strip: " 01 พิงค์ เลดี้", options: shades("319697", [["01 พิงค์ เลดี้", "#EF6F94"], ["02 ออเรนจ์ ป๊อป", "#F48A4D"], ["03 เรด ป๊อป", "#D73A45"]]) },
+  "312741": { strip: " GL07 พิงค์กี้ ทวิงเคิล", options: shades("312741", [["GL03 คอรัล ทวิงเคิล", "#F38C78"], ["GL05 โรส ทวิงเคิล", "#D9789A"], ["GL07 พิงค์กี้ ทวิงเคิล", "#F2A3BF"]]) },
+  "307056": { strip: " 03 ทรูเลิฟ", options: shades("307056", [["01 ฟอลอินเลิฟ", "#C9606A"], ["02 สวีทเลิฟ", "#D97A74"], ["03 ทรูเลิฟ", "#A5404A"]]) },
+  "305507": { strip: " 02", options: shades("305507", [["01 พิงค์ จูซ", "#F4A3B1"], ["02 พีช จูซ", "#F07F7A"], ["03 เบอร์รี่ จูซ", "#E2617A"]]) },
+  // Cheek — blush / highlighter swatches
+  "321315": { strip: " 01 พิ้งค์ ไฮไลท์เตอร์ ริบบอน", options: shades("321315", [["01 พิ้งค์ ไฮไลท์เตอร์ ริบบอน", "#F6C6D3"], ["02 พีช ไฮไลท์เตอร์ ริบบอน", "#F7C2A2"]]) },
+  "318249": { strip: " 01 พิงค์ ไดมอนด์", options: shades("318249", [["01 พิงค์ ไดมอนด์", "#F7D3E0"], ["02 แชมเปญ ไดมอนด์", "#F1D9B5"]]) },
+  "315579": { strip: " 01 โซดา พ็อป", options: shades("315579", [["01 โซดา พ็อป", "#F28AA0"], ["02 พีช พ็อป", "#F59D7E"], ["03 เบอร์รี่ พ็อป", "#D9607E"]]) },
+  "313321": { strip: " 03 เบบ คลับ", options: shades("313321", [["01 พิงค์ คลับ", "#F4A6B8"], ["02 พีช คลับ", "#F5B193"], ["03 เบบ คลับ", "#E58C8C"]]) },
+  "313082": { strip: " 02 แฟนซี ยู", options: shades("313082", [["01 ลัฟลี่ ยู", "#F29CB0"], ["02 แฟนซี ยู", "#EF8A80"], ["03 สวีท ยู", "#E07A95"]]) },
+  // Eye — palettes as image swatches, brow pencil as color swatches
+  "308565": { strip: " 05 ฟรอสเต็ด ไนน์ตี้ส์", options: glowlogramPalettes() },
+  "302889": { strip: " 01 สวีท โมเม้นท์", options: glowlogramPalettes() },
+  "301153": { strip: " 02 บราวน์ ชูก้า", options: shades("301153", [["01 เกรย์ บราวน์", "#6E625A"], ["02 บราวน์ ชูก้า", "#7A5238"], ["03 ดาร์ก บราวน์", "#4A3426"]]) },
+};
+
+function glowlogramPalettes(): ProductVariant[] {
+  return [
+    { id: "glowlogram-01", label: "01 สวีท โมเม้นท์", color: "#E9B8B0", image: watsonsPhoto("302889"), swatchImage: watsonsPhoto("302889") },
+    { id: "glowlogram-05", label: "05 ฟรอสเต็ด ไนน์ตี้ส์", color: "#C7B8D8", image: watsonsPhoto("308565"), swatchImage: watsonsPhoto("308565") },
+  ];
+}
+
+function applyProductOptions(product: Product, code: string) {
+  const spec = PRODUCT_OPTIONS[code];
+  product.variants = spec ? spec.options.map((v) => ({ ...v })) : undefined;
+  if (spec?.strip && product.name.endsWith(spec.strip)) product.name = product.name.slice(0, -spec.strip.length);
+}
+
 // Mock content: every product shows a real Charmiss product (name, photo, price, category) from the
 // Watsons listing — see `watsonsCatalog.ts`. Runs before the filler loop below, so galleries come from there.
-for (const product of allProducts) applyWatsonsItem(product);
+for (const product of allProducts) {
+  const item = applyWatsonsItem(product);
+  if (item) applyProductOptions(product, item.code);
+}
 
 // Per explicit direction: give every remaining catalog item (everything
 // besides the 3 SKUs already hand-enriched above) the same PDP-detail

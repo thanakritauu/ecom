@@ -72,7 +72,11 @@ export const RAIL_ASSIGNMENTS: Record<string, string[]> = {
 };
 
 /** Puts a real Charmiss product's name, photo, prices and category on a mock product (by its rail + position). */
-export function applyWatsonsItem(product: Product) {
+/** Front photo of a Watsons item by its code (e.g. a palette option's own photo). */
+export const watsonsPhoto = (code: string) => photo(code);
+
+/** Returns the applied item, so the caller can attach per-SKU data (shade options) by `code`. */
+export function applyWatsonsItem(product: Product): WatsonsItem | undefined {
   const prefix = Object.keys(RAIL_ASSIGNMENTS).find((p) => product.id.startsWith(p));
   if (!prefix) return;
   const index = Number(product.id.slice(prefix.length)) - 1;
@@ -87,4 +91,5 @@ export function applyWatsonsItem(product: Product) {
   product.compareAtPrice = item.compareAtPrice;
   product.discountPercent = item.compareAtPrice ? Math.round(((item.compareAtPrice - item.price) / item.compareAtPrice) * 100) : undefined;
   product.category = item.category;
+  return item;
 }

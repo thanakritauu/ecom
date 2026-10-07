@@ -107,7 +107,7 @@ export default function CartPage() {
           <section aria-labelledby="cart-recommended-heading" class="bg-gradient-to-b from-surface-pink to-white pb-6 pt-6 sm:pt-8 lg:pt-10">
             <Container width="wide" class="flex flex-col gap-4 sm:gap-5 lg:gap-6">
               <h2 id="cart-recommended-heading" class="text-xl font-bold text-ink lg:text-2xl">
-                ช็อปเพิ่มอีกนิด...ให้ครบดีล
+                แนะนำสำหรับคุณ
               </h2>
               <ProductRail products={recommended()} columns={5} />
             </Container>

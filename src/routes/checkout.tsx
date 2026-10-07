@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onMount, Show } from "solid-js";
+import { createMemo, createSignal, Show } from "solid-js";
 import { A, useSearchParams } from "@solidjs/router";
 import { Header } from "~/components/shared/Header";
 import { Footer } from "~/components/shared/Footer";
@@ -25,9 +25,7 @@ import { AddressSection } from "~/components/checkout/AddressSection";
 import { DeliverySection } from "~/components/checkout/DeliverySection";
 import { PaymentSection } from "~/components/checkout/PaymentSection";
 import { createCheckoutPayment, type PaidResult } from "~/components/checkout/checkoutPayment";
-import { createMockPaymentProvider } from "~/lib/payment";
 import { generateOrderNumber } from "~/lib/orderNumber";
-import { resolveSavedCards, type SavedCard } from "~/lib/savedCards";
 import { CheckoutOrderSummary } from "~/components/checkout/CheckoutOrderSummary";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
 
@@ -80,14 +78,9 @@ export default function CheckoutPage() {
   const [submitError, setSubmitError] = createSignal<string>();
   const [order, setOrder] = createSignal<{ number: string; total: number; coinsEarned: number; payment: PaidResult } | undefined>();
 
-  // One-page checkout: address → billing → delivery → payment, paid right here.
-  // The payment provider is the only payment dependency; mock today
-  // (`?mockPayment=fail` forces failures, `?mockPayment=expire` shortens the PromptPay QR).
+  // One-page checkout: address → billing → delivery → payment method, then
+  // Beam's payment page (new window) takes the money — see `createCheckoutPayment`.
   const [pendingOrderNumber, setPendingOrderNumber] = createSignal("");
-  const paymentProvider = createMockPaymentProvider({
-    forceFail: searchParams.mockPayment === "fail",
-    shortQrExpiry: searchParams.mockPayment === "expire",
-  });
 
   const totals = createMemo(() =>
     computeCheckoutTotals({ subtotal: subtotal(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: computeShippingFee(subtotal()) }),
@@ -134,28 +127,20 @@ export default function CheckoutPage() {
     // Display-only mockup — no loyalty-points backend exists, so this never
     // touches `auth`'s `coinBalance`; same amount-paid-for-merchandise basis
     // (shipping fee excluded) and tier multiplier as the account's order pages.
-    const coinsEarned = computeCoinsEarned(totals().total - totals().shippingFee, tier().id);
-    setOrder({ number: pendingOrderNumber(), total: totals().total, coinsEarned, payment });
+    // The amount Beam charged — in same-tab mode this page reloaded and lost coupon/coin picks, so not `totals()`.
+    const coinsEarned = computeCoinsEarned(payment.amount - totals().shippingFee, tier().id);
+    setOrder({ number: payment.orderNumber, total: payment.amount, coinsEarned, payment });
     cart.clearCart();
     window.scrollTo({ top: 0 });
   };
 
-  // Saved cards come from the (mock) card vault — read on the client only (localStorage), so SSR renders none.
-  const [savedCards, setSavedCards] = createSignal<SavedCard[]>([]);
-  onMount(() => {
-    const mode = searchParams.card === "saved" || searchParams.card === "none" ? searchParams.card : undefined;
-    setSavedCards(resolveSavedCards(mode, auth.isAuthenticated()));
-  });
-
   const payment = createCheckoutPayment({
-    provider: paymentProvider,
     amount: () => totals().total,
     // Reserved on the first pay attempt, so a failed/retried payment stays on the same order.
     orderNumber: () => pendingOrderNumber() || setPendingOrderNumber(generateOrderNumber()),
     validateOrder,
     onPaid,
-    savedCards,
-    canSaveCard: () => auth.isAuthenticated() || searchParams.card === "saved",
+    returnPath: () => "/checkout",
   });
 
   return (
@@ -302,9 +287,7 @@ export default function CheckoutPage() {
           shippingFee={totals().shippingFee}
           total={totals().total}
           ctaLabel={payment.ctaLabel()}
-          ctaLoadingLabel={payment.ctaLoadingLabel()}
-          onCta={() => void payment.pay()}
-          ctaLoading={payment.busy()}
+          onCta={payment.pay}
           ctaDisabled={hasUnavailableItem()}
           error={submitError()}
         />

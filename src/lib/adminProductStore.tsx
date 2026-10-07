@@ -124,57 +124,27 @@ export const ADMIN_PRODUCT_STATUS_META: Record<AdminProductStatus, { label: stri
 const TODAY_LABEL = "17 ก.ย. 2569";
 
 /**
- * A pool completely separate from any product's own Gallery — none of these
- * eight images appear as anyone's `Product.image`/`.images` in products.ts
- * (verified by inspection), so seeding variant photos from here can never
- * coincide with that product's own Gallery. Real per-shade photography
- * doesn't exist in this catalog (customer-facing `ProductVariant.image` is
- * always unset), so this is the mock stand-in — but a stand-in drawn from a
- * source that is structurally guaranteed independent, not a copy of the
- * Gallery it sits next to.
+ * Seeds admin's per-variant rows from the product's own options
+ * (`applyProductOptions` in products.ts). Option photo = that option's own
+ * photo when it has one (the Glowlogram palettes), else the product's photo —
+ * this catalog has no per-shade photography, and a real product photo reads
+ * better in the option modal than unrelated stand-in art. The card circle
+ * follows the option's swatch: its photo for image swatches, else its hex.
  */
-const VARIANT_MOCK_IMAGE_POOL = [
-  categoryBrow,
-  categoryCheek,
-  categoryEye,
-  categoryFace,
-  categoryLip,
-  categoryTools,
-  orderItemFoundation,
-  orderItemLipTint,
-];
-
-/**
- * Seeds admin's richer per-variant rows from whatever shade variants a
- * product already has, so a freshly-loaded catalog isn't all empty. Each
- * variant gets its own slice of `VARIANT_MOCK_IMAGE_POOL` — offset by both
- * the product's index and the variant's own index, so (a) no variant ever
- * touches this product's Gallery images and (b) sibling variants on the same
- * product don't all show the same photo. Image *count* is deliberately
- * uneven across variants (1–3) per the spec's own "จำนวนรูปไม่จำเป็นต้องเท่ากัน" —
- * a real per-variant photo shoot naturally produces different counts too.
- */
-function seedAdminVariants(product: Product, sku: string, productIndex: number): AdminVariant[] {
+function seedAdminVariants(product: Product, sku: string): AdminVariant[] {
   if (!product.variants?.length) return [];
-  return product.variants.map((v, i) => {
-    const imageCount = ((productIndex + i) % 3) + 1;
-    const images = Array.from(
-      { length: imageCount },
-      (_, k) => VARIANT_MOCK_IMAGE_POOL[(productIndex * 3 + i * 2 + k) % VARIANT_MOCK_IMAGE_POOL.length],
-    );
-    return {
-      id: v.id,
-      label: v.label,
-      sku: `${sku}-${v.id.toUpperCase()}`,
-      price: product.price,
-      stock: v.soldOut ? 0 : (product.stockLeft ?? 20),
-      images,
-      color: v.color || "#CCCCCC",
-      // The card circle stays the seeded shade color; the photos above are the modal's option photos.
-      mode: "color",
-      soldOut: v.soldOut || undefined,
-    };
-  });
+  return product.variants.map((v) => ({
+    id: v.id,
+    label: v.label,
+    sku: `${sku}-${v.id.toUpperCase()}`,
+    price: product.price,
+    stock: v.soldOut ? 0 : (product.stockLeft ?? 20),
+    images: [v.image ?? product.image],
+    color: v.color || "#CCCCCC",
+    swatchImage: v.swatchImage,
+    mode: v.swatchImage ? "image" : "color",
+    soldOut: v.soldOut || undefined,
+  }));
 }
 
 const FALLBACK_CATEGORIES = ["eye", "cheek", "lip"] as const;
@@ -221,7 +191,7 @@ export function buildAdminProductBaseline(): AdminProduct[] {
       status: "active",
       lowStockThreshold: LOW_STOCK_THRESHOLD,
       updatedAt: TODAY_LABEL,
-      adminVariants: seedAdminVariants(product, sku, i),
+      adminVariants: seedAdminVariants(product, sku),
     };
   });
 }
@@ -371,7 +341,7 @@ const STORAGE_KEY = "charmiss:admin:products";
  * purpose stays as Admin left it.
  */
 const SEED_VERSION_KEY = "charmiss:admin:products:seed-version";
-const SEED_VERSION = 10;
+const SEED_VERSION = 11;
 let nextId = 1000;
 
 function persist(products: AdminProduct[]) {
@@ -435,6 +405,14 @@ function migrateSeedFields(list: AdminProduct[], fromVersion: number): AdminProd
     }
     // v10 — seed Flash Sale products join the daily round, so a saved one stops expiring at the first midnight.
     if (fromVersion < 10 && next.flashSaleEndsAt !== undefined && seed.flashSaleEndsAt !== undefined) next.flashSaleDaily = true;
+    // v11 — options decided per SKU by product type (products.ts `applyProductOptions`): seed products take the
+    // new options, option rows, shade-free name and option-matched reviews.
+    if (fromVersion < 11) {
+      next.name = seed.name;
+      next.variants = seed.variants;
+      next.adminVariants = seedAdminVariants(seed, next.sku);
+      next.reviews = seed.reviews;
+    }
     return next;
   })
     .map((p) => (fromVersion < 5 ? splitSwatchFromPhotos(p, seedById.get(p.id)) : p))

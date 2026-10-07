@@ -20,6 +20,7 @@ import type { Product } from "~/lib/types";
 import { getDiscountPercent } from "~/lib/products";
 import { useCart } from "~/lib/cart";
 import { pushToast } from "~/lib/toast";
+import { flyToCart } from "~/lib/flyToCart";
 import starGold from "~/assets/icons/star-gold-4.svg";
 import { AddToCartButton } from "~/components/shared/AddToCartButton";
 
@@ -37,6 +38,7 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
   const catalog = useProductCatalog();
   const categories = useCategoryContent();
   let addToCartRef: HTMLDivElement | undefined;
+  let galleryRef: HTMLDivElement | undefined;
 
   /** Product / Category / Brand / Collection Source-of-Truth Cleanup (§4/§8) — the breadcrumb's category crumb resolves through the real Category store by `categoryId`, not the legacy `.category` enum + a hardcoded `/category/:slug` link (a route this app has never had — Navigation/Promotion Page architecture deliberately routes category listings through `/products?category=<slug>` instead, see `categoryListHref`). */
   const productCategory = () => (props.product.categoryId ? categories.getById(props.product.categoryId) : undefined);
@@ -71,6 +73,11 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
     try {
       await cart.addLine(props.product.id, selectedVariantId(), quantity());
       setAddStatus("idle");
+      // Flies from whichever is on screen: the gallery photo, else the sticky bar, else the main buy row.
+      flyToCart({
+        sources: [galleryRef?.querySelector("img"), document.querySelector("[data-sticky-add-to-cart]"), addToCartRef],
+        image: selectedVariant()?.image ?? props.product.image,
+      });
     } catch {
       setAddStatus("error");
       pushToast("เพิ่มลงตะกร้าไม่สำเร็จ ลองอีกครั้ง", "error");
@@ -83,9 +90,8 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
       setShadeRequired(true);
       return;
     }
-    // Buy Now skips the Drawer entirely — it's not "add and keep browsing"
-    // (what the Drawer is for), it's "go straight to checkout".
-    await cart.addLine(props.product.id, selectedVariantId(), quantity(), { openDrawer: false });
+    // Buy Now goes straight to checkout — no Drawer, no fly-to-cart.
+    await cart.addLine(props.product.id, selectedVariantId(), quantity());
     window.location.href = "/checkout";
   };
 
@@ -106,7 +112,7 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
         {/* Section rhythm — 24 / 32 / 40px (mobile / tablet / desktop), same scale as Home. */}
         <Container width="wide" class="flex flex-col gap-6 pt-4 sm:gap-8 sm:pt-6 lg:gap-10">
           <div class="flex flex-col gap-6 sm:gap-8 lg:flex-row lg:items-start lg:gap-10">
-            <div class="lg:w-1/2 lg:shrink-0">
+            <div ref={galleryRef} class="lg:w-1/2 lg:shrink-0">
               <ProductGallery product={props.product} forceOutOfStock={props.forceOutOfStock} />
             </div>
 
@@ -209,7 +215,7 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
           <Show when={relatedProducts().length > 0}>
             <section aria-labelledby="related-heading" class="flex flex-col gap-6">
               <h2 id="related-heading" class="text-2xl font-bold text-ink lg:text-3xl">
-                สินค้าที่คุณอาจชอบ
+                แนะนำสำหรับคุณ
               </h2>
               <ProductRail products={relatedProducts()} columns={5} />
             </section>

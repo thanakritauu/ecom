@@ -7,6 +7,7 @@ import { resolveVariantOptions } from "~/lib/productVariants";
 import { useCart } from "~/lib/cart";
 import { useWishlist } from "~/lib/wishlist";
 import { pushToast } from "~/lib/toast";
+import { flyToCart } from "~/lib/flyToCart";
 import { createDialogOpenState } from "~/lib/focusRestore";
 import { Badge } from "./Badge";
 import { AddToCartButton } from "./AddToCartButton";
@@ -60,6 +61,9 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
   const [wishStatus, setWishStatus] = createSignal<"idle" | "loading">("idle");
   const [selectedVariantId, setSelectedVariantId] = createSignal<string | null>(null);
   const [shadeRequired, setShadeRequired] = createSignal(false);
+  let cardRef: HTMLDivElement | undefined;
+  /** Success feedback for every add from this card (button or option modal) — the photo flies into the cart. */
+  const flyFromCard = () => flyToCart({ sources: [cardRef?.querySelector("img"), cardRef] });
 
   const hasVariants = () => (props.product.variants?.length ?? 0) > 1;
   const outOfStock = () => props.product.stockLeft !== undefined && props.product.stockLeft <= 0;
@@ -96,6 +100,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
     try {
       await cart.addLine(props.product.id, variantId);
       setAddStatus("idle");
+      flyFromCard();
     } catch {
       setAddStatus("error");
       pushToast("เพิ่มลงตะกร้าไม่สำเร็จ ลองอีกครั้ง", "error");
@@ -296,6 +301,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
         onConfirm={async (variantId, quantity) => {
           await cart.addLine(props.product.id, variantId, quantity);
           setSelectedVariantId(variantId ?? null);
+          flyFromCard();
           setShadeRequired(false);
         }}
       />
@@ -311,7 +317,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
         // Hover lift/shadow is desktop-only (`lg:`): on touch screens a tap leaves :hover stuck, and the
         // big hover shadow (~26px deep) got cut flat by the mobile swipe rail's 12px bottom room.
         // pb-3 on phones: the CTA sat 8px off a 16px-radius corner and looked cramped.
-        <div class="group flex h-full w-full flex-col gap-2 rounded-2xl bg-surface-card p-2 pb-3 sm:rounded-[20px] sm:pb-2 lg:rounded-card shadow-[0_2px_6px_rgba(90,106,133,0.10)] transition-all duration-200 ease-out lg:hover:-translate-y-1 lg:hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)]">
+        <div ref={cardRef} class="group flex h-full w-full flex-col gap-2 rounded-2xl bg-surface-card p-2 pb-3 sm:rounded-[20px] sm:pb-2 lg:rounded-card shadow-[0_2px_6px_rgba(90,106,133,0.10)] transition-all duration-200 ease-out lg:hover:-translate-y-1 lg:hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)]">
           <ImageBlock class="relative aspect-square w-full overflow-hidden rounded-xl border border-border lg:rounded-media" flashSaleOverlay />
 
           <div class="flex flex-1 flex-col gap-2">
@@ -345,7 +351,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
       {/* List view — image left, details right; same data/state/handlers as the grid card, only the arrangement
           changes (no Figma for this layout). Compact pieces throughout so a 112–180px thumbnail and a wide text
           column both read cleanly: small heart, 28px shade circles, CTA sized to its label from `sm`. */}
-      <div class="group flex w-full items-start gap-3 rounded-2xl bg-surface-card p-3 shadow-[0_2px_6px_rgba(90,106,133,0.10)] transition-shadow duration-200 ease-out sm:gap-4 lg:rounded-card lg:hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)]">
+      <div ref={cardRef} class="group flex w-full items-start gap-3 rounded-2xl bg-surface-card p-3 shadow-[0_2px_6px_rgba(90,106,133,0.10)] transition-shadow duration-200 ease-out sm:gap-4 lg:rounded-card lg:hover:shadow-[0_6px_20px_rgba(90,106,133,0.18)]">
         <ImageBlock compact class="relative size-28 shrink-0 overflow-hidden rounded-xl border border-border sm:size-36 lg:size-44 lg:rounded-media" />
 
         <div class="flex min-w-0 flex-1 flex-col gap-2 self-stretch">

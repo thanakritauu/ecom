@@ -13,15 +13,16 @@ import tiktokLogo from "~/assets/icons/social-tiktok.svg";
  * one at a time — opening another clip unloads the previous player. A page
  * view therefore makes no request to TikTok's player until someone plays.
  *
- * `default` (Home #CharmissReviews): ~1.4 clips on mobile, ~2.4 on tablet,
- * 4 on desktop. `compact` (PDP): smaller clips, ~2.3 / ~3.3 / 5 visible.
+ * Below `lg` both sizes show the PDP's clip size (~2.3 on mobile, ~3.3 on
+ * tablet). From `lg`: `default` (Home #CharmissReviews) shows 4 bigger clips,
+ * `compact` (PDP) 5.
  */
 const SIZES = {
   default: {
-    card: "w-[68%] max-w-[300px] sm:w-[40%] lg:w-[calc((100%-72px)/4)] lg:max-w-none",
+    card: "w-[42%] max-w-[190px] sm:w-[29%] lg:w-[calc((100%-72px)/4)] lg:max-w-none",
     track: "lg:mx-0 lg:scroll-px-0 lg:gap-6 lg:px-0",
-    arrow: "size-10 sm:size-11",
-    chevron: "size-5 sm:size-6",
+    arrow: "size-9 lg:size-11",
+    chevron: "size-5 lg:size-6",
     left: "lg:-left-5",
     right: "lg:-right-5",
   },

@@ -43,6 +43,7 @@ export function StickyAddToCartBar(props: {
   return (
     <Show when={visible()}>
       <div
+        data-sticky-add-to-cart
         // `bottom-16` on Tablet/Mobile clears BottomNav's own `min-h-16`
         // (Global Responsive §4) — PDP's Header is never `minimal`, so this
         // bar and BottomNav are always on-screen together there.

@@ -174,7 +174,7 @@ export function ProductGallery(props: { product: Product; forceOutOfStock?: bool
                 aria-selected={active() === i()}
                 aria-label={`รูปภาพที่ ${i() + 1}`}
                 onClick={() => goTo(i())}
-                class="size-[98px] shrink-0 overflow-hidden rounded-media border-2 transition-colors duration-150"
+                class="size-[98px] shrink-0 overflow-hidden rounded-media border transition-colors duration-150"
                 classList={{
                   "border-brand-pink": active() === i(),
                   "border-surface-gray": active() !== i(),

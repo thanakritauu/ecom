@@ -1,7 +1,7 @@
-import { createSignal, onMount } from "solid-js";
+import { createRoot, createSignal, onMount } from "solid-js";
 import { isServer } from "solid-js/web";
 import { MOCK_ORDERS } from "./accountData";
-import type { Order, ReturnRequest } from "./types";
+import type { Order, OrderItem, ReturnRequest } from "./types";
 
 /**
  * Phase 05 — the shopper's purchase history. UI reads orders only through
@@ -120,4 +120,56 @@ export function createOrderHistory(resolveRepo: () => OrderRepository) {
       replace(await getRepo().markPaid(id, paymentMethod));
     },
   };
+}
+
+/**
+ * Shopper's own product reviews on delivered orders ("รีวิว" on the order
+ * card). Mock: kept in this browser's localStorage per order + item; a module
+ * signal so the card flips to "รีวิวแล้ว" the moment the modal saves. The
+ * real API would post these to the product's reviews instead.
+ */
+export type OrderItemReview = { rating: number; text: string; reviewedAt: string };
+type ReviewStore = Record<string, Record<string, OrderItemReview>>;
+
+const REVIEWS_KEY = "charmiss:orders:reviews";
+const [reviewStore, setReviewStore] = createRoot(() => createSignal<ReviewStore>({}));
+let reviewsLoaded = false;
+
+function loadReviews() {
+  if (isServer || reviewsLoaded) return;
+  reviewsLoaded = true;
+  try {
+    setReviewStore(JSON.parse(localStorage.getItem(REVIEWS_KEY) ?? "{}") as ReviewStore);
+  } catch {}
+}
+
+/** Order lines carry no product id — name + option is unique within an order. */
+export const orderItemKey = (item: OrderItem) => `${item.name}|${item.variantLabel}`;
+
+/** Lines a shopper can review — the free gift isn't something they chose, so it's skipped. */
+export const reviewableItems = (order: Order) => order.items.filter((item) => !item.isGift);
+
+export const canReviewOrder = (order: Order) => order.status === "completed" && !order.returnRequest && reviewableItems(order).length > 0;
+
+export function getOrderReviews(orderId: string): Record<string, OrderItemReview> {
+  loadReviews();
+  return reviewStore()[orderId] ?? {};
+}
+
+export function isOrderReviewed(order: Order) {
+  const saved = getOrderReviews(order.id);
+  return reviewableItems(order).every((item) => saved[orderItemKey(item)]);
+}
+
+export async function saveOrderReviews(orderId: string, reviews: Record<string, Omit<OrderItemReview, "reviewedAt">>) {
+  await new Promise<void>((resolve) => setTimeout(resolve, 600));
+  loadReviews();
+  const reviewedAt = new Date().toISOString();
+  const next: ReviewStore = { ...reviewStore() };
+  next[orderId] = { ...next[orderId] };
+  for (const [key, r] of Object.entries(reviews)) next[orderId][key] = { ...r, reviewedAt };
+  setReviewStore(next);
+  try {
+    localStorage.setItem(REVIEWS_KEY, JSON.stringify(next));
+  } catch {}
 }

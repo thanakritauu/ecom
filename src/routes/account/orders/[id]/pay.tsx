@@ -1,5 +1,5 @@
-import { createSignal, For, onMount, Show } from "solid-js";
-import { A, useParams, useSearchParams } from "@solidjs/router";
+import { createSignal, For, Show } from "solid-js";
+import { A, useParams } from "@solidjs/router";
 import { Header } from "~/components/shared/Header";
 import { Footer } from "~/components/shared/Footer";
 import { Container } from "~/components/shared/Container";
@@ -12,15 +12,13 @@ import { OrderItemMeta, OrderItemPrice } from "~/components/account/OrderCard";
 import { PaymentSection } from "~/components/checkout/PaymentSection";
 import { createCheckoutPayment } from "~/components/checkout/checkoutPayment";
 import { useAuth } from "~/lib/auth";
-import { createMockPaymentProvider } from "~/lib/payment";
-import { resolveSavedCards, type SavedCard } from "~/lib/savedCards";
 import { createMockOrderRepository, createOrderHistory } from "~/lib/orderHistory";
 import type { Order } from "~/lib/types";
 
 /**
- * Pay a "รอชำระเงิน" order again — the same payment section and pay action
- * as Checkout (`PaymentSection` + `createCheckoutPayment`), for an order
- * that already exists, so nothing about the cart or addresses is asked again.
+ * Pay a "รอชำระเงิน" order again — the same payment section and Beam
+ * payment-window flow as Checkout (`PaymentSection` + `createCheckoutPayment`),
+ * for an order that already exists, so nothing about the cart or addresses is asked again.
  */
 export default function OrderPayPage() {
   const auth = useAuth();
@@ -61,16 +59,9 @@ export default function OrderPayPage() {
 }
 
 function PayOrder(props: { order: Order; onPaid: (methodLabel: string) => Promise<void>; detailHref: string }) {
-  const auth = useAuth();
-  const [searchParams] = useSearchParams();
   // Snapshot: once paid the order leaves "รอชำระเงิน", but this page keeps showing its success state.
   const [paid, setPaid] = createSignal(false);
-  const [savedCards, setSavedCards] = createSignal<SavedCard[]>([]);
-  onMount(() => setSavedCards(resolveSavedCards(undefined, auth.isAuthenticated())));
-
   const payment = createCheckoutPayment({
-    // `?mockPayment=fail|expire` — same QA switches as Checkout.
-    provider: createMockPaymentProvider({ forceFail: searchParams.mockPayment === "fail", shortQrExpiry: searchParams.mockPayment === "expire" }),
     amount: () => props.order.total,
     orderNumber: () => props.order.id,
     validateOrder: () => true,
@@ -79,8 +70,7 @@ function PayOrder(props: { order: Order; onPaid: (methodLabel: string) => Promis
       setPaid(true);
       window.scrollTo({ top: 0 });
     },
-    savedCards,
-    canSaveCard: () => true,
+    returnPath: () => `/account/orders/${props.order.id}/pay`,
   });
 
   return (

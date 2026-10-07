@@ -1,7 +1,7 @@
 import { createSignal, For, Show, type JSX } from "solid-js";
 import type { Shipment } from "~/lib/types";
 import { CARRIERS, getCarrierTrackingUrl } from "~/lib/carriers";
-import { buildTrackingTimeline, formatEventTime, getTrackingHistory, TRACKING_STEPS, type TimelineEntry } from "~/lib/orderTracking";
+import { buildTrackingTimeline, formatEventTime, type TimelineEntry } from "~/lib/orderTracking";
 import dhlLogo from "~/assets/icons/dhl-logo-circle.png";
 import { CheckBadge } from "../shared/icons";
 
@@ -19,8 +19,6 @@ export function OrderTrackingTimeline(props: { shipment: Shipment; /** Order tit
   // Reached steps only, newest first — what's happening now is always the top row.
   const reachedSteps = () => timeline().filter((e) => e.state !== "upcoming").reverse();
   const carrier = () => CARRIERS[props.shipment.carrier];
-  const history = () => getTrackingHistory(props.shipment).filter((e) => TRACKING_STEPS.findIndex((s) => s.status === e.status) >= 2);
-  const [showHistory, setShowHistory] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
 
   const copyTrackingNumber = async () => {
@@ -83,39 +81,6 @@ export function OrderTrackingTimeline(props: { shipment: Shipment; /** Order tit
           )}
         </Show>
       </div>
-
-      <Show when={history().length > 1}>
-        <div class="flex flex-col gap-3 border-t border-surface-gray pt-3">
-          <button
-            type="button"
-            aria-expanded={showHistory()}
-            onClick={() => setShowHistory((v) => !v)}
-            class="flex min-h-[44px] items-center justify-between text-sm font-medium text-ink"
-          >
-            ประวัติการขนส่งจาก {carrier().name} ({history().length})
-            <span aria-hidden="true" class="transition-transform" classList={{ "rotate-180": showHistory() }}>
-              ▾
-            </span>
-          </button>
-          <Show when={showHistory()}>
-            <ul class="flex flex-col gap-3">
-              <For each={history()}>
-                {(event) => (
-                  <li class="flex gap-3 text-sm">
-                    <span class="w-[92px] shrink-0 text-xs text-ink-gray">{formatEventTime(event.timestamp)}</span>
-                    <span class="min-w-0 flex-1">
-                      <span class="text-ink">{event.description ?? TRACKING_STEPS.find((s) => s.status === event.status)?.title}</span>
-                      <Show when={event.location}>
-                        <span class="block text-xs text-ink-gray">{event.location}</span>
-                      </Show>
-                    </span>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Show>
-        </div>
-      </Show>
     </section>
   );
 }

@@ -1,10 +1,19 @@
-import { For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { A } from "@solidjs/router";
+import { clientOnly } from "@solidjs/start";
 import type { Order, OrderItem } from "~/lib/types";
 import { CARRIERS } from "~/lib/carriers";
+import { canReviewOrder, isOrderReviewed } from "~/lib/orderHistory";
 import { formatOrderDate, getOrderDisplayStatus } from "~/lib/orderTracking";
 import { formatTHB } from "../shared/PriceDisplay";
-import { GiftIcon } from "../shared/icons";
+import { CheckIcon, GiftIcon } from "../shared/icons";
+
+// Same Kobalte Dialog SSR/hydration workaround as ProductCard's QuickAddSheet.
+const OrderReviewDialog = clientOnly(() => import("./OrderReviewDialog").then((m) => ({ default: m.OrderReviewDialog })));
+
+const PILL = "flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-pill px-3 text-xs font-medium transition-colors duration-150";
+const PILL_PRIMARY = `${PILL} bg-brand-pink text-white lg:hover:bg-brand-pink/90`;
+const PILL_OUTLINE = `${PILL} border border-brand-pink bg-white text-brand-pink lg:hover:bg-surface-pink`;
 
 const MAX_ITEMS_SHOWN = 2;
 
@@ -25,6 +34,9 @@ export function OrderCard(props: { order: Order }) {
         ? { href: `${detailHref()}#tracking`, label: "ติดตามพัสดุ" }
         : { href: detailHref(), label: "ดูรายละเอียด" };
   const detailHref = () => `/account/orders/${props.order.id}`;
+  // Delivered orders: "รีวิว" (solid) leads, "ดูรายละเอียด" steps down to outline; once reviewed, a "รีวิวแล้ว" chip.
+  const reviewable = () => canReviewOrder(props.order);
+  const [reviewOpen, setReviewOpen] = createSignal(false);
 
   return (
     <article class="flex w-full flex-col gap-3 rounded-2xl border border-surface-gray p-4">
@@ -56,8 +68,9 @@ export function OrderCard(props: { order: Order }) {
       </A>
 
       {/* The order's one status line — order status until DHL has it, then DHL's own status; tracking lives here too */}
-      <div class="flex items-center gap-3 rounded-2xl bg-surface-gray/60 py-2 pl-3 pr-2 text-sm">
-        <div class="flex min-h-8 min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-surface-gray/60 py-2 pl-3 pr-2 text-sm">
+        {/* With the review + detail pair, a 200px basis wraps the pair to its own row on a phone instead of squeezing the status */}
+        <div class="flex min-h-8 min-w-0 flex-wrap items-center gap-x-3 gap-y-1" classList={{ "flex-[1_1_200px]": reviewable(), "flex-1": !reviewable() }}>
           <span class="text-ink-gray">สถานะ:</span>
           <span class={`rounded-pill px-2 py-0.5 text-xs font-semibold ${status().badgeClass}`}>{status().label}</span>
           <Show when={props.order.shipment.trackingNumber}>
@@ -68,15 +81,31 @@ export function OrderCard(props: { order: Order }) {
             )}
           </Show>
         </div>
-        <Show when={action()}>
-          {(act) => (
-            <A
-              href={act().href}
-              class="flex min-h-8 shrink-0 items-center justify-center rounded-pill bg-brand-pink px-3 text-xs font-medium text-white transition-colors duration-150 lg:hover:bg-brand-pink/90"
-            >
-              {act().label}
+        <Show
+          when={reviewable()}
+          fallback={
+            <A href={action().href} class={PILL_PRIMARY}>
+              {action().label}
             </A>
-          )}
+          }
+        >
+          <div class="ml-auto flex shrink-0 items-center gap-2">
+            <Show
+              when={isOrderReviewed(props.order)}
+              fallback={
+                <button type="button" onClick={() => setReviewOpen(true)} class={PILL_PRIMARY}>
+                  รีวิว
+                </button>
+              }
+            >
+              <span class="flex min-h-8 items-center gap-1 rounded-pill bg-success-soft px-3 text-xs font-medium text-success">
+                <CheckIcon class="size-3.5" /> รีวิวแล้ว
+              </span>
+            </Show>
+            <A href={detailHref()} class={PILL_OUTLINE}>
+              ดูรายละเอียด
+            </A>
+          </div>
         </Show>
       </div>
       <Show when={props.order.returnRequest}>
@@ -87,6 +116,9 @@ export function OrderCard(props: { order: Order }) {
         <span class="text-sm text-ink-gray">ยอดรวม</span>
         <span class="text-lg font-bold text-ink">{formatTHB(props.order.total)}</span>
       </p>
+      <Show when={reviewable()}>
+        <OrderReviewDialog order={props.order} open={reviewOpen()} onOpenChange={setReviewOpen} />
+      </Show>
     </article>
   );
 }

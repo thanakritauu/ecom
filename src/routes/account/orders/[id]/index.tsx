@@ -7,6 +7,7 @@ import { Container } from "~/components/shared/Container";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { Button } from "~/components/shared/Button";
 import { ChevronIcon } from "~/components/shared/ChevronIcon";
+import { CheckIcon } from "~/components/shared/icons";
 import { formatTHB } from "~/components/shared/PriceDisplay";
 import { AccountGuestPrompt } from "~/components/account/AccountGuestPrompt";
 import { OrderTrackingTimeline } from "~/components/account/OrderTrackingTimeline";
@@ -16,7 +17,7 @@ import { pushToast } from "~/lib/toast";
 import { getPaymentStatus, PAYMENT_STATUS_META } from "~/lib/accountData";
 import { computeCoinsEarned } from "~/lib/cartSelectors";
 import { formatAddress } from "~/lib/checkoutData";
-import { createMockOrderRepository, createOrderHistory } from "~/lib/orderHistory";
+import { canReviewOrder, createMockOrderRepository, createOrderHistory, isOrderReviewed } from "~/lib/orderHistory";
 import { resolveTier, yearlySpend, type TierId } from "~/lib/membership";
 import { canCancelOrder, canRequestReturn, formatEventTime, formatOrderDate } from "~/lib/orderTracking";
 import type { Order } from "~/lib/types";
@@ -24,6 +25,7 @@ import type { Order } from "~/lib/types";
 // Same Kobalte Dialog SSR/hydration workaround as ProductCard's QuickAddSheet.
 const CancelOrderDialog = clientOnly(() => import("~/components/account/OrderActionDialogs").then((m) => ({ default: m.CancelOrderDialog })));
 const ReturnRequestDialog = clientOnly(() => import("~/components/account/OrderActionDialogs").then((m) => ({ default: m.ReturnRequestDialog })));
+const OrderReviewDialog = clientOnly(() => import("~/components/account/OrderReviewDialog").then((m) => ({ default: m.OrderReviewDialog })));
 
 /** Phase 05 — Order Detail (the "ดูรายละเอียด" target OrderCard already linked to). */
 export default function OrderDetailPage() {
@@ -69,6 +71,7 @@ function OrderDetail(props: {
 }) {
   const [cancelOpen, setCancelOpen] = createSignal(false);
   const [returnOpen, setReturnOpen] = createSignal(false);
+  const [reviewOpen, setReviewOpen] = createSignal(false);
   const showTracking = () => !["pending_payment", "cancelled"].includes(props.order.status);
   const p = () => props.order.payment;
   const paymentMeta = () => PAYMENT_STATUS_META[getPaymentStatus(props.order)];
@@ -165,8 +168,22 @@ function OrderDetail(props: {
               </div>
             </section>
 
-            <Show when={canCancelOrder(props.order) || canRequestReturn(props.order)}>
+            <Show when={canCancelOrder(props.order) || canRequestReturn(props.order) || canReviewOrder(props.order)}>
               <div class="flex flex-col gap-2 rounded-card bg-white p-4 shadow-card sm:p-6">
+                <Show when={canReviewOrder(props.order)}>
+                  <Show
+                    when={isOrderReviewed(props.order)}
+                    fallback={
+                      <Button type="button" variant="primary" size="lg" class="w-full" onClick={() => setReviewOpen(true)}>
+                        รีวิวสินค้า
+                      </Button>
+                    }
+                  >
+                    <p class="flex min-h-[44px] items-center justify-center gap-1.5 rounded-pill bg-success-soft text-base font-medium text-success">
+                      <CheckIcon class="size-4" /> รีวิวแล้ว · ขอบคุณสำหรับรีวิว
+                    </p>
+                  </Show>
+                </Show>
                 <Show when={canRequestReturn(props.order)}>
                   <Button type="button" variant="outline" size="lg" class="w-full" onClick={() => setReturnOpen(true)}>
                     ขอคืนสินค้า
@@ -202,6 +219,9 @@ function OrderDetail(props: {
         }}
       />
       <ReturnRequestDialog order={props.order} open={returnOpen()} onOpenChange={setReturnOpen} onSubmit={props.onReturn} />
+      <Show when={canReviewOrder(props.order)}>
+        <OrderReviewDialog order={props.order} open={reviewOpen()} onOpenChange={setReviewOpen} />
+      </Show>
     </div>
   );
 }

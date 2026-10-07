@@ -160,7 +160,7 @@ export function AuthModal() {
                     เข้าสู่ระบบ หรือสมัครสมาชิก
                   </Dialog.Title>
                   <p class="text-base text-ink">
-                    <Phrases text="เพื่อติดตามคำสั่งซื้อ สะสมคอยน์ และรับสิทธิพิเศษเฉพาะสมาชิก" />
+                    <Phrases text="เพื่อเป็นสมาชิก Charmiss Club สะสมคอยน์ และรับสิทธิพิเศษอื่นๆ อีกมากมาย" />
                   </p>
                 </div>
 
@@ -236,7 +236,7 @@ export function AuthModal() {
                   <p class="flex items-center gap-1.5 rounded-lg bg-surface-pink px-4 py-2 text-xs text-ink sm:whitespace-nowrap">
                     <InfoIcon />
                     <span>
-                      <Phrases text="เคยเป็นสมาชิก Charmiss Club? ระบบจะนำคอยน์เดิม มารวมให้อัตโนมัติ" />
+                      <Phrases text="สมาชิก Charmiss Club ระบบจะนำคอยน์เดิม มารวมให้อัตโนมัติ" />
                     </span>
                   </p>
                   <p class="text-center text-xs text-ink">

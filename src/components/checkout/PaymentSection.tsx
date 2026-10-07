@@ -2,10 +2,7 @@ import { For, Show, type JSX } from "solid-js";
 import { PAYMENT_METHODS, type PaymentMethodId } from "~/lib/cartSelectors";
 import { FAILURE_MESSAGES, type PaymentFailureReason } from "~/lib/payment";
 import { Button } from "../shared/Button";
-import { TextField } from "../shared/TextField";
 import { formatTHB } from "../shared/PriceDisplay";
-import { CardPaymentForm } from "../payment/CardPaymentForm";
-import { PromptPayPanel } from "../payment/PromptPayPanel";
 import type { CheckoutPayment } from "./checkoutPayment";
 import visaMark from "~/assets/icons/payment/visa.svg";
 import mastercardMark from "~/assets/icons/payment/mastercard.svg";
@@ -15,8 +12,9 @@ import { CheckIcon } from "../shared/icons";
 
 /**
  * One-page Checkout — payment, right after the billing address: pick a
- * method (card / PromptPay / TrueMoney), fill it in, and pay with the button
- * at the end of this form (it was the summary box's button). State and the
+ * method (card / PromptPay / TrueMoney) and pay with the button at the end
+ * of this form. The card number / QR / wallet are entered on Beam's payment
+ * page (new window); this section then waits for its result. State and the
  * pay action live in `createCheckoutPayment`, shared with the mobile floating bar.
  */
 export function PaymentSection(props: {
@@ -28,6 +26,7 @@ export function PaymentSection(props: {
   submitError?: string;
 }) {
   const p = props.payment;
+  const methodHint = () => METHOD_HINT[p.method()];
 
   return (
     <section aria-labelledby="payment-method-heading" class="relative flex w-full flex-col gap-4">
@@ -47,12 +46,12 @@ export function PaymentSection(props: {
                 type="button"
                 role="radio"
                 aria-checked={p.method() === m.id}
-                disabled={p.busy()}
+                disabled={p.waiting()}
                 onClick={() => p.setMethod(m.id)}
                 class="font-normal relative flex min-h-[56px] items-center gap-3 rounded-card border-2 py-3 pl-4 pr-11 text-left transition-colors duration-150 disabled:opacity-60 sm:min-h-[104px] sm:flex-col sm:items-start sm:justify-between sm:gap-2 sm:p-4"
                 classList={{
                   "border-brand-pink bg-surface-pink": p.method() === m.id,
-                  "border-surface-gray bg-white hover:border-brand-pink/40": p.method() !== m.id,
+                  "border-surface-gray bg-white lg:hover:border-brand-pink/40": p.method() !== m.id,
                 }}
               >
                 <MethodMark id={m.id} active={p.method() === m.id} />
@@ -72,137 +71,15 @@ export function PaymentSection(props: {
           </For>
         </div>
 
-        <Show when={p.method() === "card"}>
-          {/* Saved cards (if any): pick one and confirm with its CVV, or switch to a new card. */}
-          <Show when={p.savedCards().length > 0}>
-            <div class="flex flex-col gap-2">
-              <p id="saved-cards-heading" class="text-sm font-medium text-ink">
-                บัตรที่บันทึกไว้
-              </p>
-              <div role="radiogroup" aria-labelledby="saved-cards-heading" class="flex flex-col gap-2">
-                <For each={p.savedCards()}>
-                  {(c) => (
-                    <div
-                      class="flex flex-col rounded-card border-2 transition-colors duration-150"
-                      classList={{
-                        "border-brand-pink bg-surface-pink": p.cardChoice() === c.id,
-                        "border-surface-gray bg-white hover:border-brand-pink/40": p.cardChoice() !== c.id,
-                      }}
-                    >
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={p.cardChoice() === c.id}
-                        disabled={p.busy()}
-                        onClick={() => p.pickCard(c.id)}
-                        class="font-normal flex min-h-[56px] w-full items-center gap-3 px-4 py-3 text-left"
-                      >
-                        <RadioDot checked={p.cardChoice() === c.id} />
-                        <Show when={BRAND_MARK[c.brand]} fallback={<span class="w-9 shrink-0 text-xs font-bold uppercase text-ink">{c.brand}</span>}>
-                          {(src) => <img src={src()} alt="" class="h-6 w-auto shrink-0 rounded-[3px]" />}
-                        </Show>
-                        <span class="flex min-w-0 flex-1 flex-col">
-                          <span class="text-sm font-semibold tracking-wider text-ink">•••• {c.last4}</span>
-                          <span class="truncate text-xs text-ink-gray">
-                            หมดอายุ {c.expiry} · {c.holder}
-                          </span>
-                        </span>
-                        <span class="sr-only">{`บัตร ${c.brand} ลงท้าย ${c.last4}`}</span>
-                      </button>
-                      <Show when={p.cardChoice() === c.id}>
-                        <div class="px-4 pb-4">
-                          <div class="sm:max-w-[220px]">
-                            <TextField
-                              label="CVV ของบัตรนี้"
-                              required
-                              type="password"
-                              inputMode="numeric"
-                              autocomplete="cc-csc"
-                              placeholder="•••"
-                              maxlength={4}
-                              disabled={p.busy()}
-                              value={p.savedCvv()}
-                              onInput={(e) => p.setSavedCvv(e.currentTarget.value.replace(/\D/g, ""))}
-                              onBlur={p.touchSavedCvv}
-                              error={p.savedCvvError()}
-                            />
-                          </div>
-                        </div>
-                      </Show>
-                    </div>
-                  )}
-                </For>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={p.cardChoice() === "new"}
-                  disabled={p.busy()}
-                  onClick={() => p.pickCard("new")}
-                  class="font-normal flex min-h-[56px] w-full items-center gap-3 rounded-card border-2 px-4 py-3 text-left transition-colors duration-150"
-                  classList={{
-                    "border-brand-pink bg-surface-pink": p.cardChoice() === "new",
-                    "border-surface-gray bg-white hover:border-brand-pink/40": p.cardChoice() !== "new",
-                  }}
-                >
-                  <RadioDot checked={p.cardChoice() === "new"} />
-                  <span class="text-sm font-semibold text-ink">ใช้บัตรใบใหม่</span>
-                </button>
-              </div>
-            </div>
-          </Show>
-
-          <Show when={p.cardChoice() === "new"}>
-            <CardPaymentForm card={p.card()} onChange={p.setCard} errors={p.cardErrors()} onBlurField={p.touchCard} disabled={p.busy()} />
-            <Show when={p.canSaveCard()}>
-              <label class="-mt-1 flex min-h-11 cursor-pointer items-center gap-3 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  checked={p.saveNewCard()}
-                  disabled={p.busy()}
-                  onChange={(e) => p.setSaveNewCard(e.currentTarget.checked)}
-                  class="size-5 shrink-0 rounded accent-brand-pink"
-                />
-                บันทึกบัตรนี้ไว้ใช้ครั้งต่อไป
-              </label>
-            </Show>
-          </Show>
-        </Show>
-
-        <Show when={p.method() === "promptpay"}>
-          <Show
-            when={p.ppSession()}
-            fallback={
-              <p class="rounded-card bg-surface-gray/60 p-4 text-sm text-ink-gray">
-                กด <span class="font-semibold text-ink">“ชำระเงิน”</span> เพื่อสร้าง QR Code แล้วสแกนจ่าย {formatTHB(props.amount)} ผ่านแอปธนาคาร
-              </p>
-            }
-          >
-            <PromptPayPanel
-              amount={props.amount}
-              qrPayload={p.ppSession()?.qrPayload}
-              secondsLeft={p.secondsLeft()}
-              status={p.ppStatus() === "confirming" ? "confirming" : "pending"}
-              notPaidYetHint={p.notPaidHint()}
-            />
-          </Show>
-        </Show>
-
-        <Show when={p.method() === "truemoney"}>
-          <TextField
-            label="เบอร์มือถือที่ผูกกับ TrueMoney Wallet"
-            required
-            type="tel"
-            inputMode="tel"
-            autocomplete="tel"
-            placeholder="08X-XXX-XXXX"
-            maxlength={12}
-            disabled={p.busy()}
-            value={p.walletPhone()}
-            onInput={(e) => p.setWalletPhone(e.currentTarget.value.replace(/[^\d-]/g, ""))}
-            onBlur={p.touchWallet}
-            error={p.walletError()}
-          />
-          <p class="-mt-2 text-xs text-ink-gray">หลังกดชำระเงิน ระบบจะส่งคำขอชำระ {formatTHB(props.amount)} ไปที่แอป TrueMoney ของเบอร์นี้ ให้กดยืนยันในแอป</p>
+        <Show
+          when={p.waiting()}
+          fallback={
+            <p class="rounded-card bg-surface-gray/60 p-4 text-sm leading-[1.75] text-ink-gray">
+              กด <span class="font-semibold text-ink">“ชำระเงิน”</span> ระบบจะเปิดหน้าชำระเงินของ Beam ในหน้าต่างใหม่ เพื่อ{methodHint()} {formatTHB(props.amount)}
+            </p>
+          }
+        >
+          <WaitingPanel windowClosed={p.windowClosed()} onReopen={p.reopen} onCancel={p.cancelWaiting} />
         </Show>
       </Show>
 
@@ -215,31 +92,15 @@ export function PaymentSection(props: {
       </Show>
 
       {/* The pay button — end of the payment form (moved here from the order-summary box). */}
-      <Show when={p.phase() !== "failed"}>
-        <Button
-          type="button"
-          variant="primary"
-          size="lg"
-          class="w-full"
-          loading={p.busy()}
-          disabled={props.disabled}
-          onClick={() => void p.pay()}
-        >
-          {p.busy() ? p.ctaLoadingLabel() : p.ctaLabel() === "ชำระเงิน" ? `ชำระเงิน ${formatTHB(props.amount)}` : p.ctaLabel()}
+      <Show when={p.phase() === "form"}>
+        <Button type="button" variant="primary" size="lg" class="w-full" disabled={props.disabled} onClick={p.pay}>
+          ชำระเงิน {formatTHB(props.amount)}
         </Button>
       </Show>
       <p class="flex items-center justify-center gap-1.5 text-center text-xs text-ink-gray">
         <LockIcon /> ชำระเงินอย่างปลอดภัย ข้อมูลของคุณถูกเข้ารหัส
       </p>
 
-      {/* Card / TrueMoney processing — locks the form until the (mock) gateway answers. */}
-      <Show when={p.phase() === "processing"}>
-        <div class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-card bg-white/90 px-6 text-center" role="status" aria-live="assertive">
-          <span class="loading loading-spinner loading-lg text-brand-pink" aria-hidden="true" />
-          <p class="text-lg font-semibold text-ink">{p.method() === "truemoney" ? "รอการยืนยันในแอป TrueMoney..." : "กำลังดำเนินการชำระเงิน..."}</p>
-          <p class="text-sm text-ink-gray">กรุณาอย่าปิดหรือรีเฟรชหน้านี้</p>
-        </div>
-      </Show>
     </section>
   );
 }
@@ -288,19 +149,33 @@ function MethodMark(props: { id: PaymentMethodId; active: boolean }) {
   );
 }
 
-const BRAND_MARK: Partial<Record<string, string>> = { visa: visaMark, mastercard: mastercardMark };
+/** What happens on Beam's page for each method — completes "…เพื่อ" in the hint under the selector. */
+const METHOD_HINT: Record<PaymentMethodId, string> = {
+  card: "กรอกข้อมูลบัตรและชำระ",
+  promptpay: "สแกน QR พร้อมเพย์ผ่านแอปธนาคารและชำระ",
+  truemoney: "ยืนยันการชำระผ่าน TrueMoney Wallet",
+};
 
-function RadioDot(props: { checked: boolean }) {
+/** Beam is open in another window — this page waits for its result (or the shopper re-opens / cancels it). */
+function WaitingPanel(props: { windowClosed: boolean; onReopen: () => void; onCancel: () => void }) {
   return (
-    <span
-      class="flex size-5 shrink-0 items-center justify-center rounded-pill border-2"
-      classList={{ "border-brand-pink": props.checked, "border-ink-placeholder": !props.checked }}
-      aria-hidden="true"
-    >
-      <Show when={props.checked}>
-        <span class="size-2.5 rounded-pill bg-brand-pink" />
-      </Show>
-    </span>
+    <div class="flex flex-col items-center gap-3 rounded-card border border-surface-gray px-4 py-6 text-center" role="status" aria-live="polite">
+      <span class="loading loading-spinner loading-lg text-brand-pink" aria-hidden="true" />
+      <p class="font-semibold leading-[1.75] text-ink">กำลังรอการชำระเงินที่หน้าต่าง Beam…</p>
+      <p class="max-w-sm text-sm leading-[1.75] text-ink-gray">
+        <Show when={props.windowClosed} fallback="ชำระเงินให้เสร็จในหน้าต่างที่เปิดขึ้น แล้วหน้านี้จะอัปเดตเอง">
+          หน้าต่าง Beam ถูกปิดไปแล้ว หากยังไม่ได้ชำระ กดเปิดหน้าชำระเงินอีกครั้ง
+        </Show>
+      </p>
+      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-1">
+        <button type="button" onClick={props.onReopen} class="min-h-11 text-sm font-medium text-brand-pink underline">
+          เปิดหน้าชำระเงินอีกครั้ง
+        </button>
+        <button type="button" onClick={props.onCancel} class="min-h-11 text-sm font-medium text-ink-gray underline">
+          ยกเลิก
+        </button>
+      </div>
+    </div>
   );
 }
 
