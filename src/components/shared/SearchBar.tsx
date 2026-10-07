@@ -4,6 +4,7 @@ import { useProductCatalog } from "~/lib/productCatalog";
 import { useCategoryContent } from "~/lib/categoryContent";
 import { highlightSegments, matchesSearch, searchProducts } from "~/lib/productSearch";
 import type { Product } from "~/lib/types";
+import { CloseIcon } from "./icons";
 
 const MAX_PRODUCTS = 8;
 const MAX_CATEGORIES = 3;
@@ -166,9 +167,7 @@ export function SearchBar(props: {
               class="-mr-2 flex size-8 shrink-0 items-center justify-center rounded-pill"
               classList={{ "text-white": dark(), "text-ink-gray": !dark() }}
             >
-              <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
-                <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
-              </svg>
+              <CloseIcon />
             </button>
           </Show>
         </form>

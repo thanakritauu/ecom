@@ -10,6 +10,7 @@ import logo from "~/assets/icons/logo-charmiss-pink.svg";
 import lineIcon from "~/assets/icons/social-line.svg";
 import googleIcon from "~/assets/icons/social-google.svg";
 import coinMark from "~/assets/icons/charmiss-coin.png";
+import { CloseMark } from "./icons";
 
 /**
  * Login / Register (prototype). Steps: start (phone first, or email, LINE,
@@ -142,9 +143,9 @@ export function AuthModal() {
             <Show when={step() !== "checking"}>
               <Dialog.CloseButton
                 aria-label="ปิด"
-                class="absolute right-4 top-4 flex size-11 shrink-0 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-surface-gray"
+                class="group absolute right-3 top-3 flex size-11 shrink-0 items-center justify-center"
               >
-                <CloseIcon />
+                <CloseMark />
               </Dialog.CloseButton>
             </Show>
 
@@ -402,14 +403,6 @@ function InfoIcon() {
     <svg viewBox="0 0 24 24" class="size-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
       <circle cx="12" cy="12" r="9" />
       <path d="M12 11v5.5M12 8v.01" stroke-linecap="round" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-      <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
     </svg>
   );
 }

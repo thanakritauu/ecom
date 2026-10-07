@@ -1,5 +1,6 @@
 import { Dialog } from "@kobalte/core/dialog";
 import { Show, type JSX } from "solid-js";
+import { CloseMark } from "./icons";
 
 /**
  * Design system rule — the ONE modal frame (DSL baseline: the Product Option
@@ -52,8 +53,8 @@ export function SheetModal(props: {
                   <Dialog.Description class="text-[13.65px] leading-[19.792px] text-ink-gray">{props.description}</Dialog.Description>
                 </Show>
               </div>
-              <Dialog.CloseButton class="-mr-2 -mt-2 flex size-11 shrink-0 items-center justify-center rounded-pill text-2xl text-ink-gray hover:bg-surface-pink">
-                <span aria-hidden="true">×</span>
+              <Dialog.CloseButton class="group -mr-2 -mt-2 flex size-11 shrink-0 items-center justify-center">
+                <CloseMark />
                 <span class="sr-only">ปิด</span>
               </Dialog.CloseButton>
             </div>

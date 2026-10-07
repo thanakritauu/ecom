@@ -1,5 +1,6 @@
 import { createRoot, createSignal, For, Show } from "solid-js";
 import { Portal } from "solid-js/web";
+import { CloseIcon } from "~/components/shared/icons";
 
 export type ToastTone = "success" | "warning" | "error" | "info";
 
@@ -124,9 +125,7 @@ export function ToastViewport() {
                   aria-label="ปิด"
                   class="-m-1 flex size-6 shrink-0 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-ink/10 hover:text-ink"
                 >
-                  <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                    <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
-                  </svg>
+                  <CloseIcon class="size-3" />
                 </button>
               </div>
             )}

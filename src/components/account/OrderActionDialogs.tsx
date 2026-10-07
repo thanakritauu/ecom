@@ -4,7 +4,7 @@ import type { Order, ReturnRequest } from "~/lib/types";
 import { RETURN_REASONS } from "~/lib/orderTracking";
 import { Button } from "../shared/Button";
 import { formatTHB } from "../shared/PriceDisplay";
-import { CheckIcon } from "../shared/icons";
+import { CheckIcon, CloseMark } from "../shared/icons";
 
 /** Bottom sheet on mobile, centered dialog from `sm:` — same shell as QuickAddSheet. */
 export function Sheet(props: { open: boolean; onOpenChange: (open: boolean) => void; title: string; description?: string; children?: JSX.Element; footer?: JSX.Element }) {
@@ -21,8 +21,8 @@ export function Sheet(props: { open: boolean; onOpenChange: (open: boolean) => v
                   <Dialog.Description class="mt-1 text-sm text-ink-gray">{props.description}</Dialog.Description>
                 </Show>
               </div>
-              <Dialog.CloseButton class="-mr-2 -mt-2 flex size-11 shrink-0 items-center justify-center rounded-pill text-2xl text-ink-gray hover:bg-surface-pink">
-                <span aria-hidden="true">×</span>
+              <Dialog.CloseButton class="group -mr-2 -mt-2 flex size-11 shrink-0 items-center justify-center">
+                <CloseMark />
                 <span class="sr-only">ปิด</span>
               </Dialog.CloseButton>
             </div>

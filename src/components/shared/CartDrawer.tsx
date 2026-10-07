@@ -9,6 +9,7 @@ import { formatTHB } from "./PriceDisplay";
 import { CartItemRow } from "./CartItemRow";
 import { GiftPromotionBanner, rearmGiftCelebration } from "./GiftPromotionBanner";
 import { GiftItemRow } from "./GiftItemRow";
+import { CloseMark } from "./icons";
 
 /**
  * Figma node 153:19197. Global — opened from the Header cart icon, from
@@ -36,9 +37,9 @@ export function CartDrawer() {
               <Dialog.Title class="text-2xl font-semibold text-ink">ตะกร้าสินค้า ({cart.count()})</Dialog.Title>
               <Dialog.CloseButton
                 aria-label="ปิดตะกร้า"
-                class="flex size-11 items-center justify-center rounded-pill bg-surface-gray text-ink transition-colors duration-150 hover:bg-surface-gray/70"
+                class="group -mr-1.5 flex size-11 items-center justify-center"
               >
-                <CloseIcon />
+                <CloseMark />
               </Dialog.CloseButton>
             </div>
 
@@ -113,13 +114,5 @@ function EmptyCart() {
         เลือกซื้อสินค้า
       </Button>
     </div>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-      <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
-    </svg>
   );
 }

@@ -3,6 +3,7 @@ import { ChevronIcon } from "~/components/shared/ChevronIcon";
 import type { Review } from "~/lib/types";
 import { reviewMedia, type ReviewMedia } from "~/lib/productReviews";
 import starGold from "~/assets/icons/star-gold-4.svg";
+import { CloseMark } from "./icons";
 
 /**
  * The one review UI — shared by the Product Option Modal and the Product
@@ -125,8 +126,8 @@ export function ReviewMediaViewer(props: {
         <span class="text-sm">
           {props.state.author} · {props.state.index + 1} / {count()}
         </span>
-        <button ref={closeRef} type="button" onClick={props.onClose} class="flex size-11 items-center justify-center rounded-pill text-2xl hover:bg-white/10">
-          <span aria-hidden="true">×</span>
+        <button ref={closeRef} type="button" onClick={props.onClose} class="group flex size-11 items-center justify-center">
+          <CloseMark />
           <span class="sr-only">ปิดรูปภาพ</span>
         </button>
       </div>

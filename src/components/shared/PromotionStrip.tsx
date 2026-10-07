@@ -1,7 +1,7 @@
 import { createSignal, Show } from "solid-js";
 import { A } from "@solidjs/router";
 import { useAuth } from "~/lib/auth";
-import { UserIcon } from "./icons";
+import { UserIcon, CloseIcon } from "./icons";
 import deliveryIcon from "~/assets/icons/delivery.svg";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import promoBadge99 from "~/assets/images/promo/promo-strip-badge-99.png";
@@ -39,7 +39,7 @@ export function PromoStrip() {
           aria-label="ปิดแบนเนอร์โปรโมชั่น"
           class="absolute right-4 top-1/2 flex min-h-11 min-w-11 shrink-0 -translate-y-1/2 items-center justify-center lg:min-h-0 lg:min-w-0 lg:size-6"
         >
-          <span aria-hidden="true">×</span>
+          <CloseIcon />
         </button>
       </div>
     </Show>

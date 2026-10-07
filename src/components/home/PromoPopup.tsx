@@ -3,7 +3,7 @@ import { createSignal, onMount, Show } from "solid-js";
 import { useAuth } from "~/lib/auth";
 import { hidePromoForever, HOME_PROMO_POPUP, isPromoHidden, type PromoPopupContent } from "~/lib/promoPopup";
 import { Button } from "../shared/Button";
-import { CheckIcon } from "../shared/icons";
+import { CheckIcon, CloseMark } from "../shared/icons";
 
 // Closed with × once → stays closed while navigating around this visit; a full reload shows it again.
 let closedThisVisit = false;
@@ -40,7 +40,16 @@ export function PromoPopup(props: { content?: PromoPopupContent }) {
         <Dialog.Overlay class="fixed inset-0 z-40 bg-ink/60 data-[expanded]:animate-toast-in" />
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
           {/* Content = the card + the checkbox below it (still inside, so clicking it doesn't count as "outside"). */}
-          <Dialog.Content class="flex max-h-[90dvh] w-full max-w-[400px] flex-col items-center gap-3 sm:max-w-[540px] outline-none data-[expanded]:animate-toast-in">
+          {/* On open, focus the popup itself (not the × — the first focusable), so no focus ring sits on the × until
+              someone actually tabs to it. Esc / Tab still work from here. */}
+          <Dialog.Content
+            tabIndex={-1}
+            onOpenAutoFocus={(e) => {
+              e.preventDefault();
+              (e.currentTarget as HTMLElement | null)?.focus({ preventScroll: true });
+            }}
+            class="flex max-h-[90dvh] w-full max-w-[400px] flex-col items-center gap-3 sm:max-w-[540px] outline-none focus-visible:outline-none data-[expanded]:animate-toast-in"
+          >
           <div class="relative flex min-h-0 w-full flex-col overflow-hidden rounded-card bg-white shadow-card">
             <div class="relative aspect-[16/10] w-full shrink-0 overflow-hidden bg-surface-pink">
               <img
@@ -51,11 +60,7 @@ export function PromoPopup(props: { content?: PromoPopupContent }) {
               />
               {/* Small 32px circle, but the button itself keeps a 44px tap area around it. */}
               <Dialog.CloseButton class="group absolute right-1 top-1 flex size-11 items-center justify-center">
-                <span class="flex size-8 items-center justify-center rounded-pill bg-white/80 text-ink-gray shadow-card transition-colors lg:group-hover:bg-white" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
-                  </svg>
-                </span>
+                <CloseMark />
                 <span class="sr-only">ปิด</span>
               </Dialog.CloseButton>
             </div>

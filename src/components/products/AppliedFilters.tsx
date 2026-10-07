@@ -1,6 +1,7 @@
 import { For, Show } from "solid-js";
 import { getPriceBounds, type CategoryFacet, type ProductFilters } from "~/lib/productListing";
 import type { Product } from "~/lib/types";
+import { CloseIcon } from "../shared/icons";
 
 export function AppliedFilters(props: {
   products: Product[];
@@ -45,9 +46,7 @@ function Chip(props: { label: string; onRemove: () => void }) {
     <span class="flex h-[31px] items-center gap-1.5 rounded-pill border border-brand-pink bg-surface-pink px-3 text-xs font-semibold text-brand-pink">
       {props.label}
       <button type="button" onClick={props.onRemove} aria-label={`ลบตัวกรอง ${props.label}`} class="flex size-4 shrink-0 items-center justify-center">
-        <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-          <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
-        </svg>
+        <CloseIcon class="size-3" />
       </button>
     </span>
   );

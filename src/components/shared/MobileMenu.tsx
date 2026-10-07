@@ -8,6 +8,7 @@ import { NavIcon } from "./NavIcon";
 import { ChevronIcon } from "./ChevronIcon";
 import type { ResolvedNavigationItem } from "~/lib/navigationResolver";
 import { pushToast } from "~/lib/toast";
+import { CloseMark } from "./icons";
 
 export function MobileMenu(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const auth = useAuth();
@@ -20,8 +21,8 @@ export function MobileMenu(props: { open: boolean; onOpenChange: (open: boolean)
           <Dialog.Content class="flex size-full flex-col gap-6 overflow-y-auto bg-white p-6 shadow-card">
             <div class="flex items-center justify-between">
               <CharmissWordmark class="h-6 text-brand-pink" />
-              <Dialog.CloseButton class="flex size-11 items-center justify-center rounded-pill text-2xl text-ink-gray hover:bg-surface-pink">
-                <span aria-hidden="true">×</span>
+              <Dialog.CloseButton class="group -mr-1.5 flex size-11 items-center justify-center">
+                <CloseMark />
                 <span class="sr-only">ปิดเมนู</span>
               </Dialog.CloseButton>
             </div>

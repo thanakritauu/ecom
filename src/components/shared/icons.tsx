@@ -27,24 +27,53 @@ export function HeartIcon(props: { filled?: boolean; class?: string }) {
   );
 }
 
+/**
+ * Design system rule — the site's cart mark is a shopping bag (Header,
+ * BottomNav "ตะกร้า", every "เพิ่มลงตะกร้า" button). Never a trolley.
+ */
 export function CartIcon(props: { class?: string }) {
   return (
     <svg viewBox="0 0 24 24" class={props.class ?? "size-6"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <path d="M2 3h2l2.2 12.2a2 2 0 0 0 2 1.6h8.6a2 2 0 0 0 2-1.6L21 7H6" stroke-linecap="round" stroke-linejoin="round" />
-      <circle cx="9.5" cy="20.5" r="1.3" />
-      <circle cx="17.5" cy="20.5" r="1.3" />
+      <path d="M5 8h14l-1.1 11.6a1.6 1.6 0 0 1-1.6 1.4H7.7a1.6 1.6 0 0 1-1.6-1.4L5 8Z" stroke-linejoin="round" />
+      <path d="M9 10.5V7a3 3 0 0 1 6 0v3.5" stroke-linecap="round" stroke-linejoin="round" />
     </svg>
   );
 }
 
+/** Shopping bag with a plus — same bag as `CartIcon`. */
 export function PlusCartIcon(props: { class?: string }) {
   return (
     <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <path d="M3 4h2l2.4 12.2a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.6L21 8H6" stroke-linecap="round" stroke-linejoin="round" />
-      <circle cx="9.5" cy="20.5" r="1.4" fill="currentColor" stroke="none" />
-      <circle cx="17.5" cy="20.5" r="1.4" fill="currentColor" stroke="none" />
-      <path d="M16 3v5M13.5 5.5h5" stroke-linecap="round" />
+      <path d="M5 8h14l-1.1 11.6a1.6 1.6 0 0 1-1.6 1.4H7.7a1.6 1.6 0 0 1-1.6-1.4L5 8Z" stroke-linejoin="round" />
+      <path d="M9 10.5V7a3 3 0 0 1 6 0v3.5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M12 12.5v5M9.5 15h5" stroke-linecap="round" />
     </svg>
+  );
+}
+
+/**
+ * Design system rule — the one × on the site, taken from the Home promo
+ * popup: a thin 2.5px round-cap X. `CloseMark` is the full close control's
+ * look (32px white circle, soft shadow, gray X) — put it inside any close
+ * button that keeps its own 44px tap area. Tight spots (filter chip remove,
+ * search clear) use the bare `CloseIcon` glyph.
+ */
+export function CloseIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-3.5"} fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+export function CloseMark(props: { class?: string }) {
+  return (
+    <span
+      class={`flex size-8 shrink-0 items-center justify-center rounded-pill bg-white/80 text-ink-gray shadow-card transition-colors lg:group-hover:bg-white ${props.class ?? ""}`}
+      aria-hidden="true"
+    >
+      <CloseIcon />
+    </span>
   );
 }
 

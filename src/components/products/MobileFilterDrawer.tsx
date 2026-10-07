@@ -2,6 +2,7 @@ import { Dialog } from "@kobalte/core/dialog";
 import type { CategoryFacet, CategoryFacetKey, ProductFilters } from "~/lib/productListing";
 import type { Product } from "~/lib/types";
 import { FilterPanel } from "./FilterPanel";
+import { CloseMark } from "../shared/icons";
 
 /**
  * PART 24: mobile must not shrink the desktop sidebar — it gets a real
@@ -32,9 +33,9 @@ export function MobileFilterDrawer(props: {
               <Dialog.Title class="text-lg font-semibold text-ink">ตัวกรอง</Dialog.Title>
               <Dialog.CloseButton
                 aria-label="ปิดตัวกรอง"
-                class="flex size-11 items-center justify-center rounded-pill bg-surface-gray text-ink transition-colors duration-150 hover:bg-surface-gray/70"
+                class="group -mr-1.5 flex size-11 items-center justify-center"
               >
-                <CloseIcon />
+                <CloseMark />
               </Dialog.CloseButton>
             </div>
 
@@ -54,13 +55,5 @@ export function MobileFilterDrawer(props: {
         </div>
       </Dialog.Portal>
     </Dialog>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-      <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
-    </svg>
   );
 }
