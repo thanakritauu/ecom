@@ -13,7 +13,8 @@ import {
   resolveGiftPromotion,
   computeCoinsEarned,
   computeShippingFee,
-  MAX_COIN_REDEMPTION,
+  maxRedeemableCoins,
+  MOCK_COIN_BALANCE,
   type Coupon,
 } from "~/lib/cartSelectors";
 import { createAddressBook, createLocalAddressRepository, type AddressMockState } from "~/lib/addressBook";
@@ -72,7 +73,7 @@ export default function CheckoutPage() {
   const billingAddressId = () =>
     billingSameAsShipping() ? selectedAddressId() : billingCandidates().some((a) => a.id === pickedBillingId()) ? pickedBillingId() : undefined;
   const [coupon, setCoupon] = createSignal<Coupon>();
-  const [coinsRedeemed, setCoinsRedeemed] = createSignal(0);
+  const [coinsPicked, setCoinsPicked] = createSignal(0);
 
   const [fieldErrors, setFieldErrors] = createSignal<Record<string, string>>({});
   const [submitError, setSubmitError] = createSignal<string>();
@@ -82,6 +83,15 @@ export default function CheckoutPage() {
   // Beam's payment page (new window) takes the money — see `createCheckoutPayment`.
   const [pendingOrderNumber, setPendingOrderNumber] = createSignal("");
 
+  // Coins the order can take — the coupon/cart can change after coins were picked, so the pick is capped (not reset).
+  const maxCoins = createMemo(() =>
+    maxRedeemableCoins({
+      balance: MOCK_COIN_BALANCE,
+      subtotal: subtotal(),
+      couponDiscount: computeCheckoutTotals({ subtotal: subtotal(), coupon: coupon(), shippingFee: 0 }).couponDiscount,
+    }),
+  );
+  const coinsRedeemed = () => Math.min(coinsPicked(), maxCoins());
   const totals = createMemo(() =>
     computeCheckoutTotals({ subtotal: subtotal(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: computeShippingFee(subtotal()) }),
   );
@@ -101,8 +111,8 @@ export default function CheckoutPage() {
         : "กรุณากรอกที่อยู่จัดส่งให้ครบ แล้วกด “ใช้ที่อยู่นี้”";
     } else if (!selectedAddressId()) errors.address = "กรุณาเพิ่มที่อยู่จัดส่ง";
     if (!billingSameAsShipping()) {
-      if (billingFormOpen()) errors.billing = "กรุณากรอกที่อยู่ออกใบเสร็จรับเงินให้ครบ แล้วกดบันทึก หรือเลือก “ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง”";
-      else if (!billingAddressId()) errors.billing = "กรุณาเลือกหรือเพิ่มที่อยู่ออกใบเสร็จรับเงิน";
+      if (billingFormOpen()) errors.billing = "กรุณากรอกที่อยู่ออกใบกำกับภาษีให้ครบ แล้วกดบันทึก หรือเลือก “ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง”";
+      else if (!billingAddressId()) errors.billing = "กรุณาเลือกหรือเพิ่มที่อยู่ออกใบกำกับภาษี";
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
@@ -202,7 +212,7 @@ export default function CheckoutPage() {
                       {/* No gap: the checkbox row keeps its 44px tap height, which alone puts its box 12px under the heading. */}
                       <section aria-labelledby="billing-address-heading" class="flex flex-col">
                         <h2 id="billing-address-heading" class="text-lg font-semibold text-ink">
-                          ที่อยู่ออกใบเสร็จรับเงิน
+                          ที่อยู่ออกใบกำกับภาษี
                         </h2>
                         <label class="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-ink">
                           <input
@@ -221,9 +231,9 @@ export default function CheckoutPage() {
                           <AddressSection
                             embedded
                             headingId="billing-address-heading"
-                            title="เลือกที่อยู่ออกใบเสร็จรับเงิน"
-                            emptyTitle="เพิ่มที่อยู่ออกใบเสร็จรับเงิน"
-                            newAddressLabel="ที่อยู่ออกใบเสร็จรับเงิน"
+                            title="เลือกที่อยู่ออกใบกำกับภาษี"
+                            emptyTitle="เพิ่มที่อยู่ออกใบกำกับภาษี"
+                            newAddressLabel="ที่อยู่ออกใบกำกับภาษี"
                             companyAllowed
                             kind="billing"
                             addresses={billingCandidates()}
@@ -242,7 +252,7 @@ export default function CheckoutPage() {
                     </Show>
                   </Show>
                   {/* Delivery (DHL) — between the billing address and payment. */}
-                  <DeliverySection shippingFee={totals().shippingFee} />
+                  <DeliverySection />
 
                   {/* Payment — paid here; its button ends the form. */}
                   <PaymentSection
@@ -250,6 +260,7 @@ export default function CheckoutPage() {
                     amount={totals().total}
                     disabled={hasUnavailableItem()}
                     submitError={submitError()}
+                    payLaterHint
                     notice={
                       <Show when={hasUnavailableItem()}>
                         <p class="rounded-card bg-danger-soft p-3 text-sm text-danger-strong" role="alert">
@@ -272,7 +283,8 @@ export default function CheckoutPage() {
                   onApplyCoupon={setCoupon}
                   onRemoveCoupon={() => setCoupon(undefined)}
                   coinsRedeemed={coinsRedeemed()}
-                  onToggleCoins={() => setCoinsRedeemed((v) => (v > 0 ? 0 : MAX_COIN_REDEMPTION))}
+                  maxCoins={maxCoins()}
+                  onApplyCoins={setCoinsPicked}
                 />
               </div>
             </Show>

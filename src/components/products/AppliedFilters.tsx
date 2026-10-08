@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import { getPriceBounds, type CategoryFacet, type ProductFilters } from "~/lib/productListing";
+import type { CategoryFacet, ProductFilters } from "~/lib/productListing";
 import type { Product } from "~/lib/types";
 import { CloseIcon } from "../shared/icons";
 
@@ -13,16 +13,9 @@ export function AppliedFilters(props: {
   const categoryChips = () =>
     props.filters.categories.map((key) => ({ key, label: props.facets.find((f) => f.key === key)?.label ?? key }));
 
-  const hasPriceChip = () => props.filters.minPrice != null || props.filters.maxPrice != null;
-  const priceLabel = () => {
-    const bounds = getPriceBounds(props.products);
-    return `${props.filters.minPrice ?? bounds.min} ถึง ${props.filters.maxPrice ?? bounds.max}`;
-  };
-
   const hasSearchChip = () => props.filters.search.trim() !== "";
 
   const removeCategory = (key: string) => props.onChange({ ...props.filters, categories: props.filters.categories.filter((k) => k !== key) });
-  const removePrice = () => props.onChange({ ...props.filters, minPrice: null, maxPrice: null });
   const removeSearch = () => props.onChange({ ...props.filters, search: "" });
 
   return (
@@ -31,9 +24,6 @@ export function AppliedFilters(props: {
         <Chip label={`"${props.filters.search}"`} onRemove={removeSearch} />
       </Show>
       <For each={categoryChips()}>{(chip) => <Chip label={chip.label} onRemove={() => removeCategory(chip.key)} />}</For>
-      <Show when={hasPriceChip()}>
-        <Chip label={priceLabel()} onRemove={removePrice} />
-      </Show>
       <button type="button" onClick={props.onClearAll} class="flex min-h-[32px] items-center px-1.5 py-1 text-xs font-medium text-ink-gray underline">
         ล้างทั้งหมด
       </button>

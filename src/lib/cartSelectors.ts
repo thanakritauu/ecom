@@ -87,11 +87,12 @@ export function computeCartTotal(resolved: ResolvedCartLine[]): number {
 /** One carrier, no shipping choice at checkout — every order ships DHL standard (shown with its logo); the fee is `computeShippingFee`. */
 export const DELIVERY = { carrier: "DHL", label: "จัดส่งโดย DHL", method: "จัดส่งมาตรฐาน", etaLabel: "ได้รับภายใน 2–3 วันทำการ" } as const;
 
-/** Paid on the Checkout page itself (no separate payment step). No installments / cash on delivery. */
+/** Paid on the Checkout page itself (no separate payment step). No installments / cash on delivery. Order = display order; the first is the default pick. */
 export const PAYMENT_METHODS = [
+  { id: "promptpay", label: "พร้อมเพย์", description: "สแกน QR ชำระผ่านแอปธนาคาร" },
+  // Stored on orders as this label — `OrderMeta` maps this label (and the older "โอนเงินผ่านแอปธนาคาร" / "โมบายแบงก์กิ้ง") to the bank-app label.
+  { id: "mobilebanking", label: "โมบายล์แบงก์กิ้ง", description: "ชำระผ่านแอปธนาคารบนมือถือ" },
   { id: "card", label: "บัตรเครดิต / เดบิต", description: "ชำระผ่านบัตรเครดิตหรือเดบิต" },
-  // `shortLabel`: phone-width method row, where the PromptPay logo beside it already reads "PromptPay".
-  { id: "promptpay", label: "พร้อมเพย์ (PromptPay)", shortLabel: "พร้อมเพย์", description: "สแกน QR ชำระผ่านแอปธนาคาร" },
   { id: "truemoney", label: "TrueMoney Wallet", description: "ยืนยันการชำระในแอป TrueMoney" },
 ] as const;
 export type PaymentMethodId = (typeof PAYMENT_METHODS)[number]["id"];
@@ -149,6 +150,19 @@ export function activeCoupons(now = Date.now()): Coupon[] {
 export const MOCK_COIN_BALANCE = 3500;
 export const MAX_COIN_REDEMPTION = 800;
 export const COIN_TO_BAHT_RATE = 0.1; // 800 coins -> ฿80, matching the Figma example 1:1
+/** Coins are redeemed in steps of 10 (= ฿1), so a redemption is always a whole-baht discount. */
+export const COIN_REDEMPTION_STEP = 10;
+
+/**
+ * Most coins this order can take: the lowest of the balance, `MAX_COIN_REDEMPTION`,
+ * and what the products still cost after the coupon (coins never pay the shipping
+ * fee, so the total stays ≥ the fee and never below ฿0) — rounded down to a step.
+ */
+export function maxRedeemableCoins(opts: { balance: number; subtotal: number; couponDiscount: number }): number {
+  const byAmount = Math.max(0, opts.subtotal - opts.couponDiscount) / COIN_TO_BAHT_RATE;
+  const max = Math.min(opts.balance, MAX_COIN_REDEMPTION, byAmount);
+  return Math.max(0, Math.floor(max / COIN_REDEMPTION_STEP) * COIN_REDEMPTION_STEP);
+}
 
 /**
  * Earn side of the same mock Charmiss Coin program (no backend exists here

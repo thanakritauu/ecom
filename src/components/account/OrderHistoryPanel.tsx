@@ -1,25 +1,35 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { useSearchParams } from "@solidjs/router";
 import type { Order } from "~/lib/types";
 import { Button } from "../shared/Button";
 import { OrderCard } from "./OrderCard";
+import { LineContactNote } from "./OrderMeta";
 
-type TabKey = "all" | "pending_payment" | "in_progress" | "completed" | "cancelled_return";
+type TabKey = "all" | "pending_payment" | "in_progress" | "completed" | "cancelled";
 
 /**
  * Tabs group the order statuses a shopper thinks in — "กำลังจัดส่ง" covers
  * everything paid but not yet delivered (เตรียมการจัดส่ง → ส่งให้บริษัทขนส่ง →
- * กำลังจัดส่ง); a delivered order with a return request moves to "ยกเลิก/คืนสินค้า".
+ * กำลังจัดส่ง). "ยกเลิก" also holds unpaid orders past their payment deadline —
+ * the repository already reads those as cancelled (`applyPaymentDeadline`).
+ * Tabs flagged `hidden` aren't rendered (their orders still show under "ทั้งหมด").
  */
-const TABS: { key: TabKey; label: string; match?: (o: Order) => boolean }[] = [
+const TABS: { key: TabKey; label: string; match?: (o: Order) => boolean; hidden?: boolean }[] = [
   { key: "all", label: "ทั้งหมด" },
   { key: "pending_payment", label: "รอชำระเงิน", match: (o) => o.status === "pending_payment" },
   { key: "in_progress", label: "กำลังจัดส่ง", match: (o) => ["preparing", "handed_over", "shipping"].includes(o.status) },
-  { key: "completed", label: "ส่งสำเร็จ", match: (o) => o.status === "completed" && !o.returnRequest },
-  { key: "cancelled_return", label: "ยกเลิก/คืนสินค้า", match: (o) => o.status === "cancelled" || !!o.returnRequest },
+  { key: "completed", label: "ส่งสำเร็จ", match: (o) => o.status === "completed" },
+  { key: "cancelled", label: "ยกเลิก", match: (o) => o.status === "cancelled" },
 ];
 
 export function OrderHistoryPanel(props: { orders: Order[]; ready: boolean }) {
-  const [activeTab, setActiveTab] = createSignal<TabKey>("all");
+  // `?tab=pending_payment` opens a tab directly (Checkout's "ชำระเงินไม่สำเร็จ" notice links here).
+  const [searchParams] = useSearchParams();
+  const initialTab = () => {
+    const t = searchParams.tab;
+    return TABS.some((tab) => tab.key === t && !tab.hidden) ? (t as TabKey) : "all";
+  };
+  const [activeTab, setActiveTab] = createSignal<TabKey>(initialTab());
 
   const filteredOrders = createMemo(() => {
     const match = TABS.find((t) => t.key === activeTab())?.match;
@@ -35,7 +45,7 @@ export function OrderHistoryPanel(props: { orders: Order[]; ready: boolean }) {
       <Show when={props.ready} fallback={<OrdersSkeleton />}>
         <Show when={props.orders.length > 0} fallback={<NoOrdersYet />}>
           <div role="tablist" aria-label="สถานะคำสั่งซื้อ" class="-mx-4 flex h-11 items-start overflow-x-auto border-b border-surface-gray px-4">
-            <For each={TABS}>
+            <For each={TABS.filter((t) => !t.hidden)}>
               {(tab) => (
                 <button
                   type="button"
@@ -45,7 +55,7 @@ export function OrderHistoryPanel(props: { orders: Order[]; ready: boolean }) {
                   class="flex h-full shrink-0 items-center justify-center whitespace-nowrap border-b-2 px-4 text-sm font-medium transition-colors duration-150"
                   classList={{
                     "border-brand-pink text-ink": activeTab() === tab.key,
-                    "border-transparent text-ink-placeholder hover:text-ink-gray": activeTab() !== tab.key,
+                    "border-transparent text-ink-placeholder lg:hover:text-ink-gray": activeTab() !== tab.key,
                   }}
                 >
                   {tab.label}
@@ -61,6 +71,7 @@ export function OrderHistoryPanel(props: { orders: Order[]; ready: boolean }) {
             <div class="flex flex-col gap-4">
               <For each={filteredOrders()}>{(order) => <OrderCard order={order} />}</For>
             </div>
+            <LineContactNote />
           </Show>
         </Show>
       </Show>

@@ -56,26 +56,27 @@ export function CouponDetailSheet(props: { open: boolean; onOpenChange: (open: b
 
       <dl class="flex flex-col gap-3 text-sm">
         <Row label="โค้ดส่วนลด">
-          <span class="flex items-center justify-end gap-2">
+          <span class="flex items-center justify-end gap-1">
             <span class="select-all rounded-pill border border-dashed border-brand-pink px-3 py-0.5 font-semibold tracking-wide text-brand-pink">{props.coupon.code}</span>
+            {/* Icon-only copy — 44px tap area; the tick (DSL CheckIcon) shows for 2s after copying. */}
             <button
               type="button"
               onClick={copyCode}
-              aria-label={`คัดลอกโค้ด ${props.coupon.code}`}
-              class="flex min-h-[36px] items-center gap-1 rounded-pill bg-brand-pink px-3 text-xs font-medium text-white transition-opacity lg:hover:opacity-90"
+              aria-label={copied() ? `คัดลอกโค้ด ${props.coupon.code} แล้ว` : `คัดลอกโค้ด ${props.coupon.code}`}
+              title="คัดลอกโค้ด"
+              class="-my-1 flex size-11 shrink-0 items-center justify-center rounded-pill text-brand-pink transition-colors lg:hover:bg-surface-pink"
             >
               <Show
                 when={copied()}
                 fallback={
-                  <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <rect x="9" y="9" width="11" height="11" rx="2" />
                     <path d="M5 15V6a2 2 0 0 1 2-2h9" stroke-linecap="round" />
                   </svg>
                 }
               >
-                <CheckIcon class="size-3.5" />
+                <CheckIcon class="size-5" />
               </Show>
-              {copied() ? "คัดลอกแล้ว" : "คัดลอก"}
             </button>
           </span>
         </Row>

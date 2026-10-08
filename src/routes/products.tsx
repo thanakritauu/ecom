@@ -20,14 +20,14 @@ import {
   filterProducts,
   hasActiveFilters,
   sortProducts,
+  parseSortValue,
+  DEFAULT_SORT,
   type CategoryFacet,
   type CategoryFacetKey,
   type ProductFilters,
   type SortValue,
 } from "~/lib/productListing";
 
-const SORT_VALUES: SortValue[] = ["popular", "new", "bestselling", "price-asc", "price-desc", "rating"];
-const isSortValue = (v: string): v is SortValue => (SORT_VALUES as string[]).includes(v);
 const isCategoryKey = (v: string, facets: CategoryFacet[]): v is CategoryFacetKey => facets.some((f) => f.key === v);
 
 /**
@@ -50,15 +50,11 @@ function filtersFromParams(
   const categories = (Array.isArray(categoriesRaw) ? categoriesRaw : categoriesRaw ? categoriesRaw.split(",") : []).filter((v) =>
     isCategoryKey(v, facets),
   );
-  const min = params.min ? Number(params.min) : null;
-  const max = params.max ? Number(params.max) : null;
   const collectionParam = typeof params.collection === "string" ? params.collection : undefined;
   const brandParam = typeof params.brand === "string" ? params.brand : undefined;
   return {
     search: typeof params.search === "string" ? params.search : "",
     categories,
-    minPrice: min != null && !Number.isNaN(min) ? min : null,
-    maxPrice: max != null && !Number.isNaN(max) ? max : null,
     collectionProductIds: collectionParam ? resolveCollectionProductIds(collectionParam) : null,
     brandId: brandParam ? resolveBrandId(brandParam) : null,
   };
@@ -108,7 +104,7 @@ export default function ProductsPage() {
     filtersFromParams(searchParams, resolveCollectionProductIds, resolveBrandId, facets()),
   );
   const [draftFilters, setDraftFilters] = createSignal<ProductFilters>(appliedFilters());
-  const [sort, setSort] = createSignal<SortValue>(typeof searchParams.sort === "string" && isSortValue(searchParams.sort) ? searchParams.sort : "popular");
+  const [sort, setSort] = createSignal<SortValue>(parseSortValue(searchParams.sort));
   const [view, setView] = createSignal<ListingView>((searchParams.view as ListingView) === "list" ? "list" : "grid");
   const [visibleCount, setVisibleCount] = createSignal(PAGE_SIZE);
   const [mobileFilterOpen, setMobileFilterOpen] = createSignal(false);
@@ -140,10 +136,11 @@ export default function ProductsPage() {
       setSearchParams(
         {
           category: filters.categories.length ? filters.categories.join(",") : undefined,
-          min: filters.minPrice ?? undefined,
-          max: filters.maxPrice ?? undefined,
+          // Retired price-range params — always cleared so an old shared link doesn't keep them around.
+          min: undefined,
+          max: undefined,
           search: filters.search || undefined,
-          sort: sortValue === "popular" ? undefined : sortValue,
+          sort: sortValue === DEFAULT_SORT ? undefined : sortValue,
           view: viewValue === "grid" ? undefined : viewValue,
           collection: collection ?? undefined,
           brand: brand ?? undefined,
@@ -153,7 +150,7 @@ export default function ProductsPage() {
     }),
   );
 
-  /** Simulates a real fetch: mock latency + a small chance to fail, so Loading/Error/Retry are genuinely exercised (same pattern as cart.addLine/auth.login). Reserved for the heavier, explicit-submit moments (initial load, Sort, price/search Apply) — NOT category toggling, which must feel instant. */
+  /** Simulates a real fetch: mock latency + a small chance to fail, so Loading/Error/Retry are genuinely exercised (same pattern as cart.addLine/auth.login). Reserved for the heavier, explicit-submit moments (initial load, Sort) — NOT category toggling, which must feel instant. */
   const runListingLoad = async () => {
     setStatus("loading");
     setVisibleCount(PAGE_SIZE);
@@ -180,11 +177,9 @@ export default function ProductsPage() {
    * "ประเภทการใช้งาน" Instant Filter: apply synchronously, no fake latency,
    * no skeleton — filtering 54 in-memory products is genuinely instant, and
    * simulating a network round-trip here would fight the explicit "feels
-   * instant and fluid" requirement. Also used for chip removal (any type,
-   * category or price) and Clear All, since "remove a filter" is the same
-   * kind of immediate, already-applied-state edit as toggling a checkbox —
-   * only *adding/editing* the price range still goes through the sidebar's
-   * explicit Apply button.
+   * instant and fluid" requirement. Also used for chip removal (search or
+   * category) and Clear All, since "remove a filter" is the same kind of
+   * immediate, already-applied-state edit as toggling a checkbox.
    */
   const applyInstant = (next: ProductFilters) => {
     setAppliedFilters(next);
@@ -199,11 +194,8 @@ export default function ProductsPage() {
     applyInstant({ ...current, categories: has ? current.categories.filter((k) => k !== key) : [...current.categories, key] });
   };
 
-  const applyFilters = () => {
-    setAppliedFilters(draftFilters());
-    setMobileFilterOpen(false);
-    void runListingLoad();
-  };
+  // Category toggles already applied instantly — the drawer's "แสดง N รายการ" just closes it.
+  const applyFilters = () => setMobileFilterOpen(false);
 
   const resetFilters = () => {
     applyInstant(EMPTY_FILTERS);
@@ -237,7 +229,7 @@ export default function ProductsPage() {
             onViewChange={setView}
             sort={sort()}
             onSortChange={setSort}
-            activeFilterCount={appliedFilters().categories.length + (hasActiveFilters(appliedFilters()) && appliedFilters().minPrice != null ? 1 : 0)}
+            activeFilterCount={appliedFilters().categories.length}
             onOpenMobileFilter={() => {
               setDraftFilters(appliedFilters());
               setMobileFilterOpen(true);
@@ -254,9 +246,7 @@ export default function ProductsPage() {
                 products={products()}
                 draft={draftFilters()}
                 facets={facets()}
-                onChange={setDraftFilters}
                 onToggleCategory={toggleCategoryInstant}
-                onApply={applyFilters}
                 onReset={resetFilters}
               />
             </div>
@@ -285,7 +275,6 @@ export default function ProductsPage() {
         onOpenChange={setMobileFilterOpen}
         draft={draftFilters()}
         facets={facets()}
-        onChange={setDraftFilters}
         onToggleCategory={toggleCategoryInstant}
         onApply={applyFilters}
         onReset={resetFilters}

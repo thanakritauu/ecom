@@ -193,5 +193,7 @@ export type Order = {
   shipment: Shipment;
   /** ISO 8601 — set when the order is cancelled. */
   cancelledAt?: string;
+  /** Why it was cancelled, when known — e.g. the payment-deadline auto-cancel (`applyPaymentDeadline`). */
+  cancelReason?: string;
   returnRequest?: ReturnRequest;
 };

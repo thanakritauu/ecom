@@ -4,7 +4,7 @@ import type { PaymentFailureReason } from "./payment";
 import { FAILURE_MESSAGES } from "./payment";
 import { allProducts } from "./products";
 import { formatAdminCurrency } from "./adminDashboard";
-import { MOCK_ORDERS as ACCOUNT_ORDERS, getPaymentStatus as getAccountPaymentStatus } from "./accountData";
+import { applyPaymentDeadline, MOCK_ORDERS as ACCOUNT_ORDERS, getPaymentStatus as getAccountPaymentStatus } from "./accountData";
 import { AVAILABLE_COUPONS, COIN_TO_BAHT_RATE, computeCoinsEarned, computeShippingFee, DELIVERY, GIFT_PROMOTION, PAYMENT_METHODS, type PaymentMethodId } from "./cartSelectors";
 import type { TierId } from "./membership";
 import { getShipmentStatus, RETURN_REASONS, SHIPMENT_STATUS_META } from "./orderTracking";
@@ -616,13 +616,14 @@ function buildFromAccountOrder(order: Order): AdminOrder {
     orderStatus: order.status,
     paymentStatus: accountPayment,
     fulfillmentStatus: deriveFulfillmentStatus(shipping),
-    cancellation: order.cancelledAt ? { by: "customer", at: order.cancelledAt } : undefined,
+    // The storefront's payment-deadline auto-cancel reads as a system cancel, worded like Admin's own seeds.
+    cancellation: order.cancelledAt ? (order.cancelReason ? { by: "system", reason: "ไม่ชำระเงินภายในเวลาที่กำหนด", at: order.cancelledAt } : { by: "customer", at: order.cancelledAt }) : undefined,
     returnRequest: order.returnRequest && { ...order.returnRequest, status: "requested" },
   };
 }
 
 /** Newest first — `customerResolvers.ts`'s `getCustomerLastOrder` relies on this order. */
-export const MOCK_ORDERS: AdminOrder[] = [...ADMIN_ORDER_SEEDS.map(buildAdminSeedOrder), ...ACCOUNT_ORDERS.map(buildFromAccountOrder)].sort((a, b) =>
+export const MOCK_ORDERS: AdminOrder[] = [...ADMIN_ORDER_SEEDS.map(buildAdminSeedOrder), ...ACCOUNT_ORDERS.map((o) => buildFromAccountOrder(applyPaymentDeadline(o)))].sort((a, b) =>
   b.placedAt.localeCompare(a.placedAt),
 );
 

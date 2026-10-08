@@ -1,5 +1,4 @@
 import type { Product } from "./types";
-import { isNewArrival } from "./products";
 import { matchesSearch } from "./productSearch";
 
 /**
@@ -31,37 +30,15 @@ export function buildCategoryFacets(activeCategories: { id: string; slug: string
   }));
 }
 
-/**
- * Figma's "เหมาะกับผิว" (skin type) filter group has zero corresponding
- * Product Data field at all — not even a partial mapping like the category
- * group above. Adding a `skinType` field to every product just to make this
- * group real would be inventing a new dataset dimension nothing requested;
- * it's kept purely as an inert, disabled display group (count always 0) so
- * the sidebar still matches Figma's visual, documented as an Issue in the
- * final report rather than faked.
- */
-export const SKIN_TYPE_LABELS = ["ผิวมัน", "ผิวแห้ง", "ผิวผสม", "ผิวแพ้ง่าย"] as const;
-
 /** Architecture Cleanup & Source of Truth — takes the live product list from the caller (`useProductCatalog().products()`/`useAdminProducts().products()`) instead of reading a static `allProducts` import, so the count reacts to Admin edits. Facets are likewise supplied by the caller (`buildCategoryFacets()` over the live Category store), never read from a module-level constant. */
 export function categoryCount(key: CategoryFacetKey, products: Product[], facets: CategoryFacet[]): number {
   const facet = facets.find((f) => f.key === key);
   return facet ? products.filter(facet.matches).length : 0;
 }
 
-/** Same reasoning as `categoryCount` — computed from whatever product list is currently live, not a static catalog captured at module-load time. */
-export function getPriceBounds(products: Product[]): { min: number; max: number } {
-  if (products.length === 0) return { min: 0, max: 0 };
-  return {
-    min: Math.min(...products.map((p) => p.price)),
-    max: Math.max(...products.map((p) => p.price)),
-  };
-}
-
 export type ProductFilters = {
   search: string;
   categories: CategoryFacetKey[];
-  minPrice: number | null;
-  maxPrice: number | null;
   /**
    * Global Frontend Navigation Architecture — set when arriving via a
    * Collection destination (`/products?collection=<id>`, see
@@ -85,15 +62,13 @@ export type ProductFilters = {
   brandId: string | null;
 };
 
-export const EMPTY_FILTERS: ProductFilters = { search: "", categories: [], minPrice: null, maxPrice: null, collectionProductIds: null, brandId: null };
+export const EMPTY_FILTERS: ProductFilters = { search: "", categories: [], collectionProductIds: null, brandId: null };
 
 export function hasActiveFilters(filters: ProductFilters): boolean {
   return (
     filters.search.trim() !== "" ||
     filters.categories.length > 0 ||
     filters.brandId != null ||
-    filters.minPrice != null ||
-    filters.maxPrice != null ||
     filters.collectionProductIds != null
   );
 }
@@ -108,34 +83,35 @@ export function filterProducts(products: Product[], filters: ProductFilters, fac
     }
     if (filters.collectionProductIds && !filters.collectionProductIds.includes(product.id)) return false;
     if (filters.brandId != null && product.brandId !== filters.brandId) return false;
-    if (filters.minPrice != null && product.price < filters.minPrice) return false;
-    if (filters.maxPrice != null && product.price > filters.maxPrice) return false;
     return true;
   });
 }
 
 /**
- * "มาใหม่" reuses `newArrivalProducts` membership (an already-real, existing
- * curated array in products.ts) as the "is this new" signal instead of
- * adding a fabricated `createdAt` field to Product just for this sort. Every
- * other option here sorts by a field the Product type already has.
+ * "ยอดนิยม" and "มาใหม่" were dropped; "แนะนำ" (the curated catalog order)
+ * is the default. Every other option sorts by a field the Product type
+ * already has. `parseSortValue` maps anything else — including the retired
+ * `popular` / `new` values in old shared links — back to the default.
  */
-export type SortValue = "popular" | "new" | "bestselling" | "price-asc" | "price-desc" | "rating";
+export type SortValue = "recommended" | "bestselling" | "price-asc" | "price-desc" | "rating";
+
+export const DEFAULT_SORT: SortValue = "recommended";
 
 export const SORT_OPTIONS: { value: SortValue; label: string }[] = [
-  { value: "popular", label: "ยอดนิยม" },
-  { value: "new", label: "มาใหม่" },
+  { value: "recommended", label: "แนะนำ" },
   { value: "bestselling", label: "สินค้าขายดี" },
   { value: "price-asc", label: "ราคาต่ำ → สูง" },
   { value: "price-desc", label: "ราคาสูง → ต่ำ" },
   { value: "rating", label: "คะแนนสูง" },
 ];
 
+export function parseSortValue(raw: unknown): SortValue {
+  return SORT_OPTIONS.find((o) => o.value === raw)?.value ?? DEFAULT_SORT;
+}
+
 export function sortProducts(products: Product[], sort: SortValue): Product[] {
   const sorted = [...products];
   switch (sort) {
-    case "new":
-      return sorted.sort((a, b) => Number(isNewArrival(b)) - Number(isNewArrival(a)));
     case "bestselling":
       return sorted.sort((a, b) => (b.soldCount ?? 0) - (a.soldCount ?? 0));
     case "price-asc":
@@ -144,9 +120,9 @@ export function sortProducts(products: Product[], sort: SortValue): Product[] {
       return sorted.sort((a, b) => b.price - a.price);
     case "rating":
       return sorted.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
-    case "popular":
+    case "recommended":
     default:
-      return sorted; // curated catalog order — this IS the "ยอดนิยม" order Figma shows by default
+      return sorted; // curated catalog order
   }
 }
 

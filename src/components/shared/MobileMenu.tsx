@@ -1,6 +1,6 @@
 import { Dialog } from "@kobalte/core/dialog";
 import { LanguageSwitcher } from "./LanguageSwitcher";
-import { For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { A } from "@solidjs/router";
 import { useAuth } from "~/lib/auth";
 import { useNavigationContent } from "~/lib/navigationContent";
@@ -9,6 +9,7 @@ import { ChevronIcon } from "./ChevronIcon";
 import type { ResolvedNavigationItem } from "~/lib/navigationResolver";
 import { pushToast } from "~/lib/toast";
 import { CloseMark } from "./icons";
+import coinMark from "~/assets/icons/charmiss-coin.png";
 
 export function MobileMenu(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const auth = useAuth();
@@ -42,15 +43,7 @@ export function MobileMenu(props: { open: boolean; onOpenChange: (open: boolean)
                 </button>
               }
             >
-              <A
-                href="/account"
-                class="flex min-h-[44px] items-center justify-between gap-2 rounded-pill bg-surface-pink pl-4 pr-3 font-medium text-ink"
-                onClick={() => props.onOpenChange(false)}
-              >
-                <span class="min-w-0 truncate">{auth.user()?.name}</span>
-                {/* Shows the row opens the account page. */}
-                <ChevronIcon direction="right" class="size-5 text-ink-gray" />
-              </A>
+              <MobileAccountRow onNavigate={() => props.onOpenChange(false)} />
             </Show>
 
             {/* Navigation Architecture (Blueprint v1 FINAL) — one resolved,
@@ -64,27 +57,54 @@ export function MobileMenu(props: { open: boolean; onOpenChange: (open: boolean)
             </nav>
 
             <LanguageSwitcher tone="menu" />
-
-            {/* Signed-in only — same sign-out as the Account sidebar, pinned to the drawer's bottom. */}
-            <Show when={auth.isAuthenticated()}>
-              <div class="mt-auto border-t border-surface-gray pt-4">
-                <button
-                  type="button"
-                  class="flex min-h-[44px] w-full items-center rounded-lg px-2 text-left text-base font-medium text-danger-strong lg:hover:bg-danger-soft"
-                  onClick={() => {
-                    auth.logout();
-                    props.onOpenChange(false);
-                    pushToast("ออกจากระบบสำเร็จ", "success", "แล้วพบกันใหม่นะ 👋");
-                  }}
-                >
-                  ออกจากระบบ
-                </button>
-              </div>
-            </Show>
           </Dialog.Content>
         </div>
       </Dialog.Portal>
     </Dialog>
+  );
+}
+
+/**
+ * Signed-in row: "[C] name | N คอยน์" + "v" (Charmiss Coin mark, no tier medal) — an accordion that reveals the same
+ * two account actions as the desktop member badge (ดูโปรไฟล์ / ออกจากระบบ).
+ */
+function MobileAccountRow(props: { onNavigate: () => void }) {
+  const auth = useAuth();
+  const [expanded, setExpanded] = createSignal(false);
+  return (
+    <div class="flex flex-col gap-1">
+      <button
+        type="button"
+        aria-expanded={expanded()}
+        aria-controls="mobile-account-actions"
+        onClick={() => setExpanded((v) => !v)}
+        class="flex min-h-[44px] items-center gap-2 rounded-pill bg-surface-pink pl-2.5 pr-3 text-left font-medium text-ink"
+      >
+        <img src={coinMark} alt="" class="size-6 shrink-0" />
+        <span class="min-w-0 truncate">{auth.user()?.name}</span>
+        <span aria-hidden="true" class="text-ink-placeholder">|</span>
+        <span class="shrink-0 whitespace-nowrap">{(auth.user()?.coinBalance ?? 0).toLocaleString("th-TH")} คอยน์</span>
+        <ChevronIcon class={`ml-auto size-5 text-ink-gray transition-transform duration-150 ${expanded() ? "rotate-180" : ""}`} />
+      </button>
+      <Show when={expanded()}>
+        <div id="mobile-account-actions" class="flex flex-col gap-1">
+          <A href="/account" class="flex min-h-[44px] items-center rounded-lg px-4 text-base font-medium text-ink lg:hover:bg-surface-pink" onClick={props.onNavigate}>
+            ดูโปรไฟล์
+          </A>
+          <button
+            type="button"
+            class="flex min-h-[44px] items-center rounded-lg px-4 text-left text-base font-medium text-danger-strong lg:hover:bg-danger-soft"
+            onClick={() => {
+              auth.logout();
+              props.onNavigate();
+              pushToast("ออกจากระบบสำเร็จ", "success", "แล้วพบกันใหม่นะ 👋");
+            }}
+          >
+            ออกจากระบบ
+          </button>
+        </div>
+      </Show>
+    </div>
   );
 }
 

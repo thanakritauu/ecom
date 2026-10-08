@@ -1,7 +1,8 @@
 import { Dialog } from "@kobalte/core/dialog";
-import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, Match, onCleanup, Show, Switch, type JSX } from "solid-js";
 import { A } from "@solidjs/router";
-import { useAuth, type SignInResult } from "~/lib/auth";
+import { useAuth, type ProfileExtraField, type SignInResult } from "~/lib/auth";
+import type { User } from "~/lib/types";
 import { MOCK_GOOGLE_PROFILE, MOCK_LINE_PROFILE, type SignInIdentity } from "~/lib/crm";
 import { ChevronIcon } from "./ChevronIcon";
 import { pushToast } from "~/lib/toast";
@@ -11,6 +12,7 @@ import lineIcon from "~/assets/icons/social-line.svg";
 import googleIcon from "~/assets/icons/social-google.svg";
 import coinMark from "~/assets/icons/charmiss-coin.png";
 import { CloseMark } from "./icons";
+import { Button } from "./Button";
 
 /**
  * Login / Register (prototype). Steps: start (phone first, or email, LINE,
@@ -18,6 +20,11 @@ import { CloseMark } from "./icons";
  * an existing member sees their old coins merged in; a new member is simply
  * signed in. LINE/Google skip the OTP. Fewest taps: the OTP submits itself on
  * the 6th digit, and a new member lands straight back on the page.
+ * If the member's profile (CRM copy or what they saved before) lacks birth date
+ * and/or gender, a "ข้อมูลเพิ่มเติม" step asks for just those — saved through
+ * `auth.updateProfile`, so `/account/profile` shows them. The step is
+ * required: no skip button, no × / ESC / overlay close while it's open.
+ * A CRM member still gets the coin carry-over screen after it.
  *
  * Originally Figma node 157:20131 — same UI/copy/logic as the original full-page
  * `/login` route (see git history / routes/login.tsx), just relocated into
@@ -34,12 +41,20 @@ import { CloseMark } from "./icons";
  * `?redirect=` mechanism, which only existed because Login used to be a
  * full page navigation.
  */
-type Step = "start" | "otp" | "checking" | "welcome-back";
+type Step = "start" | "otp" | "checking" | "more-info" | "welcome-back";
 type Channel = "phone" | "email";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 60;
+const MIN_AGE = 13;
+const THAI_MONTHS = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+/** Same values/labels as `/account/profile`'s เพศ radio group. */
+const GENDERS: { value: NonNullable<User["gender"]>; label: string }[] = [
+  { value: "female", label: "หญิง" },
+  { value: "male", label: "ชาย" },
+  { value: "unspecified", label: "ไม่ระบุ" },
+];
 
 export function AuthModal() {
   const auth = useAuth();
@@ -53,6 +68,13 @@ export function AuthModal() {
   const [resendIn, setResendIn] = createSignal(0);
   const [formError, setFormError] = createSignal<string>();
   const [result, setResult] = createSignal<SignInResult>();
+  // "ข้อมูลเพิ่มเติม": day / month (1–12) / year (ค.ศ.; shown as พ.ศ.) → stored as ISO like the profile page's date field.
+  const [birthDay, setBirthDay] = createSignal("");
+  const [birthMonth, setBirthMonth] = createSignal("");
+  const [birthYear, setBirthYear] = createSignal("");
+  const [gender, setGender] = createSignal<User["gender"]>();
+  const [moreInfoTried, setMoreInfoTried] = createSignal(false);
+  const [savingMoreInfo, setSavingMoreInfo] = createSignal(false);
 
   let resendTimer: ReturnType<typeof setInterval> | undefined;
   const startResendTimer = () => {
@@ -78,6 +100,12 @@ export function AuthModal() {
     setOtp("");
     setFormError(undefined);
     setResult(undefined);
+    setBirthDay("");
+    setBirthMonth("");
+    setBirthYear("");
+    setGender(undefined);
+    setMoreInfoTried(false);
+    setSavingMoreInfo(false);
   };
   const close = () => {
     auth.closeAuthModal();
@@ -105,15 +133,67 @@ export function AuthModal() {
     try {
       const res = await auth.login(identity);
       setResult(res);
-      if (res.member === "crm") {
-        setStep("welcome-back");
+      if (res.missingProfile.length > 0) {
+        setStep("more-info");
+        setTimeout(() => document.getElementById(res.missingProfile.includes("birthDate") ? "auth-modal-birth-day" : "auth-modal-gender-female")?.focus(), 50);
       } else {
-        pushToast("สมัครสมาชิกสำเร็จ", "success", "ยินดีต้อนรับสู่ Charmiss Club 🎉");
-        close();
+        finishSignIn();
       }
     } catch {
       setFormError("ไม่สามารถดำเนินการได้ กรุณาลองอีกครั้ง");
       setStep("start");
+    }
+  };
+
+  // After sign-in (and the "ข้อมูลเพิ่มเติม" step, if any): a CRM member sees the coins carried over; a new member is done.
+  const finishSignIn = () => {
+    if (result()?.member === "crm") {
+      setStep("welcome-back");
+    } else {
+      pushToast("สมัครสมาชิกสำเร็จ", "success", "ยินดีต้อนรับสู่ Charmiss Club 🎉");
+      close();
+    }
+  };
+
+  const asks = (field: ProfileExtraField) => !!result()?.missingProfile.includes(field);
+  const thisYear = new Date().getFullYear();
+  // Youngest selectable year already makes the member 13 this year; the exact day is checked in `birthError`.
+  const years = Array.from({ length: 100 }, (_, i) => thisYear - MIN_AGE - i);
+  const daysInMonth = () => new Date(Number(birthYear()) || 2000, Number(birthMonth()) || 1, 0).getDate(); // 2000: leap, so 29 ก.พ. is offered before a year is picked
+  createEffect(() => {
+    if (Number(birthDay()) > daysInMonth()) setBirthDay(""); // e.g. 31 then เดือน กุมภาพันธ์ — ask for the day again
+  });
+  const birthIso = () => `${birthYear()}-${birthMonth().padStart(2, "0")}-${birthDay().padStart(2, "0")}`;
+  const birthError = (): string | undefined => {
+    if (!asks("birthDate")) return undefined;
+    if (!birthDay() || !birthMonth() || !birthYear()) return "กรุณาเลือกวัน เดือน และปีเกิดให้ครบ";
+    const date = new Date(Number(birthYear()), Number(birthMonth()) - 1, Number(birthDay()));
+    if (date.getDate() !== Number(birthDay())) return "วันเกิดไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง";
+    const now = new Date();
+    if (date > now) return "วันเกิดต้องไม่เป็นวันในอนาคต";
+    const thirteenth = new Date(date.getFullYear() + MIN_AGE, date.getMonth(), date.getDate());
+    if (thirteenth > now) return `ต้องมีอายุ ${MIN_AGE} ปีขึ้นไป`;
+    return undefined;
+  };
+  const genderError = () => (asks("gender") && !gender() ? "กรุณาเลือกเพศ" : undefined);
+  const moreInfoSubtitle = () =>
+    asks("birthDate") && asks("gender") ? "ระบุวันเกิด และเพศ เพื่อรับสิทธิพิเศษจากเรา" : asks("birthDate") ? "ระบุวันเกิด เพื่อรับสิทธิพิเศษจากเรา" : "ระบุเพศ เพื่อรับสิทธิพิเศษจากเรา";
+
+  const saveMoreInfo = async (e: SubmitEvent) => {
+    e.preventDefault();
+    setMoreInfoTried(true);
+    if (birthError() || genderError()) {
+      document.getElementById(birthError() ? "auth-modal-birth-day" : "auth-modal-gender-female")?.focus();
+      return;
+    }
+    setSavingMoreInfo(true);
+    try {
+      await auth.updateProfile({ ...(asks("birthDate") && { birthDate: birthIso() }), ...(asks("gender") && { gender: gender() }) });
+      finishSignIn();
+    } catch {
+      pushToast("บันทึกข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง", "error");
+    } finally {
+      setSavingMoreInfo(false);
     }
   };
 
@@ -130,6 +210,7 @@ export function AuthModal() {
       onOpenChange={(open) => {
         if (open) return;
         if (step() === "checking") return; // don't let ESC/overlay-click close mid-check
+        if (step() === "more-info") return; // birth date / gender are required — no skipping, so no ESC/overlay close either
         close();
       }}
     >
@@ -140,7 +221,7 @@ export function AuthModal() {
             aria-modal="true"
             class="relative flex max-h-[90vh] w-full max-w-[429px] flex-col sm:max-w-[500px] items-center gap-6 overflow-y-auto rounded-[32px] bg-white p-6 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out sm:p-10"
           >
-            <Show when={step() !== "checking"}>
+            <Show when={step() !== "checking" && step() !== "more-info"}>
               <Dialog.CloseButton
                 aria-label="ปิด"
                 class="group absolute right-3 top-3 flex size-11 shrink-0 items-center justify-center"
@@ -340,7 +421,81 @@ export function AuthModal() {
                 </div>
               </Match>
 
-              {/* 4 — existing CRM member: coins carried over */}
+              {/* 4 — "ข้อมูลเพิ่มเติม": only the birth date / gender the profile is missing */}
+              <Match when={step() === "more-info"}>
+                <div class="mt-4 flex flex-col items-center gap-2 text-center">
+                  <Dialog.Title as="h1" class="text-2xl font-semibold text-ink">
+                    ข้อมูลเพิ่มเติม
+                  </Dialog.Title>
+                  <p class="text-base leading-[1.75] text-ink-gray">
+                    <Phrases text={moreInfoSubtitle()} />
+                  </p>
+                </div>
+
+                <form onSubmit={saveMoreInfo} novalidate class="flex w-full flex-col gap-5">
+                  <Show when={asks("birthDate")}>
+                    <fieldset class="flex flex-col gap-1.5" aria-describedby={moreInfoTried() && birthError() ? "auth-modal-birth-error" : undefined}>
+                      <legend class="mb-1.5 text-sm font-medium text-ink">วันเดือนปีเกิด</legend>
+                      <div class="grid grid-cols-[1fr_1.6fr_1.2fr] gap-2">
+                        <BirthSelect id="auth-modal-birth-day" label="วัน" value={birthDay()} onChange={setBirthDay} invalid={moreInfoTried() && !!birthError()}>
+                          <For each={Array.from({ length: daysInMonth() }, (_, i) => i + 1)}>{(d) => <option value={String(d)}>{d}</option>}</For>
+                        </BirthSelect>
+                        <BirthSelect id="auth-modal-birth-month" label="เดือน" value={birthMonth()} onChange={setBirthMonth} invalid={moreInfoTried() && !!birthError()}>
+                          <For each={THAI_MONTHS}>{(m, i) => <option value={String(i() + 1)}>{m}</option>}</For>
+                        </BirthSelect>
+                        <BirthSelect id="auth-modal-birth-year" label="ปี (พ.ศ.)" value={birthYear()} onChange={setBirthYear} invalid={moreInfoTried() && !!birthError()}>
+                          <For each={years}>{(y) => <option value={String(y)}>{y + 543}</option>}</For>
+                        </BirthSelect>
+                      </div>
+                      <Show when={moreInfoTried() && birthError()}>
+                        <p id="auth-modal-birth-error" role="alert" class="text-sm text-system-red">
+                          {birthError()}
+                        </p>
+                      </Show>
+                    </fieldset>
+                  </Show>
+
+                  <Show when={asks("gender")}>
+                    <fieldset class="flex flex-col gap-1.5" aria-describedby={moreInfoTried() && genderError() ? "auth-modal-gender-error" : undefined}>
+                      <legend class="mb-1.5 text-sm font-medium text-ink">เพศ</legend>
+                      <div class="flex flex-wrap gap-2">
+                        <For each={GENDERS}>
+                          {(g) => (
+                            <label
+                              class="flex min-h-11 cursor-pointer items-center gap-2 rounded-pill border px-4 text-sm text-ink transition-colors duration-150"
+                              classList={{ "border-brand-pink bg-surface-pink": gender() === g.value, "border-surface-gray bg-white": gender() !== g.value }}
+                            >
+                              <input
+                                id={`auth-modal-gender-${g.value}`}
+                                type="radio"
+                                name="auth-modal-gender"
+                                value={g.value}
+                                checked={gender() === g.value}
+                                onChange={() => setGender(g.value)}
+                                class="size-4 accent-brand-pink"
+                              />
+                              {g.label}
+                            </label>
+                          )}
+                        </For>
+                      </div>
+                      <Show when={moreInfoTried() && genderError()}>
+                        <p id="auth-modal-gender-error" role="alert" class="text-sm text-system-red">
+                          {genderError()}
+                        </p>
+                      </Show>
+                    </fieldset>
+                  </Show>
+
+                  <div class="flex w-full flex-col gap-2">
+                    <Button type="submit" variant="primary" class="w-full" loading={savingMoreInfo()}>
+                      บันทึก
+                    </Button>
+                  </div>
+                </form>
+              </Match>
+
+              {/* 5 — existing CRM member: coins carried over */}
               <Match when={step() === "welcome-back" && result()}>
                 {(res) => (
                   <div class="flex w-full flex-col items-center gap-5 text-center" role="status">
@@ -378,6 +533,32 @@ export function AuthModal() {
         </div>
       </Dialog.Portal>
     </Dialog>
+  );
+}
+
+/** One of the birth date's day / month / year dropdowns — the TextField box look, with the shared chevron. */
+function BirthSelect(props: { id: string; label: string; value: string; onChange: (value: string) => void; invalid: boolean; children: JSX.Element }) {
+  return (
+    <div class="relative">
+      <label for={props.id} class="sr-only">
+        {props.label}
+      </label>
+      <select
+        id={props.id}
+        value={props.value}
+        onChange={(e) => props.onChange(e.currentTarget.value)}
+        aria-invalid={props.invalid}
+        class={`h-11 w-full appearance-none rounded-card border bg-surface-card pl-3 pr-8 text-base outline-none transition-colors duration-150 focus:border-brand-pink ${
+          props.invalid ? "border-system-red" : "border-border"
+        } ${props.value ? "text-ink" : "text-ink-placeholder"}`}
+      >
+        <option value="" disabled>
+          {props.label}
+        </option>
+        {props.children}
+      </select>
+      <ChevronIcon direction="down" class="pointer-events-none absolute right-2.5 top-1/2 size-5 -translate-y-1/2 text-ink-gray" />
+    </div>
   );
 }
 

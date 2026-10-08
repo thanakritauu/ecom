@@ -11,7 +11,7 @@ import type { Address } from "~/lib/checkoutData";
 const ConfirmRemoveDialog = clientOnly(() => import("~/components/account/OrderActionDialogs").then((m) => ({ default: m.ConfirmRemoveDialog })));
 
 /**
- * ที่อยู่จัดส่ง + ที่อยู่ออกใบเสร็จรับเงิน — the same saved addresses Checkout
+ * ที่อยู่จัดส่ง + ที่อยู่ออกใบกำกับภาษี — the same saved addresses Checkout
  * picks from (same repository, same `AddressCard` + `AddressForm`), managed
  * here: add, edit, set the default shipping address, delete. Billing
  * addresses are the ones saved with `kind: "billing"` (may be a company).
@@ -33,7 +33,7 @@ export default function AccountAddressPage() {
       <AddressListPanel
         book={book}
         kind="billing"
-        title="ที่อยู่ออกใบเสร็จรับเงิน"
+        title="ที่อยู่ออกใบกำกับภาษี"
         headingId="account-billing-heading"
         addresses={book.addresses().filter((a) => a.kind === "billing")}
         onRemove={setRemoving}
@@ -98,7 +98,7 @@ function AddressListPanel(props: {
               {(_key) => (
                 <AddressForm
                   initial={editing()}
-                  newAddressLabel={billing() ? "ที่อยู่ออกใบเสร็จรับเงิน" : "ที่อยู่ใหม่"}
+                  newAddressLabel={billing() ? "ที่อยู่ออกใบกำกับภาษี" : "ที่อยู่ใหม่"}
                   kind={billing() ? "billing" : undefined}
                   companyAllowed={billing()}
                   showDefaultOption={!billing()}
@@ -136,7 +136,7 @@ function AddressListPanel(props: {
         <p class="text-xs text-ink-gray">
           {billing()
             ? empty()
-              ? "ยังไม่มีที่อยู่ออกใบเสร็จ"
+              ? "ยังไม่มีที่อยู่ออกใบกำกับภาษี"
               : "เลือกใช้ได้ตอนชำระเงิน เมื่อยกเลิก “ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง”"
             : "ที่อยู่เริ่มต้นจะถูกเลือกให้อัตโนมัติตอนชำระเงิน"}
         </p>

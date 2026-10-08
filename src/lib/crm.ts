@@ -10,6 +10,8 @@
  * `MOCK_USER`, 089-123-4567 / nutcha.s@example.com — Admin's cust-2), whose
  * 3,500 coins are the carry-over her `/account/points` history starts from.
  * Any other phone/email (and Google) signs up as new.
+ * Birth date / gender: กมลชนก (phone 081 / LINE) already has both in the CRM, so
+ * she skips the Auth Modal's "ข้อมูลเพิ่มเติม" step; the others don't, so they get it.
  */
 export type CrmMember = {
   crmMemberId: string;
@@ -18,11 +20,14 @@ export type CrmMember = {
   email: string;
   lineUserId?: string;
   coins: number;
+  /** ISO `YYYY-MM-DD` — same format as `User["birthDate"]`. */
+  birthDate?: string;
+  gender?: "female" | "male" | "unspecified";
 };
 
 const CRM_MEMBERS: CrmMember[] = [
   { crmMemberId: "CRM-000071", name: "Nutcha S.", phone: "0891234567", email: "nutcha.s@example.com", coins: 3500 },
-  { crmMemberId: "CRM-000182", name: "กมลชนก ใจดี", phone: "0812345678", email: "kamolchanok@example.com", lineUserId: "U-line-kamolchanok", coins: 3500 },
+  { crmMemberId: "CRM-000182", name: "กมลชนก ใจดี", phone: "0812345678", email: "kamolchanok@example.com", lineUserId: "U-line-kamolchanok", coins: 3500, birthDate: "1996-08-21", gender: "female" },
   { crmMemberId: "CRM-000245", name: "พิมพ์ชนก ส.", phone: "0898765432", email: "pimchanok@example.com", coins: 1280 },
 ];
 

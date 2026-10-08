@@ -6,9 +6,8 @@ import { CloseMark } from "../shared/icons";
 
 /**
  * PART 24: mobile must not shrink the desktop sidebar — it gets a real
- * bottom-sheet with an explicit Apply step (Open → Select → Review → Apply
- * → Close) instead, its CTA showing the live result count for the draft
- * filters. Same Kobalte Dialog pattern as CartDrawer, just sliding from the
+ * bottom-sheet instead; category toggles apply instantly and its CTA (the
+ * live result count) just closes the sheet. Same Kobalte Dialog pattern as CartDrawer, just sliding from the
  * bottom (`sheet-in`/`sheet-out`) instead of the side.
  */
 export function MobileFilterDrawer(props: {
@@ -17,7 +16,6 @@ export function MobileFilterDrawer(props: {
   onOpenChange: (open: boolean) => void;
   draft: ProductFilters;
   facets: CategoryFacet[];
-  onChange: (next: ProductFilters) => void;
   onToggleCategory: (key: CategoryFacetKey) => void;
   onApply: () => void;
   onReset: () => void;
@@ -44,7 +42,6 @@ export function MobileFilterDrawer(props: {
                 products={props.products}
                 draft={props.draft}
                 facets={props.facets}
-                onChange={props.onChange}
                 onToggleCategory={props.onToggleCategory}
                 onApply={props.onApply}
                 onReset={props.onReset}

@@ -3,10 +3,12 @@ import { A } from "@solidjs/router";
 import { clientOnly } from "@solidjs/start";
 import type { Order, OrderItem } from "~/lib/types";
 import { CARRIERS } from "~/lib/carriers";
-import { canReviewOrder, isOrderReviewed } from "~/lib/orderHistory";
-import { formatOrderDate, getOrderDisplayStatus } from "~/lib/orderTracking";
+import { canReviewOrder, getOrderRating, isOrderReviewed } from "~/lib/orderHistory";
+import { getPaymentDeadline } from "~/lib/accountData";
+import { formatEventTime, formatOrderDate, getOrderDisplayStatus } from "~/lib/orderTracking";
 import { formatTHB } from "../shared/PriceDisplay";
 import { CheckIcon, GiftIcon } from "../shared/icons";
+import { ReviewStars } from "./OrderMeta";
 
 // Same Kobalte Dialog SSR/hydration workaround as ProductCard's QuickAddSheet.
 const OrderReviewDialog = clientOnly(() => import("./OrderReviewDialog").then((m) => ({ default: m.OrderReviewDialog })));
@@ -34,7 +36,7 @@ export function OrderCard(props: { order: Order }) {
         ? { href: `${detailHref()}#tracking`, label: "ติดตามพัสดุ" }
         : { href: detailHref(), label: "ดูรายละเอียด" };
   const detailHref = () => `/account/orders/${props.order.id}`;
-  // Delivered orders: "รีวิว" (solid) leads, "ดูรายละเอียด" steps down to outline; once reviewed, a "รีวิวแล้ว" chip.
+  // Delivered orders: "รีวิว" (solid) leads, "ดูรายละเอียด" steps down to outline; once reviewed, a "รีวิวแล้ว" chip with the stars given.
   const reviewable = () => canReviewOrder(props.order);
   const [reviewOpen, setReviewOpen] = createSignal(false);
 
@@ -73,6 +75,12 @@ export function OrderCard(props: { order: Order }) {
         <div class="flex min-h-8 min-w-0 flex-wrap items-center gap-x-3 gap-y-1" classList={{ "flex-[1_1_200px]": reviewable(), "flex-1": !reviewable() }}>
           <span class="text-ink-gray">สถานะ:</span>
           <span class={`rounded-pill px-2 py-0.5 text-xs font-semibold ${status().badgeClass}`}>{status().label}</span>
+          {/* Unpaid past this time → auto-cancelled (PAYMENT_WINDOW_HOURS) */}
+          <Show when={props.order.status === "pending_payment"}>
+            <span class="text-xs text-ink-gray">
+              ชำระภายใน <span class="font-medium text-ink">{formatEventTime(getPaymentDeadline(props.order))}</span>
+            </span>
+          </Show>
           <Show when={props.order.shipment.trackingNumber}>
             {(n) => (
               <span class="text-xs text-ink-gray">
@@ -100,6 +108,7 @@ export function OrderCard(props: { order: Order }) {
             >
               <span class="flex min-h-8 items-center gap-1 rounded-pill bg-success-soft px-3 text-xs font-medium text-success">
                 <CheckIcon class="size-3.5" /> รีวิวแล้ว
+                <Show when={getOrderRating(props.order)}>{(r) => <ReviewStars rating={r()} class="size-3" />}</Show>
               </span>
             </Show>
             <A href={detailHref()} class={PILL_OUTLINE}>
@@ -108,9 +117,6 @@ export function OrderCard(props: { order: Order }) {
           </div>
         </Show>
       </div>
-      <Show when={props.order.returnRequest}>
-        <p class="rounded-2xl bg-warning-soft px-3 py-2 text-sm text-ink">ส่งคำขอคืนสินค้าแล้ว · รอตรวจสอบ</p>
-      </Show>
 
       <p class="flex items-baseline justify-between gap-2 border-t border-surface-gray pt-3">
         <span class="text-sm text-ink-gray">ยอดรวม</span>

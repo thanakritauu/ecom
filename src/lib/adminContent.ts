@@ -367,7 +367,7 @@ const PROMOTION_PAGE_SEEDS: (Omit<PromotionPage, "createdAt" | "updatedAt"> & { 
     id: "promo-page-003",
     isHomepage: false,
     name: "Charmiss x Sanrio Collection",
-    slug: "charmiss-x-sanrio",
+    slug: "iconic-glow",
     status: "published",
     banners: { desktop: heroBanner3, tablet: heroBanner3, mobile: heroBanner3 },
     title: "Charming Iconic Glow",
@@ -552,11 +552,24 @@ export function withLateSeedPages(stored: PromotionPage[]): PromotionPage[] {
  * record still in its old seed shape, so an admin's own edits survive.
  *  - v2: 9.9 page → unpublished (expired); Homepage's disabled sample hero →
  *    the three live `HeroBanner.tsx` slides, enabled.
+ *  - v4: Iconic Glow page slug `charmiss-x-sanrio` → `iconic-glow` (the old
+ *    URL keeps working via `LEGACY_PROMOTION_SLUGS`).
  */
-export const PROMOTION_PAGE_SEED_VERSION = 3;
+export const PROMOTION_PAGE_SEED_VERSION = 4;
+
+/** Retired slugs → their current slug, so `/promotion/<old>` redirects instead of 404ing on links shared before a rename. */
+export const LEGACY_PROMOTION_SLUGS: Record<string, string> = { "charmiss-x-sanrio": "iconic-glow" };
 
 export function upgradePromotionPageSeeds(stored: PromotionPage[], fromVersion: number): PromotionPage[] {
-  if (fromVersion >= 3) return stored;
+  const v3 = fromVersion >= 3 ? stored : upgradeToV3(stored, fromVersion);
+  if (fromVersion >= 4) return v3;
+  // v4 — only the untouched seed slug moves, and only if nothing else already took the new one.
+  const target = LEGACY_PROMOTION_SLUGS["charmiss-x-sanrio"];
+  if (v3.some((p) => p.slug === target)) return v3;
+  return v3.map((p) => (p.id === "promo-page-003" && p.slug === "charmiss-x-sanrio" ? { ...p, slug: target } : p));
+}
+
+function upgradeToV3(stored: PromotionPage[], fromVersion: number): PromotionPage[] {
   return stored.map((p) => {
     // v2 briefly shipped the hero enabled, which routed `/` through `AdminHeroSlide` — v3 turns that untouched seed back off.
     if (fromVersion === 2 && p.isHomepage) {

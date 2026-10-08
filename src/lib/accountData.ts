@@ -50,6 +50,64 @@ export function getPaymentStatus(order: Order): PaymentStatus {
   return "paid";
 }
 
+/**
+ * Payment deadline — an order left "รอชำระเงิน" longer than this after it was
+ * placed is cancelled automatically. Derived when orders are read
+ * (`applyPaymentDeadline`), never written back into the seeds.
+ */
+export const PAYMENT_WINDOW_HOURS = 24;
+
+/**
+ * The order module's mock "now" — afternoon of the same mock today as Admin's
+ * `ORDERS_TODAY_ISO_DATE` (2 ต.ค. 2569), so a seed can sit inside its payment
+ * window forever. Orders placed later than this (Checkout, real clock) are
+ * measured against the real time instead.
+ */
+export const ORDERS_MOCK_NOW_ISO = "2026-10-02T15:00:00+07:00";
+
+export const AUTO_CANCEL_REASON = "ยกเลิกอัตโนมัติ — ไม่ได้ชำระเงินภายในเวลาที่กำหนด";
+
+/** ISO (Bangkok "+07:00" form, like the seeds) — when a pending order's payment window closes. */
+export function getPaymentDeadline(order: Pick<Order, "placedAt">): string {
+  const bangkok = new Date(Date.parse(order.placedAt) + (PAYMENT_WINDOW_HOURS + 7) * 3_600_000);
+  return `${bangkok.toISOString().slice(0, 19)}+07:00`;
+}
+
+const MOCK_NOW_MS = Date.parse(ORDERS_MOCK_NOW_ISO);
+const ordersNow = (order: Order) => (Date.parse(order.placedAt) > MOCK_NOW_MS ? Date.now() : MOCK_NOW_MS);
+
+/** A pending order past its deadline reads as cancelled (at the deadline, with `AUTO_CANCEL_REASON`); anything else is returned as-is. */
+export function applyPaymentDeadline(order: Order): Order {
+  if (order.status !== "pending_payment") return order;
+  const deadline = getPaymentDeadline(order);
+  if (Date.parse(deadline) > ordersNow(order)) return order;
+  return { ...order, status: "cancelled", cancelledAt: deadline, cancelReason: AUTO_CANCEL_REASON };
+}
+
+/**
+ * Orders store the payment method as Checkout's label text — this maps it
+ * back to a method kind (logo + short label in the order detail). Matches
+ * on the text so older/renamed labels still resolve; an unknown method
+ * returns `undefined` and the UI shows the stored label as-is.
+ */
+export type PaymentKind = "card" | "promptpay" | "truemoney" | "mobile_banking";
+
+export const PAYMENT_KIND_LABEL: Record<PaymentKind, string> = {
+  card: "บัตรเครดิต / เดบิต",
+  promptpay: "พร้อมเพย์",
+  truemoney: "TrueMoney Wallet",
+  mobile_banking: "โมบายล์แบงก์กิ้ง",
+};
+
+export function getPaymentKind(method: string): PaymentKind | undefined {
+  const m = method.toLowerCase();
+  if (m.includes("บัตร") || m.includes("card")) return "card";
+  if (m.includes("พร้อมเพย์") || m.includes("promptpay")) return "promptpay";
+  if (m.includes("truemoney")) return "truemoney";
+  if (m.includes("โมบาย") || m.includes("mobile")) return "mobile_banking";
+  return undefined;
+}
+
 const HOME = MOCK_ADDRESSES[0];
 const OFFICE = MOCK_ADDRESSES[1];
 const lipTint = (variantLabel: string, price = 299, qty = 1): OrderItem => ({ name: "ลิปทินท์ Y2K Glow", variantLabel, qty, price, image: orderItemLipTint });
@@ -86,7 +144,8 @@ const STANDARD = DELIVERY.method;
 /**
  * Phase 05 mock purchase history — covers every tracking state for UX
  * review (State 1–6 = สั่งซื้อสำเร็จ → จัดส่งสำเร็จ) plus pending-payment and
- * cancelled. ORD-2026-1027 carries the full multi-hub DHL history and the
+ * cancelled (ORD-2026-1037 is inside its payment window; ORD-2026-1026
+ * missed it and reads as auto-cancelled). ORD-2026-1027 carries the full multi-hub DHL history and the
  * SAVE50 coupon; ORD-2026-1029 redeems 100 coins — exactly what 1027 (the
  * one delivered order) earned at her Radiance ×1.5 rate, so the CRM
  * carry-over alone is her `MOCK_COIN_BALANCE`. Tracking
@@ -95,11 +154,20 @@ const STANDARD = DELIVERY.method;
  */
 export const MOCK_ORDERS: Order[] = [
   {
+    // Pending payment, still inside its PAYMENT_WINDOW_HOURS window at the mock now (deadline 3 ต.ค. 14:30)
+    id: "ORD-2026-1037",
+    status: "pending_payment",
+    placedAt: "2026-10-02T14:30:00+07:00",
+    ...priced([lipTint("01 Melody Pink")], "พร้อมเพย์"),
+    shippingAddress: HOME,
+    shipment: { carrier: "dhl", method: STANDARD, events: [] },
+  },
+  {
     // State 1 — สั่งซื้อสำเร็จ (paid, not packed yet)
     id: "ORD-2026-1032",
     status: "preparing",
     placedAt: "2026-10-02T09:32:00+07:00",
-    ...priced([lipTint("01 Melody Pink", 299, 2)], "พร้อมเพย์ (PromptPay)"),
+    ...priced([lipTint("01 Melody Pink", 299, 2)], "พร้อมเพย์"),
     shippingAddress: HOME,
     shipment: { carrier: "dhl", method: STANDARD, events: [{ status: "ordered", timestamp: "2026-10-02T09:32:00+07:00", description: "ได้รับคำสั่งซื้อและชำระเงินเรียบร้อย" }] },
   },
@@ -162,7 +230,7 @@ export const MOCK_ORDERS: Order[] = [
     id: "ORD-2026-1028",
     status: "shipping",
     placedAt: "2026-09-27T19:48:00+07:00",
-    ...priced([blush(2)], "พร้อมเพย์ (PromptPay)"),
+    ...priced([blush(2)], "พร้อมเพย์"),
     shippingAddress: OFFICE,
     shipment: {
       carrier: "dhl",
@@ -202,10 +270,11 @@ export const MOCK_ORDERS: Order[] = [
     },
   },
   {
+    // Left unpaid past its deadline — reads as auto-cancelled (`applyPaymentDeadline`)
     id: "ORD-2026-1026",
     status: "pending_payment",
     placedAt: "2026-09-11T18:22:00+07:00",
-    ...priced([lipTint("Peach Pop", 259)], "พร้อมเพย์ (PromptPay)"),
+    ...priced([lipTint("Peach Pop", 259)], "พร้อมเพย์"),
     shippingAddress: HOME,
     shipment: { carrier: "dhl", method: STANDARD, events: [] },
   },

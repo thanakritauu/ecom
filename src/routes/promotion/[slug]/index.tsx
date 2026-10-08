@@ -1,7 +1,7 @@
 import { createMemo, Show } from "solid-js";
-import { useParams } from "@solidjs/router";
+import { Navigate, useParams } from "@solidjs/router";
 import { usePromotionPages } from "~/lib/promotionPages";
-import { isPromotionPageVisible } from "~/lib/adminContent";
+import { isPromotionPageVisible, LEGACY_PROMOTION_SLUGS } from "~/lib/adminContent";
 import { PromotionPageView, PromotionPageLoading, PromotionPageNotFound } from "~/components/promotion/PromotionPageView";
 
 /**
@@ -17,18 +17,30 @@ import { PromotionPageView, PromotionPageLoading, PromotionPageNotFound } from "
  * §18/§35 — the Homepage's own `PromotionPage` record never resolves here
  * even if its slug happens to match, so `/promotion/:slug` can never become
  * a second URL for `/` — Homepage is reached only via `/`.
+ *
+ * A retired slug (`LEGACY_PROMOTION_SLUGS`) redirects to its current one —
+ * a 302 on the server render, a replace-navigation on the client.
  */
 export default function PromotionPageRoute() {
   const params = useParams();
+  const legacyTarget = () => LEGACY_PROMOTION_SLUGS[params.slug ?? ""];
+  return (
+    <Show when={legacyTarget()} fallback={<PromotionPageBySlug slug={params.slug ?? ""} />}>
+      {(slug) => <Navigate href={`/promotion/${slug()}`} />}
+    </Show>
+  );
+}
+
+function PromotionPageBySlug(props: { slug: string }) {
   const store = usePromotionPages();
   const visiblePage = createMemo(() => {
-    const found = store.getBySlug(params.slug ?? "");
+    const found = store.getBySlug(props.slug);
     return found && !found.isHomepage && isPromotionPageVisible(found) ? found : undefined;
   });
 
   return (
     <Show when={store.ready()} fallback={<PromotionPageLoading />}>
-      <Show when={visiblePage()} fallback={<PromotionPageNotFound slug={params.slug ?? ""} />}>
+      <Show when={visiblePage()} fallback={<PromotionPageNotFound slug={props.slug} />}>
         {(p) => <PromotionPageView page={p()} />}
       </Show>
     </Show>

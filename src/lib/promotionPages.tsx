@@ -1,9 +1,18 @@
 import { createContext, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
-import { normalizePromotionPage, buildMockPromotionPages, withLateSeedPages, type PromotionPage } from "./adminContent";
+import {
+  normalizePromotionPage,
+  buildMockPromotionPages,
+  withLateSeedPages,
+  upgradePromotionPageSeeds,
+  PROMOTION_PAGE_SEED_VERSION,
+  type PromotionPage,
+} from "./adminContent";
 
 /** Same key `adminContentStore.tsx` (the Admin side's source of truth) persists to — read-only here, never written from the customer side. */
 const STORAGE_KEY = "charmiss:admin:content:promotionPages";
+/** Same seed-version key the Admin store tracks — a browser that hasn't opened Admin since a seed bump still sees the upgraded seeds (applied in memory only). */
+const SEED_VERSION_KEY = "charmiss:admin:content:promotionPages:seedVersion";
 
 /**
  * Landing Page Architecture — root-cause fix: this provider used to fall
@@ -27,7 +36,9 @@ function readStoredPages(): PromotionPage[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return fallbackPages();
-    return withLateSeedPages((JSON.parse(raw) as PromotionPage[]).map(normalizePromotionPage));
+    const loaded = withLateSeedPages((JSON.parse(raw) as PromotionPage[]).map(normalizePromotionPage));
+    const storedVersion = Number(localStorage.getItem(SEED_VERSION_KEY) ?? "1") || 1;
+    return storedVersion < PROMOTION_PAGE_SEED_VERSION ? upgradePromotionPageSeeds(loaded, storedVersion).map(normalizePromotionPage) : loaded;
   } catch {
     return fallbackPages();
   }

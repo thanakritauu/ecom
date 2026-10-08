@@ -1,8 +1,9 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createSignal, For, onMount, Show } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import { Button } from "~/components/shared/Button";
 import { formatTHB } from "~/components/shared/PriceDisplay";
 import { PAYMENT_METHODS } from "~/lib/cartSelectors";
+import { METHOD_ICONS } from "~/components/checkout/paymentMarks";
 import { reportBeamResult, safeReturnPath, BEAM_RESULT_TYPE, type PaymentResult } from "~/lib/payment";
 
 /**
@@ -85,7 +86,13 @@ export default function BeamCheckoutMockPage() {
               </div>
               <div class="flex justify-between gap-3">
                 <dt class="text-ink-gray">ช่องทางชำระเงิน</dt>
-                <dd class="text-right text-ink">{method()!.label}</dd>
+                <dd class="flex items-center justify-end gap-2 text-right text-ink">
+                  {/* The method's own square icon(s) — the shopper's method, not Beam branding. */}
+                  <span class="flex shrink-0 gap-1" aria-hidden="true">
+                    <For each={METHOD_ICONS[method()!.id]}>{(src) => <img src={src} alt="" class="size-5" />}</For>
+                  </span>
+                  {method()!.label}
+                </dd>
               </div>
               <div class="flex items-baseline justify-between gap-3 border-t border-surface-gray pt-3">
                 <dt class="font-semibold text-ink">ยอดชำระ</dt>

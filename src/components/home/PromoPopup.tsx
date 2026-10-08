@@ -1,5 +1,5 @@
 import { Dialog } from "@kobalte/core/dialog";
-import { createSignal, onMount, Show } from "solid-js";
+import { createEffect, createSignal, onMount, Show } from "solid-js";
 import { useAuth } from "~/lib/auth";
 import { hidePromoForever, HOME_PROMO_POPUP, isPromoHidden, type PromoPopupContent } from "~/lib/promoPopup";
 import { Button } from "../shared/Button";
@@ -23,9 +23,13 @@ export function PromoPopup(props: { content?: PromoPopupContent }) {
   const [neverAgain, setNeverAgain] = createSignal(false);
 
   onMount(() => {
-    if (closedThisVisit || isPromoHidden(content().id)) return;
+    if (closedThisVisit || isPromoHidden(content().id) || auth.isAuthenticated()) return;
     if (auth.isAuthModalOpen() || document.querySelector('[role="dialog"]')) return;
     setOpen(true);
+  });
+  // A new-member offer: signed-in members never see it (also covers the session restoring just after mount).
+  createEffect(() => {
+    if (auth.isAuthenticated() && open()) setOpen(false);
   });
 
   const close = () => {
@@ -74,25 +78,16 @@ export function PromoPopup(props: { content?: PromoPopupContent }) {
                 <p class="whitespace-nowrap rounded-pill bg-surface-pink px-4 py-2 text-xs font-medium text-brand-pink sm:text-sm">{content().condition}</p>
               </Show>
 
-              <Show
-                when={auth.isAuthenticated()}
-                fallback={
-                  <Button
-                    size="lg"
-                    class="w-full"
-                    onClick={() => {
-                      close();
-                      auth.openAuthModal();
-                    }}
-                  >
-                    {content().guestCta}
-                  </Button>
-                }
+              <Button
+                size="lg"
+                class="w-full"
+                onClick={() => {
+                  close();
+                  auth.openAuthModal();
+                }}
               >
-                <Button href={content().memberCta.href} size="lg" class="w-full" onClick={close}>
-                  {content().memberCta.label}
-                </Button>
-              </Show>
+                {content().guestCta}
+              </Button>
 
             </div>
           </div>

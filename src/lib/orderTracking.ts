@@ -80,18 +80,7 @@ export function getOrderDisplayStatus(order: Order): { label: string; badgeClass
   return shipment === "awaiting_shipment" ? ORDER_STATUS_META.preparing : SHIPMENT_STATUS_META[shipment];
 }
 
-const CANCELLABLE: OrderStatus[] = ["pending_payment", "preparing"];
-
-/** Cancellable until the parcel is handed to the carrier. */
-export function canCancelOrder(order: Order): boolean {
-  return CANCELLABLE.includes(order.status) && getShipmentStatus(order.shipment) === "awaiting_shipment";
-}
-
-/** Returns open once delivered (order completed), one request per order. */
-export function canRequestReturn(order: Order): boolean {
-  return order.status === "completed" && !order.returnRequest;
-}
-
+/** Admin-side return requests (`adminOrders.ts` seeds) — the storefront sends shoppers to LINE instead. */
 export const RETURN_REASONS = [
   "ได้รับสินค้าผิดตัวเลือกสินค้า / ผิดรุ่น",
   "สินค้าชำรุดหรือเสียหาย",

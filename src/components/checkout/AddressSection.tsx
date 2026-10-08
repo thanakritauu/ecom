@@ -1,5 +1,6 @@
 import { createEffect, createResource, createSignal, createUniqueId, For, on, onMount, Show } from "solid-js";
-import { formatAddress, isBangkok, THAI_PROVINCES, type Address } from "~/lib/checkoutData";
+import { DEFAULT_PHONE_COUNTRY_CODE, formatAddress, formatAddressPhone, isBangkok, THAI_PROVINCES, type Address } from "~/lib/checkoutData";
+import { findCountryCode, PHONE_COUNTRY_CODES, type CountryCode } from "~/lib/countryCodes";
 import { PHONE_PATTERN } from "~/lib/validators";
 import { districtsOf, loadThaiAddressData, postalCodesOf, stripAreaPrefix, subDistrictsOf } from "~/lib/thaiAddress";
 import { TextField } from "../shared/TextField";
@@ -185,7 +186,7 @@ export function AddressCard(props: {
     <span class="flex min-w-0 flex-1 flex-col gap-0.5">
       <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span class="font-semibold text-ink">{props.address.recipientName}</span>
-        <span class="text-sm text-ink-gray">{props.address.phone}</span>
+        <span class="text-sm text-ink-gray">{formatAddressPhone(props.address)}</span>
         <Show when={props.address.isDefault}>
           <Badge tone="success">ค่าเริ่มต้น</Badge>
         </Show>
@@ -263,6 +264,8 @@ function splitName(full: string | undefined): { first: string; last: string } {
   return { first, last: rest.join(" ") };
 }
 const POSTAL_PATTERN = /^\d{5}$/;
+/** Outside +66 we don't know each country's numbering plan — just 6–12 digits. */
+const FOREIGN_PHONE_PATTERN = /^(?=(?:\D*\d){6,12}\D*$)\d[\d-]*$/;
 
 export function AddressForm(props: {
   initial?: Address;
@@ -292,6 +295,8 @@ export function AddressForm(props: {
     subDistrict: stripAreaPrefix(props.initial?.subDistrict ?? ""),
     postalCode: props.initial?.postalCode ?? "",
   });
+  const [phoneCode, setPhoneCode] = createSignal(props.initial?.phoneCountryCode ?? DEFAULT_PHONE_COUNTRY_CODE);
+  const thaiPhone = () => phoneCode() === DEFAULT_PHONE_COUNTRY_CODE;
   const [makeDefault, setMakeDefault] = createSignal(props.forceDefault || !!props.initial?.isDefault);
   const [touched, setTouched] = createSignal<Partial<Record<FieldKey, boolean>>>({});
   const [submitted, setSubmitted] = createSignal(false);
@@ -344,6 +349,7 @@ export function AddressForm(props: {
         return value || props.companyAllowed ? undefined : "กรุณากรอกนามสกุล";
       case "phone":
         if (!value) return "กรุณากรอกเบอร์โทรศัพท์ผู้รับ";
+        if (!thaiPhone()) return FOREIGN_PHONE_PATTERN.test(value) ? undefined : "เบอร์โทรต้องเป็นตัวเลข 6–12 หลัก";
         return PHONE_PATTERN.test(value) ? undefined : "เบอร์โทรต้องเป็นตัวเลข 9–10 หลัก ขึ้นต้นด้วย 0 เช่น 081-234-5678";
       case "addressLine":
         return value ? undefined : "กรุณากรอกบ้านเลขที่ หมู่บ้าน/อาคาร ซอย ถนน";
@@ -364,7 +370,7 @@ export function AddressForm(props: {
   // Mobile: keep the focused field clear of the on-screen keyboard and the fixed order-summary bar.
   const onFocusIn = (e: FocusEvent) => {
     const el = e.target as HTMLElement;
-    if (window.innerWidth >= 1024 || !(el instanceof HTMLInputElement || el instanceof HTMLSelectElement)) return;
+    if (window.innerWidth >= 1024 || !(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) return;
     setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 300);
   };
 
@@ -385,6 +391,7 @@ export function AddressForm(props: {
           label: props.initial?.label ?? props.newAddressLabel,
           recipientName: [t("firstName"), t("lastName")].filter(Boolean).join(" "),
           phone: t("phone"),
+          phoneCountryCode: phoneCode(),
           addressLine: t("addressLine"),
           province: t("province"),
           district: t("district"),
@@ -428,48 +435,42 @@ export function AddressForm(props: {
           error={shownError("lastName")}
         />
       </div>
-      <TextField
+      {/* Order: name → phone → address line (full row) → จังหวัด | อำเภอ/เขต → ตำบล/แขวง | รหัสไปรษณีย์ — same on every width. */}
+      <PhoneField
         id={fieldId("phone")}
-        label="เบอร์โทรศัพท์"
-        required
-        type="tel"
-        inputMode="tel"
-        autocomplete="tel"
-        enterkeyhint="next"
-        placeholder="08X-XXX-XXXX"
-        maxlength={12}
+        code={phoneCode()}
+        onCodeChange={(code) => {
+          setPhoneCode(code);
+          touch("phone");
+        }}
+        thai={thaiPhone()}
         value={v("phone")}
-        onInput={(e) => set("phone", e.currentTarget.value.replace(/[^\d-]/g, ""))}
+        onInput={(value) => set("phone", value)}
         onBlur={() => touch("phone")}
         error={shownError("phone")}
       />
 
-      <TextField
+      <AddressLineField
         id={fieldId("addressLine")}
-        label="ที่อยู่"
-        required
-        autocomplete="street-address"
-        enterkeyhint="next"
-        placeholder="บ้านเลขที่ หมู่บ้าน/อาคาร ซอย ถนน"
         value={v("addressLine")}
-        onInput={(e) => set("addressLine", e.currentTarget.value)}
+        onInput={(value) => set("addressLine", value)}
         onBlur={() => touch("addressLine")}
         error={shownError("addressLine")}
       />
 
-      <SelectField
-        id={fieldId("province")}
-        label="จังหวัด"
-        placeholder="เลือกจังหวัด"
-        autocomplete="address-level1"
-        options={THAI_PROVINCES}
-        value={v("province")}
-        onChange={pickProvince}
-        error={shownError("province")}
-      />
-      {/* เขต/อำเภอ | แขวง/ตำบล | รหัสไปรษณีย์ — always one row (compact selects; labels name each field, so placeholders stay short). */}
-      {/* Postal column fixed at 88px on phones so all 5 digits always show; the two name columns share the rest. */}
-      <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_88px] gap-2 sm:grid-cols-3 sm:gap-4">
+      {/* Two selects per row on every width — the cascade reads left→right, top→bottom. Compact on phones (tighter padding). */}
+      <div class="grid grid-cols-2 gap-3 sm:gap-4">
+        <SelectField
+          compact
+          id={fieldId("province")}
+          label="จังหวัด"
+          placeholder="เลือก"
+          autocomplete="address-level1"
+          options={THAI_PROVINCES}
+          value={v("province")}
+          onChange={pickProvince}
+          error={shownError("province")}
+        />
         <SelectField
           compact
           id={fieldId("district")}
@@ -482,6 +483,8 @@ export function AddressForm(props: {
           onChange={pickDistrict}
           error={shownError("district")}
         />
+      </div>
+      <div class="grid grid-cols-2 gap-3 sm:gap-4">
         <SelectField
           compact
           id={fieldId("subDistrict")}
@@ -510,10 +513,10 @@ export function AddressForm(props: {
           error={shownError("postalCode")}
         />
       </div>
-      {/* Phones: the three narrow selects truncate long names ("ป้อมปราบศัตรูพ่าย") — spell the pick out in full. */}
+      {/* Phones: the half-width selects can truncate long names ("ป้อมปราบศัตรูพ่าย") — spell the pick out in full. */}
       <Show when={v("district")}>
-        <p class="-mt-2 text-xs text-ink-gray sm:hidden" aria-live="polite">
-          {[`${districtLabel()}${v("district")}`, v("subDistrict") && `${subDistrictLabel()}${v("subDistrict")}`, v("postalCode")].filter(Boolean).join(" ")}
+        <p class="-mt-2 text-xs leading-[1.75] text-ink-gray sm:hidden" aria-live="polite">
+          {[`${districtLabel()}${v("district")}`, v("subDistrict") && `${subDistrictLabel()}${v("subDistrict")}`, v("province"), v("postalCode")].filter(Boolean).join(" ")}
         </p>
       </Show>
 
@@ -556,6 +559,141 @@ export function AddressForm(props: {
 }
 
 /**
+ * ที่อยู่ (บ้านเลขที่ ถนน) — full row on every width, and a 2-line box (same border/label/error
+ * treatment as `TextField`) so long Thai addresses wrap instead of scrolling sideways. Grows with
+ * its text (`field-sizing: content`, else the input handler); still one line of data — Enter and
+ * pasted line breaks become nothing / a space.
+ */
+function AddressLineField(props: { id: string; value: string; onInput: (value: string) => void; onBlur: () => void; error?: string }) {
+  const errorId = `${props.id}-error`;
+  const grow = (el: HTMLTextAreaElement) => {
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + 2}px`;
+  };
+  return (
+    <div class="flex flex-col gap-1.5">
+      <label for={props.id} class="text-sm font-medium text-ink">
+        ที่อยู่ (บ้านเลขที่ ถนน)
+        <span class="text-system-red" aria-hidden="true">
+          {" "}
+          *
+        </span>
+      </label>
+      <textarea
+        id={props.id}
+        rows={2}
+        autocomplete="street-address"
+        enterkeyhint="next"
+        placeholder="บ้านเลขที่ หมู่บ้าน/อาคาร ซอย ถนน"
+        aria-required="true"
+        aria-invalid={!!props.error}
+        aria-describedby={props.error ? errorId : undefined}
+        value={props.value}
+        onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
+        onInput={(e) => {
+          const el = e.currentTarget;
+          const clean = el.value.replace(/\s*\n\s*/g, " ");
+          if (clean !== el.value) el.value = clean;
+          props.onInput(clean);
+          grow(el);
+        }}
+        onBlur={props.onBlur}
+        class={`min-h-[84px] w-full resize-none rounded-card border bg-surface-card px-4 py-2.5 text-base leading-[1.75] text-ink outline-none transition-colors duration-150 [field-sizing:content] placeholder:text-ink-placeholder focus:border-brand-pink ${
+          props.error ? "border-system-red" : "border-border"
+        }`}
+      />
+      <Show when={props.error}>
+        <p id={errorId} role="alert" class="text-sm text-system-red">
+          {props.error}
+        </p>
+      </Show>
+    </div>
+  );
+}
+
+/**
+ * เบอร์โทรศัพท์ with a country-code prefix — one bordered box like `TextField`: a compact
+ * "🇹🇭 +66 ⌄" segment (a transparent native `<select>` laid over it, so phones get the OS
+ * picker and the list reads "+66 ประเทศไทย") in front of the number input.
+ */
+function PhoneField(props: {
+  id: string;
+  code: string;
+  onCodeChange: (code: string) => void;
+  /** +66 — Thai number format (leading 0, 9–10 digits). */
+  thai: boolean;
+  value: string;
+  onInput: (value: string) => void;
+  onBlur: () => void;
+  error?: string;
+}) {
+  const errorId = `${props.id}-error`;
+  // The row the shopper picked — keeps e.g. Canada's flag for "+1" (shared with the US); otherwise the code's first row.
+  const [picked, setPicked] = createSignal<CountryCode>();
+  const current = () => (picked()?.code === props.code ? picked()! : findCountryCode(props.code));
+  return (
+    <div class="flex flex-col gap-1.5">
+      <label for={props.id} class="text-sm font-medium text-ink">
+        เบอร์โทรศัพท์
+        <span class="text-system-red" aria-hidden="true">
+          {" "}
+          *
+        </span>
+      </label>
+      <div
+        class={`flex h-11 rounded-card border bg-surface-card transition-colors duration-150 focus-within:border-brand-pink ${props.error ? "border-system-red" : "border-border"}`}
+      >
+        <div class="relative flex shrink-0 items-center gap-1 border-r border-border pl-3 pr-2 text-base text-ink">
+          <span aria-hidden="true">{current().flag}</span>
+          <span aria-hidden="true">{current().code}</span>
+          <ChevronIcon direction="down" class="size-4 text-ink-gray" />
+          <select
+            aria-label="รหัสประเทศ"
+            autocomplete="tel-country-code"
+            value={String(PHONE_COUNTRY_CODES.indexOf(current()))}
+            onChange={(e) => {
+              const row = PHONE_COUNTRY_CODES[Number(e.currentTarget.value)];
+              setPicked(row);
+              props.onCodeChange(row.code);
+            }}
+            class="absolute inset-0 size-full cursor-pointer appearance-none opacity-0"
+          >
+            <For each={PHONE_COUNTRY_CODES}>
+              {(c, i) => (
+                <option value={String(i())} selected={c === current()}>
+                  {`${c.flag} ${c.country} (${c.code})`}
+                </option>
+              )}
+            </For>
+          </select>
+        </div>
+        <input
+          id={props.id}
+          type="tel"
+          inputMode="tel"
+          autocomplete="tel-national"
+          enterkeyhint="next"
+          placeholder={props.thai ? "08X-XXX-XXXX" : "เบอร์โทรศัพท์"}
+          maxlength={props.thai ? 12 : 15}
+          aria-required="true"
+          aria-invalid={!!props.error}
+          aria-describedby={props.error ? errorId : undefined}
+          value={props.value}
+          onInput={(e) => props.onInput(e.currentTarget.value.replace(/[^\d-]/g, ""))}
+          onBlur={props.onBlur}
+          class="min-w-0 flex-1 rounded-r-card bg-transparent px-3 text-base text-ink outline-none placeholder:text-ink-placeholder sm:px-4"
+        />
+      </div>
+      <Show when={props.error}>
+        <p id={errorId} role="alert" class="text-sm text-system-red">
+          {props.error}
+        </p>
+      </Show>
+    </div>
+  );
+}
+
+/**
  * Same visual/label/error treatment as `TextField`, for the address pick-lists
  * (จังหวัด → เขต/อำเภอ → แขวง/ตำบล → รหัสไปรษณีย์). Native `<select>` on purpose:
  * on phones it opens the OS picker, which handles long lists best.
@@ -570,7 +708,7 @@ function SelectField(props: {
   autocomplete?: string;
   disabled?: boolean;
   error?: string;
-  /** Narrow column (3 per row on phones): tighter side padding + smaller chevron. */
+  /** Half-width column on phones: tighter side padding + smaller chevron. */
   compact?: boolean;
 }) {
   const errorId = `${props.id}-error`;

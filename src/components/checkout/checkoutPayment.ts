@@ -34,7 +34,7 @@ export function createCheckoutPayment(opts: {
   /** This page's path — where Beam sends the shopper back in same-tab mode. */
   returnPath: () => string;
 }) {
-  const [method, setMethodRaw] = createSignal<PaymentMethodId>("card");
+  const [method, setMethodRaw] = createSignal<PaymentMethodId>(PAYMENT_METHODS[0].id);
   const [phase, setPhase] = createSignal<"form" | "waiting" | "failed">("form");
   const [failure, setFailure] = createSignal<PaymentFailureReason>("cancelled");
   const [request, setRequest] = createSignal<PaymentRequest>();

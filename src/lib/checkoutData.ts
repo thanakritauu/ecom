@@ -1,15 +1,19 @@
+import { DEFAULT_PHONE_COUNTRY_CODE } from "./countryCodes";
+
 export type Address = {
   id: string;
   label: string;
   recipientName: string;
   phone: string;
+  /** Country calling code in front of `phone` ("+66", "+856", …). Unset = "+66" (every address saved before the picker existed). */
+  phoneCountryCode?: string;
   addressLine: string;
   province: string;
   district: string;
   subDistrict: string;
   postalCode: string;
   isDefault?: boolean;
-  /** "billing" = saved as a ที่อยู่ออกใบเสร็จรับเงิน (may be a company); unset = a shipping address. Billing never holds the default. */
+  /** "billing" = saved as a ที่อยู่ออกใบกำกับภาษี (may be a company); unset = a shipping address. Billing never holds the default. */
   kind?: "billing";
 };
 
@@ -64,6 +68,13 @@ export const THAI_PROVINCES = [
   "สมุทรสงคราม", "สมุทรสาคร", "สระแก้ว", "สระบุรี", "สิงห์บุรี", "สุโขทัย", "สุพรรณบุรี", "สุราษฎร์ธานี", "สุรินทร์", "หนองคาย",
   "หนองบัวลำภู", "อ่างทอง", "อำนาจเจริญ", "อุดรธานี", "อุตรดิตถ์", "อุทัยธานี", "อุบลราชธานี",
 ] as const;
+
+/** Phone country-code picker — the full list lives in `countryCodes.ts` (Thailand first, default +66). */
+export { DEFAULT_PHONE_COUNTRY_CODE, PHONE_COUNTRY_CODES } from "./countryCodes";
+
+/** "089-123-4567" for a Thai number (the local form shoppers recognise); "+856 20-1234-5678" otherwise. */
+export const formatAddressPhone = (a: Pick<Address, "phone" | "phoneCountryCode">) =>
+  !a.phoneCountryCode || a.phoneCountryCode === DEFAULT_PHONE_COUNTRY_CODE ? a.phone : `${a.phoneCountryCode} ${a.phone}`;
 
 /** Bangkok uses เขต/แขวง; every other province uses อำเภอ/ตำบล — labels/errors follow the selected province. */
 export const isBangkok = (province: string) => province === "กรุงเทพมหานคร";

@@ -1,7 +1,7 @@
 import { createRoot, createSignal, onMount } from "solid-js";
 import { isServer } from "solid-js/web";
-import { MOCK_ORDERS } from "./accountData";
-import type { Order, OrderItem, ReturnRequest } from "./types";
+import { applyPaymentDeadline, MOCK_ORDERS } from "./accountData";
+import type { Order, OrderItem } from "./types";
 
 /**
  * Phase 05 — the shopper's purchase history. UI reads orders only through
@@ -9,14 +9,14 @@ import type { Order, OrderItem, ReturnRequest } from "./types";
  * shipment events with DHL tracking data, mapped to `TrackingEvent`) means
  * writing one new repository — no UI rewrite.
  *
- * Mock repository: `MOCK_ORDERS` plus this browser's own cancel/return
- * actions, persisted as a small overlay keyed by order id (no backend).
+ * Mock repository: `MOCK_ORDERS` plus this browser's own late payments,
+ * persisted as a small overlay keyed by order id (no backend). Unpaid orders
+ * past `PAYMENT_WINDOW_HOURS` are read as auto-cancelled (`applyPaymentDeadline`). Cancelling
+ * and returns aren't self-serve — the shopper contacts LINE @Charmiss.
  * `?orders=empty` shows the no-orders state for QA/user testing.
  */
 export interface OrderRepository {
   list(): Promise<Order[]>;
-  cancel(orderId: string): Promise<Order>;
-  requestReturn(orderId: string, request: Omit<ReturnRequest, "requestedAt">): Promise<Order>;
   /** A pending-payment order paid later from the account ("ชำระเงิน" → `/account/orders/:id/pay`). */
   markPaid(orderId: string, paymentMethod: string): Promise<Order>;
 }
@@ -59,11 +59,10 @@ function writeOverlay(overlay: OrderOverlay) {
 }
 
 export function createMockOrderRepository(opts: { empty?: boolean } = {}): OrderRepository {
-  const delay = () => new Promise<void>((resolve) => setTimeout(resolve, 500));
   const all = (): Order[] => {
     if (opts.empty) return [];
     const overlay = readOverlay();
-    return MOCK_ORDERS.map((o) => applyOverlay(o, overlay[o.id])).sort((a, b) => b.placedAt.localeCompare(a.placedAt));
+    return MOCK_ORDERS.map((o) => applyPaymentDeadline(applyOverlay(o, overlay[o.id]))).sort((a, b) => b.placedAt.localeCompare(a.placedAt));
   };
   const patch = (orderId: string, change: Partial<OrderOverlay[string]>) => {
     const order = all().find((o) => o.id === orderId);
@@ -78,21 +77,13 @@ export function createMockOrderRepository(opts: { empty?: boolean } = {}): Order
     async list() {
       return all();
     },
-    async cancel(orderId) {
-      await delay();
-      return patch(orderId, { status: "cancelled", cancelledAt: new Date().toISOString() });
-    },
-    async requestReturn(orderId, request) {
-      await delay();
-      return patch(orderId, { returnRequest: { ...request, requestedAt: new Date().toISOString() } });
-    },
     async markPaid(orderId, paymentMethod) {
       return patch(orderId, { status: "preparing", paidAt: new Date().toISOString(), paymentMethod });
     },
   };
 }
 
-/** Reactive wrapper for the account pages — loads on mount (client), keeps the list in sync after cancel/return. */
+/** Reactive wrapper for the account pages — loads on mount (client), keeps the list in sync after a late payment. */
 export function createOrderHistory(resolveRepo: () => OrderRepository) {
   const [orders, setOrders] = createSignal<Order[]>([]);
   const [ready, setReady] = createSignal(false);
@@ -110,12 +101,6 @@ export function createOrderHistory(resolveRepo: () => OrderRepository) {
     orders,
     ready,
     getById: (id: string) => orders().find((o) => o.id === id),
-    cancel: async (id: string): Promise<void> => {
-      replace(await getRepo().cancel(id));
-    },
-    requestReturn: async (id: string, request: Omit<ReturnRequest, "requestedAt">): Promise<void> => {
-      replace(await getRepo().requestReturn(id, request));
-    },
     markPaid: async (id: string, paymentMethod: string): Promise<void> => {
       replace(await getRepo().markPaid(id, paymentMethod));
     },
@@ -128,7 +113,10 @@ export function createOrderHistory(resolveRepo: () => OrderRepository) {
  * signal so the card flips to "รีวิวแล้ว" the moment the modal saves. The
  * real API would post these to the product's reviews instead.
  */
-export type OrderItemReview = { rating: number; text: string; reviewedAt: string };
+export type OrderItemReview = { rating: number; text: string; reviewedAt: string; media?: ReviewMediaMeta[] };
+/** A photo/video attached to a review. Only name + type are persisted (no blobs in localStorage); the preview URL lives in `reviewMediaPreviews` for this session. */
+export type ReviewMediaMeta = { name: string; type: string };
+export type ReviewMedia = ReviewMediaMeta & { url?: string };
 type ReviewStore = Record<string, Record<string, OrderItemReview>>;
 
 const REVIEWS_KEY = "charmiss:orders:reviews";
@@ -173,3 +161,17 @@ export async function saveOrderReviews(orderId: string, reviews: Record<string, 
     localStorage.setItem(REVIEWS_KEY, JSON.stringify(next));
   } catch {}
 }
+
+/** Average of the stars the shopper gave this order's items (undefined until reviewed). */
+export function getOrderRating(order: Order): number | undefined {
+  const saved = getOrderReviews(order.id);
+  const ratings = reviewableItems(order).map((item) => saved[orderItemKey(item)]?.rating).filter((r): r is number => !!r);
+  return ratings.length ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length : undefined;
+}
+
+/**
+ * This session's object URLs for review photos/videos, keyed `orderId` →
+ * item key — reopening the review shows the real thumbnails until reload;
+ * after that only the saved names remain (mock — the real API uploads the files).
+ */
+export const reviewMediaPreviews = new Map<string, Record<string, ReviewMedia[]>>();

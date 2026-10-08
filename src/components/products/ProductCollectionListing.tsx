@@ -1,6 +1,6 @@
 import { createMemo, createSignal, on, createEffect } from "solid-js";
 import type { Product } from "~/lib/types";
-import { PAGE_SIZE, sortProducts, type SortValue } from "~/lib/productListing";
+import { DEFAULT_SORT, PAGE_SIZE, sortProducts, type SortValue } from "~/lib/productListing";
 import { ProductListingToolbar, type ListingView } from "./ProductListingToolbar";
 import { ProductListingGrid } from "./ProductListingGrid";
 
@@ -10,7 +10,7 @@ import { ProductListingGrid } from "./ProductListingGrid";
  * Category pages and the Promotion pages so every nav page lists products the same way.
  */
 export function ProductCollectionListing(props: { products: Product[]; /** Flash Sale cards — the Flash Sale menu page only. */ flashSale?: boolean }) {
-  const [sort, setSort] = createSignal<SortValue>("popular");
+  const [sort, setSort] = createSignal<SortValue>(DEFAULT_SORT);
   const [view, setView] = createSignal<ListingView>("grid");
   const [visibleCount, setVisibleCount] = createSignal(PAGE_SIZE);
   const [loadingMore, setLoadingMore] = createSignal(false);

@@ -8,9 +8,10 @@
  * non-square box. Slider arrow buttons around it use `bg-white/50`.
  */
 export function ChevronIcon(props: { direction?: "left" | "right" | "up" | "down"; class?: string }) {
-  const rotate = { down: "", up: "rotate-180", left: "rotate-90", right: "-rotate-90" }[props.direction ?? "down"];
+  // A function, not a constant, so a `direction` that changes after mount (e.g. an accordion opening) re-rotates.
+  const rotate = () => ({ down: "", up: "rotate-180", left: "rotate-90", right: "-rotate-90" })[props.direction ?? "down"];
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" class={`shrink-0 ${rotate} ${props.class ?? "size-6"}`}>
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" class={`shrink-0 transition-transform ${rotate()} ${props.class ?? "size-6"}`}>
       <path
         fill-rule="evenodd"
         clip-rule="evenodd"

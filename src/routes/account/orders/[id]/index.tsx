@@ -12,19 +12,17 @@ import { formatTHB } from "~/components/shared/PriceDisplay";
 import { AccountGuestPrompt } from "~/components/account/AccountGuestPrompt";
 import { OrderTrackingTimeline } from "~/components/account/OrderTrackingTimeline";
 import { OrderItemMeta, OrderItemPrice } from "~/components/account/OrderCard";
+import { LineContactNote, PaymentMethodLabel, ReviewStars, ShippingMethodLabel } from "~/components/account/OrderMeta";
 import { useAuth } from "~/lib/auth";
-import { pushToast } from "~/lib/toast";
-import { getPaymentStatus, PAYMENT_STATUS_META } from "~/lib/accountData";
+import { getPaymentDeadline, getPaymentStatus, PAYMENT_STATUS_META } from "~/lib/accountData";
 import { computeCoinsEarned } from "~/lib/cartSelectors";
 import { formatAddress } from "~/lib/checkoutData";
-import { canReviewOrder, createMockOrderRepository, createOrderHistory, isOrderReviewed } from "~/lib/orderHistory";
+import { canReviewOrder, createMockOrderRepository, createOrderHistory, getOrderRating, isOrderReviewed } from "~/lib/orderHistory";
 import { resolveTier, yearlySpend, type TierId } from "~/lib/membership";
-import { canCancelOrder, canRequestReturn, formatEventTime, formatOrderDate } from "~/lib/orderTracking";
+import { formatEventTime, formatOrderDate } from "~/lib/orderTracking";
 import type { Order } from "~/lib/types";
 
 // Same Kobalte Dialog SSR/hydration workaround as ProductCard's QuickAddSheet.
-const CancelOrderDialog = clientOnly(() => import("~/components/account/OrderActionDialogs").then((m) => ({ default: m.CancelOrderDialog })));
-const ReturnRequestDialog = clientOnly(() => import("~/components/account/OrderActionDialogs").then((m) => ({ default: m.ReturnRequestDialog })));
 const OrderReviewDialog = clientOnly(() => import("~/components/account/OrderReviewDialog").then((m) => ({ default: m.OrderReviewDialog })));
 
 /** Phase 05 — Order Detail (the "ดูรายละเอียด" target OrderCard already linked to). */
@@ -45,12 +43,7 @@ export default function OrderDetailPage() {
             <Show when={history.ready()} fallback={<div class="h-64 animate-pulse rounded-card bg-white" aria-hidden="true" />}>
               <Show when={order()} fallback={<OrderNotFound id={orderId()} />}>
                 {(o) => (
-                  <OrderDetail
-                    order={o()}
-                    tier={resolveTier(yearlySpend(history.orders())).current.id}
-                    onCancel={() => history.cancel(o().id)}
-                    onReturn={(r) => history.requestReturn(o().id, r)}
-                  />
+                  <OrderDetail order={o()} tier={resolveTier(yearlySpend(history.orders())).current.id} />
                 )}
               </Show>
             </Show>
@@ -66,11 +59,7 @@ function OrderDetail(props: {
   order: Order;
   /** The shopper's member tier — sets the coin multiplier. */
   tier: TierId;
-  onCancel: () => Promise<void>;
-  onReturn: (request: Parameters<ReturnType<typeof createOrderHistory>["requestReturn"]>[1]) => Promise<void>;
 }) {
-  const [cancelOpen, setCancelOpen] = createSignal(false);
-  const [returnOpen, setReturnOpen] = createSignal(false);
   const [reviewOpen, setReviewOpen] = createSignal(false);
   const showTracking = () => !["pending_payment", "cancelled"].includes(props.order.status);
   const p = () => props.order.payment;
@@ -100,25 +89,26 @@ function OrderDetail(props: {
         <Banner tone="neutral">
           คำสั่งซื้อนี้ถูกยกเลิกแล้ว
           <Show when={props.order.cancelledAt}> เมื่อ {formatEventTime(props.order.cancelledAt!)}</Show>
+          <Show when={props.order.cancelReason}>
+            {(reason) => <span class="mt-0.5 block text-sm text-ink-gray">{reason()}</span>}
+          </Show>
         </Banner>
       </Show>
       <Show when={props.order.status === "pending_payment"}>
         <Banner tone="warning">
           <span class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>รอชำระเงิน — ระบบจะเริ่มเตรียมและจัดส่งสินค้าหลังชำระเงินเรียบร้อย</span>
+            <span class="flex flex-col">
+              <span>รอชำระเงิน — ระบบจะเริ่มเตรียมและจัดส่งสินค้าหลังชำระเงินเรียบร้อย</span>
+              {/* Past this time the order is cancelled automatically (PAYMENT_WINDOW_HOURS) */}
+              <span class="text-sm">
+                ชำระภายใน <span class="font-semibold">{formatEventTime(getPaymentDeadline(props.order))}</span> มิฉะนั้นคำสั่งซื้อจะถูกยกเลิกอัตโนมัติ
+              </span>
+            </span>
             <Button href={`/account/orders/${props.order.id}/pay`} variant="primary" class="w-full shrink-0 sm:w-auto">
               ชำระเงิน {formatTHB(props.order.total)}
             </Button>
           </span>
         </Banner>
-      </Show>
-      <Show when={props.order.returnRequest}>
-        {(r) => (
-          <Banner tone="warning">
-            ส่งคำขอคืนสินค้าแล้วเมื่อ {formatEventTime(r().requestedAt)} · รอทีมงานตรวจสอบ
-            <span class="block text-xs text-ink-gray">เหตุผล: {r().reason}</span>
-          </Banner>
-        )}
       </Show>
 
       {/* Tracking on the left; the right column starts with the items, above the address.
@@ -151,8 +141,8 @@ function OrderDetail(props: {
                 </h2>
                 <span class={`rounded-pill px-2.5 py-0.5 text-xs font-semibold ${paymentMeta().badgeClass}`}>{paymentMeta().label}</span>
               </div>
-              <Row label="ช่องทางชำระเงิน" value={p().method} />
-              <Row label="การจัดส่ง" value={`${props.order.shipment.method} (DHL)`} />
+              <Row label="ช่องทางชำระเงิน" value={<PaymentMethodLabel method={p().method} />} />
+              <Row label="การจัดส่ง" value={<ShippingMethodLabel method={props.order.shipment.method} />} />
               <div class="my-1 h-px bg-surface-gray" />
               <Row label="ราคาสินค้า" value={formatTHB(p().subtotal)} />
               <Row label="ค่าจัดส่ง" value={p().shippingFee ? formatTHB(p().shippingFee) : "ฟรี"} />
@@ -168,39 +158,27 @@ function OrderDetail(props: {
               </div>
             </section>
 
-            <Show when={canCancelOrder(props.order) || canRequestReturn(props.order) || canReviewOrder(props.order)}>
-              <div class="flex flex-col gap-2 rounded-card bg-white p-4 shadow-card sm:p-6">
-                <Show when={canReviewOrder(props.order)}>
-                  <Show
-                    when={isOrderReviewed(props.order)}
-                    fallback={
-                      <Button type="button" variant="primary" size="lg" class="w-full" onClick={() => setReviewOpen(true)}>
-                        รีวิวสินค้า
-                      </Button>
-                    }
-                  >
-                    <p class="flex min-h-[44px] items-center justify-center gap-1.5 rounded-pill bg-success-soft text-base font-medium text-success">
+            {/* Review (delivered orders) + the LINE note — cancelling / returns go through LINE Official, not self-serve. */}
+            <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-6">
+              <Show when={canReviewOrder(props.order)}>
+                <Show
+                  when={isOrderReviewed(props.order)}
+                  fallback={
+                    <Button type="button" variant="primary" size="lg" class="w-full" onClick={() => setReviewOpen(true)}>
+                      รีวิวสินค้า
+                    </Button>
+                  }
+                >
+                  <div class="flex min-h-[44px] flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-pill bg-success-soft px-4 py-2 text-base font-medium text-success">
+                    <span class="flex items-center gap-1.5">
                       <CheckIcon class="size-4" /> รีวิวแล้ว · ขอบคุณสำหรับรีวิว
-                    </p>
-                  </Show>
+                    </span>
+                    <Show when={getOrderRating(props.order)}>{(r) => <ReviewStars rating={r()} class="size-4" showValue={r() % 1 !== 0} />}</Show>
+                  </div>
                 </Show>
-                <Show when={canRequestReturn(props.order)}>
-                  <Button type="button" variant="outline" size="lg" class="w-full" onClick={() => setReturnOpen(true)}>
-                    ขอคืนสินค้า
-                  </Button>
-                </Show>
-                <Show when={canCancelOrder(props.order)}>
-                  <button
-                    type="button"
-                    onClick={() => setCancelOpen(true)}
-                    class="flex min-h-[44px] w-full items-center justify-center rounded-pill text-base font-medium text-system-red transition-colors duration-150 lg:hover:bg-danger-soft"
-                  >
-                    ยกเลิกคำสั่งซื้อ
-                  </button>
-                  <p class="text-center text-xs text-ink-gray">ยกเลิกได้จนกว่าจะส่งมอบพัสดุให้ขนส่ง</p>
-                </Show>
-              </div>
-            </Show>
+              </Show>
+              <LineContactNote />
+            </div>
 
             <Button href="/account" variant="outline" class="w-full lg:hidden">
               กลับไปที่ประวัติการซื้อ
@@ -209,16 +187,6 @@ function OrderDetail(props: {
         </div>
       </div>
 
-      <CancelOrderDialog
-        order={props.order}
-        open={cancelOpen()}
-        onOpenChange={setCancelOpen}
-        onConfirm={async () => {
-          await props.onCancel();
-          pushToast(`ยกเลิกคำสั่งซื้อ ${props.order.id} แล้ว`);
-        }}
-      />
-      <ReturnRequestDialog order={props.order} open={returnOpen()} onOpenChange={setReturnOpen} onSubmit={props.onReturn} />
       <Show when={canReviewOrder(props.order)}>
         <OrderReviewDialog order={props.order} open={reviewOpen()} onOpenChange={setReviewOpen} />
       </Show>
@@ -279,7 +247,7 @@ function OrderItemsBox(props: { order: Order; tier: TierId }) {
   );
 }
 
-function Row(props: { label: string; value: string; accent?: boolean }) {
+function Row(props: { label: string; value: JSX.Element; accent?: boolean }) {
   return (
     <div class="flex items-start justify-between gap-3 text-sm">
       <span class="text-ink-gray">{props.label}</span>

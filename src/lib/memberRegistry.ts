@@ -38,7 +38,7 @@ export function recordMemberSignIn(identity: SignInIdentity, crm: CrmMember | un
   const [firstName, ...rest] = profile.name.trim().split(/\s+/);
 
   const record: Customer = existing
-    ? { ...existing, updatedAt: today }
+    ? { ...existing, birthDate: existing.birthDate ?? crm?.birthDate, gender: existing.gender ?? crm?.gender, updatedAt: today }
     : normalizeCustomer({
         id: `cust-web-${Date.now()}`,
         firstName: firstName ?? "",
@@ -52,6 +52,8 @@ export function recordMemberSignIn(identity: SignInIdentity, crm: CrmMember | un
         crmMemberId: crm?.crmMemberId,
         crmCoinsTransferred: crm?.coins,
         loyaltyPoints: crm?.coins ?? 0,
+        birthDate: crm?.birthDate,
+        gender: crm?.gender,
         createdAt: today,
         updatedAt: today,
       });
@@ -61,4 +63,29 @@ export function recordMemberSignIn(identity: SignInIdentity, crm: CrmMember | un
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {}
   return record;
+}
+
+/**
+ * The member saved birth date / gender (Auth Modal's "ข้อมูลเพิ่มเติม" step or
+ * `/account/profile`) — mirrored onto their Admin Customer record so the
+ * customer list shows the same values. Matched the same way as sign-in.
+ */
+export function recordMemberProfile(member: { crmMemberId?: string; phone: string; email: string }, patch: Pick<Customer, "birthDate" | "gender">) {
+  if (isServer) return;
+  const list = readCustomers();
+  const phone = digits(member.phone);
+  const email = member.email.trim().toLowerCase();
+  const existing = list.find(
+    (c) => (member.crmMemberId && c.crmMemberId === member.crmMemberId) || (phone && digits(c.phone) === phone) || (email && c.email.trim().toLowerCase() === email),
+  );
+  if (!existing) return;
+  const record: Customer = {
+    ...existing,
+    ...(patch.birthDate !== undefined && { birthDate: patch.birthDate || undefined }),
+    ...(patch.gender !== undefined && { gender: patch.gender }),
+    updatedAt: todayThaiLabel(),
+  };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list.map((c) => (c.id === existing.id ? record : c))));
+  } catch {}
 }

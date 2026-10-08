@@ -1,11 +1,19 @@
 import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
 import type { ResolvedCartLine, CheckoutTotals, Coupon, GiftPromotionState } from "~/lib/cartSelectors";
-import { AVAILABLE_COUPONS, MOCK_COIN_BALANCE, MAX_COIN_REDEMPTION } from "~/lib/cartSelectors";
+import { AVAILABLE_COUPONS, MOCK_COIN_BALANCE, SHIPPING_FEE } from "~/lib/cartSelectors";
 import { formatTHB } from "../shared/PriceDisplay";
+import { ChevronIcon } from "../shared/ChevronIcon";
+import { CheckIcon } from "../shared/icons";
+import coinMark from "~/assets/icons/charmiss-coin.png";
+import blurShape from "~/assets/images/coupon/blur-shape.png";
+import ticketDeco1 from "~/assets/images/coupon/coupon-ticket-deco-1.svg";
+import ticketDeco2 from "~/assets/images/coupon/coupon-ticket-deco-2.svg";
+import ticketDeco3 from "~/assets/images/coupon/coupon-ticket-deco-3.svg";
 import { clientOnly } from "@solidjs/start";
 
 // Same Kobalte Dialog SSR/hydration issue as ProductCard's QuickAddSheet — mount the modal on the client only.
 const CouponPickerSheet = clientOnly(() => import("./CouponPickerSheet").then((m) => ({ default: m.CouponPickerSheet })));
+const CoinRedeemSheet = clientOnly(() => import("./CoinRedeemSheet").then((m) => ({ default: m.CoinRedeemSheet })));
 
 /**
  * Figma's coupon UI is a picker over a short list of already-available
@@ -14,8 +22,8 @@ const CouponPickerSheet = clientOnly(() => import("./CouponPickerSheet").then((m
  * since Figma is the visual source of truth when the two disagree. Same for
  * "Charmiss Coin": no loyalty-points backend exists anywhere in this
  * project, so the balance is mock data (documented in cartSelectors.ts)
- * with a real redeem/un-redeem toggle wired into the same totals Cart Page
- * and the Drawer already share.
+ * with a real redeem sheet (`CoinRedeemSheet` — pick the amount) wired into
+ * the same totals Cart Page and the Drawer already share.
  */
 export function CheckoutOrderSummary(props: {
   lines: ResolvedCartLine[];
@@ -26,11 +34,14 @@ export function CheckoutOrderSummary(props: {
   onApplyCoupon: (coupon: Coupon) => void;
   onRemoveCoupon: () => void;
   coinsRedeemed: number;
-  onToggleCoins: () => void;
+  /** Most coins this order can take (`maxRedeemableCoins`). */
+  maxCoins: number;
+  onApplyCoins: (coins: number) => void;
 }) {
   // Collapsed by default — the item list opens from the header.
   const [itemsExpanded, setItemsExpanded] = createSignal(false);
   const [couponPickerOpen, setCouponPickerOpen] = createSignal(false);
+  const [coinSheetOpen, setCoinSheetOpen] = createSignal(false);
 
   return (
     <div class="flex w-full flex-col rounded-card border border-surface-gray bg-white lg:sticky lg:top-6 lg:w-[390px] lg:shrink-0">
@@ -48,7 +59,7 @@ export function CheckoutOrderSummary(props: {
         <p class="text-lg font-semibold text-ink">สรุปคำสั่งซื้อ</p>
         <span class="flex items-center gap-1 text-sm font-semibold text-ink">
           สินค้าทั้งหมด {props.lines.reduce((n, l) => n + l.line.qty, 0)} ชิ้น
-          <ChevronIcon class={itemsExpanded() ? "rotate-180" : ""} />
+          <ChevronIcon direction={itemsExpanded() ? "up" : "down"} class="size-5 transition-transform duration-200" />
         </span>
       </button>
       <div class="h-px bg-surface-gray" />
@@ -94,7 +105,16 @@ export function CheckoutOrderSummary(props: {
         </ul>
       </Show>
 
-      <div class="relative flex flex-col gap-3 overflow-hidden rounded-t-card bg-gradient-to-b from-brand-purple to-[#8462ff] p-4">
+      {/* `isolate` + `-z-10` decos: the Home coupon section's yellow light shapes and floating tickets (same assets)
+          paint above this gradient but under every row, text and button; clipped by the box, smaller on phones. */}
+      <div class="relative isolate flex flex-col gap-3 overflow-hidden rounded-t-card bg-gradient-to-b from-brand-purple to-[#8462ff] p-4">
+        <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+          <img src={blurShape} alt="" class="absolute -left-16 -top-24 h-52 w-auto max-w-none -rotate-[60deg] opacity-60 blur-[6px] sm:-left-14 sm:h-60" />
+          <img src={blurShape} alt="" class="absolute -bottom-28 -right-16 h-52 w-auto max-w-none rotate-[120deg] opacity-50 blur-[6px] sm:h-60" />
+          <img src={ticketDeco2} alt="" class="absolute -left-4 top-3 w-14 -rotate-12 sm:w-16" />
+          <img src={ticketDeco3} alt="" class="absolute -right-4 top-2 w-14 -scale-y-100 rotate-[-172deg] sm:w-16" />
+          <img src={ticketDeco1} alt="" class="absolute -right-5 bottom-10 w-12 rotate-12 opacity-80 blur-[3px] sm:w-14" />
+        </div>
         <p class="text-center text-lg font-semibold text-white">ส่วนลดและสิทธิพิเศษ</p>
 
         {/* Same row pattern + pill button as the Charmiss Coin row below; the button opens the coupon modal. */}
@@ -108,7 +128,7 @@ export function CheckoutOrderSummary(props: {
               <p class="text-xs text-ink-gray">{props.coupon ? `ใช้คูปอง ${props.coupon.label} อยู่` : "เลือกคูปองเพื่อรับส่วนลด"}</p>
             </div>
           </div>
-          <PerkButton tone="pink" onClick={() => setCouponPickerOpen(true)} aria-haspopup="dialog">
+          <PerkButton onClick={() => setCouponPickerOpen(true)} aria-haspopup="dialog">
             {props.coupon ? "เปลี่ยนคูปอง" : "เลือกคูปอง"}
           </PerkButton>
         </div>
@@ -128,21 +148,33 @@ export function CheckoutOrderSummary(props: {
           <div class="h-px flex-1 bg-white/40" />
         </div>
 
-        {/* Both perk rows: 12px padding / 6px gaps / 28px icons below `sm` so "Charmiss Coin" + its pill fit a 360px phone. */}
-        <div class="flex items-center justify-between gap-1.5 rounded-card bg-[#fff4e6] p-3 sm:gap-2 sm:p-4">
-          <div class="flex items-center gap-1.5 sm:gap-2">
-            <CoinIcon />
-            <div>
+        {/* Both perk rows: 12px padding / 6px gaps / 28px icons below `sm` so "Charmiss Coin" + its pill fit a 360px phone.
+            The coin row is the coupon row's pink (pink tint, pink pill) with the real coin artwork. */}
+        <div class="flex items-center justify-between gap-1.5 rounded-card bg-surface-pink p-3 sm:gap-2 sm:p-4">
+          <div class="flex min-w-0 items-center gap-1.5 sm:gap-2">
+            <img src={coinMark} alt="" class="size-7 shrink-0 sm:size-8" aria-hidden="true" />
+            <div class="min-w-0">
               <p class="whitespace-nowrap text-sm font-semibold text-ink">Charmiss Coin</p>
-              <p class="text-xs text-ink-gray">คุณมี {MOCK_COIN_BALANCE.toLocaleString("th-TH")} คอยน์</p>
+              <p class="text-xs text-ink-gray">
+                {props.coinsRedeemed > 0
+                  ? `ใช้ ${props.coinsRedeemed.toLocaleString("th-TH")} คอยน์ ลด ${formatTHB(props.totals.coinDiscount)}`
+                  : `คุณมี ${MOCK_COIN_BALANCE.toLocaleString("th-TH")} คอยน์`}
+              </p>
             </div>
           </div>
-          <PerkButton onClick={props.onToggleCoins} aria-pressed={props.coinsRedeemed > 0} active={props.coinsRedeemed > 0}>
-            {props.coinsRedeemed > 0
-              ? "ยกเลิกการใช้คอยน์"
-              : `ใช้ ${MAX_COIN_REDEMPTION} คอยน์ ลด ฿${Math.round(MAX_COIN_REDEMPTION * 0.1).toLocaleString("th-TH")}`}
+          {/* Same 14px as the row's "Charmiss Coin" / "คูปองส่วนลด" label; opens the amount picker. */}
+          <PerkButton onClick={() => setCoinSheetOpen(true)} aria-haspopup="dialog">
+            {props.coinsRedeemed > 0 ? "แก้ไขคอยน์" : "ใช้คอยน์"}
           </PerkButton>
         </div>
+        <CoinRedeemSheet
+          open={coinSheetOpen()}
+          onOpenChange={setCoinSheetOpen}
+          balance={MOCK_COIN_BALANCE}
+          max={props.maxCoins}
+          applied={props.coinsRedeemed}
+          onApply={props.onApplyCoins}
+        />
       </div>
 
       <div class="h-px bg-surface-gray" />
@@ -157,19 +189,23 @@ export function CheckoutOrderSummary(props: {
         </div>
         <Show when={props.totals.coinDiscount > 0}>
           <div class="flex items-center justify-between">
-            <span class="text-ink-gray">Charmiss Coin</span>
+            <span class="text-ink-gray">Charmiss Coin ({props.coinsRedeemed.toLocaleString("th-TH")} คอยน์)</span>
             <span class="font-bold text-success">-{formatTHB(props.totals.coinDiscount)}</span>
           </div>
         </Show>
         <div class="flex items-center justify-between">
           <span class="text-ink-gray">ค่าจัดส่ง</span>
-          <span class="font-bold" classList={{ "text-success": props.totals.shippingFee === 0, "text-ink": props.totals.shippingFee > 0 }}>
-            {props.totals.shippingFee === 0 ? "ฟรี" : formatTHB(props.totals.shippingFee)}
-          </span>
+          {/* Struck ฿60.00 + "ส่งฟรี" once `computeShippingFee` → 0 (the DHL box shows carrier + ETA only). */}
+          <Show when={props.totals.shippingFee === 0} fallback={<span class="font-bold text-ink">{formatTHB(props.totals.shippingFee)}</span>}>
+            <span class="flex items-baseline gap-1.5">
+              <span class="text-xs text-ink-gray line-through">{formatTHB(SHIPPING_FEE)}</span>
+              <span class="font-bold text-success">ส่งฟรี</span>
+            </span>
+          </Show>
         </div>
         <Show when={props.totals.couponDiscount + props.totals.coinDiscount > 0}>
           <div class="flex items-center gap-2 rounded-card bg-success-soft px-3 py-2 text-xs font-medium text-success">
-            <CheckIcon /> คุณประหยัดไป {formatTHB(props.totals.couponDiscount + props.totals.coinDiscount)} จากออเดอร์นี้
+            <CheckIcon class="size-4 shrink-0" /> คุณประหยัดไป {formatTHB(props.totals.couponDiscount + props.totals.coinDiscount)} จากออเดอร์นี้
           </div>
         </Show>
       </div>
@@ -188,23 +224,22 @@ export function CheckoutOrderSummary(props: {
 }
 
 /**
- * The pill used by both perk rows — one definition so they always match in
- * size/shape; only the color differs: coupons pink (`tone="pink"`), Charmiss
- * Coin yellow (default). `active` = the perk is in use (gray, "cancel").
+ * The pill used by both perk rows (coupon, Charmiss Coin) — one definition so
+ * they always match: brand pink, 14px (`text-sm`, the rows' own label size).
+ * `active` = the perk is in use (gray, "cancel").
  */
 function PerkButton(
-  props: { children: JSX.Element; onClick: () => void; active?: boolean; tone?: "yellow" | "pink" } & Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "children">,
+  props: { children: JSX.Element; onClick: () => void; active?: boolean } & Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "children">,
 ) {
-  const [local, rest] = splitProps(props, ["children", "onClick", "active", "tone"]);
+  const [local, rest] = splitProps(props, ["children", "onClick", "active"]);
   return (
     <button
       type="button"
       {...rest}
       onClick={local.onClick}
-      class="shrink-0 whitespace-nowrap rounded-pill px-3 py-1.5 text-xs font-medium text-white transition-colors duration-150 sm:px-4"
+      class="min-h-9 shrink-0 whitespace-nowrap rounded-pill px-3 py-1.5 text-sm font-medium text-white transition-colors duration-150 sm:px-4"
       classList={{
-        "bg-system-yellow": !local.active && local.tone !== "pink",
-        "bg-brand-pink": !local.active && local.tone === "pink",
+        "bg-brand-pink lg:hover:bg-brand-pink/90": !local.active,
         "bg-ink-gray": !!local.active,
       }}
     >
@@ -213,35 +248,11 @@ function PerkButton(
   );
 }
 
-function ChevronIcon(props: { class?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" class={`size-4 shrink-0 transition-transform duration-200 ${props.class ?? ""}`} fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  );
-}
 function TagIcon() {
   return (
     <svg viewBox="0 0 24 24" class="size-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
       <path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.24L4 3v5.59a2 2 0 0 0 .59 1.41l9.58 9.59a2 2 0 0 0 2.83 0l3.59-3.59a2 2 0 0 0 0-2.59Z" />
       <circle cx="7.5" cy="7.5" r="1" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-function CoinIcon() {
-  return (
-    <svg viewBox="0 0 24 24" class="size-7 shrink-0 text-system-yellow sm:size-8" fill="currentColor" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <text x="12" y="16" text-anchor="middle" font-size="11" fill="white" font-weight="bold">
-        C
-      </text>
-    </svg>
-  );
-}
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-      <path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
     </svg>
   );
 }
