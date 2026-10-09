@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { DropdownMenu } from "@kobalte/core/dropdown-menu";
 import { useAuth } from "~/lib/auth";
@@ -29,17 +29,61 @@ function StripText(props: { content: PromotionStripContent; linkClass: string })
   );
 }
 
+/**
+ * Same rule as the Popup: closing the purple strip with × hides it for the
+ * rest of the day; the next day's visit shows it again. Keyed by its content
+ * too, so a new message from Admin shows even if today's old one was closed.
+ * The head script in entry-server.tsx reads the same key before first paint
+ * (adds `promo-strip-closed` to <html>) so a closed strip never flashes in.
+ */
+const STRIP_CLOSED_KEY = "charmiss:promo-strip-closed";
+const STRIP_CLOSED_CLASS = "promo-strip-closed";
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+};
+const stripFingerprint = (c: PromotionStripContent) => JSON.stringify([c.text, c.linkLabel ?? "", c.linkUrl ?? "", c.icon ?? ""]);
+
+function readStripClosed(): string | null {
+  try {
+    return localStorage.getItem(STRIP_CLOSED_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function PromoStrip(props: { state?: PromotionStripState }) {
   const stored = useStorefrontPromotionStrip();
   const purple = () => (props.state ?? stored()).purple;
-  // In-memory only, on purpose — must reappear on every fresh page load/
-  // refresh (never persisted). See original comment history in Header.tsx.
-  const [promoDismissed, setPromoDismissed] = createSignal(false);
-  const dismissPromo = () => setPromoDismissed(true);
+  // Admin's preview (`state` passed in) always shows the strip.
+  const live = () => !props.state;
+  const [mounted, setMounted] = createSignal(false);
+  const [closedRecord, setClosedRecord] = createSignal<string | null>(null);
+  onMount(() => {
+    setClosedRecord(readStripClosed());
+    setMounted(true);
+  });
+  const closedToday = () => live() && mounted() && closedRecord() === `${todayKey()}|${stripFingerprint(purple())}`;
+  // Admin changed the message since it was closed: drop the pre-paint hide.
+  createEffect(() => {
+    if (live() && mounted() && !closedToday()) document.documentElement.classList.remove(STRIP_CLOSED_CLASS);
+  });
+
+  const dismissPromo = () => {
+    const record = `${todayKey()}|${stripFingerprint(purple())}`;
+    try {
+      localStorage.setItem(STRIP_CLOSED_KEY, record);
+    } catch {
+      // storage unavailable (private mode): hidden for this page only.
+    }
+    setClosedRecord(record);
+  };
 
   return (
-    <Show when={purple().enabled && !promoDismissed()}>
-      <div class="relative flex min-h-[40px] items-center justify-center bg-brand-purple px-4 py-2 text-white lg:h-10 lg:min-h-0 lg:py-0">
+    <Show when={purple().enabled && !closedToday()}>
+      <div
+        data-promo-strip={live() ? "" : undefined}
+        class="relative flex min-h-[40px] items-center justify-center bg-brand-purple px-4 py-2 text-white lg:h-10 lg:min-h-0 lg:py-0">
         <div class="flex min-w-0 max-w-full items-center gap-2 px-[60px] lg:px-10">
           <Show when={purple().icon}>
             <img src={purple().icon} alt="" class="h-6 w-auto shrink-0" />

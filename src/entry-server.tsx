@@ -20,6 +20,10 @@ export default createHandler(() => (
               icon exists in this project. */}
           <link rel="icon" type="image/png" href="/favicon.png" />
           <title>Charmiss</title>
+          {/* Purple top strip closed today (PromotionStrip.tsx): hide it before first paint so it never flashes in and jumps the page. */}
+          <script
+            innerHTML={`try{var v=localStorage.getItem("charmiss:promo-strip-closed"),d=new Date();if(v&&v.split("|")[0]===d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate())document.documentElement.classList.add("promo-strip-closed")}catch(e){}`}
+          />
           {assets}
         </head>
         <body>

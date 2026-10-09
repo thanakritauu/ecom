@@ -1,3 +1,4 @@
+import { openCookieSettings } from "~/lib/cookieConsent";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { Container } from "./Container";
 import { Accordion } from "./Accordion";
@@ -100,6 +101,10 @@ export function Footer() {
           <p>{footer().copyright}</p>
           <div class="flex gap-6">
             <For each={footer().legalLinks}>{(link) => <FooterLinkItem link={link} class="hover:underline" />}</For>
+            {/* PDPA: consent can be changed any time, so this link is fixed (not Admin-editable). */}
+            <button type="button" onClick={openCookieSettings} class="font-normal hover:underline">
+              ตั้งค่าคุกกี้
+            </button>
           </div>
         </div>
       </Container>

@@ -175,3 +175,8 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Purple top strip closed today: hidden before hydration (see entry-server.tsx / PromotionStrip.tsx). */
+.promo-strip-closed [data-promo-strip] {
+  display: none;
+}

@@ -13,6 +13,7 @@ import { NavigationContentProvider } from "~/lib/navigationContent";
 import { ToastViewport } from "~/lib/toast";
 import { StorefrontPromotionsProvider } from "~/lib/storefrontPromotions";
 import { PromoPopup } from "~/components/home/PromoPopup";
+import { CookieConsent } from "~/components/shared/CookieConsent";
 import "./app.css";
 
 export default function App() {
@@ -36,6 +37,7 @@ export default function App() {
                             <ToastViewport />
                             {/* Site-wide: opens on whichever storefront pages Admin picked (never on /admin). */}
                             <PromoPopup />
+                            <CookieConsent />
                           </HomepageContentProvider>
                         </NavigationContentProvider>
                       </CollectionContentProvider>
