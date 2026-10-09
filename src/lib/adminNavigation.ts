@@ -5,7 +5,8 @@ import bestSellerIcon from "~/assets/icons/nav/promotion.png";
 import newIcon from "~/assets/icons/nav/new.png";
 import hotIcon from "~/assets/icons/nav/hot.png";
 import nineNineIcon from "~/assets/icons/nav/nine-nine.png";
-import couponIcon from "~/assets/icons/coupon-percent.svg";
+import couponIcon from "~/assets/icons/nav/coupon.svg";
+import oldCouponIcon from "~/assets/icons/coupon-percent.svg";
 
 /**
  * Navigation Architecture (Blueprint v1 FINAL) — Navigation is its own
@@ -108,6 +109,8 @@ const LEGACY_NAV_ICONS: Record<string, string> = {
 
 function normalizeNavIcon(icon: unknown): string {
   if (typeof icon !== "string") return "";
+  // The first coupon artwork was the tall ticket file and rendered too big; saved menus move to the square one.
+  if (icon === oldCouponIcon) return couponIcon;
   if (isImageIconSrc(icon)) return icon;
   return LEGACY_NAV_ICONS[icon] ?? "";
 }
