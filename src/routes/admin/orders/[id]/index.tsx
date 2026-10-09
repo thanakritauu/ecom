@@ -8,7 +8,6 @@ import { EmptyState } from "~/components/admin/EmptyState";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { OrderTrackingPanel } from "~/components/admin/orders/OrderTrackingPanel";
-import { OrderReturnPanel } from "~/components/admin/orders/OrderReturnPanel";
 import { OrderTotalsBreakdown } from "~/components/admin/orders/OrderTotalsBreakdown";
 import { OrdersIcon, ReceiptIcon, PrintIcon, DownloadIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
@@ -20,6 +19,7 @@ import {
   canCancelOrder,
   formatOrderAddress,
   formatOrderDateTimeLabel,
+  orderPaymentDeadline,
   getNextStatusActions,
   paymentFailureLabel,
   type AdminOrder,
@@ -28,20 +28,11 @@ import {
 } from "~/lib/adminOrders";
 import { useAdminOrders } from "~/lib/adminOrderStore";
 import { useAdminCustomers } from "~/lib/adminCustomerStore";
-import { getCustomerFullName } from "~/lib/adminCustomers";
+import { getCustomerCode, getCustomerFullName } from "~/lib/adminCustomers";
 import { getReceiptData } from "~/lib/receiptResolver";
 import { downloadOrderReceiptHtml } from "~/components/admin/orders/orderReceiptDocument";
-import { LINE_ITEM_STOCK_STATUS_META } from "~/lib/adminInventoryStock";
 import { GIFT_PROMOTION } from "~/lib/cartSelectors";
 import { pushToast } from "~/lib/toast";
-
-/** Stock state per order status — admin-local mapping onto the Inventory module's 4 line-item states (its own helper still keys off the old status codes). */
-function lineItemStockStatus(status: OrderStatus): keyof typeof LINE_ITEM_STOCK_STATUS_META {
-  if (status === "pending_payment") return "reserved";
-  if (status === "preparing") return "preparing";
-  if (status === "cancelled") return "released";
-  return "deducted";
-}
 
 export default function AdminOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -62,11 +53,11 @@ export default function AdminOrderDetailPage() {
     try {
       await store.updateOrderStatus(current.id, target);
       // Cancel is destructive even when it succeeds — Global Toast Rule #7 groups "Cancel Order" under red regardless of outcome, distinct from a routine status advance.
-      pushToast("อัปเดตสถานะคำสั่งซื้อแล้ว", target === "cancelled" ? "error" : "success");
+      pushToast(target === "cancelled" ? "ยกเลิกคำสั่งซื้อแล้ว" : `เปลี่ยนสถานะเป็น "${ORDER_STATUS_META[target].label}" แล้ว`, target === "cancelled" ? "error" : "success");
       setPendingStatus(null);
     } catch (err) {
       pushToast(
-        err instanceof Error && err.message === "TRACKING_REQUIRED" ? "กรุณากรอกเลขพัสดุ DHL ก่อนส่งมอบพัสดุ" : "อัปเดตสถานะไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+        err instanceof Error && err.message === "TRACKING_REQUIRED" ? "กรุณากรอกเลขพัสดุ DHL ก่อนส่งมอบพัสดุ" : "เปลี่ยนสถานะไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
         "error",
       );
     } finally {
@@ -80,7 +71,7 @@ export default function AdminOrderDetailPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "คำสั่งซื้อ", href: "/admin/orders" }]} />
-          <EmptyState icon={<OrdersIcon />} title="ไม่พบคำสั่งซื้อนี้" description="คำสั่งซื้ออาจไม่มีอยู่ หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าคำสั่งซื้อ" onAction={() => navigate("/admin/orders")} class="bg-surface-card shadow-card" />
+          <EmptyState icon={<OrdersIcon />} title="ไม่พบคำสั่งซื้อนี้" description="คำสั่งซื้ออาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าคำสั่งซื้อ" onAction={() => navigate("/admin/orders")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -101,11 +92,12 @@ export default function AdminOrderDetailPage() {
         return (
           <div class="flex flex-col gap-6">
             <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "คำสั่งซื้อ", href: "/admin/orders" }, { label: o().orderNumber }]} />
-            {/* CMS + Frontend Final Refinement §1 — the 3 receipt document actions move into the page's own Header/Action area (top-right on desktop, wraps on mobile) instead of a mid-page Section; same buttons, same handlers, nothing about the action/logic itself changes. */}
+            {/* Receipt actions live in the header; only a paid order has a receipt. */}
             <PageHeader
               title={o().orderNumber}
               description={`สั่งซื้อเมื่อ ${o().createdAt}`}
               actions={
+                <Show when={o().paymentStatus === "paid"}>
                 <div class="flex flex-wrap items-center gap-2">
                   <Button variant="outline" onClick={() => goToReceipt()}>
                     <ReceiptIcon class="size-4" /> ดูใบเสร็จ
@@ -117,6 +109,7 @@ export default function AdminOrderDetailPage() {
                     <DownloadIcon class="size-4" /> ดาวน์โหลดใบเสร็จ
                   </Button>
                 </div>
+                </Show>
               }
             />
 
@@ -124,18 +117,23 @@ export default function AdminOrderDetailPage() {
               <div class="flex flex-col gap-6 lg:col-span-2">
                 <Section title="สรุปคำสั่งซื้อ">
                   <div class="flex flex-col gap-2">
-                    <StatusRow label="Order Status" tone={ORDER_STATUS_META[o().orderStatus].tone} value={ORDER_STATUS_META[o().orderStatus].label} />
-                    <StatusRow label="Payment" tone={PAYMENT_STATUS_META[o().paymentStatus].tone} value={PAYMENT_STATUS_META[o().paymentStatus].label} />
-                    <StatusRow label="Fulfillment" tone={FULFILLMENT_STATUS_META[o().fulfillmentStatus].tone} value={FULFILLMENT_STATUS_META[o().fulfillmentStatus].label} />
+                    <StatusRow label="สถานะคำสั่งซื้อ" tone={ORDER_STATUS_META[o().orderStatus].tone} value={ORDER_STATUS_META[o().orderStatus].label} />
+                    <StatusRow label="การชำระเงิน" tone={PAYMENT_STATUS_META[o().paymentStatus].tone} value={PAYMENT_STATUS_META[o().paymentStatus].label} />
+                    <StatusRow label="การจัดส่ง" tone={FULFILLMENT_STATUS_META[o().fulfillmentStatus].tone} value={FULFILLMENT_STATUS_META[o().fulfillmentStatus].label} />
                   </div>
-                  <div class="border-t border-border pt-4">
+                  <Show when={o().orderStatus === "pending_payment"}>
+                    <p class="rounded-card bg-warning-soft px-3 py-2 text-sm text-ink">
+                      ต้องชำระภายใน {formatOrderDateTimeLabel(orderPaymentDeadline(o()))} ไม่เช่นนั้นระบบจะยกเลิกอัตโนมัติ
+                    </p>
+                  </Show>
+                  <div class="border-t border-border pt-3">
                     <OrderTotalsBreakdown order={o()} />
                   </div>
                   <Show when={o().cancellation}>
                     {(c) => (
-                      <dl class="flex flex-col gap-1.5 border-t border-border pt-4 text-sm">
+                      <dl class="flex flex-col gap-1.5 border-t border-border pt-3 text-sm">
                         <Row label="ยกเลิกโดย" value={CANCELLED_BY_LABEL[c().by]} />
-                        <Row label="เหตุผลการยกเลิก" value={c().reason ?? "ไม่ได้ระบุ"} />
+                        <Row label="เหตุผล" value={c().reason ?? "-"} />
                         <Row label="ยกเลิกเมื่อ" value={formatOrderDateTimeLabel(c().at)} />
                       </dl>
                     )}
@@ -146,7 +144,6 @@ export default function AdminOrderDetailPage() {
                   <div class="flex flex-col gap-4">
                     <For each={o().items}>
                       {(item) => {
-                        const stockStatus = () => lineItemStockStatus(o().orderStatus);
                         return (
                           <div class="flex gap-3">
                             <img src={item.image} alt="" class="size-14 shrink-0 rounded-media object-cover" />
@@ -154,17 +151,14 @@ export default function AdminOrderDetailPage() {
                               <p class="truncate text-sm font-medium text-ink">{item.name}</p>
                               <p class="text-xs text-ink-gray">
                                 {item.sku}
-                                {item.variantLabel ? ` · ${item.variantLabel}` : ""}
+                                {item.variantLabel ? ` ${item.variantLabel}` : ""}
                               </p>
                               <p class="text-xs text-ink-gray">
-                                {formatAdminCurrency(item.unitPrice)} × {item.qty}
+                                {formatAdminCurrency(item.unitPrice)} x {item.qty}
                               </p>
-                              <div class="mt-1 flex flex-wrap gap-1.5">
-                                <Show when={item.isFreeGift}>
-                                  <StatusBadge tone="success">ของแถมฟรี</StatusBadge>
-                                </Show>
-                                <StatusBadge tone={LINE_ITEM_STOCK_STATUS_META[stockStatus()].tone}>{LINE_ITEM_STOCK_STATUS_META[stockStatus()].label}</StatusBadge>
-                              </div>
+                              <Show when={item.isFreeGift}>
+                                <StatusBadge tone="success" class="mt-1">ของแถมฟรี</StatusBadge>
+                              </Show>
                               <Show when={item.isFreeGift}>
                                 <p class="mt-1 text-xs text-ink-gray">โปรโมชั่นซื้อครบ {formatAdminCurrency(GIFT_PROMOTION.threshold)} รับฟรี</p>
                               </Show>
@@ -181,11 +175,6 @@ export default function AdminOrderDetailPage() {
                   <OrderTrackingPanel order={o()} />
                 </Section>
 
-                <Show when={o().returnRequest}>
-                  <Section title="คำขอคืนสินค้า">
-                    <OrderReturnPanel order={o()} />
-                  </Section>
-                </Show>
               </div>
 
               <div class="flex flex-col gap-6">
@@ -203,11 +192,12 @@ export default function AdminOrderDetailPage() {
                     {(c) => (
                       <div class="flex flex-col gap-2">
                         <dl class="flex flex-col gap-1.5 text-sm">
+                          <Row label="รหัสลูกค้า" value={getCustomerCode(c())} />
                           <Row label="ชื่อ" value={getCustomerFullName(c())} />
                           <Row label="อีเมล" value={c().email} />
                           <Row label="โทรศัพท์" value={c().phone} />
                         </dl>
-                        <Button variant="outline" class="self-start" onClick={() => navigate(`/admin/customers/${c().id}`)}>
+                        <Button variant="outline" size="sm" class="self-start" href={`/admin/customers/${c().id}`}>
                           ดูข้อมูลลูกค้า
                         </Button>
                       </div>
@@ -232,16 +222,9 @@ export default function AdminOrderDetailPage() {
                   <AddressBlock address={o().shipping.address} />
                 </Section>
 
-                <Section title="ที่อยู่ออกใบเสร็จรับเงิน">
-                  <Show when={o().billingAddress} fallback={<p class="text-sm text-ink-gray">ลูกค้าไม่ได้ระบุ — ออกใบเสร็จในชื่อลูกค้า</p>}>
-                    {(b) => (
-                      <div class="flex flex-col gap-2">
-                        <Show when={b().isCompany}>
-                          <StatusBadge tone="info" class="self-start">นิติบุคคล</StatusBadge>
-                        </Show>
-                        <AddressBlock address={b()} />
-                      </div>
-                    )}
+                <Section title="ที่อยู่ออกใบกำกับภาษี">
+                  <Show when={o().billingAddress} fallback={<p class="text-sm text-ink-gray">ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง</p>}>
+                    {(b) => <AddressBlock address={b()} />}
                   </Show>
                 </Section>
               </div>
@@ -255,7 +238,7 @@ export default function AdminOrderDetailPage() {
             <Show when={nextActions().length > 0}>
               <AdminFloatingBar>
                 <div class="flex w-full flex-wrap items-center gap-3">
-                  <span class="hidden text-sm font-medium text-ink-gray sm:inline">เปลี่ยนสถานะ:</span>
+                  <span class="hidden text-sm font-medium text-ink-gray sm:inline">เปลี่ยนสถานะคำสั่งซื้อ</span>
                   <div class="ml-auto flex flex-wrap items-center gap-2">
                     <Show when={nextActions().some((a) => needsTracking(a.status))}>
                       <span class="text-xs text-ink-gray">กรอกเลขพัสดุ DHL ก่อนส่งมอบพัสดุ</span>
@@ -282,9 +265,13 @@ export default function AdminOrderDetailPage() {
             <ConfirmDialog
               open={pendingStatus() !== null}
               onOpenChange={(open) => !open && !saving() && setPendingStatus(null)}
-              title="เปลี่ยนสถานะคำสั่งซื้อ?"
-              description={`จาก "${ORDER_STATUS_META[o().orderStatus].label}" เป็น "${targetMeta()?.label ?? ""}"`}
-              confirmLabel="ยืนยัน"
+              title={pendingStatus() === "cancelled" ? "ยกเลิกคำสั่งซื้อ?" : "เปลี่ยนสถานะคำสั่งซื้อ?"}
+              description={
+                pendingStatus() === "cancelled"
+                  ? `คำสั่งซื้อ "${o().orderNumber}" จะถูกยกเลิก การกระทำนี้ไม่สามารถย้อนกลับได้`
+                  : `"${o().orderNumber}" จะเปลี่ยนจาก "${ORDER_STATUS_META[o().orderStatus].label}" เป็น "${targetMeta()?.label ?? ""}"`
+              }
+              confirmLabel={pendingStatus() === "cancelled" ? "ยกเลิกคำสั่งซื้อ" : "ยืนยัน"}
               tone={pendingStatus() === "cancelled" ? "danger" : "default"}
               loading={saving()}
               onConfirm={confirmChange}
@@ -298,7 +285,7 @@ export default function AdminOrderDetailPage() {
 
 function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+    <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
       {props.children}
     </div>

@@ -79,7 +79,6 @@ function makeSection(partial: Partial<HomepageSection> & { id: string; type: Hom
     products: [],
     collectionId: "",
     categoryId: "",
-    campaignId: "",
     createdAt: TODAY_LABEL,
     updatedAt: TODAY_LABEL,
     ...partial,
@@ -105,21 +104,21 @@ export function buildHomepageSectionBaseline(): HomepageSection[] {
     makeSection({
       id: HOMEPAGE_HERO_SECTION_ID,
       type: "hero",
-      name: "Hero Banner หน้าแรก",
+      name: "แบนเนอร์สไลด์หน้าแรก",
       enabled: false,
       assets: buildLiveHeroAssets(),
     }),
     makeSection({
       id: "home-sec-product-featured",
       type: "product",
-      name: "Product Section: Featured",
+      name: "สินค้าแนะนำ",
       title: "คอลเลคชั่น Glow in motion",
       productSource: "featured",
     }),
     makeSection({
       id: "home-sec-promo-banner-1",
       type: "promotion_banner",
-      name: "Promotion Banner (ตัวอย่าง)",
+      name: "แบนเนอร์โปรโมชั่น (ตัวอย่าง)",
       enabled: false,
       title: "",
       description: "",
@@ -127,7 +126,7 @@ export function buildHomepageSectionBaseline(): HomepageSection[] {
     makeSection({
       id: "home-sec-content-1",
       type: "content",
-      name: "Content Block (ตัวอย่าง)",
+      name: "รูปพร้อมข้อความ (ตัวอย่าง)",
       enabled: false,
       title: "สะสม Charmiss Coins",
       description: "แลกรับของรางวัล ส่วนลด และสิทธิพิเศษทุกการสั่งซื้อ",
@@ -156,24 +155,13 @@ export type HomepageFixedSection = {
 };
 
 export const HOMEPAGE_FIXED_SECTIONS: HomepageFixedSection[] = [
-  { id: "hero", label: "Hero Banner", note: "สไลด์หลักด้านบนสุด — ตอนนี้หน้าร้านแสดง 3 สไลด์เริ่มต้น (Iconic Glow / Juicy Cheek / Acne Balance) เปิดใช้ Section Hero ของหน้านี้เมื่อต้องการแทนที่", editable: true },
-  { id: "sections", label: "Section ที่แก้ไขได้", note: "Section อื่นๆ ของหน้านี้ (เช่น คอลเลคชั่น Glow in motion) แสดงต่อจาก Hero ตามลำดับด้านล่าง", editable: true },
-  { id: "flash-sale", label: "Flash Sale", note: "สินค้า Flash Sale พร้อมนับถอยหลัง — ดึงจากสินค้าที่ตั้ง Flash Sale ไว้ (ซ่อนเองเมื่อไม่มีสินค้า)", href: "/promotion/flash-sale" },
+  { id: "hero", label: "แบนเนอร์สไลด์", note: "สไลด์ใหญ่บนสุด ตอนนี้หน้าร้านแสดง 3 สไลด์เริ่มต้น (Iconic Glow, Juicy Cheek, Acne Balance) เปิดส่วนแบนเนอร์สไลด์ของหน้านี้เมื่อต้องการเปลี่ยน", editable: true },
+  { id: "sections", label: "ส่วนที่แก้ไขได้", note: "ส่วนอื่นของหน้านี้ (เช่น คอลเลคชั่น Glow in motion) แสดงต่อจากแบนเนอร์สไลด์ตามลำดับด้านล่าง", editable: true },
+  { id: "flash-sale", label: "Flash Sale", note: "สินค้า Flash Sale พร้อมนับถอยหลัง ดึงจากสินค้าที่ตั้ง Flash Sale ไว้ ถ้าไม่มีสินค้าจะซ่อนเอง", href: "/promotion/flash-sale" },
   { id: "best-sellers", label: "สินค้าขายดี", note: "สินค้าขายดีพร้อมแท็บกรองหมวด", href: "/promotion/best-sellers" },
-  { id: "coupon", label: "คูปองส่วนลด", note: "คูปองส่วนลด ลดทั้งเว็บ! — ปุ่มเก็บคูปอง/เก็บทั้งหมด" },
+  { id: "coupon", label: "คูปองส่วนลด", note: "คูปองที่ตั้งให้แสดงหน้าแรก พร้อมปุ่มเก็บคูปองและเก็บทั้งหมด" },
   { id: "new-arrivals", label: "มาใหม่", note: "สินค้ามาใหม่", href: "/promotion/new-arrivals" },
   { id: "trending", label: "กำลังฮิตสัปดาห์นี้", note: "สินค้ากำลังฮิต", href: "/promotion/trending" },
   { id: "reviews", label: "#CharmissReviews", note: "คะแนน 4.9 จากรีวิวจริง 10,000+ รีวิว พร้อมคลิปรีวิวจาก TikTok" },
-  { id: "faq", label: "คำถามที่พบบ่อย", note: "รายการคำถามด้านล่าง (ข้อแรกเปิดไว้)" },
-];
-
-/** Mirror of `FAQSection.tsx`'s `faqItems` (same order, same copy) — read-only in Admin; the storefront list itself is hardcoded. */
-export const HOMEPAGE_FAQ_ITEMS: { question: string; answer: string }[] = [
-  {
-    question: "หลังจากสั่งซื้อแล้วจะได้รับสินค้าภายในกี่วัน?",
-    answer: "สินค้าจะถูกจัดส่งภายใน 2-3 วันทำการหลังจากชำระเงินสำเร็จ สำหรับพื้นที่กรุงเทพฯ และปริมณฑล และภายใน 3-5 วันทำการสำหรับพื้นที่ต่างจังหวัด",
-  },
-  { question: "ชำระเงินด้วยวิธีใดได้บ้าง?", answer: "รองรับบัตรเครดิต/เดบิต (Visa, Mastercard, JCB, UnionPay), พร้อมเพย์ (สแกน QR ผ่านแอปธนาคาร) และ TrueMoney Wallet" },
-  { question: "สินค้าเป็นของแท้ 100% หรือไม่?", answer: "สินค้าทุกชิ้นเป็นของแท้ 100% จัดจำหน่ายโดย Charmiss อย่างเป็นทางการเท่านั้น" },
-  { question: "หากต้องการคืนสินค้าต้องทำอย่างไร?", answer: "แจ้งคืนสินค้าได้ภายใน 7 วันหลังได้รับสินค้า ผ่านหน้า “ติดตามคำสั่งซื้อ” โดยสินค้าต้องไม่ผ่านการใช้งาน" },
+  { id: "faq", label: "คำถามที่พบบ่อย", note: "คำถามที่พบบ่อยตามรายการด้านล่าง" },
 ];

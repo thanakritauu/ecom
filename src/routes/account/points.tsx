@@ -1,12 +1,15 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { AccountShell, AccountPanel } from "~/components/account/AccountShell";
 import { clientOnly } from "@solidjs/start";
-import { CheckIcon } from "~/components/shared/icons";
+import { CheckIcon, CoinIcon } from "~/components/shared/icons";
+import { EmptyState } from "~/components/shared/EmptyState";
 import { ChevronIcon } from "~/components/shared/ChevronIcon";
 
 // Same Kobalte Dialog SSR/hydration workaround as the other account dialogs.
 const PerksSheet = clientOnly(() => import("~/components/account/OrderActionDialogs").then((m) => ({ default: m.Sheet })));
 import { formatTHB } from "~/components/shared/PriceDisplay";
+import charmissCardLogo from "~/assets/images/charmiss-club-card-logo.png";
+import rotateIcon from "~/assets/icons/rotate-cw.svg";
 import { useAuth } from "~/lib/auth";
 import { COIN_TO_BAHT_RATE, computeCoinsEarned } from "~/lib/cartSelectors";
 import { createMockOrderRepository, createOrderHistory } from "~/lib/orderHistory";
@@ -66,19 +69,14 @@ export default function AccountPointsPage() {
   return (
     <AccountShell>
       <AccountPanel title="Charmiss Club" headingId="account-points-heading" hideTitle>
-        {/* Balance — centered on phones */}
-        <div class="flex flex-col items-center gap-3 rounded-card bg-surface-pink p-4 text-center sm:flex-row sm:gap-4 sm:p-6 sm:text-left">
-          <TierMark tier={tier()} />
-          <div>
-            <p class="text-sm text-ink-gray">Charmiss Coin ของคุณ</p>
-            <p class="text-3xl font-bold text-ink">{balance().toLocaleString("th-TH")} คอยน์</p>
-          </div>
-        </div>
+        <MemberCard name={auth.user()?.name ?? ""} memberCode={auth.user()?.memberCode} balance={balance()} />
 
         <MemberTierCard spend={spend()} />
 
         {/* History — earned (incl. pending) | redeemed */}
-        <h2 class="text-lg font-semibold text-ink">ประวัติคอยน์</h2>
+        <h2 id="coin-history" class="scroll-mt-24 text-lg font-semibold text-ink">
+          ประวัติคอยน์
+        </h2>
         <div role="tablist" aria-label="ประวัติคอยน์" class="-mx-4 flex h-11 items-start overflow-x-auto border-b border-surface-gray px-4 sm:-mx-6 sm:px-6">
           <For each={HISTORY_TABS}>
             {(tab) => (
@@ -101,7 +99,14 @@ export default function AccountPointsPage() {
         <Show when={history.ready()} fallback={<div class="h-40 animate-pulse rounded-card bg-surface-gray" aria-hidden="true" />}>
           <Show
             when={shownEntries().length > 0}
-            fallback={<p class="py-8 text-center text-sm text-ink-gray">{historyTab() === "earned" ? "ยังไม่มีคอยน์ที่ได้รับ" : "ยังไม่มีการแลกคอยน์"}</p>}
+            fallback={
+              <EmptyState
+                size="compact"
+                icon={CoinIcon}
+                title={historyTab() === "earned" ? "ยังไม่มีคอยน์ที่ได้รับ" : "ยังไม่มีการแลกคอยน์"}
+                description={historyTab() === "earned" ? "สั่งซื้อสินค้าแล้วรับคอยน์ เมื่อได้รับสินค้า" : "ใช้คอยน์เป็นส่วนลดได้ตอนชำระเงิน"}
+              />
+            }
           >
             <ul class="-mt-2 flex flex-col divide-y divide-surface-gray">
               <For each={shownEntries()}>
@@ -109,8 +114,9 @@ export default function AccountPointsPage() {
                   <li class="flex items-center justify-between gap-3 py-3">
                     <div class="min-w-0">
                       <p class="text-sm font-medium text-ink">{entry.label}</p>
-                      <p class="text-xs text-ink-gray">
-                        {entry.orderId ?? "Charmiss Club"} · {formatOrderDate(entry.date)}
+                      <p class="flex flex-wrap gap-x-2 text-xs text-ink-gray">
+                        <span>{entry.orderId ?? "Charmiss Club"}</span>
+                        <span>{formatOrderDate(entry.date)}</span>
                       </p>
                     </div>
                     <p
@@ -139,6 +145,60 @@ export default function AccountPointsPage() {
   );
 }
 
+/**
+ * Charmiss Club member card (Figma CharmissCRM 1:538): greeting + member
+ * number, the Charmiss mark, and the coin balance with a shortcut down to
+ * the coin history. No member photo exists, so the avatar is the name's
+ * first letter. Locked to the Figma frame's 367:214 ratio (close to a real
+ * bank card), centered, at most 400px wide.
+ */
+function MemberCard(props: { name: string; memberCode?: string; balance: number }) {
+  const firstName = () => props.name.trim().split(/\s+/)[0] ?? "";
+  const initial = () => firstName().charAt(0).toUpperCase();
+  // Thai names join "คุณ" directly (คุณธนกฤต); Latin names get a space (คุณ Nutcha).
+  const greeting = () => (/^[\u0E00-\u0E7F]/.test(firstName()) ? `คุณ${firstName()}` : `คุณ ${firstName()}`);
+  const toHistory = () => document.getElementById("coin-history")?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  return (
+    <section
+      aria-label="บัตรสมาชิก Charmiss Club"
+      class="mx-auto flex aspect-[367/214] w-full max-w-[400px] flex-col justify-between gap-3 overflow-hidden rounded-card border-[3px] border-white/30 bg-brand-pink p-5 text-white shadow-card sm:p-6"
+    >
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex min-w-0 items-center gap-2">
+          <span class="flex size-8 shrink-0 items-center justify-center rounded-pill bg-white/25 text-sm font-bold" aria-hidden="true">
+            {initial()}
+          </span>
+          <div class="flex min-w-0 flex-col">
+            <p class="truncate text-base font-bold leading-[1.5]">สวัสดี {greeting()}</p>
+            <Show when={props.memberCode}>
+              <p class="text-xs leading-[1.5] text-white/50">{props.memberCode}</p>
+            </Show>
+          </div>
+        </div>
+        <img src={charmissCardLogo} alt="Charmiss" width="48" height="48" class="size-12 shrink-0 rounded-pill" />
+      </div>
+
+      <div class="flex flex-col">
+        <p class="flex items-center gap-1 text-sm font-bold leading-[1.5]">
+          คอยน์ทั้งหมด
+          <img src={rotateIcon} alt="" width="11" height="11" class="size-[11px]" />
+        </p>
+        <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <p class="text-2xl font-bold leading-[1.5]">{props.balance.toLocaleString("th-TH")} คอยน์</p>
+          <button
+            type="button"
+            onClick={toHistory}
+            class="relative flex items-center justify-center rounded-pill bg-white px-3 py-1.5 text-sm font-medium leading-[1.5] text-brand-pink transition-colors duration-150 before:absolute before:-inset-y-1.5 before:inset-x-0 lg:hover:bg-white/90"
+          >
+            ดูประวัติคอยน์
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /** Member ladder: current tier, progress along Glow → Radiance → Icon, what's left to the next one, and each tier's perks. */
 function MemberTierCard(props: { spend: number }) {
   const tier = () => resolveTier(props.spend);
@@ -152,7 +212,7 @@ function MemberTierCard(props: { spend: number }) {
         type="button"
         onClick={() => setPerksOpen(true)}
         aria-haspopup="dialog"
-        aria-label={`ระดับสมาชิกของคุณ ${tier().current.name} — ดูสิทธิประโยชน์`}
+        aria-label={`ระดับสมาชิกของคุณคือ ${tier().current.name} กดเพื่อดูสิทธิประโยชน์`}
         class="font-normal -m-2 flex items-center gap-3 rounded-2xl p-2 text-left transition-colors duration-150 lg:hover:bg-surface-gray/60"
       >
         <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
@@ -270,4 +330,3 @@ function TierBadge(props: { tier: Tier }) {
 function TierMark(props: { tier: Tier; class?: string }) {
   return <img src={props.tier.mark} alt="" class={`w-auto shrink-0 ${props.class ?? "h-14"}`} />;
 }
-

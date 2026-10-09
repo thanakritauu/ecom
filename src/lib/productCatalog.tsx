@@ -1,12 +1,26 @@
-import { createContext, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
-import { buildAdminProductBaseline, normalizeAdminProduct, readPersistedAdminProducts, type AdminProduct } from "./adminProductStore";
+import { createContext, createSignal, onCleanup, onMount, useContext, type Accessor, type JSX } from "solid-js";
+import {
+  buildAdminProductBaseline,
+  isProductOnSale,
+  lowStockThresholdOf,
+  normalizeAdminProduct,
+  PRODUCTS_CHANGED_EVENT,
+  PRODUCTS_STORAGE_KEY,
+  readPersistedAdminProducts,
+  type AdminProduct,
+} from "./adminProductStore";
+import type { Product } from "./types";
+import { HIDDEN_REVIEWS_CHANGED_EVENT, HIDDEN_REVIEWS_STORAGE_KEY, readHiddenReviewKeys, reviewKey } from "./adminProductReviews";
+
+/** Stock at or below this shows "เหลือ X ชิ้นสุดท้าย" in the cart: the product's own Admin setting (default 5). */
+export const storefrontLowStockThreshold = (product: Product) => lowStockThresholdOf(product as Partial<AdminProduct>);
 
 /**
  * Architecture Cleanup & Source of Truth — the storefront's one read path
  * into the exact same Product data Admin manages, same "Admin store +
  * read-only mirror" pattern already established for Category
- * (`categoryContent.tsx`), Collection (`collectionContent.tsx`), Campaign
- * (`campaignContent.tsx`), and Landing Page (`promotionPages.tsx`) — not a
+ * (`categoryContent.tsx`), Collection (`collectionContent.tsx`), and
+ * Landing Page (`promotionPages.tsx`) — not a
  * new architecture, the one missing instance of an existing one.
  * `adminProductStore.tsx` (`useAdminProducts()`) stays the Admin-only write
  * side; this file never writes to `localStorage`, only reads the same key.
@@ -23,8 +37,17 @@ function fallbackProducts(): AdminProduct[] {
   return buildAdminProductBaseline().map(normalizeAdminProduct);
 }
 
+/**
+ * Only products Admin has on sale ("เปิดขาย") reach the storefront; drafts and
+ * switched-off products are hidden everywhere. Reviews Admin hid (รีวิว >
+ * รีวิวสินค้า) are dropped here too, so the PDP and the Option Modal never
+ * show them.
+ */
 function readStoredProducts(): AdminProduct[] {
-  return readPersistedAdminProducts() ?? fallbackProducts();
+  const hidden = readHiddenReviewKeys();
+  return (readPersistedAdminProducts() ?? fallbackProducts())
+    .filter(isProductOnSale)
+    .map((p) => (hidden.size > 0 && p.reviews?.length ? { ...p, reviews: p.reviews.filter((r) => !hidden.has(reviewKey(p.id, r.id))) } : p));
 }
 
 type ProductCatalogContextValue = {
@@ -35,19 +58,31 @@ type ProductCatalogContextValue = {
   getBySlug: (slug: string) => AdminProduct | undefined;
   /** Products whose own `categoryId` classifies them under this Category — derived live, never a second stored list. */
   getByCategory: (categoryId: string) => AdminProduct[];
-  /** Resolves an ordered list of product ids (e.g. a Collection's or Campaign's own `productId[]`) against the live catalog — the one place "reference → real Product" resolution happens, reused by Homepage/Landing Page Product & Campaign sections alike. */
+  /** Resolves an ordered list of product ids (e.g. a Collection's own `productId[]`) against the live catalog — the one place "reference → real Product" resolution happens, reused by Homepage/Landing Page Product sections alike. */
   getByIds: (ids: string[]) => AdminProduct[];
 };
 
 const ProductCatalogContext = createContext<ProductCatalogContextValue>();
 
 export function ProductCatalogProvider(props: { children: JSX.Element }) {
-  const [products, setProducts] = createSignal<AdminProduct[]>(fallbackProducts());
+  const [products, setProducts] = createSignal<AdminProduct[]>(fallbackProducts().filter(isProductOnSale));
   const [ready, setReady] = createSignal(false);
 
   onMount(() => {
-    setProducts(readStoredProducts());
+    const refresh = () => setProducts(readStoredProducts());
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || e.key.startsWith(PRODUCTS_STORAGE_KEY) || e.key === HIDDEN_REVIEWS_STORAGE_KEY) refresh();
+    };
+    refresh();
     setReady(true);
+    window.addEventListener("storage", onStorage);
+    window.addEventListener(PRODUCTS_CHANGED_EVENT, refresh);
+    window.addEventListener(HIDDEN_REVIEWS_CHANGED_EVENT, refresh);
+    onCleanup(() => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(PRODUCTS_CHANGED_EVENT, refresh);
+      window.removeEventListener(HIDDEN_REVIEWS_CHANGED_EVENT, refresh);
+    });
   });
 
   const getById = (id: string) => products().find((p) => p.id === id);

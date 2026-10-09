@@ -3,6 +3,8 @@ import { clientOnly } from "@solidjs/start";
 import { AccountShell, AccountPanel } from "~/components/account/AccountShell";
 import { AddressCard, AddressForm } from "~/components/checkout/AddressSection";
 import { Button } from "~/components/shared/Button";
+import { EmptyState } from "~/components/shared/EmptyState";
+import { PinIcon } from "~/components/shared/icons";
 import { createAddressBook, createLocalAddressRepository, type AddressBook } from "~/lib/addressBook";
 import { pushToast } from "~/lib/toast";
 import type { Address } from "~/lib/checkoutData";
@@ -43,7 +45,7 @@ export default function AccountAddressPage() {
         open={!!removing()}
         onOpenChange={(open) => !open && setRemoving(undefined)}
         title="ลบที่อยู่นี้?"
-        description={removing() ? `${removing()!.recipientName} · ${removing()!.addressLine}` : ""}
+        description={removing() ? `${removing()!.recipientName} ${removing()!.addressLine}` : ""}
         confirmLabel="ลบที่อยู่"
         onConfirm={async () => {
           await book.remove(removing()!.id);
@@ -133,13 +135,23 @@ function AddressListPanel(props: {
             </For>
           </ul>
         </Show>
-        <p class="text-xs text-ink-gray">
-          {billing()
-            ? empty()
-              ? "ยังไม่มีที่อยู่ออกใบกำกับภาษี"
-              : "เลือกใช้ได้ตอนชำระเงิน เมื่อยกเลิก “ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง”"
-            : "ที่อยู่เริ่มต้นจะถูกเลือกให้อัตโนมัติตอนชำระเงิน"}
-        </p>
+        <Show
+          when={billing() && empty()}
+          fallback={
+            <p class="text-xs text-ink-gray">
+              {billing() ? 'เลือกใช้ได้ตอนชำระเงิน เมื่อยกเลิก "ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง"' : "ที่อยู่เริ่มต้นจะถูกเลือกให้อัตโนมัติตอนชำระเงิน"}
+            </p>
+          }
+        >
+          <Show when={!formOpen()}>
+            <EmptyState
+              size="compact"
+              icon={PinIcon}
+              title="ยังไม่มีที่อยู่ออกใบกำกับภาษี"
+              description="เพิ่มไว้ใช้ตอนต้องการใบกำกับภาษีในนามบุคคลหรือบริษัท"
+            />
+          </Show>
+        </Show>
       </Show>
     </AccountPanel>
   );

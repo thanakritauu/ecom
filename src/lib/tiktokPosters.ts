@@ -1,5 +1,9 @@
 import { query } from "@solidjs/router";
-import { TIKTOK_REVIEW_CLIPS, tiktokVideoUrl } from "./tiktokReviews";
+import { TIKTOK_REVIEW_CLIPS, tiktokVideoUrl, type TikTokReviewClip } from "./tiktokReviews";
+
+/** A clip Admin added (not in the seed list) whose cover should be looked up too. */
+export type PosterClip = Pick<TikTokReviewClip, "videoId" | "author">;
+const MAX_EXTRA_CLIPS = 30;
 
 /**
  * Cover images for the TikTok review clips, so the rails can show a poster
@@ -24,9 +28,7 @@ const FETCH_TIMEOUT_MS = 4000;
 const RETRY_AFTER_FAILURE_MS = 15 * 60 * 1000;
 const FAILED_UNTIL = new Map<string, number>();
 
-async function fetchPoster(videoId: string): Promise<PosterEntry | undefined> {
-  const clip = TIKTOK_REVIEW_CLIPS.find((c) => c.videoId === videoId);
-  if (!clip) return undefined;
+async function fetchPoster(clip: PosterClip): Promise<PosterEntry | undefined> {
   const res = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(tiktokVideoUrl(clip))}`, {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
@@ -38,16 +40,23 @@ async function fetchPoster(videoId: string): Promise<PosterEntry | undefined> {
   return { url: data.thumbnail_url, expiresAt };
 }
 
-export const getTikTokPosters = query(async (): Promise<Record<string, string>> => {
+export const getTikTokPosters = query(async (extra: PosterClip[] = []): Promise<Record<string, string>> => {
   "use server";
   const now = Date.now();
-  const stale = TIKTOK_REVIEW_CLIPS.map((c) => c.videoId).filter(
-    (id) => (CACHE.get(id)?.expiresAt ?? 0) <= now && (FAILED_UNTIL.get(id) ?? 0) <= now,
+  // Admin-added clips arrive from the browser: only well-formed TikTok ids/handles, capped.
+  const safeExtra = (Array.isArray(extra) ? extra : [])
+    .filter((c) => /^\d{8,25}$/.test(String(c?.videoId)) && /^[\w.-]{1,40}$/.test(String(c?.author)))
+    .slice(0, MAX_EXTRA_CLIPS)
+    .map((c) => ({ videoId: String(c.videoId), author: String(c.author) }));
+  const byId = new Map<string, PosterClip>([...TIKTOK_REVIEW_CLIPS, ...safeExtra].map((c) => [c.videoId, c]));
+  const stale = [...byId.values()].filter(
+    (c) => (CACHE.get(c.videoId)?.expiresAt ?? 0) <= now && (FAILED_UNTIL.get(c.videoId) ?? 0) <= now,
   );
   for (let i = 0; i < stale.length; i += 2) {
     await Promise.all(
-      stale.slice(i, i + 2).map(async (id) => {
-        const entry = await fetchPoster(id).catch(() => undefined);
+      stale.slice(i, i + 2).map(async (clip) => {
+        const id = clip.videoId;
+        const entry = await fetchPoster(clip).catch(() => undefined);
         if (entry) {
           CACHE.set(id, entry);
           FAILED_UNTIL.delete(id);
@@ -57,5 +66,5 @@ export const getTikTokPosters = query(async (): Promise<Record<string, string>> 
       }),
     );
   }
-  return Object.fromEntries([...CACHE].map(([id, entry]) => [id, entry.url]));
+  return Object.fromEntries([...CACHE].filter(([id]) => byId.has(id)).map(([id, entry]) => [id, entry.url]));
 }, "tiktok-posters");

@@ -85,7 +85,7 @@ export function computeCartTotal(resolved: ResolvedCartLine[]): number {
  * a total their own way.
  */
 /** One carrier, no shipping choice at checkout — every order ships DHL standard (shown with its logo); the fee is `computeShippingFee`. */
-export const DELIVERY = { carrier: "DHL", label: "จัดส่งโดย DHL", method: "จัดส่งมาตรฐาน", etaLabel: "ได้รับภายใน 2–3 วันทำการ" } as const;
+export const DELIVERY = { carrier: "DHL", label: "จัดส่งโดย DHL", method: "จัดส่งมาตรฐาน", etaLabel: "ได้รับภายใน 2-3 วันทำการ" } as const;
 
 /** Paid on the Checkout page itself (no separate payment step). No installments / cash on delivery. Order = display order; the first is the default pick. */
 export const PAYMENT_METHODS = [
@@ -97,13 +97,34 @@ export const PAYMENT_METHODS = [
 ] as const;
 export type PaymentMethodId = (typeof PAYMENT_METHODS)[number]["id"];
 
+export type CouponDiscountKind = "baht" | "percent";
+
 export type Coupon = {
   code: string;
-  /** "ลด ฿100" — whole baht, the one amount format every coupon surface prints. */
+  /** "ลด ฿100" / "ลด 10% (สูงสุด ฿200)": the one-line label every coupon surface prints (`couponLabels`). */
   label: string;
+  /** "ลด ฿100" / "ลด 10%": the ticket's big line. */
+  amountLabel: string;
+  /** "ลดสูงสุด ฿200": a capped % coupon's extra ticket line. */
+  capLabel?: string;
+  discountType: CouponDiscountKind;
+  /** Baht off, or the percent for a "percent" coupon (see `couponDiscountAmount`). */
   discount: number;
+  /** "percent" only: most baht it takes off. */
+  maxDiscount?: number;
+  /** 0 = no minimum. */
   minSpend: number;
-  /** ISO 8601 — last moment the coupon can be used (end of that day, Bangkok). */
+  /** Uses across every customer; unset = unlimited. */
+  usageLimit?: number;
+  /** Uses per customer account; unset = unlimited. */
+  perCustomerLimit?: number;
+  /** Uses so far across every customer (cancelled orders don't count). */
+  usedCount: number;
+  /** Ticket thumbnail; unset = the % artwork. */
+  image?: string;
+  /** ISO 8601 — first moment the coupon can be used (Bangkok). Unset = already open. */
+  startsAt?: string;
+  /** ISO 8601 — last moment the coupon can be used (Bangkok). */
   expiresAt: string;
   /** "หมดอายุ 31 ต.ค." — derived from `expiresAt`. */
   expiresLabel: string;
@@ -111,33 +132,99 @@ export type Coupon = {
 
 const THAI_SHORT_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
-/** `expiresOn` = the coupon's last valid day (YYYY-MM-DD, Bangkok). */
-function coupon(code: string, discount: number, minSpend: number, expiresOn: string): Coupon {
-  const [, month, day] = expiresOn.split("-").map(Number);
+/** The coupon's printed labels: big line ("ลด 10%"), cap line ("ลดสูงสุด ฿200") and one-line label ("ลด 10% (สูงสุด ฿200)"). */
+export function couponLabels(c: { discountType?: CouponDiscountKind; discount: number; maxDiscount?: number }): { amount: string; cap?: string; label: string } {
+  const baht = (n: number) => `฿${n.toLocaleString("th-TH")}`;
+  if (c.discountType !== "percent") return { amount: `ลด ${baht(c.discount ?? 0)}`, label: `ลด ${baht(c.discount ?? 0)}` };
+  const amount = `ลด ${c.discount ?? 0}%`;
+  if (!c.maxDiscount) return { amount, label: amount };
+  return { amount, cap: `ลดสูงสุด ${baht(c.maxDiscount)}`, label: `${amount} (สูงสุด ${baht(c.maxDiscount)})` };
+}
+
+/**
+ * One storefront coupon from its Admin fields: `endDate`/`endTime` is its last
+ * valid minute and `startDate`/`startTime` its first (YYYY-MM-DD / HH:mm, Bangkok).
+ */
+export function buildCoupon(c: {
+  code: string;
+  discount: number;
+  discountType?: CouponDiscountKind;
+  maxDiscount?: number;
+  minSpend?: number;
+  usageLimit?: number;
+  perCustomerLimit?: number;
+  usedCount?: number;
+  image?: string;
+  startDate?: string;
+  startTime?: string;
+  endDate: string;
+  endTime?: string;
+}): Coupon {
+  const [, month, day] = c.endDate.split("-").map(Number);
+  const discountType = c.discountType ?? "baht";
+  const maxDiscount = discountType === "percent" ? c.maxDiscount || undefined : undefined;
+  const labels = couponLabels({ discountType, discount: c.discount, maxDiscount });
   return {
-    code,
-    label: `ลด ฿${discount.toLocaleString("th-TH")}`,
-    discount,
-    minSpend,
-    expiresAt: `${expiresOn}T23:59:59+07:00`,
+    code: c.code,
+    label: labels.label,
+    amountLabel: labels.amount,
+    capLabel: labels.cap,
+    discountType,
+    discount: c.discount,
+    maxDiscount,
+    minSpend: c.minSpend ?? 0,
+    usageLimit: c.usageLimit || undefined,
+    perCustomerLimit: c.perCustomerLimit || undefined,
+    usedCount: c.usedCount ?? 0,
+    image: c.image || undefined,
+    startsAt: c.startDate ? `${c.startDate}T${c.startTime || "00:00"}:00+07:00` : undefined,
+    expiresAt: `${c.endDate}T${c.endTime || "23:59"}:59+07:00`,
     expiresLabel: `หมดอายุ ${day} ${THAI_SHORT_MONTHS[month - 1]}`,
   };
 }
 
-/** Mock prototype catalog (no coupon backend exists) — same kind of stand-in as the mock reviews on the Product Detail page. Admin's coupon seeds (adminMarketing.ts) read these same dates. */
-export const AVAILABLE_COUPONS: Coupon[] = [
-  coupon("SAVE100", 100, 2000, "2026-10-31"),
-  coupon("SAVE50", 50, 500, "2026-11-15"),
-  coupon("SAVE20", 20, 200, "2026-11-30"),
-];
-
-/** An expired coupon is never offered (Home tickets, Checkout picker) nor accepted (typed code, totals). */
-export function isCouponActive(c: Pick<Coupon, "expiresAt">, now = Date.now()): boolean {
-  return Date.parse(c.expiresAt) >= now;
+/**
+ * Baht this coupon takes off a product subtotal: 0 below its minimum; a %
+ * coupon is rounded down to whole baht and capped by `maxDiscount`; never
+ * more than the subtotal itself (shipping is never discounted).
+ */
+export function couponDiscountAmount(c: Pick<Coupon, "discountType" | "discount" | "maxDiscount" | "minSpend">, subtotal: number): number {
+  if (subtotal <= 0 || subtotal < c.minSpend) return 0;
+  let amount = c.discountType === "percent" ? Math.floor((subtotal * c.discount) / 100) : c.discount;
+  if (c.discountType === "percent" && c.maxDiscount) amount = Math.min(amount, c.maxDiscount);
+  return Math.max(0, Math.min(amount, subtotal));
 }
 
-export function activeCoupons(now = Date.now()): Coupon[] {
-  return AVAILABLE_COUPONS.filter((c) => isCouponActive(c, now));
+/**
+ * Why this coupon can't be used any more, or undefined when it still can:
+ * its total limit is used up, or this shopper (`usedByShopper` of their own
+ * non-cancelled orders) has used their share.
+ */
+export function couponUsageBlock(c: Pick<Coupon, "usageLimit" | "perCustomerLimit" | "usedCount">, usedByShopper = 0): string | undefined {
+  if (c.usageLimit !== undefined && c.usedCount >= c.usageLimit) return "คูปองนี้ถูกใช้ครบจำนวนแล้ว";
+  if (c.perCustomerLimit !== undefined && usedByShopper >= c.perCustomerLimit)
+    return c.perCustomerLimit === 1 ? "คุณใช้คูปองนี้ไปแล้ว ใช้ได้ 1 ครั้งต่อบัญชี" : `คุณใช้คูปองนี้ครบ ${c.perCustomerLimit.toLocaleString("th-TH")} ครั้งแล้ว`;
+  return undefined;
+}
+
+/**
+ * The three launch coupons. Admin's coupon store is seeded from these (and the
+ * storefront reads that store, see `storefrontPromotions.tsx`); mock order
+ * history (accountData.ts, adminOrders.ts) prices its past coupon orders with them.
+ */
+export const AVAILABLE_COUPONS: Coupon[] = [
+  buildCoupon({ code: "SAVE100", discount: 100, minSpend: 2000, endDate: "2026-10-31" }),
+  buildCoupon({ code: "SAVE50", discount: 50, minSpend: 500, endDate: "2026-11-15" }),
+  buildCoupon({ code: "SAVE20", discount: 20, minSpend: 200, endDate: "2026-11-30" }),
+];
+
+/** A coupon outside its window is never offered (Home tickets, Checkout picker) nor accepted (typed code, totals). */
+export function isCouponActive(c: Pick<Coupon, "expiresAt" | "startsAt">, now = Date.now()): boolean {
+  return Date.parse(c.expiresAt) >= now && (!c.startsAt || Date.parse(c.startsAt) <= now);
+}
+
+export function isCouponNotStarted(c: Pick<Coupon, "startsAt">, now = Date.now()): boolean {
+  return !!c.startsAt && Date.parse(c.startsAt) > now;
 }
 
 /**
@@ -195,7 +282,7 @@ export function computeCheckoutTotals(opts: {
   coinsRedeemed?: number;
   shippingFee: number;
 }): CheckoutTotals {
-  const couponDiscount = opts.coupon && opts.subtotal >= opts.coupon.minSpend && isCouponActive(opts.coupon) ? opts.coupon.discount : 0;
+  const couponDiscount = opts.coupon && isCouponActive(opts.coupon) ? couponDiscountAmount(opts.coupon, opts.subtotal) : 0;
   const coinDiscount = Math.round((opts.coinsRedeemed ?? 0) * COIN_TO_BAHT_RATE);
   const total = Math.max(0, opts.subtotal - couponDiscount - coinDiscount + opts.shippingFee);
   return { subtotal: opts.subtotal, couponDiscount, coinDiscount, shippingFee: opts.shippingFee, total };

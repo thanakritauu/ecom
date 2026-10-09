@@ -23,14 +23,10 @@ import type { User } from "./types";
  * either). These three are always derived live via `~/lib/customerResolvers`
  * from `useAdminOrders().orders()`, the same "never hardcode, always derive"
  * rule §15 of the phase spec itself requires.
+ *
+ * Fields mirror the storefront member (`User` + address book, wishlist and
+ * saved cards). No account status: the storefront has none to enforce.
  */
-export type CustomerStatus = "active" | "inactive" | "blocked";
-
-export const CUSTOMER_STATUS_META: Record<CustomerStatus, { label: string; tone: StatusTone }> = {
-  active: { label: "ใช้งานอยู่", tone: "success" },
-  inactive: { label: "ไม่ได้ใช้งาน", tone: "neutral" },
-  blocked: { label: "ถูกระงับ", tone: "danger" },
-};
 
 /**
  * Member tier — the storefront's own Charmiss Glow → Radiance → Icon ladder
@@ -54,13 +50,12 @@ export function normalizeTier(value: unknown): CustomerTier {
 /** Coin multiplier per tier — `membership.ts`'s own `coinMultiplier` (the "รับคอยน์ x1.5" / "x2" perks; Glow earns the base rate). */
 export const TIER_COIN_MULTIPLIER: Record<CustomerTier, number> = Object.fromEntries(TIERS.map((t) => [t.id, t.coinMultiplier])) as Record<CustomerTier, number>;
 
-/** How a member account came to exist — moved over from the old Charmiss Club CRM, a brand-new sign-up on the website, or added by staff here in Admin. */
-export type CustomerSource = "crm_migrated" | "new_signup" | "admin_created";
+/** How a member account came to exist — moved over from the old Charmiss Club CRM, or a brand-new sign-up on the website (storefront `memberRegistry.ts`). */
+export type CustomerSource = "crm_migrated" | "new_signup";
 
 export const CUSTOMER_SOURCE_META: Record<CustomerSource, { label: string; tone: StatusTone }> = {
   crm_migrated: { label: "ย้ายจาก CRM", tone: "info" },
   new_signup: { label: "สมาชิกใหม่", tone: "success" },
-  admin_created: { label: "สร้างโดยแอดมิน", tone: "neutral" },
 };
 
 export type SignupMethod = "phone" | "email" | "line" | "google";
@@ -72,7 +67,7 @@ export type CustomerGender = NonNullable<User["gender"]>;
 
 export const GENDER_LABEL: Record<CustomerGender, string> = { female: "หญิง", male: "ชาย", unspecified: "ไม่ระบุ" };
 
-/** The storefront address-book entry as-is (`~/lib/checkoutData`'s `Address`) — `kind: "billing"` = ที่อยู่ออกใบเสร็จ, whose `recipientName` may be a company. */
+/** The storefront address-book entry as-is (`~/lib/checkoutData`'s `Address`) — `kind: "billing"` = ที่อยู่ออกใบกำกับภาษี, whose `recipientName` may be a company. */
 export type CustomerAddress = Address;
 
 /** Only what the storefront's mock card vault keeps (`~/lib/savedCards`) — never a full number or CVV; the token isn't shown in Admin so it isn't kept here. */
@@ -82,12 +77,17 @@ export const CARD_BRAND_LABEL: Record<CardBrand, string> = { visa: "Visa", maste
 
 export type Customer = {
   id: string;
+  /**
+   * Running member number behind the formal customer code ("CM-000001", see
+   * `formatCustomerCode`). Seeds cust-1..cust-10 are 1..10; a new storefront
+   * sign-up gets the next free number (`nextCustomerNo`). Never reused for the
+   * internal `id`/storage, which stay as they are.
+   */
+  customerNo?: number;
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
-  avatar?: string;
-  status: CustomerStatus;
   /** Display label (e.g. "12 ม.ค. 2568") — same "formatted string, not a Date" convention every other Admin module's dates already use (Order.createdAt, AdminCategory.createdAt, ...). */
   memberSince: string;
   /** ISO date (YYYY-MM-DD) — same format the storefront profile saves. */
@@ -108,13 +108,12 @@ export type Customer = {
   updatedAt: string;
 };
 
-/** Editable via `CustomerForm` — `loyaltyPoints`/`tier`/`avatar`/wishlist/saved cards are Loyalty-module/storefront concerns with no admin edit UI, so they're never part of the form's own values; the store's `add`/`update` preserve whatever a record already has for them. */
+/** Editable via `CustomerForm` — `loyaltyPoints`/`tier`/wishlist/saved cards come from the storefront and have no admin edit UI; the store's `update` keeps whatever a record already has for them. */
 export type CustomerFormValues = {
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
-  status: CustomerStatus;
   birthDate?: string;
   gender?: CustomerGender;
   addresses: CustomerAddress[];
@@ -124,9 +123,53 @@ export function getCustomerFullName(c: Pick<Customer, "firstName" | "lastName">)
   return `${c.firstName} ${c.lastName}`.trim();
 }
 
+/** "CM-000001" — the one formal customer code shown everywhere (Admin + the storefront member card). */
+export function formatCustomerCode(no: number | undefined): string {
+  return no && no > 0 ? `CM-${String(Math.floor(no)).padStart(6, "0")}` : "-";
+}
+
+export function getCustomerCode(c: Pick<Customer, "customerNo">): string {
+  return formatCustomerCode(c.customerNo);
+}
+
+/** Search text for the code, so "CM-000001", "cm000001" and "000001" all match. */
+export function customerCodeSearchText(c: Pick<Customer, "customerNo">): string {
+  const code = getCustomerCode(c);
+  return code === "-" ? "" : `${code} ${code.replace("-", "")}`.toLowerCase();
+}
+
+/** Seed ids carry their number ("cust-7" = 7); anything else has none until `assignCustomerNumbers`. */
+function customerNoFromId(id: string): number | undefined {
+  const m = id.match(/^cust-(\d+)$/);
+  return m ? Number(m[1]) : undefined;
+}
+
+export function nextCustomerNo(list: Pick<Customer, "customerNo">[]): number {
+  return list.reduce((max, c) => Math.max(max, c.customerNo ?? 0), 0) + 1;
+}
+
+/**
+ * Gives every record without a number the next free one, oldest first
+ * (storefront sign-ups are `cust-web-<timestamp>`, so their id order is sign-up
+ * order) — same input, same numbers, and once persisted they never change.
+ */
+export function assignCustomerNumbers(list: Customer[]): Customer[] {
+  const missing = list.filter((c) => !c.customerNo).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+  if (missing.length === 0) return list;
+  let next = nextCustomerNo(list);
+  const assigned = new Map(missing.map((c) => [c.id, next++]));
+  return list.map((c) => (assigned.has(c.id) ? { ...c, customerNo: assigned.get(c.id) } : c));
+}
+
 export function getCustomerInitials(c: Pick<Customer, "firstName" | "lastName">): string {
   return `${c.firstName.charAt(0)}${c.lastName.charAt(0)}`.toUpperCase() || "?";
 }
+
+/** Address-book badge per entry — shipping (default or not) vs the storefront's billing-only kind. */
+export const ADDRESS_KIND_META = {
+  default: { label: "ที่อยู่หลัก", tone: "success" },
+  billing: { label: "ที่อยู่ออกใบกำกับภาษี", tone: "info" },
+} as const satisfies Record<string, { label: string; tone: StatusTone }>;
 
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -163,12 +206,11 @@ function normalizeAddresses(c: LegacyCustomer): CustomerAddress[] {
 export function normalizeCustomer(c: LegacyCustomer): Customer {
   return {
     id: c.id,
+    customerNo: typeof c.customerNo === "number" && c.customerNo > 0 ? c.customerNo : customerNoFromId(c.id),
     firstName: c.firstName ?? "",
     lastName: c.lastName ?? "",
     email: c.email ?? "",
     phone: c.phone ?? "",
-    avatar: c.avatar,
-    status: c.status ?? "active",
     memberSince: c.memberSince ?? "",
     birthDate: c.birthDate || undefined,
     gender: c.gender === "female" || c.gender === "male" || c.gender === "unspecified" ? c.gender : undefined,
@@ -178,7 +220,7 @@ export function normalizeCustomer(c: LegacyCustomer): Customer {
     loyaltyPoints: c.loyaltyPoints,
     // Everyone on the storefront starts at Glow (spend ฿0).
     tier: normalizeTier(c.tier),
-    source: c.source === "crm_migrated" || c.source === "admin_created" ? c.source : "new_signup",
+    source: c.source === "crm_migrated" ? c.source : "new_signup",
     signupMethod: c.signupMethod,
     crmMemberId: c.crmMemberId,
     crmCoinsTransferred: c.crmCoinsTransferred,
@@ -205,9 +247,7 @@ const storefrontCards = (): CustomerSavedCard[] => SAMPLE_SAVED_CARDS.map(({ id,
  * id/name/email/phone come from that one shared array (never retyped by
  * hand here, so the two can never disagree); this only adds the fields a
  * Customer Master record needs that an order snapshot never did. Deliberately
- * varied per §05's own acceptance list: `cust-5` is inactive; `cust-6` is
- * blocked (and still has order history — exercises "blocked but un-deletable"
- * at the same time as "has orders so un-deletable"). `cust-2` is the
+ * varied: CRM carry-overs and new sign-ups, each signup method. `cust-2` is the
  * storefront's mock persona (`MOCK_USER` "Nutcha S.", `~/lib/crm`'s
  * CRM-000071) — coins/tier/address book/card are what her `/account` pages
  * show: 3,500 coins, Radiance (฿4,108 paid this year in `accountData.ts`'s
@@ -217,12 +257,11 @@ const storefrontCards = (): CustomerSavedCard[] => SAMPLE_SAVED_CARDS.map(({ id,
  */
 type CustomerExtras = Pick<
   Customer,
-  "status" | "memberSince" | "tier" | "source" | "signupMethod" | "crmMemberId" | "crmCoinsTransferred" | "birthDate" | "gender" | "addresses" | "wishlistProductIds" | "savedCards"
+  "memberSince" | "tier" | "source" | "signupMethod" | "crmMemberId" | "crmCoinsTransferred" | "birthDate" | "gender" | "addresses" | "wishlistProductIds" | "savedCards"
 >;
 
 const ORDER_CUSTOMER_EXTRAS: Record<string, CustomerExtras> = {
   "cust-1": {
-    status: "active",
     memberSince: "12 ม.ค. 2568",
     tier: "radiance",
     source: "crm_migrated",
@@ -238,7 +277,6 @@ const ORDER_CUSTOMER_EXTRAS: Record<string, CustomerExtras> = {
     savedCards: [{ id: "cust-1-card-1", brand: "mastercard", last4: "5454", expiry: "09/27", holder: "THANAKRIT P" }],
   },
   "cust-2": {
-    status: "active",
     memberSince: "3 มี.ค. 2568",
     tier: "radiance",
     source: "crm_migrated",
@@ -250,7 +288,6 @@ const ORDER_CUSTOMER_EXTRAS: Record<string, CustomerExtras> = {
     savedCards: storefrontCards(),
   },
   "cust-3": {
-    status: "active",
     memberSince: "20 เม.ย. 2568",
     tier: "glow",
     source: "new_signup",
@@ -264,7 +301,6 @@ const ORDER_CUSTOMER_EXTRAS: Record<string, CustomerExtras> = {
     savedCards: [],
   },
   "cust-4": {
-    status: "active",
     memberSince: "9 พ.ค. 2568",
     tier: "radiance",
     source: "crm_migrated",
@@ -275,13 +311,12 @@ const ORDER_CUSTOMER_EXTRAS: Record<string, CustomerExtras> = {
     gender: "female",
     addresses: [
       { id: "cust-4-addr-1", label: "บ้าน", recipientName: "ฝ้าย ธนพร", phone: "082-333-4444", addressLine: "45/7 ถนนนิมมานเหมินท์ ซอย 9", province: "เชียงใหม่", district: "อำเภอเมืองเชียงใหม่", subDistrict: "สุเทพ", postalCode: "50200", isDefault: true },
-      { id: "cust-4-addr-2", label: "ที่อยู่ออกใบเสร็จรับเงิน", recipientName: "บริษัท ฝ้าย บิวตี้ จำกัด", phone: "053-221-456", addressLine: "88 ถนนห้วยแก้ว", province: "เชียงใหม่", district: "อำเภอเมืองเชียงใหม่", subDistrict: "ช้างเผือก", postalCode: "50300", kind: "billing" },
+      { id: "cust-4-addr-2", label: "ที่อยู่ออกใบกำกับภาษี", recipientName: "บริษัท ฝ้าย บิวตี้ จำกัด", phone: "053-221-456", addressLine: "88 ถนนห้วยแก้ว", province: "เชียงใหม่", district: "อำเภอเมืองเชียงใหม่", subDistrict: "ช้างเผือก", postalCode: "50300", kind: "billing" },
     ],
     wishlistProductIds: ["feature-2", "best-4"],
     savedCards: [{ id: "cust-4-card-1", brand: "jcb", last4: "3530", expiry: "03/29", holder: "FAI T" }],
   },
   "cust-5": {
-    status: "inactive",
     memberSince: "14 มิ.ย. 2568",
     tier: "glow",
     source: "new_signup",
@@ -295,7 +330,6 @@ const ORDER_CUSTOMER_EXTRAS: Record<string, CustomerExtras> = {
     savedCards: [],
   },
   "cust-6": {
-    status: "blocked",
     memberSince: "2 ก.ค. 2568",
     tier: "glow",
     source: "new_signup",
@@ -309,7 +343,7 @@ const ORDER_CUSTOMER_EXTRAS: Record<string, CustomerExtras> = {
   },
 };
 
-const NO_EXTRAS: CustomerExtras = { status: "active", memberSince: TODAY_LABEL, tier: "glow", source: "new_signup", addresses: [], wishlistProductIds: [], savedCards: [] };
+const NO_EXTRAS: CustomerExtras = { memberSince: TODAY_LABEL, tier: "glow", source: "new_signup", addresses: [], wishlistProductIds: [], savedCards: [] };
 
 /**
  * Never referenced by any `ORDER_SEEDS` entry in `adminOrders.ts` — the
@@ -318,19 +352,18 @@ const NO_EXTRAS: CustomerExtras = { status: "active", memberSince: TODAY_LABEL, 
  * LINE / 081-234-5678 QA account), already moved over to the website — a
  * fresh storefront sign-in matches this record instead of adding a second one.
  * CRM-000245 deliberately has no Customer yet: she's only in the CRM until she
- * signs in on the website (see `adminLoyaltyMembers.ts`).
+ * signs in on the website.
  */
 const NO_ORDER_CUSTOMER_SEEDS: CustomerSeed[] = [
   { id: "cust-7", firstName: "พิม", lastName: "จ.", email: "pim.j@example.com", phone: "085-666-7777", ...NO_EXTRAS, memberSince: "18 ส.ค. 2568", loyaltyPoints: 0, signupMethod: "phone", wishlistProductIds: ["new-3"] },
   { id: "cust-8", firstName: "ต้นข้าว", lastName: "ร.", email: "tonkhao.r@example.com", phone: "086-777-8888", ...NO_EXTRAS, memberSince: "1 ก.ย. 2568", loyaltyPoints: 0, signupMethod: "phone" },
-  { id: "cust-9", firstName: "ใบเตย", lastName: "ม.", email: "baitoey.m@example.com", phone: "087-888-9999", ...NO_EXTRAS, status: "inactive", memberSince: "5 ก.ย. 2568", loyaltyPoints: 0, source: "admin_created" },
+  { id: "cust-9", firstName: "ใบเตย", lastName: "ม.", email: "baitoey.m@example.com", phone: "087-888-9999", ...NO_EXTRAS, memberSince: "5 ก.ย. 2568", loyaltyPoints: 0, signupMethod: "email" },
   {
     id: "cust-10",
     firstName: "กมลชนก",
     lastName: "ใจดี",
     email: "kamolchanok@example.com",
     phone: "081-234-5678",
-    status: "active",
     memberSince: "15 ก.ย. 2569",
     tier: "icon",
     loyaltyPoints: 3500,
@@ -356,7 +389,7 @@ export function buildMockCustomers(): Customer[] {
     const loyaltyPoints = (extra.crmCoinsTransferred ?? 0) + customerOrderCoinNet(oc.id, extra.tier ?? "glow");
     return { id: oc.id, firstName, lastName, email: oc.email, phone: oc.phone, ...extra, loyaltyPoints };
   });
-  return [...fromOrders, ...NO_ORDER_CUSTOMER_SEEDS].map((seed) => ({ ...seed, createdAt: TODAY_LABEL, updatedAt: TODAY_LABEL }));
+  return [...fromOrders, ...NO_ORDER_CUSTOMER_SEEDS].map((seed) => ({ ...seed, customerNo: customerNoFromId(seed.id), createdAt: TODAY_LABEL, updatedAt: TODAY_LABEL }));
 }
 
 /** "8 พ.ค. 2539" from the ISO `birthDate` — same Thai label format as every other Admin date. */

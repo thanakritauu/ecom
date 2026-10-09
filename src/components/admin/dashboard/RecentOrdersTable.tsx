@@ -26,26 +26,26 @@ export function RecentOrdersTable() {
   const quickViewOrder = createMemo(() => (quickViewId() ? store.getById(quickViewId()!) : undefined));
 
   const columns: DataTableColumn<AdminOrder>[] = [
-    { key: "id", label: "Order", render: (row) => <span class="font-medium text-ink">{row.orderNumber}</span> },
-    { key: "customer", label: "Customer", render: (row) => <span class="text-ink">{row.customer.name}</span> },
-    { key: "items", label: "Items", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.items.length} รายการ</span> },
-    { key: "total", label: "Total", align: "right", render: (row) => <span class="font-medium text-ink">{formatAdminCurrency(row.totals.grandTotal)}</span> },
+    { key: "id", label: "คำสั่งซื้อ", render: (row) => <span class="font-medium text-ink">{row.orderNumber}</span> },
+    { key: "customer", label: "ลูกค้า", render: (row) => <span class="text-ink">{row.customer.name}</span> },
+    { key: "items", label: "สินค้า", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.items.length.toLocaleString("th-TH")} รายการ</span> },
+    { key: "total", label: "ยอดชำระ", align: "right", render: (row) => <span class="font-medium text-ink">{formatAdminCurrency(row.totals.grandTotal)}</span> },
     {
       key: "payment",
-      label: "Payment",
+      label: "การชำระเงิน",
       hideBelowXl: true,
       render: (row) => <StatusBadge tone={PAYMENT_STATUS_META[row.paymentStatus].tone}>{PAYMENT_STATUS_META[row.paymentStatus].label}</StatusBadge>,
     },
     {
       key: "status",
-      label: "Status",
+      label: "สถานะ",
       render: (row) => <StatusBadge tone={ORDER_STATUS_META[row.orderStatus].tone}>{ORDER_STATUS_META[row.orderStatus].label}</StatusBadge>,
     },
-    { key: "date", label: "Date", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.createdAt}</span> },
+    { key: "date", label: "วันที่", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.createdAt}</span> },
   ];
 
   return (
-    <Show when={recentOrders().length > 0} fallback={<EmptyState icon={<OrdersIcon />} title="ยังไม่มีคำสั่งซื้อ" />}>
+    <Show when={recentOrders().length > 0} fallback={<EmptyState icon={<OrdersIcon />} title="ยังไม่มีคำสั่งซื้อ" class="bg-surface-card shadow-card" />}>
       <DataTable
         columns={columns}
         rows={recentOrders()}
@@ -55,20 +55,20 @@ export function RecentOrdersTable() {
           <button
             type="button"
             onClick={() => setQuickViewId(row.id)}
-            class="font-normal flex w-full min-w-0 flex-col gap-3 rounded-card bg-surface-card p-4 text-left shadow-card"
+            class="font-normal flex w-full min-w-0 flex-col gap-2 rounded-card bg-surface-card p-3 text-left shadow-card"
           >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
-                <p class="truncate font-semibold text-ink">{row.orderNumber}</p>
+                <p class="truncate text-sm font-medium text-ink">{row.orderNumber}</p>
                 <p class="truncate text-sm text-ink-gray">{row.customer.name}</p>
               </div>
-              <p class="shrink-0 font-semibold text-ink">{formatAdminCurrency(row.totals.grandTotal)}</p>
+              <p class="shrink-0 text-sm font-semibold text-ink">{formatAdminCurrency(row.totals.grandTotal)}</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <StatusBadge tone={PAYMENT_STATUS_META[row.paymentStatus].tone}>{PAYMENT_STATUS_META[row.paymentStatus].label}</StatusBadge>
               <StatusBadge tone={ORDER_STATUS_META[row.orderStatus].tone}>{ORDER_STATUS_META[row.orderStatus].label}</StatusBadge>
               <span class="truncate text-xs text-ink-gray">
-                {row.items.length} รายการ · {row.createdAt}
+                {row.items.length.toLocaleString("th-TH")} รายการ {row.createdAt}
               </span>
             </div>
           </button>
@@ -80,7 +80,11 @@ export function RecentOrdersTable() {
         onOpenChange={(open) => !open && setQuickViewId(null)}
         title={quickViewOrder()?.orderNumber ?? ""}
         subtitle={quickViewOrder()?.customer.name}
-        onViewFull={() => navigate(`/admin/orders/${quickViewId()}`)}
+        onViewFull={() => {
+          const id = quickViewId();
+          setQuickViewId(null);
+          if (id) navigate(`/admin/orders/${id}`);
+        }}
       >
         <Show when={quickViewOrder()}>{(o) => <OrderQuickView order={o()} />}</Show>
       </QuickViewDrawer>

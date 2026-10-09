@@ -5,7 +5,10 @@ import type { Product } from "~/lib/types";
 import { useWishlist } from "~/lib/wishlist";
 import { pushToast } from "~/lib/toast";
 import { Badge } from "../shared/Badge";
-import { HeartIcon } from "../shared/icons";
+import { HeartIcon, PlayIcon } from "../shared/icons";
+import { MediaView } from "../shared/MediaView";
+import { withProductVideos } from "~/lib/productVariants";
+import { isVideoMedia } from "~/lib/media";
 import { FlashSaleBar } from "~/components/shared/FlashSaleBar";
 import { getDiscountPercent } from "~/lib/products";
 
@@ -29,6 +32,8 @@ export function ProductGallery(props: { product: Product; forceOutOfStock?: bool
     const source = props.product.images?.length ? props.product.images : [props.product.image];
     return source.slice(0, 10);
   };
+  /** Same list with gallery videos swapped in (a video's still in `images` is its poster). */
+  const items = () => withProductVideos(props.product, images());
   const [active, setActive] = createSignal(0);
   const wishlist = useWishlist();
   const [wishStatus, setWishStatus] = createSignal<"idle" | "loading">("idle");
@@ -95,19 +100,19 @@ export function ProductGallery(props: { product: Product; forceOutOfStock?: bool
         tabindex="0"
         onKeyDown={onGalleryKeyDown}
       >
-        <img
-          src={images()[active()]}
+        {/* The visible slide on first paint is eager; thumbnails and Related Products lazy-load. A video slide plays muted (MediaView). */}
+        <MediaView
+          media={items()[active()] ?? ""}
           alt={props.product.name}
-          class="size-full object-cover"
-          classList={{ "opacity-70 grayscale": outOfStock() }}
-          // The visible slide on first paint — every other image on this
-          // page (thumbnails, Related Products) can lazy-load instead.
+          objectFit="cover"
+          class={outOfStock() ? "opacity-70 grayscale" : ""}
           loading="eager"
+          audioButtonClass="right-4 top-16"
         />
 
         <Show when={getDiscountPercent(props.product) && !outOfStock()}>
           <Badge tone="red" class="absolute left-4 top-4">
-            -{getDiscountPercent(props.product)}%
+            ลด {getDiscountPercent(props.product)}%
           </Badge>
         </Show>
 
@@ -172,7 +177,7 @@ export function ProductGallery(props: { product: Product; forceOutOfStock?: bool
                 type="button"
                 role="tab"
                 aria-selected={active() === i()}
-                aria-label={`รูปภาพที่ ${i() + 1}`}
+                aria-label={`${isVideoMedia(items()[i()]) ? "วิดีโอ" : "รูปภาพ"}ที่ ${i() + 1}`}
                 onClick={() => goTo(i())}
                 class="size-[98px] shrink-0 overflow-hidden rounded-media border transition-colors duration-150"
                 classList={{
@@ -180,7 +185,14 @@ export function ProductGallery(props: { product: Product; forceOutOfStock?: bool
                   "border-surface-gray": active() !== i(),
                 }}
               >
-                <img src={src} alt="" class="size-full object-cover" loading="lazy" />
+                <span class="relative block size-full">
+                  <img src={src} alt="" class="size-full object-cover" loading="lazy" />
+                  <Show when={isVideoMedia(items()[i()])}>
+                    <span class="absolute inset-0 flex items-center justify-center bg-ink/20 text-white" aria-hidden="true">
+                      <PlayIcon class="size-6" />
+                    </span>
+                  </Show>
+                </span>
               </button>
             )}
           </For>

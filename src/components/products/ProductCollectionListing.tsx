@@ -9,7 +9,13 @@ import { ProductListingGrid } from "./ProductListingGrid";
  * toggle + sort row, then the grid with "load more". No filters — the set already is the filter. Shared by the
  * Category pages and the Promotion pages so every nav page lists products the same way.
  */
-export function ProductCollectionListing(props: { products: Product[]; /** Flash Sale cards — the Flash Sale menu page only. */ flashSale?: boolean }) {
+export function ProductCollectionListing(props: {
+  products: Product[];
+  /** Flash Sale cards — the Flash Sale menu page only. */
+  flashSale?: boolean;
+  /** Title of the empty state when the set has no products. */
+  emptyTitle?: string;
+}) {
   const [sort, setSort] = createSignal<SortValue>(DEFAULT_SORT);
   const [view, setView] = createSignal<ListingView>("grid");
   const [visibleCount, setVisibleCount] = createSignal(PAGE_SIZE);
@@ -55,6 +61,7 @@ export function ProductCollectionListing(props: { products: Product[]; /** Flash
         onClearFilters={() => {}}
         fullWidth
         flashSale={props.flashSale}
+        emptyTitle={props.emptyTitle}
       />
     </>
   );

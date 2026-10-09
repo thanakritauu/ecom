@@ -33,7 +33,7 @@ export function AccountSidebar(props: { counts?: AccountCounts }) {
   const logout = () => {
     auth.logout(); // synchronous — Auth State is already cleared (and Header/this page already reactively guest) before the lines below run
     navigate("/account");
-    pushToast("ออกจากระบบสำเร็จ", "success", "แล้วพบกันใหม่นะ 👋");
+    pushToast("ออกจากระบบสำเร็จ", "success", "แล้วพบกันใหม่นะ");
   };
 
   return (
@@ -48,7 +48,7 @@ export function AccountSidebar(props: { counts?: AccountCounts }) {
 
         <li class="my-1 hidden h-px w-full bg-surface-gray lg:block" aria-hidden="true" />
         <li class="shrink-0">
-          <button type="button" onClick={logout} class={`${ITEM_CLASS} text-danger-strong lg:hover:bg-danger-soft`}>
+          <button type="button" onClick={logout} class={`${NAV_ITEM_CLASS} text-danger-strong lg:hover:bg-danger-soft`}>
             <span class="flex-1 text-left">ออกจากระบบ</span>
           </button>
         </li>
@@ -57,8 +57,8 @@ export function AccountSidebar(props: { counts?: AccountCounts }) {
   );
 }
 
-// Pill on tablet/phone (a row that scrolls sideways), full-width row on desktop.
-const ITEM_CLASS =
+// Pill on tablet/phone (a row that scrolls sideways), full-width row on desktop. Shared with the info pages' `InfoSidebar`.
+export const NAV_ITEM_CLASS =
   "flex min-h-[44px] items-center gap-2 whitespace-nowrap rounded-pill border border-surface-gray px-4 py-2 text-sm font-medium transition-colors duration-150 lg:w-full lg:rounded-2xl lg:border-transparent lg:px-3";
 
 function NavItem(props: { href: string; end?: boolean; label: string; count?: number }) {
@@ -67,7 +67,7 @@ function NavItem(props: { href: string; end?: boolean; label: string; count?: nu
       <A
         href={props.href}
         end={props.end}
-        class={`group ${ITEM_CLASS}`}
+        class={`group ${NAV_ITEM_CLASS}`}
         activeClass="!border-transparent bg-surface-pink text-brand-pink"
         inactiveClass="text-ink lg:hover:bg-surface-gray"
       >

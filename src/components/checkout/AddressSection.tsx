@@ -1,9 +1,9 @@
 import { createEffect, createResource, createSignal, createUniqueId, For, on, onMount, Show } from "solid-js";
 import { DEFAULT_PHONE_COUNTRY_CODE, formatAddress, formatAddressPhone, isBangkok, THAI_PROVINCES, type Address } from "~/lib/checkoutData";
 import { findCountryCode, PHONE_COUNTRY_CODES, type CountryCode } from "~/lib/countryCodes";
-import { PHONE_PATTERN } from "~/lib/validators";
+import { focusFirstInvalid, isValidationFocus, PHONE_PATTERN } from "~/lib/validators";
 import { districtsOf, loadThaiAddressData, postalCodesOf, stripAreaPrefix, subDistrictsOf } from "~/lib/thaiAddress";
-import { TextField } from "../shared/TextField";
+import { FieldError, FieldLabel, fieldBorderClass, TextField } from "../shared/TextField";
 import { Button } from "../shared/Button";
 import { Badge } from "../shared/Badge";
 import { ChevronIcon } from "../shared/ChevronIcon";
@@ -43,6 +43,8 @@ export function AddressSection(props: {
   embedded?: boolean;
   /** Kind given to addresses added here. */
   kind?: Address["kind"];
+  /** Checkout's pay button checks an open form through this (see `AddressForm`'s `onRegisterValidate`). */
+  onRegisterValidate?: (validate: () => boolean) => void;
 }) {
   const initialMode = (): Mode => (props.addresses.length === 0 ? "add" : props.selectedId ? "summary" : "list");
   const [mode, setMode] = createSignal<Mode>(initialMode());
@@ -103,6 +105,7 @@ export function AddressSection(props: {
           forceDefault={props.showDefaultOption && isFirstAddress()}
           canCancel={!isFirstAddress()}
           onCancel={closeForm}
+          onRegisterValidate={props.onRegisterValidate}
           onSubmit={async (address, makeDefault) => {
             const saved = await props.onSave(address, { makeDefault });
             props.onSelect(saved.id);
@@ -281,6 +284,11 @@ export function AddressForm(props: {
   submitLabel?: string;
   /** Kind given to a new address ("billing" from a billing form). */
   kind?: Address["kind"];
+  /**
+   * Hands the parent a "validate as if submitted" check — Checkout's "ชำระเงิน" runs it on an open,
+   * unsaved form so every empty/invalid field shows its error too (true = all fields valid).
+   */
+  onRegisterValidate?: (validate: () => boolean) => void;
 }) {
   const formId = createUniqueId();
   const fieldId = (key: FieldKey) => `${formId}-${key}`;
@@ -348,11 +356,11 @@ export function AddressForm(props: {
       case "lastName":
         return value || props.companyAllowed ? undefined : "กรุณากรอกนามสกุล";
       case "phone":
-        if (!value) return "กรุณากรอกเบอร์โทรศัพท์ผู้รับ";
-        if (!thaiPhone()) return FOREIGN_PHONE_PATTERN.test(value) ? undefined : "เบอร์โทรต้องเป็นตัวเลข 6–12 หลัก";
-        return PHONE_PATTERN.test(value) ? undefined : "เบอร์โทรต้องเป็นตัวเลข 9–10 หลัก ขึ้นต้นด้วย 0 เช่น 081-234-5678";
+        if (!value) return "กรุณากรอกเบอร์โทรศัพท์";
+        if (!thaiPhone()) return FOREIGN_PHONE_PATTERN.test(value) ? undefined : "เบอร์โทรต้องเป็นตัวเลข 6-12 หลัก";
+        return PHONE_PATTERN.test(value) ? undefined : "เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก ขึ้นต้นด้วย 0 เช่น 081-234-5678";
       case "addressLine":
-        return value ? undefined : "กรุณากรอกบ้านเลขที่ หมู่บ้าน/อาคาร ซอย ถนน";
+        return value ? undefined : "กรุณากรอกที่อยู่ (บ้านเลขที่ ถนน)";
       case "province":
         return value ? undefined : "กรุณาเลือกจังหวัด";
       case "district":
@@ -365,21 +373,25 @@ export function AddressForm(props: {
     }
   };
   // Errors appear once a field is left (blur) or on submit — not while typing the first time.
+  // After a submit attempt every field shows its error at once and updates live as it's fixed.
   const shownError = (key: FieldKey) => (submitted() || touched()[key] ? errorFor(key) : undefined);
-  
+  const validateAll = () => {
+    setSubmitted(true);
+    return !FIELD_ORDER.some((key) => errorFor(key));
+  };
+  props.onRegisterValidate?.(validateAll);
+
   // Mobile: keep the focused field clear of the on-screen keyboard and the fixed order-summary bar.
   const onFocusIn = (e: FocusEvent) => {
     const el = e.target as HTMLElement;
-    if (window.innerWidth >= 1024 || !(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) return;
+    if (window.innerWidth >= 1024 || isValidationFocus() || !(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) return;
     setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 300);
   };
 
   const submit = async (e: SubmitEvent) => {
     e.preventDefault();
-    setSubmitted(true);
-    const firstInvalid = FIELD_ORDER.find((key) => errorFor(key));
-    if (firstInvalid) {
-      document.getElementById(fieldId(firstInvalid))?.focus();
+    if (!validateAll()) {
+      focusFirstInvalid(e.currentTarget as HTMLFormElement);
       return;
     }
     setStatus("saving");
@@ -475,7 +487,7 @@ export function AddressForm(props: {
           compact
           id={fieldId("district")}
           label={districtLabel()}
-          placeholder={!v("province") ? "—" : geo.loading ? "…" : "เลือก"}
+          placeholder={!v("province") ? "-" : geo.loading ? "..." : "เลือก"}
           autocomplete="address-level2"
           options={districtOptions()}
           disabled={!v("province") || !geo()}
@@ -489,7 +501,7 @@ export function AddressForm(props: {
           compact
           id={fieldId("subDistrict")}
           label={subDistrictLabel()}
-          placeholder={!v("district") ? "—" : "เลือก"}
+          placeholder={!v("district") ? "-" : "เลือก"}
           autocomplete="address-level3"
           options={subDistrictOptions()}
           disabled={!v("district")}
@@ -501,7 +513,7 @@ export function AddressForm(props: {
           compact
           id={fieldId("postalCode")}
           label="รหัสไปรษณีย์"
-          placeholder={!v("district") ? "—" : "เลือก"}
+          placeholder={!v("district") ? "-" : "เลือก"}
           autocomplete="postal-code"
           options={postalOptions()}
           disabled={!v("district")}
@@ -572,13 +584,7 @@ function AddressLineField(props: { id: string; value: string; onInput: (value: s
   };
   return (
     <div class="flex flex-col gap-1.5">
-      <label for={props.id} class="text-sm font-medium text-ink">
-        ที่อยู่ (บ้านเลขที่ ถนน)
-        <span class="text-system-red" aria-hidden="true">
-          {" "}
-          *
-        </span>
-      </label>
+      <FieldLabel for={props.id} label="ที่อยู่ (บ้านเลขที่ ถนน)" required />
       <textarea
         id={props.id}
         rows={2}
@@ -598,15 +604,9 @@ function AddressLineField(props: { id: string; value: string; onInput: (value: s
           grow(el);
         }}
         onBlur={props.onBlur}
-        class={`min-h-[84px] w-full resize-none rounded-card border bg-surface-card px-4 py-2.5 text-base leading-[1.75] text-ink outline-none transition-colors duration-150 [field-sizing:content] placeholder:text-ink-placeholder focus:border-brand-pink ${
-          props.error ? "border-system-red" : "border-border"
-        }`}
+        class={`min-h-[84px] w-full resize-none rounded-card border bg-surface-card px-4 py-2.5 text-base leading-[1.75] text-ink outline-none transition-colors duration-150 [field-sizing:content] placeholder:text-ink-placeholder focus:border-brand-pink ${fieldBorderClass(props.error)}`}
       />
-      <Show when={props.error}>
-        <p id={errorId} role="alert" class="text-sm text-system-red">
-          {props.error}
-        </p>
-      </Show>
+      <FieldError id={errorId} message={props.error} />
     </div>
   );
 }
@@ -633,15 +633,9 @@ function PhoneField(props: {
   const current = () => (picked()?.code === props.code ? picked()! : findCountryCode(props.code));
   return (
     <div class="flex flex-col gap-1.5">
-      <label for={props.id} class="text-sm font-medium text-ink">
-        เบอร์โทรศัพท์
-        <span class="text-system-red" aria-hidden="true">
-          {" "}
-          *
-        </span>
-      </label>
+      <FieldLabel for={props.id} label="เบอร์โทรศัพท์" required />
       <div
-        class={`flex h-11 rounded-card border bg-surface-card transition-colors duration-150 focus-within:border-brand-pink ${props.error ? "border-system-red" : "border-border"}`}
+        class={`flex h-11 rounded-card border bg-surface-card transition-colors duration-150 focus-within:border-brand-pink ${fieldBorderClass(props.error)}`}
       >
         <div class="relative flex shrink-0 items-center gap-1 border-r border-border pl-3 pr-2 text-base text-ink">
           <span aria-hidden="true">{current().flag}</span>
@@ -684,11 +678,7 @@ function PhoneField(props: {
           class="min-w-0 flex-1 rounded-r-card bg-transparent px-3 text-base text-ink outline-none placeholder:text-ink-placeholder sm:px-4"
         />
       </div>
-      <Show when={props.error}>
-        <p id={errorId} role="alert" class="text-sm text-system-red">
-          {props.error}
-        </p>
-      </Show>
+      <FieldError id={errorId} message={props.error} />
     </div>
   );
 }
@@ -714,13 +704,7 @@ function SelectField(props: {
   const errorId = `${props.id}-error`;
   return (
     <div class="flex flex-col gap-1.5">
-      <label for={props.id} class="text-sm font-medium text-ink">
-        {props.label}
-        <span class="text-system-red" aria-hidden="true">
-          {" "}
-          *
-        </span>
-      </label>
+      <FieldLabel for={props.id} label={props.label} required />
       <div class="relative">
         <select
           id={props.id}
@@ -731,9 +715,7 @@ function SelectField(props: {
           aria-invalid={!!props.error}
           aria-describedby={props.error ? errorId : undefined}
           onChange={(e) => props.onChange(e.currentTarget.value)}
-          class={`h-11 w-full appearance-none truncate rounded-card border bg-surface-card text-base outline-none ${props.compact ? "pl-3 pr-6 sm:pl-4 sm:pr-10" : "pl-4 pr-10"} transition-colors duration-150 focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray/60 ${
-            props.error ? "border-system-red" : "border-border"
-          } ${props.value ? "text-ink" : "text-ink-placeholder"}`}
+          class={`h-11 w-full appearance-none truncate rounded-card border bg-surface-card text-base outline-none ${props.compact ? "pl-3 pr-6 sm:pl-4 sm:pr-10" : "pl-4 pr-10"} transition-colors duration-150 focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray/60 ${fieldBorderClass(props.error)} ${props.value ? "text-ink" : "text-ink-placeholder"}`}
         >
           <option value="" disabled selected={!props.value}>
             {props.placeholder}
@@ -747,11 +729,7 @@ function SelectField(props: {
           <ChevronIcon direction="down" class={props.compact ? "size-3.5 sm:size-5" : "size-5"} />
         </span>
       </div>
-      <Show when={props.error}>
-        <p id={errorId} role="alert" class="text-sm text-system-red">
-          {props.error}
-        </p>
-      </Show>
+      <FieldError id={errorId} message={props.error} />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { createSignal, For, Show } from "solid-js";
 
 /**
- * CMS Backoffice Polish §15-16 — Bar / Horizontal Bar / Donut chart
+ * CMS Backoffice Polish §15-16 — Horizontal Bar / Line / Donut chart
  * primitives for the Dashboard's new analytics sections. Same approach as
  * the existing `SalesTrendChart` (hand-rolled inline SVG, no charting
  * library — this codebase deliberately avoids adding one), same Charmiss
@@ -9,48 +9,9 @@ import { createSignal, For, Show } from "solid-js";
  * `<title>` hover-tooltip pattern `SalesTrendChart` already established.
  */
 
-const SERIES_COLORS = ["fill-brand-pink", "fill-brand-purple", "fill-brand-yellow", "fill-ink-gray"];
-
-export type BarDatum = { label: string; value: number; formatValue?: (v: number) => string };
-
-/** Small vertical bar chart — used by the period/dataset Comparison tool (2-4 bars, e.g. "Lip" vs "Eye"). */
-export function BarChart(props: { data: BarDatum[] }) {
-  const max = () => Math.max(...props.data.map((d) => d.value), 1);
-  return (
-    <figure role="img" aria-label={`กราฟเปรียบเทียบ ${props.data.map((d) => `${d.label} ${d.value}`).join(", ")}`} class="w-full">
-      <svg viewBox="0 0 300 140" preserveAspectRatio="none" class="h-40 w-full overflow-visible">
-        <For each={props.data}>
-          {(d, i) => {
-            const slotWidth = 300 / props.data.length;
-            const barWidth = Math.min(slotWidth * 0.5, 70);
-            const barHeight = () => Math.max((d.value / max()) * 120, 2);
-            const x = i() * slotWidth + (slotWidth - barWidth) / 2;
-            const fmt = d.formatValue ?? ((v: number) => v.toLocaleString("th-TH"));
-            return (
-              <g>
-                <rect x={x} y={140 - barHeight() - 20} width={barWidth} height={barHeight()} rx={4} class={`${SERIES_COLORS[i() % SERIES_COLORS.length]} transition-opacity duration-150 hover:opacity-80`}>
-                  <title>
-                    {d.label}: {fmt(d.value)}
-                  </title>
-                </rect>
-                <text x={x + barWidth / 2} y={140 - barHeight() - 26} text-anchor="middle" class="fill-ink text-[10px] font-semibold">
-                  {fmt(d.value)}
-                </text>
-              </g>
-            );
-          }}
-        </For>
-      </svg>
-      <div class="mt-2 grid gap-2 text-center text-xs text-ink-gray" style={{ "grid-template-columns": `repeat(${props.data.length}, minmax(0, 1fr))` }}>
-        <For each={props.data}>{(d) => <span class="truncate">{d.label}</span>}</For>
-      </div>
-    </figure>
-  );
-}
-
 export type HBarDatum = { id: string; label: string; value: number; href?: string };
 
-/** Horizontal ranked bar list — used for Category/Brand/Promotion/Campaign/Coupon performance. */
+/** Horizontal ranked bar list — used for Category/Promotion page/Coupon performance. */
 export function HBarChart(props: { data: HBarDatum[]; formatValue?: (v: number) => string; emptyLabel?: string }) {
   const max = () => Math.max(...props.data.map((d) => d.value), 1);
   const fmt = () => props.formatValue ?? ((v: number) => v.toLocaleString("th-TH"));
@@ -266,7 +227,7 @@ export function DonutChart(props: { slices: DonutSlice[] }) {
               type="button"
               onMouseEnter={() => setHovered(s.key)}
               onMouseLeave={() => setHovered(null)}
-              class="flex items-center justify-between gap-2 rounded-card px-1.5 py-0.5 text-left text-xs transition-colors duration-150 hover:bg-surface-gray/60"
+              class="font-normal flex items-center justify-between gap-2 rounded-card px-1.5 py-0.5 text-left text-xs transition-colors duration-150 hover:bg-surface-gray/60"
             >
               <span class="flex items-center gap-1.5 truncate text-ink-gray">
                 <span class={`size-2 shrink-0 rounded-pill ${s.colorClass.replace("stroke-", "bg-")}`} />

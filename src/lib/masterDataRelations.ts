@@ -4,22 +4,17 @@ import type { ProductCollection } from "./adminCollections";
 
 /**
  * Admin Master Data Foundation — the one place that answers "which products
- * classify themselves under this Category/Brand", derived live from each
- * product's own `categoryId`/`brandId` (set in `ProductForm`). Deliberately
- * separate from `AdminCategory.products`/`AdminBrand.products` (the
- * curated "which products to feature" picker those forms already have) —
- * the two are different relationships: one is a product's own classification,
- * the other is merchandising curation. Lives here (not in
- * `adminCategories.ts`/`adminBrands.ts`) to avoid a circular import, since
- * `adminProductStore.tsx` already imports *from* those two files for its own
+ * classify themselves under this Category", derived live from each
+ * product's own `categoryId` (set in `ProductForm`). Deliberately separate
+ * from `AdminCategory.products` (the curated "which products to feature"
+ * picker that form already has) — the two are different relationships: one
+ * is a product's own classification, the other is merchandising curation.
+ * Lives here (not in `adminCategories.ts`) to avoid a circular import, since
+ * `adminProductStore.tsx` already imports *from* that file for its own
  * baseline backfill.
  */
 export function productsInCategory(categoryId: string, products: AdminProduct[]): AdminProduct[] {
   return products.filter((p) => p.categoryId === categoryId);
-}
-
-export function productsInBrand(brandId: string, products: AdminProduct[]): AdminProduct[] {
-  return products.filter((p) => p.brandId === brandId);
 }
 
 /** Every Collection that manually curates this Product — checked before deleting a Product (§21/§46) so a curated Collection never silently shrinks. */
@@ -28,7 +23,7 @@ export function collectionsContainingProduct(productId: string, collections: Pro
 }
 
 /**
- * Product / Category / Brand / Collection Source-of-Truth Cleanup §42/§43/§45/§46
+ * Product / Category / Collection Source-of-Truth Cleanup §42/§43/§45/§46
  * — Promotion Page (incl. Homepage) Section references, for the three entity
  * kinds a Section can point at: a Product Section's own source
  * (`productSource: "category" | "collection"`), or any section's CTA
@@ -79,6 +74,6 @@ export function findProductReferencesInPromotionPages(productId: string, pages: 
   );
   const flatHits: PromotionPageSectionReference[] = pages
     .filter((p) => p.products.some((ref) => ref.productId === productId))
-    .map((p) => ({ pageId: p.id, pageName: p.name, isHomepage: p.isHomepage, sectionName: "(เนื้อหาหลักของหน้า — ไม่ได้ใช้ Page Section)" }));
+    .map((p) => ({ pageId: p.id, pageName: p.name, isHomepage: p.isHomepage, sectionName: "สินค้าหลักของหน้า" }));
   return [...sectionHits, ...flatHits];
 }

@@ -4,6 +4,7 @@ import type { ResolvedCartLine } from "~/lib/cartSelectors";
 import { PriceDisplay } from "./PriceDisplay";
 import { getDiscountPercent } from "~/lib/products";
 import { QuantityStepper } from "./QuantityStepper";
+import { storefrontLowStockThreshold } from "~/lib/productCatalog";
 
 /**
  * One line item — shared by the Cart Drawer (node 153:19197) and the Cart
@@ -19,7 +20,7 @@ export function CartItemRow(props: { entry: ResolvedCartLine; variant?: "drawer"
   const layout = () => props.variant ?? "drawer";
   const { line, product, variant } = props.entry;
   const outOfStock = () => product.stockLeft !== undefined && product.stockLeft <= 0;
-  const lowStock = () => !outOfStock() && product.stockLeft !== undefined && product.stockLeft <= 5;
+  const lowStock = () => !outOfStock() && product.stockLeft !== undefined && product.stockLeft <= storefrontLowStockThreshold(product);
   const image = () => variant?.image ?? product.image;
   // Same derived % as ProductCard/PDP, against the price this line is actually charged at.
   const discountPercent = () => getDiscountPercent({ price: props.entry.unitPrice, compareAtPrice: product.compareAtPrice });
@@ -64,7 +65,7 @@ export function CartItemRow(props: { entry: ResolvedCartLine; variant?: "drawer"
             fallback={
               <Show when={discountPercent()}>
                 <span class="rounded-pill bg-danger-soft px-1.5 py-0.5 text-xs font-bold text-danger-strong">
-                  -{discountPercent()}%
+                  ลด {discountPercent()}%
                 </span>
               </Show>
             }

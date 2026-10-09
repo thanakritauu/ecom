@@ -13,7 +13,7 @@ export default function AdminLandingPageNewPage() {
   const handleSubmit = async (values: LandingPageFormValues) => {
     const created = await store.add(values);
     pushToast(
-      created.status === "published" ? `เผยแพร่หน้า "${created.name}" เรียบร้อยแล้ว` : `บันทึกแบบร่าง "${created.name}" เรียบร้อยแล้ว`,
+      created.status === "published" ? "เผยแพร่หน้าแคมเปญเรียบร้อยแล้ว" : "บันทึกหน้าแคมเปญเรียบร้อยแล้ว",
       "success",
     );
     navigate(`/admin/promotion-pages/${created.id}`);
@@ -24,12 +24,11 @@ export default function AdminLandingPageNewPage() {
       <Breadcrumb
         items={[
           { label: "แดชบอร์ด", href: "/admin" },
-          { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
-          { label: "หน้าโปรโมชั่น", href: "/admin/promotion-pages" },
-          { label: "เพิ่มหน้าโปรโมชั่น" },
+          { label: "หน้าแคมเปญ", href: "/admin/promotion-pages" },
+          { label: "เพิ่มหน้าแคมเปญ" },
         ]}
       />
-      <PageHeader title="เพิ่มหน้าโปรโมชั่น" description="กำหนดชื่อหน้า, Banner, เนื้อหา และสินค้าที่จะแสดงในหน้านี้" />
+      <PageHeader title="เพิ่มหน้าแคมเปญ" description="ตั้งชื่อหน้า ใส่แบนเนอร์ เนื้อหา และสินค้าที่จะแสดงบนหน้าร้าน" />
       <LandingPageForm
         mode="create"
         isSlugTaken={(slug) => isSlugTaken(store.pages(), slug)}

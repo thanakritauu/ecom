@@ -1,40 +1,41 @@
-import { createMemo, createSignal, Show } from "solid-js";
+import { createMemo, createSignal, For, Index, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
-import { ChevronDownIcon } from "~/components/admin/icons";
+import { SelectField } from "~/components/admin/SelectField";
 import { Toggle } from "~/components/admin/Toggle";
 import { ProductSelector } from "./ProductSelector";
+import { BundlePriceSummary, fromItemDrafts, itemDraftsValid, PromotionItemsBox, toItemDrafts, type PromotionItemDraft } from "./PromotionItems";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import {
-  PROMOTION_TYPES_WITH_MIN_SPEND,
+  MAX_GIFT_TIERS,
+  PROMOTION_CONDITION_META,
+  formatPromotionThreshold,
+  promotionGiftTiers,
+  type PromotionCondition,
   isValidDateRange,
-  formatMarketingDate,
+  formatMarketingDateTime,
   formatPromotionDiscount,
+  PROMOTION_TYPES,
   PROMOTION_TYPE_META,
+  STOREFRONT_PROMOTION_TYPES,
+  promotionHasProductScope,
+  promotionItemsTotal,
   type Promotion,
   type PromotionType,
-  type MarketingStatus,
 } from "~/lib/adminMarketing";
 
-const TYPE_OPTIONS: { value: PromotionType; label: string }[] = Object.entries(PROMOTION_TYPE_META).map(([value, meta]) => ({
-  value: value as PromotionType,
-  label: meta.label,
-}));
+export type PromotionFormValues = Omit<Promotion, "id" | "createdAt" | "updatedAt">;
 
-const STATUS_OPTIONS: { value: MarketingStatus; label: string }[] = [
-  { value: "draft", label: "แบบร่าง" },
-  { value: "scheduled", label: "ตั้งเวลาไว้" },
-  { value: "active", label: "กำลังใช้งาน" },
-  { value: "disabled", label: "ปิดใช้งาน" },
-];
-
-export type PromotionFormValues = Omit<Promotion, "id" | "createdAt" | "updatedAt" | "usageCount">;
+/** A gift tier as typed into the form (strings until saved). */
+type TierDraft = { threshold: string; giftProductId: string; giftQty: string };
+const emptyTier = (): TierDraft => ({ threshold: "", giftProductId: "", giftQty: "1" });
 
 /**
- * Shared Create/Edit form (Phase 07 #12) — same "one form, two routes"
- * shape as `ProductForm.tsx`: `/new` and `/:id/edit` only differ in
- * `initial` and what `onSubmit` does with the result.
+ * Shared Create/Edit form, same "one form, two routes" shape as
+ * `ProductForm.tsx`. The type dropdown decides the rest of the form: free
+ * shipping and ซื้อครบรับของแถม (1 to 5 tiers), which the cart runs, plus
+ * % off, baht off, buy X get Y and bundle, set up ahead of time.
  */
 export function PromotionForm(props: {
   initial?: Promotion;
@@ -43,19 +44,40 @@ export function PromotionForm(props: {
   onCancel: () => void;
 }) {
   const [name, setName] = createSignal(props.initial?.name ?? "");
-  const [description, setDescription] = createSignal(props.initial?.description ?? "");
-  const [type, setType] = createSignal<PromotionType>(props.initial?.type ?? "percentage");
-  const [status, setStatus] = createSignal<MarketingStatus>(props.initial?.status ?? "draft");
-  const [discountValue, setDiscountValue] = createSignal(props.initial?.discountValue !== undefined ? String(props.initial.discountValue) : "");
-  const [buyQty, setBuyQty] = createSignal(props.initial?.buyQty !== undefined ? String(props.initial.buyQty) : "2");
-  const [getQty, setGetQty] = createSignal(props.initial?.getQty !== undefined ? String(props.initial.getQty) : "1");
-  const [minSpend, setMinSpend] = createSignal(props.initial?.minSpend !== undefined ? String(props.initial.minSpend) : "");
-  const [giftProductId, setGiftProductId] = createSignal(props.initial?.giftProductId ?? "");
-  const [giftQty, setGiftQty] = createSignal(props.initial?.giftQty !== undefined ? String(props.initial.giftQty) : "1");
+  const [type, setType] = createSignal<PromotionType>(props.initial?.type ?? "gift_with_purchase");
+  const [enabled, setEnabled] = createSignal(props.initial ? props.initial.status === "active" : false);
+  const [minSpend, setMinSpend] = createSignal(props.initial?.type !== "gift_with_purchase" && props.initial?.minSpend !== undefined ? String(props.initial.minSpend) : "");
+  const [discountPercent, setDiscountPercent] = createSignal(props.initial?.discountPercent ? String(props.initial.discountPercent) : "");
+  const [maxDiscount, setMaxDiscount] = createSignal(props.initial?.maxDiscount ? String(props.initial.maxDiscount) : "");
+  const [discountAmount, setDiscountAmount] = createSignal(props.initial?.discountAmount ? String(props.initial.discountAmount) : "");
+  const [bundleItems, setBundleItems] = createSignal<PromotionItemDraft[]>(toItemDrafts(props.initial?.bundleItems));
+  const [bundlePrice, setBundlePrice] = createSignal(props.initial?.bundlePrice ? String(props.initial.bundlePrice) : "");
+  const [buyItems, setBuyItems] = createSignal<PromotionItemDraft[]>(toItemDrafts(props.initial?.buyItems));
+  const [getItems, setGetItems] = createSignal<PromotionItemDraft[]>(toItemDrafts(props.initial?.getItems));
+  const runsInCart = () => STOREFRONT_PROMOTION_TYPES.includes(type());
+  const bundleNormalTotal = () => promotionItemsTotal(fromItemDrafts(bundleItems()), (id) => productStore.getById(id)?.price);
+  const [conditionType, setConditionType] = createSignal<PromotionCondition>(props.initial?.conditionType ?? "amount");
+  const initialTiers = props.initial ? promotionGiftTiers(props.initial) : [];
+  const [tiers, setTiers] = createSignal<TierDraft[]>(
+    initialTiers.length > 0
+      ? initialTiers.map((t) => ({ threshold: String(t.threshold), giftProductId: t.giftProductId, giftQty: String(t.giftQty) }))
+      : [emptyTier()],
+  );
+  // Which tier's product picker is open (one at a time keeps the form short).
+  const [pickingTier, setPickingTier] = createSignal<number | null>(initialTiers.length > 0 ? null : 0);
   const [showInCart, setShowInCart] = createSignal(props.initial?.showInCart ?? false);
   const productStore = useAdminProducts();
-  const giftName = () => productStore.getById(giftProductId())?.name;
-  const hasMinSpend = () => PROMOTION_TYPES_WITH_MIN_SPEND.includes(type());
+  const productName = (id: string) => productStore.getById(id)?.name;
+  const unitLabel = () => (conditionType() === "qty" ? "ชิ้น" : "฿");
+  const updateTier = (i: number, patch: Partial<TierDraft>) => setTiers((list) => list.map((t, j) => (j === i ? { ...t, ...patch } : t)));
+  const addTier = () => {
+    setTiers((list) => [...list, emptyTier()]);
+    setPickingTier(tiers().length - 1);
+  };
+  const removeTier = (i: number) => {
+    setTiers((list) => list.filter((_, j) => j !== i));
+    setPickingTier(null);
+  };
   const [applyToAll, setApplyToAll] = createSignal((props.initial?.productIds.length ?? 0) === 0);
   const [productIds, setProductIds] = createSignal<string[]>(props.initial?.productIds ?? []);
   const [startDate, setStartDate] = createSignal(props.initial?.startDate ?? "");
@@ -72,20 +94,47 @@ export function PromotionForm(props: {
   const validate = (): Record<string, string> => {
     const next: Record<string, string> = {};
     if (!name().trim()) next.name = "กรุณากรอกชื่อโปรโมชั่น";
-    if (type() === "percentage" || type() === "fixed") {
-      const v = Number(discountValue());
-      if (!discountValue().trim() || Number.isNaN(v) || v <= 0) next.discountValue = "กรุณากรอกส่วนลดที่ถูกต้อง";
-    }
     if (type() === "gift_with_purchase") {
-      const spend = Number(minSpend());
-      if (!minSpend().trim() || Number.isNaN(spend) || spend <= 0) next.minSpend = "กรุณากรอกยอดซื้อขั้นต่ำ";
-      if (!giftProductId()) next.giftProductId = "กรุณาเลือกสินค้าของแถม";
-      const qty = Number(giftQty());
-      if (!Number.isInteger(qty) || qty < 1) next.giftQty = "จำนวนของแถมต้องเป็นจำนวนเต็มอย่างน้อย 1";
+      let prev = 0;
+      tiers().forEach((t, i) => {
+        const value = Number(t.threshold);
+        if (!t.threshold.trim() || Number.isNaN(value) || value <= 0) next[`tier-${i}-threshold`] = "กรุณากรอกเงื่อนไขของขั้นนี้";
+        else if (conditionType() === "qty" && !Number.isInteger(value)) next[`tier-${i}-threshold`] = "จำนวนชิ้นต้องเป็นจำนวนเต็ม";
+        else if (value <= prev) next[`tier-${i}-threshold`] = "ต้องมากกว่าขั้นก่อนหน้า";
+        if (!Number.isNaN(value)) prev = Math.max(prev, value);
+        const qty = Number(t.giftQty);
+        if (!Number.isInteger(qty) || qty < 1) next[`tier-${i}-giftQty`] = "จำนวนต้องเป็นจำนวนเต็มอย่างน้อย 1";
+        if (!t.giftProductId) next[`tier-${i}-gift`] = "กรุณาเลือกสินค้าของแถม";
+      });
     }
-    if (type() === "free_shipping" && minSpend().trim()) {
+    if ((type() === "free_shipping" || type() === "percent_off" || type() === "baht_off") && minSpend().trim()) {
       const spend = Number(minSpend());
-      if (Number.isNaN(spend) || spend < 0) next.minSpend = "กรุณากรอกยอดซื้อขั้นต่ำที่ถูกต้อง";
+      if (Number.isNaN(spend) || spend < 0) next.minSpend = "กรุณากรอกขั้นต่ำที่ถูกต้อง";
+      else if (type() === "free_shipping" && conditionType() === "qty" && !Number.isInteger(spend)) next.minSpend = "จำนวนชิ้นต้องเป็นจำนวนเต็ม";
+    }
+    if (type() === "percent_off") {
+      const pct = Number(discountPercent());
+      if (!discountPercent().trim() || !Number.isInteger(pct) || pct < 1 || pct > 100) next.discountPercent = "กรุณากรอกเปอร์เซ็นต์เป็นจำนวนเต็ม 1-100";
+      const cap = Number(maxDiscount());
+      if (maxDiscount().trim() && (Number.isNaN(cap) || cap <= 0)) next.maxDiscount = "กรุณากรอกส่วนลดสูงสุดที่ถูกต้อง";
+    }
+    if (type() === "baht_off") {
+      const amount = Number(discountAmount());
+      if (!discountAmount().trim() || Number.isNaN(amount) || amount <= 0) next.discountAmount = "กรุณากรอกจำนวนเงินที่ลด";
+      else if (minSpend().trim() && Number(minSpend()) > 0 && amount > Number(minSpend())) next.minSpend = "ยอดซื้อขั้นต่ำต้องไม่น้อยกว่าส่วนลด";
+    }
+    if (type() === "bundle") {
+      if (bundleItems().length < 2) next.bundleItems = "เลือกสินค้าอย่างน้อย 2 รายการ";
+      else if (!itemDraftsValid(bundleItems())) next.bundleItems = "จำนวนต้องเป็นจำนวนเต็มอย่างน้อย 1";
+      const price = Number(bundlePrice());
+      if (!bundlePrice().trim() || Number.isNaN(price) || price <= 0) next.bundlePrice = "กรุณากรอกราคาเซ็ต";
+      else if (bundleNormalTotal() > 0 && price >= bundleNormalTotal()) next.bundlePrice = "ราคาเซ็ตต้องต่ำกว่าราคาปกติรวม";
+    }
+    if (type() === "buy_x_get_y") {
+      if (buyItems().length === 0) next.buyItems = "กรุณาเลือกสินค้าที่ต้องซื้อ";
+      else if (!itemDraftsValid(buyItems())) next.buyItems = "จำนวนต้องเป็นจำนวนเต็มอย่างน้อย 1";
+      if (getItems().length === 0) next.getItems = "กรุณาเลือกสินค้าที่แถม";
+      else if (!itemDraftsValid(getItems())) next.getItems = "จำนวนต้องเป็นจำนวนเต็มอย่างน้อย 1";
     }
     if (!startDate()) next.startDate = "กรุณาเลือกวันเริ่ม";
     if (!endDate()) next.endDate = "กรุณาเลือกวันสิ้นสุด";
@@ -95,21 +144,29 @@ export function PromotionForm(props: {
 
   const previewValues = (): PromotionFormValues => ({
     name: name().trim(),
-    description: description().trim() || undefined,
     type: type(),
-    discountValue: (type() === "percentage" || type() === "fixed") && discountValue().trim() ? Number(discountValue()) : undefined,
-    buyQty: type() === "buy_x_get_y" ? Number(buyQty()) : undefined,
-    getQty: type() === "buy_x_get_y" ? Number(getQty()) : undefined,
-    minSpend: hasMinSpend() && minSpend().trim() ? Number(minSpend()) : undefined,
-    giftProductId: type() === "gift_with_purchase" ? giftProductId() || undefined : undefined,
-    giftQty: type() === "gift_with_purchase" ? Number(giftQty()) || 1 : undefined,
-    showInCart: showInCart(),
-    productIds: applyToAll() ? [] : productIds(),
+    minSpend: (type() === "free_shipping" || type() === "percent_off" || type() === "baht_off") && Number(minSpend()) > 0 ? Number(minSpend()) : undefined,
+    conditionType: runsInCart() ? conditionType() : undefined,
+    discountPercent: type() === "percent_off" ? Number(discountPercent()) || 0 : undefined,
+    maxDiscount: type() === "percent_off" && Number(maxDiscount()) > 0 ? Number(maxDiscount()) : undefined,
+    discountAmount: type() === "baht_off" ? Number(discountAmount()) || 0 : undefined,
+    bundleItems: type() === "bundle" ? fromItemDrafts(bundleItems()) : undefined,
+    bundlePrice: type() === "bundle" ? Number(bundlePrice()) || 0 : undefined,
+    buyItems: type() === "buy_x_get_y" ? fromItemDrafts(buyItems()) : undefined,
+    getItems: type() === "buy_x_get_y" ? fromItemDrafts(getItems()) : undefined,
+    tiers:
+      type() === "gift_with_purchase"
+        ? tiers().map((t) => ({ threshold: Number(t.threshold) || 0, giftProductId: t.giftProductId, giftQty: Number(t.giftQty) || 1 }))
+        : undefined,
+    giftProductId: undefined,
+    giftQty: undefined,
+    showInCart: runsInCart() ? showInCart() : undefined,
+    productIds: promotionHasProductScope(type()) && !applyToAll() ? productIds() : [],
     startDate: startDate(),
     startTime: startTime(),
     endDate: endDate(),
     endTime: endTime(),
-    status: status(),
+    status: enabled() ? "active" : "disabled",
   });
 
   const handleSubmit = async (e: SubmitEvent) => {
@@ -136,135 +193,191 @@ export function PromotionForm(props: {
           <Section title="ข้อมูลพื้นฐาน">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <TextField label="ชื่อโปรโมชั่น" required value={name()} onInput={(e) => setName(e.currentTarget.value)} error={errors().name} disabled={saving()} class="sm:col-span-2" />
-              <label class="flex flex-col gap-1.5 sm:col-span-2">
-                <span class="text-sm font-medium text-ink">คำอธิบาย</span>
-                <textarea
-                  value={description()}
-                  disabled={saving()}
-                  onInput={(e) => setDescription(e.currentTarget.value)}
-                  rows={3}
-                  class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                />
-              </label>
+              <SelectField
+                label="ประเภทโปรโมชั่น"
+                required
+                value={type()}
+                options={PROMOTION_TYPES.map((t) => ({ value: t, label: PROMOTION_TYPE_META[t].label }))}
+                onChange={(v) => {
+                  setType(v as PromotionType);
+                  setErrors({});
+                }}
+                disabled={saving()}
+              />
               <label class="flex flex-col gap-1.5">
-                <span class="text-sm font-medium text-ink">ประเภทโปรโมชั่น</span>
-                <div class="relative">
-                  <select
-                    value={type()}
-                    disabled={saving()}
-                    onChange={(e) => setType(e.currentTarget.value as PromotionType)}
-                    class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                  >
-                    {TYPE_OPTIONS.map((opt) => (
-                      <option value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                  <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
-                </div>
-              </label>
-              <label class="flex flex-col gap-1.5">
-                <span class="text-sm font-medium text-ink">สถานะ</span>
-                <div class="relative">
-                  <select
-                    value={status()}
-                    disabled={saving()}
-                    onChange={(e) => setStatus(e.currentTarget.value as MarketingStatus)}
-                    class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                  >
-                    {STATUS_OPTIONS.map((opt) => (
-                      <option value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                  <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
-                </div>
+                <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
+                <Toggle checked={enabled()} onChange={setEnabled} disabled={saving()} />
+                <span class="text-xs text-ink-gray">{enabled() ? "เปิดใช้ตามช่วงเวลาที่ตั้งไว้" : "ปิดอยู่ ยังไม่มีผล"}</span>
               </label>
             </div>
           </Section>
 
-          <Section title="ส่วนลด">
-            <Show when={type() === "percentage" || type() === "fixed"}>
-              <TextField
-                label={type() === "percentage" ? "เปอร์เซ็นต์ส่วนลด (%)" : "จำนวนเงินส่วนลด (฿)"}
-                required
-                type="number"
-                min="0"
-                step={type() === "percentage" ? "1" : "0.01"}
-                value={discountValue()}
-                onInput={(e) => setDiscountValue(e.currentTarget.value)}
-                error={errors().discountValue}
-                disabled={saving()}
-              />
+          <Section title="เงื่อนไข">
+            <Show when={runsInCart()}>
+            <fieldset class="flex flex-col gap-2">
+                <legend class="mb-2 text-sm font-medium text-ink">นับจาก</legend>
+                <div class="flex flex-wrap gap-2" role="radiogroup">
+                  <For each={Object.entries(PROMOTION_CONDITION_META) as [PromotionCondition, { label: string }][]}>
+                    {([value, meta]) => (
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={conditionType() === value}
+                        disabled={saving()}
+                        onClick={() => setConditionType(value)}
+                        class={`min-h-11 rounded-pill border px-4 text-sm font-medium transition-colors duration-150 ${
+                          conditionType() === value ? "border-brand-pink bg-surface-pink text-brand-pink" : "border-border bg-surface-card text-ink hover:bg-surface-gray"
+                        }`}
+                      >
+                        {meta.label}
+                      </button>
+                    )}
+                  </For>
+                </div>
+                <p class="text-xs text-ink-gray">นับเฉพาะสินค้าที่เข้าร่วม ราคาก่อนหักคูปองและคอยน์ ไม่นับของแถม</p>
+              </fieldset>
+            </Show>
+            <Show when={type() === "percent_off"}>
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <TextField label="ส่วนลด (%)" required type="number" min="1" max="100" step="1" value={discountPercent()} onInput={(e) => setDiscountPercent(e.currentTarget.value)} error={errors().discountPercent} disabled={saving()} />
+                <TextField label="ลดสูงสุด (บาท)" type="number" min="1" step="1" value={maxDiscount()} onInput={(e) => setMaxDiscount(e.currentTarget.value)} error={errors().maxDiscount} disabled={saving()} placeholder="ไม่จำกัด" />
+                <TextField label="ยอดซื้อขั้นต่ำ (บาท)" type="number" min="0" step="1" value={minSpend()} onInput={(e) => setMinSpend(e.currentTarget.value)} error={errors().minSpend} disabled={saving()} placeholder="ไม่มีขั้นต่ำ" />
+              </div>
+              <p class="text-xs text-ink-gray">ลดเป็นเปอร์เซ็นต์จากราคาสินค้าที่เข้าร่วม เว้นลดสูงสุดและยอดขั้นต่ำว่างไว้ถ้าไม่จำกัด</p>
+            </Show>
+            <Show when={type() === "baht_off"}>
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <TextField label="ส่วนลด (บาท)" required type="number" min="1" step="1" value={discountAmount()} onInput={(e) => setDiscountAmount(e.currentTarget.value)} error={errors().discountAmount} disabled={saving()} />
+                <TextField label="ยอดซื้อขั้นต่ำ (บาท)" type="number" min="0" step="1" value={minSpend()} onInput={(e) => setMinSpend(e.currentTarget.value)} error={errors().minSpend} disabled={saving()} placeholder="ไม่มีขั้นต่ำ" />
+              </div>
+              <p class="text-xs text-ink-gray">ลดเป็นจำนวนเงินจากยอดสินค้าที่เข้าร่วม เว้นยอดขั้นต่ำว่างไว้ถ้าไม่มีขั้นต่ำ</p>
+            </Show>
+            <Show when={type() === "buy_x_get_y"}>
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <PromotionItemsBox title="สินค้าที่ต้องซื้อ" hint="ลูกค้าต้องซื้อครบทุกรายการตามจำนวน" items={buyItems()} onChange={setBuyItems} error={errors().buyItems} disabled={saving()} />
+                <PromotionItemsBox title="สินค้าที่แถม" hint="ลูกค้าได้รับฟรีทุกรายการตามจำนวน" items={getItems()} onChange={setGetItems} error={errors().getItems} disabled={saving()} accent />
+              </div>
+            </Show>
+            <Show when={type() === "bundle"}>
+              <PromotionItemsBox title="สินค้าในเซ็ต" hint="เลือกอย่างน้อย 2 รายการ" items={bundleItems()} onChange={setBundleItems} error={errors().bundleItems} disabled={saving()} />
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <TextField label="ราคาเซ็ต (บาท)" required type="number" min="1" step="1" value={bundlePrice()} onInput={(e) => setBundlePrice(e.currentTarget.value)} error={errors().bundlePrice} disabled={saving()} />
+              </div>
+              <BundlePriceSummary normal={bundleNormalTotal()} price={Number(bundlePrice()) || 0} />
             </Show>
             <Show when={type() === "free_shipping"}>
               <TextField
-                label="ยอดซื้อขั้นต่ำ (฿)"
+                label={`ส่งฟรีเมื่อซื้อครบ (${unitLabel()})`}
                 type="number"
                 min="0"
-                step="0.01"
+                step={conditionType() === "qty" ? "1" : "0.01"}
                 value={minSpend()}
                 onInput={(e) => setMinSpend(e.currentTarget.value)}
                 error={errors().minSpend}
                 disabled={saving()}
               />
-              <p class="text-sm text-ink-gray">เว้นว่างไว้ = ส่งฟรีทุกออเดอร์ ไม่มีขั้นต่ำ</p>
+              <p class="text-xs text-ink-gray">เว้นว่างไว้ถ้าต้องการส่งฟรีทุกออเดอร์</p>
             </Show>
             <Show when={type() === "gift_with_purchase"}>
-              <div class="grid grid-cols-2 gap-4">
-                <TextField
-                  label="ยอดซื้อขั้นต่ำ (฿)"
-                  required
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={minSpend()}
-                  onInput={(e) => setMinSpend(e.currentTarget.value)}
-                  error={errors().minSpend}
-                  disabled={saving()}
-                />
-                <TextField
-                  label="จำนวนของแถม"
-                  required
-                  type="number"
-                  min="1"
-                  value={giftQty()}
-                  onInput={(e) => setGiftQty(e.currentTarget.value)}
-                  error={errors().giftQty}
-                  disabled={saving()}
-                />
-              </div>
-              <div class="flex flex-col gap-2">
-                <span class="text-sm font-medium text-ink">
-                  สินค้าของแถม <span class="text-system-red">*</span>
-                </span>
-                <Show when={giftName()}>
-                  <p class="text-sm text-ink-gray">เลือกแล้ว: {giftName()}</p>
+              <div class="flex flex-col gap-3">
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                  <span class="text-sm font-medium text-ink">
+                    ขั้นของแถม {tiers().length > 1 ? `(ขั้นบันได ${tiers().length} ขั้น)` : ""}
+                  </span>
+                  <span class="text-sm text-ink-gray">ตั้งได้สูงสุด {MAX_GIFT_TIERS} ขั้น</span>
+                </div>
+                <Index each={tiers()}>
+                  {(tier, i) => (
+                    <div class="flex flex-col gap-3 rounded-card border border-border p-4">
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="text-sm font-semibold text-ink">ขั้นที่ {i + 1}</span>
+                        <Show when={tiers().length > 1}>
+                          <button type="button" onClick={() => removeTier(i)} disabled={saving()} class="min-h-11 px-2 text-sm font-medium text-danger-strong hover:underline">
+                            ลบขั้นนี้
+                          </button>
+                        </Show>
+                      </div>
+                      <div class="grid grid-cols-2 gap-4">
+                        <TextField
+                          label={`ซื้อครบ (${unitLabel()})`}
+                          required
+                          type="number"
+                          min="0"
+                          step={conditionType() === "qty" ? "1" : "0.01"}
+                          value={tier().threshold}
+                          onInput={(e) => updateTier(i, { threshold: e.currentTarget.value })}
+                          error={errors()[`tier-${i}-threshold`]}
+                          disabled={saving()}
+                        />
+                        <TextField
+                          label="จำนวนของแถม"
+                          required
+                          type="number"
+                          min="1"
+                          value={tier().giftQty}
+                          onInput={(e) => updateTier(i, { giftQty: e.currentTarget.value })}
+                          error={errors()[`tier-${i}-giftQty`]}
+                          disabled={saving()}
+                        />
+                      </div>
+                      <div class="flex flex-col gap-2">
+                        <span class="text-sm font-medium text-ink">
+                          สินค้าของแถม <span class="text-system-red">*</span>
+                        </span>
+                        <div class="flex items-center gap-3">
+                          <Show when={productStore.getById(tier().giftProductId)} fallback={<p class="flex-1 text-sm text-ink-gray">ยังไม่ได้เลือกสินค้า</p>}>
+                            {(product) => (
+                              <>
+                                <img src={product().image} alt="" class="size-10 shrink-0 rounded-media object-cover" />
+                                <p class="min-w-0 flex-1 truncate text-sm text-ink">{product().name}</p>
+                              </>
+                            )}
+                          </Show>
+                          <Button type="button" variant="outline" size="sm" disabled={saving()} onClick={() => setPickingTier(pickingTier() === i ? null : i)}>
+                            {pickingTier() === i ? "ปิดรายการ" : tier().giftProductId ? "เปลี่ยนสินค้า" : "เลือกสินค้า"}
+                          </Button>
+                        </div>
+                        <Show when={errors()[`tier-${i}-gift`]}>
+                          <p class="text-sm text-system-red">{errors()[`tier-${i}-gift`]}</p>
+                        </Show>
+                        <Show when={pickingTier() === i}>
+                          <ProductSelector
+                            single
+                            selectedIds={tier().giftProductId ? [tier().giftProductId] : []}
+                            onChange={(ids) => {
+                              updateTier(i, { giftProductId: ids[0] ?? "" });
+                              setPickingTier(null);
+                            }}
+                          />
+                        </Show>
+                      </div>
+                    </div>
+                  )}
+                </Index>
+                <Show when={tiers().length < MAX_GIFT_TIERS}>
+                  <Button type="button" variant="outline" disabled={saving()} onClick={addTier} class="self-start">
+                    เพิ่มขั้นของแถม
+                  </Button>
                 </Show>
-                <Show when={errors().giftProductId}>
-                  <p class="text-sm text-system-red">{errors().giftProductId}</p>
-                </Show>
-                <ProductSelector single selectedIds={giftProductId() ? [giftProductId()] : []} onChange={(ids) => setGiftProductId(ids[0] ?? "")} />
               </div>
-              <p class="text-sm text-ink-gray">ของแถมจะไม่นับเป็นสินค้าในตะกร้า ไม่คิดราคา และหายไปเองเมื่อยอดซื้อต่ำกว่าขั้นต่ำ</p>
-            </Show>
-            <Show when={type() === "buy_x_get_y"}>
-              <div class="grid grid-cols-2 gap-4">
-                <TextField label="ซื้อจำนวน" type="number" min="1" value={buyQty()} onInput={(e) => setBuyQty(e.currentTarget.value)} disabled={saving()} />
-                <TextField label="แถมจำนวน" type="number" min="1" value={getQty()} onInput={(e) => setGetQty(e.currentTarget.value)} disabled={saving()} />
-              </div>
+              <p class="text-xs text-ink-gray">ลูกค้าได้ของแถมทุกขั้นที่ซื้อถึงแบบสะสม ของแถมไม่นับเป็นสินค้าในตะกร้า ไม่คิดราคา และหายไปเองเมื่อยอดต่ำกว่าขั้น</p>
             </Show>
           </Section>
 
+          <Show when={runsInCart()}>
           <Section title="การแสดงผลหน้าร้าน">
             <div class="flex items-center justify-between gap-4">
               <div class="min-w-0">
                 <p class="text-sm font-medium text-ink">แสดงในตะกร้า</p>
-                <p class="text-sm text-ink-gray">แสดงแถบความคืบหน้า "ซื้อเพิ่มอีก ฿X" ในตะกร้าและหน้าตะกร้าสินค้า — หน้าร้านแสดงได้ครั้งละ 1 แถบ (ตอนนี้คือแถบของแถม) โปรที่ไม่แสดงยังคงมีผลตามเงื่อนไข</p>
+                <p class="text-xs text-ink-gray">แสดงแถบความคืบหน้าของโปรนี้ในตะกร้าและหน้าตะกร้าสินค้า ถ้าไม่แสดง โปรยังมีผลตามเงื่อนไขเหมือนเดิม</p>
               </div>
               <Toggle checked={showInCart()} onChange={setShowInCart} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
             </div>
           </Section>
+          </Show>
 
-          <Section title="วันที่เริ่มต้น - สิ้นสุด">
+          <Section title="ระยะเวลา">
+            <p class="text-xs text-ink-gray">เวลาประเทศไทย โปรเริ่มและหยุดเองตามเวลาที่ตั้งไว้</p>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <TextField label="วันเริ่ม" required type="date" value={startDate()} onInput={(e) => setStartDate(e.currentTarget.value)} error={errors().startDate} disabled={saving()} />
               <TextField label="เวลาเริ่ม" type="time" value={startTime()} onInput={(e) => setStartTime(e.currentTarget.value)} disabled={saving()} />
@@ -273,29 +386,47 @@ export function PromotionForm(props: {
             </div>
           </Section>
 
+          <Show when={promotionHasProductScope(type())}>
           <Section title="สินค้าที่เข้าร่วม">
-            <label class="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" checked={applyToAll()} onChange={(e) => setApplyToAll(e.currentTarget.checked)} class="size-4 rounded accent-brand-pink" />
-              ใช้กับสินค้าทั้งหมด
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-ink">ใช้กับสินค้าทั้งหมด</span>
+              <Toggle checked={applyToAll()} onChange={setApplyToAll} onLabel="ทุกสินค้า" offLabel="เฉพาะสินค้าที่เลือก" disabled={saving()} />
             </label>
             <Show when={!applyToAll()}>
               <ProductSelector selectedIds={productIds()} onChange={setProductIds} />
             </Show>
           </Section>
+          </Show>
         </div>
 
         <div class="flex flex-col gap-6">
           <Section title="ตัวอย่างโปรโมชั่น">
             <div class="flex flex-col gap-2 text-sm">
               <p class="text-base font-semibold text-ink">{name() || "ชื่อโปรโมชั่น"}</p>
-              <p class="font-medium text-brand-pink">{formatPromotionDiscount(previewValues(), giftName())}</p>
-              <p class="text-ink-gray">{showInCart() ? "แสดงในตะกร้า" : "ไม่แสดงในตะกร้า"}</p>
-              <p class="text-ink-gray">{applyToAll() ? "ทุกสินค้า" : `${productIds().length} สินค้าที่เลือก`}</p>
+              <p class="font-medium text-brand-pink">{formatPromotionDiscount(previewValues(), productName)}</p>
+              <Show when={type() === "gift_with_purchase" && tiers().length > 1}>
+                <ol class="flex flex-col gap-1 text-ink-gray">
+                  <For each={tiers()}>
+                    {(t, i) => (
+                      <li class="truncate">
+                        ขั้นที่ {i() + 1} ซื้อครบ {t.threshold ? formatPromotionThreshold(conditionType(), Number(t.threshold)) : "-"} รับ {productName(t.giftProductId) ?? "ยังไม่เลือกของแถม"}
+                      </li>
+                    )}
+                  </For>
+                </ol>
+              </Show>
+              <Show when={runsInCart()}>
+                <p class="text-ink-gray">{showInCart() ? "แสดงในตะกร้า" : "ไม่แสดงในตะกร้า"}</p>
+              </Show>
+              <Show when={promotionHasProductScope(type())}>
+                <p class="text-ink-gray">{applyToAll() ? "ทุกสินค้า" : `${productIds().length} สินค้าที่เลือก`}</p>
+              </Show>
               <Show when={startDate() && endDate()}>
                 <p class="text-ink-gray">
-                  {formatMarketingDate(startDate())} {startTime()} — {formatMarketingDate(endDate())} {endTime()}
+                  {formatMarketingDateTime(startDate(), startTime())} - {formatMarketingDateTime(endDate(), endTime())}
                 </p>
               </Show>
+              <p class="text-ink-gray">{enabled() ? "เปิดใช้งาน" : "ปิดใช้งาน"}</p>
               <Show when={startDate() && endDate() && !dateRangeValid()}>
                 <p class="text-system-red">ช่วงวันที่ไม่ถูกต้อง</p>
               </Show>

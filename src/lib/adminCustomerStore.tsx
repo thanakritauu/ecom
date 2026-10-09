@@ -1,6 +1,6 @@
 import { createContext, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
-import { type Customer, type CustomerFormValues, type CustomerStatus, buildMockCustomers, normalizeCustomer } from "./adminCustomers";
+import { type Customer, type CustomerFormValues, assignCustomerNumbers, buildMockCustomers, normalizeCustomer } from "./adminCustomers";
 
 /**
  * Phase 05 §02 — Customer Source of Truth. Same "Admin Store + LocalStorage"
@@ -20,11 +20,12 @@ const STORAGE_KEY = "charmiss:admin:customers";
  * v2 = storefront tiers (Glow/Radiance/Icon), address book, birth date/gender,
  * wishlist/saved cards, CRM-000182 seed. v3 = Nutcha's (cust-2) address
  * book/card in her own name, CRM-000182 with her own, coins derived from orders.
+ * v4 = account status and admin-created customers cut (the storefront has
+ * neither).
  */
 const SEED_VERSION_KEY = "charmiss:admin:customers:seed-version";
-const SEED_VERSION = 3;
+const SEED_VERSION = 4;
 const TODAY_LABEL = "18 ก.ย. 2569";
-let nextId = 100;
 
 function baseline(): Customer[] {
   return buildMockCustomers();
@@ -33,7 +34,7 @@ function baseline(): Customer[] {
 /**
  * An older stored copy: seed records are replaced by today's seeds (their
  * mock values changed), everything else — storefront sign-ups written by
- * `memberRegistry.ts`, customers added in Admin — is kept and normalized.
+ * `memberRegistry.ts` — is kept and normalized.
  * A new seed is only added when no kept record is already that person
  * (e.g. CRM-000182 who signed in on the storefront before this migration).
  */
@@ -51,9 +52,7 @@ function migrateStored(stored: Customer[]): Customer[] {
 type AdminCustomerContextValue = {
   customers: Accessor<Customer[]>;
   getById: (id: string) => Customer | undefined;
-  add: (input: CustomerFormValues) => Promise<Customer>;
   update: (id: string, input: CustomerFormValues) => Promise<Customer>;
-  setStatus: (id: string, status: CustomerStatus) => Promise<void>;
   remove: (id: string) => Promise<void>;
 };
 
@@ -78,10 +77,15 @@ export function AdminCustomerProvider(props: { children: JSX.Element }) {
       if (raw) {
         const stored = (JSON.parse(raw) as Customer[]).map(normalizeCustomer);
         if (version < SEED_VERSION) {
-          const migrated = migrateStored(stored);
+          const migrated = assignCustomerNumbers(migrateStored(stored));
           setCustomers(migrated);
           persist(migrated);
-        } else setCustomers(stored);
+        } else {
+          // Sign-ups saved before customer codes existed get their number once, then keep it.
+          const numbered = assignCustomerNumbers(stored);
+          setCustomers(numbered);
+          if (numbered !== stored) persist(numbered);
+        }
       }
       localStorage.setItem(SEED_VERSION_KEY, String(SEED_VERSION));
     } catch {
@@ -91,7 +95,7 @@ export function AdminCustomerProvider(props: { children: JSX.Element }) {
 
   const mutate = (fn: (list: Customer[]) => Customer[]) => {
     setCustomers((list) => {
-      const next = fn(list).map(normalizeCustomer);
+      const next = assignCustomerNumbers(fn(list).map(normalizeCustomer));
       persist(next);
       return next;
     });
@@ -99,26 +103,6 @@ export function AdminCustomerProvider(props: { children: JSX.Element }) {
 
   const simulateDelay = () => new Promise<void>((resolve) => setTimeout(resolve, 400 + Math.random() * 250));
   const getById = (id: string) => customers().find((c) => c.id === id);
-
-  const add: AdminCustomerContextValue["add"] = async (input) => {
-    await simulateDelay();
-    if (Math.random() < 0.08) throw new Error("SAVE_FAILED");
-    // Added by staff in Admin — not a CRM carry-over or a storefront sign-up; starts where every new member does (Glow, 0 coins).
-    const created: Customer = {
-      ...input,
-      id: `cust-${nextId++}`,
-      memberSince: TODAY_LABEL,
-      source: "admin_created",
-      tier: "glow",
-      loyaltyPoints: 0,
-      wishlistProductIds: [],
-      savedCards: [],
-      createdAt: TODAY_LABEL,
-      updatedAt: TODAY_LABEL,
-    };
-    mutate((list) => [created, ...list]);
-    return created;
-  };
 
   const update: AdminCustomerContextValue["update"] = async (id, input) => {
     await simulateDelay();
@@ -135,18 +119,13 @@ export function AdminCustomerProvider(props: { children: JSX.Element }) {
     return updated;
   };
 
-  const setStatus: AdminCustomerContextValue["setStatus"] = async (id, status) => {
-    await simulateDelay();
-    mutate((list) => list.map((c) => (c.id === id ? { ...c, status, updatedAt: TODAY_LABEL } : c)));
-  };
-
   const remove: AdminCustomerContextValue["remove"] = async (id) => {
     await simulateDelay();
     mutate((list) => list.filter((c) => c.id !== id));
   };
 
   return (
-    <AdminCustomerContext.Provider value={{ customers, getById, add, update, setStatus, remove }}>
+    <AdminCustomerContext.Provider value={{ customers, getById, update, remove }}>
       {props.children}
     </AdminCustomerContext.Provider>
   );

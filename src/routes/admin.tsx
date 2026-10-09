@@ -5,20 +5,12 @@ import { AdminAuthProvider, useAdminAuth } from "~/lib/adminAuth";
 import { useAdminUI } from "~/lib/adminUI";
 import { AdminProductProvider } from "~/lib/adminProductStore";
 import { AdminCategoryProvider } from "~/lib/adminCategoryStore";
-import { AdminBrandProvider } from "~/lib/adminBrandStore";
 import { AdminOrderProvider } from "~/lib/adminOrderStore";
 import { AdminCustomerProvider } from "~/lib/adminCustomerStore";
 import { AdminMarketingProvider } from "~/lib/adminMarketingStore";
 import { AdminContentProvider } from "~/lib/adminContentStore";
-import { AdminBannerProvider } from "~/lib/adminBannerStore";
-import { AdminCampaignProvider } from "~/lib/adminCampaignStore";
 import { AdminCollectionProvider } from "~/lib/adminCollectionStore";
 import { AdminNavigationProvider } from "~/lib/adminNavigationStore";
-import { AdminLoyaltyProvider } from "~/lib/adminLoyaltyStore";
-import { AdminLoyaltyMemberProvider } from "~/lib/adminLoyaltyMemberStore";
-import { AdminMissionProvider } from "~/lib/adminLoyaltyMissionStore";
-import { AdminRewardProvider } from "~/lib/adminLoyaltyRewardStore";
-import { AdminInventoryStockProvider } from "~/lib/adminInventoryStockStore";
 import { AdminNotificationBarProvider } from "~/lib/adminNotificationBarStore";
 import { AdminUIProvider } from "~/lib/adminUI";
 import { AdminNotificationProvider } from "~/lib/adminNotifications";
@@ -102,39 +94,23 @@ export default function AdminRouteGroup(props: { children: JSX.Element }) {
       <AdminUIProvider>
         <AdminNotificationProvider>
           <AdminProductProvider>
-            <AdminInventoryStockProvider>
-              <AdminCategoryProvider>
-                <AdminBrandProvider>
-                  <AdminOrderProvider>
-                    <AdminCustomerProvider>
-                      <AdminMarketingProvider>
-                        <AdminContentProvider>
-                          <AdminBannerProvider>
-                            <AdminCampaignProvider>
-                              <AdminCollectionProvider>
-                                <AdminNavigationProvider>
-                                  <AdminLoyaltyProvider>
-                                    <AdminLoyaltyMemberProvider>
-                                      <AdminMissionProvider>
-                                        <AdminRewardProvider>
-                                          <AdminNotificationBarProvider>
-                                            <AdminGate>{props.children}</AdminGate>
-                                          </AdminNotificationBarProvider>
-                                        </AdminRewardProvider>
-                                      </AdminMissionProvider>
-                                    </AdminLoyaltyMemberProvider>
-                                  </AdminLoyaltyProvider>
-                                </AdminNavigationProvider>
-                              </AdminCollectionProvider>
-                            </AdminCampaignProvider>
-                          </AdminBannerProvider>
-                        </AdminContentProvider>
-                      </AdminMarketingProvider>
-                    </AdminCustomerProvider>
-                  </AdminOrderProvider>
-                </AdminBrandProvider>
-              </AdminCategoryProvider>
-            </AdminInventoryStockProvider>
+            <AdminCategoryProvider>
+              <AdminOrderProvider>
+                <AdminCustomerProvider>
+                  <AdminMarketingProvider>
+                    <AdminContentProvider>
+                      <AdminCollectionProvider>
+                        <AdminNavigationProvider>
+                          <AdminNotificationBarProvider>
+                            <AdminGate>{props.children}</AdminGate>
+                          </AdminNotificationBarProvider>
+                        </AdminNavigationProvider>
+                      </AdminCollectionProvider>
+                    </AdminContentProvider>
+                  </AdminMarketingProvider>
+                </AdminCustomerProvider>
+              </AdminOrderProvider>
+            </AdminCategoryProvider>
           </AdminProductProvider>
         </AdminNotificationProvider>
       </AdminUIProvider>

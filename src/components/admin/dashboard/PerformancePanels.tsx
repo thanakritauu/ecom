@@ -1,29 +1,22 @@
 import { createMemo, For } from "solid-js";
-import { A } from "@solidjs/router";
+import { Button } from "~/components/shared/Button";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
-import { useAdminBrands } from "~/lib/adminBrandStore";
 import { useAdminContent } from "~/lib/adminContentStore";
-import { useAdminMarketing } from "~/lib/adminMarketingStore";
+import { useAdminOrders } from "~/lib/adminOrderStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { getCategoryPerformance, getBrandPerformance, getPromotionPagePerformance, getCouponUsage } from "~/lib/adminDashboardAnalytics";
+import { getCategoryPerformance, getPromotionPagePerformance, getCouponUsageFromOrders } from "~/lib/adminDashboardAnalytics";
 import { HBarChart } from "./DashboardCharts";
 
-/** §12/§16 — Category/Brand/Promotion performance + Coupon usage, each a ranked horizontal-bar list with a "ดูรายละเอียดทั้งหมด" link into the module the ranking is drawn from. */
+/** Category/Promotion page sales (catalog sold figures) + coupon codes used in orders, each a ranked bar list with a link into its module. */
 export function PerformancePanels() {
   const products = useAdminProducts();
   const categories = useAdminCategories();
-  const brands = useAdminBrands();
   const content = useAdminContent();
-  const marketing = useAdminMarketing();
+  const orders = useAdminOrders();
 
   const categoryData = createMemo(() =>
     getCategoryPerformance(categories.categories(), products.products())
-      .slice(0, 6)
-      .map((e) => ({ id: e.id, label: e.name, value: e.revenue, href: e.href })),
-  );
-  const brandData = createMemo(() =>
-    getBrandPerformance(brands.brands(), products.products())
       .slice(0, 6)
       .map((e) => ({ id: e.id, label: e.name, value: e.revenue, href: e.href })),
   );
@@ -33,24 +26,21 @@ export function PerformancePanels() {
       .map((e) => ({ id: e.id, label: e.name, value: e.revenue, href: e.href })),
   );
   const couponData = createMemo(() =>
-    getCouponUsage(marketing.coupons.items())
+    getCouponUsageFromOrders(orders.orders())
       .slice(0, 6)
-      .map((c) => ({ id: c.id, label: `${c.code} (${c.discountLabel})`, value: c.usageCount })),
+      .map((c) => ({ id: c.code, label: c.code, value: c.uses })),
   );
 
   return (
-    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <Panel title="ยอดขายตามหมวดหมู่" href="/admin/categories">
         <HBarChart data={categoryData()} formatValue={formatAdminCurrency} emptyLabel="ยังไม่มีข้อมูลยอดขายตามหมวดหมู่" />
       </Panel>
-      <Panel title="ยอดขายตามแบรนด์" href="/admin/brands">
-        <HBarChart data={brandData()} formatValue={formatAdminCurrency} emptyLabel="ยังไม่มีข้อมูลยอดขายตามแบรนด์" />
+      <Panel title="ยอดขายตามหน้าแคมเปญ" href="/admin/promotion-pages">
+        <HBarChart data={promotionData()} formatValue={formatAdminCurrency} emptyLabel="ยังไม่มีข้อมูลยอดขายจากหน้าแคมเปญ" />
       </Panel>
-      <Panel title="ประสิทธิภาพ Promotion Page" href="/admin/promotion-pages">
-        <HBarChart data={promotionData()} formatValue={formatAdminCurrency} emptyLabel="ยังไม่มีข้อมูลยอดขายจาก Promotion Page" />
-      </Panel>
-      <Panel title="การใช้งานคูปอง" href="/admin/marketing/coupons">
-        <HBarChart data={couponData()} formatValue={(v) => `${v.toLocaleString("th-TH")} ครั้ง`} emptyLabel="ยังไม่มีการใช้งานคูปอง" />
+      <Panel title="คูปองที่ถูกใช้ในคำสั่งซื้อ" href="/admin/marketing/coupons">
+        <HBarChart data={couponData()} formatValue={(v) => `${v.toLocaleString("th-TH")} ครั้ง`} emptyLabel="ยังไม่มีคำสั่งซื้อที่ใช้คูปอง" />
       </Panel>
     </div>
   );
@@ -58,14 +48,14 @@ export function PerformancePanels() {
 
 function Panel(props: { title: string; href: string; children: import("solid-js").JSX.Element }) {
   return (
-    <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+    <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <div class="flex items-center justify-between gap-2">
-        <h3 class="text-sm font-semibold text-ink">{props.title}</h3>
-        <A href={props.href} class="shrink-0 text-xs font-medium text-brand-pink hover:underline">
-          ดูรายละเอียดทั้งหมด
-        </A>
+        <h2 class="text-base font-semibold text-ink">{props.title}</h2>
+        <Button variant="outline" size="sm" href={props.href}>
+          ดูทั้งหมด
+        </Button>
       </div>
       {props.children}
-    </div>
+    </section>
   );
 }

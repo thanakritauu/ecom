@@ -3,6 +3,8 @@ import type { AdminVariant } from "~/lib/adminProductStore";
 import { ArrowDownIcon, ArrowUpIcon, TrashIcon, PlusIcon } from "~/components/admin/icons";
 import { ProductImageUploader } from "./ProductImageUploader";
 import { SingleImageUploader } from "~/components/admin/SingleImageUploader";
+import { Toggle } from "~/components/admin/Toggle";
+import { mediaSrc } from "~/lib/media";
 
 /**
  * PART 16 — deliberately simple: Name/SKU/Price/Stock per row, add/remove
@@ -58,7 +60,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
     <div class="flex flex-col gap-4">
       <Show when={props.variants.length > 1}>
         <p class="text-xs text-ink-gray">
-          ลำดับนี้คือลำดับที่แสดงบนหน้าร้าน — การ์ดสินค้าแสดงวงสีได้ {CARD_SHADE_SLOTS} วง ถ้ามีมากกว่า {CARD_SHADE_SLOTS} ตัวเลือกจะแสดง {CARD_SHADE_SLOTS - 1} วงแรก + "+N"
+          ลำดับนี้คือลำดับที่แสดงบนหน้าร้าน การ์ดสินค้าแสดงวงสีได้ {CARD_SHADE_SLOTS} วง ถ้ามีมากกว่า {CARD_SHADE_SLOTS} ตัวเลือกจะแสดง {CARD_SHADE_SLOTS - 1} วงแรกและตัวเลขที่เหลือ เช่น +3
         </p>
       </Show>
       <For each={props.variants}>
@@ -68,7 +70,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
               <div class="flex min-w-0 items-center gap-2">
                 <p class="truncate text-sm font-semibold text-ink">{variant.label || `ตัวเลือกที่ ${i() + 1}`}</p>
                 <Show when={props.variants.length > CARD_SHADE_SLOTS && i() >= cardVisibleCount()}>
-                  <span class="shrink-0 rounded-pill bg-surface-gray px-2 py-0.5 text-[11px] text-ink-gray">รวมใน "+N" บนการ์ด</span>
+                  <span class="shrink-0 rounded-pill bg-surface-gray px-2 py-0.5 text-[11px] text-ink-gray">ไม่แสดงวงสีบนการ์ด</span>
                 </Show>
               </div>
               <div class="flex shrink-0 items-center gap-1">
@@ -111,7 +113,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                   value={variant.label}
                   onInput={(e) => update(variant.id, { label: e.currentTarget.value })}
                   placeholder="เช่น Coral Bloom"
-                  class="h-10 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
+                  class="h-10 rounded-card border border-border bg-surface-card px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                 />
               </label>
               <label class="flex flex-col gap-1 text-xs font-medium text-ink-gray">
@@ -119,7 +121,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                 <input
                   value={variant.sku}
                   onInput={(e) => update(variant.id, { sku: e.currentTarget.value })}
-                  class="h-10 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
+                  class="h-10 rounded-card border border-border bg-surface-card px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                 />
               </label>
               <label class="flex flex-col gap-1 text-xs font-medium text-ink-gray">
@@ -130,7 +132,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                   step="0.01"
                   value={variant.price ?? ""}
                   onInput={(e) => update(variant.id, { price: e.currentTarget.value === "" ? undefined : Number(e.currentTarget.value) })}
-                  class="h-10 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
+                  class="h-10 rounded-card border border-border bg-surface-card px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                 />
               </label>
               <label class="flex flex-col gap-1 text-xs font-medium text-ink-gray">
@@ -140,27 +142,27 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                   min="0"
                   value={variant.stock}
                   onInput={(e) => update(variant.id, { stock: Math.max(0, Number(e.currentTarget.value)) })}
-                  class="h-10 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
+                  class="h-10 rounded-card border border-border bg-surface-card px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                 />
               </label>
             </div>
 
-            <label class="flex items-center gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={!!variant.soldOut}
-                onChange={(e) => update(variant.id, { soldOut: e.currentTarget.checked || undefined })}
-                class="size-4 accent-brand-pink"
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-ink">พร้อมขาย</span>
+              <Toggle
+                checked={!variant.soldOut}
+                onChange={(on) => update(variant.id, { soldOut: on ? undefined : true })}
+                onLabel="มีสินค้า"
+                offLabel="สินค้าหมด"
               />
-              ตัวเลือกนี้สินค้าหมด
-              <span class="text-xs text-ink-gray">(หน้าร้านแสดงแต่เลือกไม่ได้ — สต๊อก 0 ก็นับว่าหมด)</span>
+              <span class="text-xs text-ink-gray">ถ้าปิดหรือสต๊อกเป็น 0 หน้าร้านยังแสดงตัวเลือกนี้ แต่ลูกค้าเลือกไม่ได้</span>
             </label>
 
             {/* 1 — Product Card shade circle: color or its own small swatch image. */}
             <div class="border-t border-dashed border-border pt-3">
-              <p class="text-xs font-medium text-ink">วงสีบน Product Card</p>
-              <p class="mb-2 text-[11px] text-ink-gray">วงกลมเล็กใต้ชื่อสินค้าบนการ์ด — แยกจากรูปสินค้าใน Modal</p>
-              <div role="radiogroup" aria-label="รูปแบบวงสีบน Product Card" class="mb-3 inline-flex rounded-card border border-border p-1">
+              <p class="text-xs font-medium text-ink">วงสีบนการ์ดสินค้า</p>
+              <p class="mb-2 text-xs text-ink-gray">วงกลมเล็กใต้ชื่อสินค้าบนการ์ด ตั้งค่าแยกจากรูปตัวเลือกด้านล่าง</p>
+              <div role="radiogroup" aria-label="รูปแบบวงสีบนการ์ดสินค้า" class="mb-3 inline-flex rounded-card border border-border p-1">
                 <button
                   type="button"
                   role="radio"
@@ -170,7 +172,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                     (variant.mode ?? "color") === "color" ? "bg-brand-pink text-white" : "text-ink-gray hover:text-ink"
                   }`}
                 >
-                  สี (Color)
+                  สี
                 </button>
                 <button
                   type="button"
@@ -181,7 +183,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                     variant.mode === "image" ? "bg-brand-pink text-white" : "text-ink-gray hover:text-ink"
                   }`}
                 >
-                  รูปภาพ (Image)
+                  รูปภาพ
                 </button>
               </div>
 
@@ -189,7 +191,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                 when={variant.mode === "image"}
                 fallback={
                   <label class="flex w-40 flex-col gap-1 text-xs font-medium text-ink-gray">
-                    รหัสสี (Hex Color Code)
+                    รหัสสี
                     <div class="flex items-center gap-2">
                       <input
                         type="color"
@@ -201,7 +203,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                         value={variant.color || "#CCCCCC"}
                         onInput={(e) => update(variant.id, { color: e.currentTarget.value })}
                         placeholder="#FF0000"
-                        class="h-10 min-w-0 flex-1 rounded-card border border-border px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
+                        class="h-10 min-w-0 flex-1 rounded-card border border-border bg-surface-card px-2.5 text-sm text-ink outline-none focus:border-brand-pink"
                       />
                     </div>
                   </label>
@@ -210,7 +212,7 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
                 <div class="max-w-xs">
                   <SingleImageUploader
                     label="รูปวงสี"
-                    hint="แสดงเป็นวงกลมขนาดเล็ก — แนะนำรูปสี่เหลี่ยมจัตุรัส"
+                    hint="แสดงเป็นวงกลมขนาดเล็ก แนะนำให้ใช้รูปสี่เหลี่ยมจัตุรัส"
                     value={variant.swatchImage ?? ""}
                     onChange={(url) => update(variant.id, { swatchImage: url || undefined })}
                   />
@@ -220,9 +222,9 @@ export function ProductVariantsEditor(props: { variants: AdminVariant[]; onChang
 
             {/* 2 — Product Option Modal photos: the option tile, independent of the swatch above. */}
             <div class="border-t border-dashed border-border pt-3">
-              <p class="text-xs font-medium text-ink">รูปสินค้าใน Modal ตัวเลือกสินค้า</p>
-              <p class="mb-2 text-[11px] text-ink-gray">รูปแรกแสดงเป็นช่องตัวเลือกสี่เหลี่ยมใน Modal และในตะกร้า</p>
-              <ProductImageUploader images={variant.images ?? []} onChange={(images) => update(variant.id, { images })} />
+              <p class="text-xs font-medium text-ink">รูปตัวเลือกสินค้า</p>
+              <p class="mb-2 text-xs text-ink-gray">รูปแรกแสดงในหน้าต่างเลือกตัวเลือกและในตะกร้า</p>
+              <ProductImageUploader images={variant.images ?? []} onChange={(images) => update(variant.id, { images: images.map(mediaSrc) })} />
             </div>
           </div>
         )}

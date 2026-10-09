@@ -29,16 +29,16 @@ export function HomepageSectionsPreview(props: { sections: HomepageSection[]; co
         <button
           type="button"
           onClick={() => setDevice("desktop")}
-          class={`min-h-9 flex-1 rounded-pill px-3 font-medium transition-colors duration-150 ${device() === "desktop" ? "bg-surface-card text-ink shadow-sm" : "text-ink-gray"}`}
+          class={`min-h-9 flex-1 rounded-pill px-3 font-medium transition-colors duration-150 ${device() === "desktop" ? "bg-surface-card text-ink shadow-card" : "text-ink-gray"}`}
         >
-          Desktop
+          เดสก์ท็อป
         </button>
         <button
           type="button"
           onClick={() => setDevice("mobile")}
-          class={`min-h-9 flex-1 rounded-pill px-3 font-medium transition-colors duration-150 ${device() === "mobile" ? "bg-surface-card text-ink shadow-sm" : "text-ink-gray"}`}
+          class={`min-h-9 flex-1 rounded-pill px-3 font-medium transition-colors duration-150 ${device() === "mobile" ? "bg-surface-card text-ink shadow-card" : "text-ink-gray"}`}
         >
-          Mobile
+          มือถือ
         </button>
       </div>
 

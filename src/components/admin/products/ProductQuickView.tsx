@@ -3,7 +3,6 @@ import { StatusBadge } from "~/components/admin/StatusBadge";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { getStockStatus, STOCK_STATUS_META, stockStatusLabel, ADMIN_PRODUCT_STATUS_META, type AdminProduct } from "~/lib/adminProductStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
-import { useAdminBrands } from "~/lib/adminBrandStore";
 import { ProductVariantImages } from "./ProductVariantImages";
 import { ImageIcon } from "~/components/admin/icons";
 
@@ -22,9 +21,7 @@ export function ProductQuickView(props: { product: AdminProduct }) {
   const p = () => props.product;
   const stockStatus = () => getStockStatus(p());
   const categoryStore = useAdminCategories();
-  const brandStore = useAdminBrands();
   const categoryLabel = () => categoryStore.getById(p().categoryId)?.name ?? LEGACY_CATEGORY_LABELS[p().category ?? ""] ?? "-";
-  const brandLabel = () => brandStore.getById(p().brandId)?.name ?? p().brand ?? "-";
 
   const [selectedVariantId, setSelectedVariantId] = createSignal<string | undefined>(undefined);
 
@@ -81,7 +78,6 @@ export function ProductQuickView(props: { product: AdminProduct }) {
         <Field label="สต๊อก" value={String(displayStock())} />
         <Field label="ขายแล้ว" value={String(p().soldCount ?? 0)} />
         <Field label="หมวดหมู่" value={categoryLabel()} />
-        <Field label="แบรนด์" value={brandLabel()} />
       </div>
 
       <Show when={p().description}>

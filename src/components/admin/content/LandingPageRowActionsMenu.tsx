@@ -53,29 +53,29 @@ export function LandingPageRowActionsMenu(props: {
             onSelect={() => navigate(`${basePath}/${props.id}/edit`)}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
           >
-            แก้ไข
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={props.onTogglePublish}
-            class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
-          >
-            {props.isPublished ? "ยกเลิกการเผยแพร่" : "เผยแพร่"}
+            แก้ไขหน้า
           </DropdownMenu.Item>
           <Show when={props.onDuplicate}>
             <DropdownMenu.Item
               onSelect={props.onDuplicate}
               class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
             >
-              ทำสำเนา
+              ทำสำเนาหน้า
             </DropdownMenu.Item>
           </Show>
+          <DropdownMenu.Item
+            onSelect={props.onTogglePublish}
+            class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
+          >
+            {props.isPublished ? "ยกเลิกการเผยแพร่" : "เผยแพร่"}
+          </DropdownMenu.Item>
           <Show when={!props.hideDelete}>
             <DropdownMenu.Separator class="my-1 h-px bg-border" />
             <DropdownMenu.Item
               onSelect={props.onDelete}
               class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm font-medium text-system-red outline-none transition-colors duration-150 hover:bg-danger-soft data-[highlighted]:bg-danger-soft"
             >
-              ลบ
+              ลบหน้า
             </DropdownMenu.Item>
           </Show>
         </DropdownMenu.Content>

@@ -1,11 +1,12 @@
 import { For, Show, onMount } from "solid-js";
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
+import { PageHeader } from "~/components/shared/PageHeader";
 import { Button } from "~/components/shared/Button";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { PrintIcon, DownloadIcon, OrdersIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { PAYMENT_STATUS_META, formatOrderAddress } from "~/lib/adminOrders";
+import { formatOrderAddress } from "~/lib/adminOrders";
 import { useAdminOrders } from "~/lib/adminOrderStore";
 import { getReceiptData } from "~/lib/receiptResolver";
 import { downloadOrderReceiptHtml } from "~/components/admin/orders/orderReceiptDocument";
@@ -28,7 +29,9 @@ export default function AdminOrderReceiptPage() {
   const store = useAdminOrders();
   const navigate = useNavigate();
 
-  const receipt = () => getReceiptData(params.id, store.orders());
+  const order = () => store.getById(params.id);
+  // A receipt exists only once the order is paid (storefront: pending orders have nothing to receipt, cancelled ones were never charged).
+  const receipt = () => (order()?.paymentStatus === "paid" ? getReceiptData(params.id, store.orders()) : undefined);
 
   onMount(() => {
     if (searchParams.print === "1" && receipt()) {
@@ -42,7 +45,23 @@ export default function AdminOrderReceiptPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "คำสั่งซื้อ", href: "/admin/orders" }]} />
-          <EmptyState icon={<OrdersIcon />} title="ไม่พบคำสั่งซื้อนี้" description="ไม่สามารถออกใบเสร็จได้เนื่องจากไม่พบคำสั่งซื้อ" actionLabel="กลับไปหน้าคำสั่งซื้อ" onAction={() => navigate("/admin/orders")} class="bg-surface-card shadow-card" />
+          <Show
+            when={order()}
+            fallback={
+              <EmptyState icon={<OrdersIcon />} title="ไม่พบคำสั่งซื้อนี้" description="คำสั่งซื้ออาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าคำสั่งซื้อ" onAction={() => navigate("/admin/orders")} class="bg-surface-card shadow-card" />
+            }
+          >
+            {(o) => (
+              <EmptyState
+                icon={<OrdersIcon />}
+                title="ยังไม่มีใบเสร็จ"
+                description={`คำสั่งซื้อ ${o().orderNumber} ยังไม่ได้ชำระเงิน จึงยังไม่มีใบเสร็จ`}
+                actionLabel="กลับไปหน้าคำสั่งซื้อนี้"
+                onAction={() => navigate(`/admin/orders/${o().id}`)}
+                class="bg-surface-card shadow-card"
+              />
+            )}
+          </Show>
         </div>
       }
     >
@@ -57,17 +76,20 @@ export default function AdminOrderReceiptPage() {
                 { label: "ใบเสร็จ" },
               ]}
             />
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <h1 class="text-xl font-bold text-ink">ใบเสร็จ {data().receiptNumber}</h1>
-              <div class="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={() => window.print()}>
-                  <PrintIcon class="size-4" /> พิมพ์
-                </Button>
-                <Button variant="outline" onClick={() => downloadOrderReceiptHtml(data(), formatAdminCurrency)}>
-                  <DownloadIcon class="size-4" /> ดาวน์โหลด
-                </Button>
-              </div>
-            </div>
+            <PageHeader
+              title={`ใบเสร็จ ${data().receiptNumber}`}
+              description={`คำสั่งซื้อ ${data().order.orderNumber}`}
+              actions={
+                <div class="flex flex-wrap items-center gap-2">
+                  <Button variant="outline" onClick={() => downloadOrderReceiptHtml(data(), formatAdminCurrency)}>
+                    <DownloadIcon class="size-4" /> ดาวน์โหลดใบเสร็จ
+                  </Button>
+                  <Button variant="primary" onClick={() => window.print()}>
+                    <PrintIcon class="size-4" /> พิมพ์ใบเสร็จ
+                  </Button>
+                </div>
+              }
+            />
           </div>
 
           <div class="mx-auto w-full max-w-2xl rounded-card bg-surface-card p-6 shadow-card print:max-w-none print:rounded-none print:p-0 print:shadow-none sm:p-8">
@@ -91,16 +113,10 @@ export default function AdminOrderReceiptPage() {
                 <p class="text-sm text-ink-gray">{data().customer.phone}</p>
               </div>
               <div>
-                <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">ที่อยู่ออกใบเสร็จรับเงิน</p>
-                <Show when={data().order.billingAddress} fallback={<p class="mt-1 text-sm text-ink-gray">ออกในชื่อลูกค้า</p>}>
-                  {(b) => (
-                    <>
-                      <p class="mt-1 text-sm font-medium text-ink">{b().recipientName}</p>
-                      <p class="text-sm text-ink-gray">{b().phone}</p>
-                      <p class="text-sm text-ink-gray">{formatOrderAddress(b())}</p>
-                    </>
-                  )}
-                </Show>
+                <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">ที่อยู่ออกใบกำกับภาษี</p>
+                <p class="mt-1 text-sm font-medium text-ink">{data().billing.recipientName}</p>
+                <p class="text-sm text-ink-gray">{data().billing.phone}</p>
+                <p class="text-sm text-ink-gray">{formatOrderAddress(data().billing)}</p>
               </div>
               <div class="sm:col-span-2">
                 <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">ที่อยู่จัดส่ง</p>
@@ -150,13 +166,13 @@ export default function AdminOrderReceiptPage() {
                 <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">การชำระเงิน</p>
                 <p class="mt-1 text-ink">
                   {data().payment.method}
-                  {data().payment.detail ? ` · ${data().payment.detail}` : ""}
+                  {data().payment.detail ? ` ${data().payment.detail}` : ""}
                 </p>
                 <Show when={data().payment.transactionId}>
                   <p class="text-xs text-ink-gray">เลขอ้างอิง {data().payment.transactionId}</p>
                 </Show>
               </div>
-              <p class="font-medium text-ink">{PAYMENT_STATUS_META[data().order.paymentStatus].label}</p>
+              <p class="font-medium text-ink">ชำระเงินแล้ว {data().receiptDate}</p>
             </div>
 
             <p class="mt-8 text-center text-sm text-ink-gray">ขอบคุณที่อุดหนุน Charmiss</p>

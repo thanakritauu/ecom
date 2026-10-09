@@ -5,17 +5,13 @@ import { getCustomerFullName, type Customer } from "~/lib/adminCustomers";
 import { MoreIcon } from "~/components/admin/icons";
 
 /**
- * The View/Edit/Suspend-Reactivate/Delete menu — shared by the desktop
- * table's Actions column, the mobile card's overflow button, and Customer
- * Detail's secondary actions. Same shape as `ProductRowActionsMenu` — no
- * "ทำสำเนา" (duplicating a customer record makes no sense) and no generic
- * enable/disable toggle: the one status action here is specifically
- * ระงับบัญชี/เปิดใช้งานบัญชี (blocked ↔ active); switching to `inactive`
- * only happens through the full Edit form's status field.
+ * The View/Edit/Delete menu — shared by the desktop table's Actions column,
+ * the mobile card's overflow button, and Customer Detail's secondary
+ * actions. Same shape as `ProductRowActionsMenu`, minus "ทำสำเนา" and the
+ * on/off toggle (a customer has no status on the storefront).
  */
 export function CustomerRowActionsMenu(props: {
   customer: Customer;
-  onToggleBlocked: () => void;
   onDelete: () => void;
   hideView?: boolean;
   triggerClass?: string;
@@ -32,7 +28,7 @@ export function CustomerRowActionsMenu(props: {
         <MoreIcon class="size-5" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content class="z-50 w-52 rounded-card border border-border bg-surface-card p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+        <DropdownMenu.Content class="z-50 w-48 rounded-card border border-border bg-surface-card p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
           <Show when={!props.hideView}>
             <DropdownMenu.Item
               onSelect={() => navigate(`/admin/customers/${props.customer.id}`)}
@@ -45,13 +41,7 @@ export function CustomerRowActionsMenu(props: {
             onSelect={() => navigate(`/admin/customers/${props.customer.id}/edit`)}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
           >
-            แก้ไขข้อมูลลูกค้า
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={props.onToggleBlocked}
-            class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
-          >
-            {props.customer.status === "blocked" ? "เปิดใช้งานบัญชี" : "ระงับบัญชี"}
+            แก้ไขลูกค้า
           </DropdownMenu.Item>
           <DropdownMenu.Separator class="my-1 h-px bg-border" />
           <DropdownMenu.Item

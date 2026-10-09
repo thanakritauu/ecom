@@ -6,7 +6,8 @@ import { StatusBadge } from "~/components/admin/StatusBadge";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { NavigationItemFormDrawer } from "~/components/admin/navigation/NavigationItemFormDrawer";
-import { NavigationIcon, ArrowUpIcon, ArrowDownIcon, DragHandleIcon, PlusIcon, TrashIcon } from "~/components/admin/icons";
+import { NavigationIcon, ArrowUpIcon, ArrowDownIcon, PlusIcon } from "~/components/admin/icons";
+import { NavigationRowActionsMenu } from "~/components/admin/navigation/NavigationRowActionsMenu";
 import { NavIcon } from "~/components/shared/NavIcon";
 import {
   NAVIGATION_TARGET_TYPE_LABELS,
@@ -61,6 +62,7 @@ export default function AdminNavigationPage() {
   const [editing, setEditing] = createSignal<NavigationItem | undefined>(undefined);
   const [saving, setSaving] = createSignal(false);
   const [confirmDelete, setConfirmDelete] = createSignal<NavigationItem | null>(null);
+  const [confirmToggle, setConfirmToggle] = createSignal<NavigationItem | null>(null);
   const [actionLoading, setActionLoading] = createSignal(false);
 
   const openCreate = () => {
@@ -76,14 +78,12 @@ export default function AdminNavigationPage() {
     setSaving(true);
     try {
       const current = editing();
-      if (current) {
-        await navigation.update(current.id, values);
-        pushToast("บันทึกการเปลี่ยนแปลงแล้ว", "success");
-      } else {
-        await navigation.add(values);
-        pushToast("เพิ่มเมนูแล้ว", "success");
-      }
+      if (current) await navigation.update(current.id, values);
+      else await navigation.add(values);
+      pushToast("บันทึกเมนูเรียบร้อยแล้ว", "success");
       setFormOpen(false);
+    } catch {
+      pushToast("บันทึกเมนูไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
     } finally {
       setSaving(false);
     }
@@ -98,8 +98,25 @@ export default function AdminNavigationPage() {
     await navigation.remove(item.id);
     setActionLoading(false);
     setConfirmDelete(null);
-    pushToast(`ลบเมนู "${item.label}" เรียบร้อยแล้ว`, "error");
+    pushToast(`ลบ "${item.label}" เรียบร้อยแล้ว`, "error");
   };
+
+  const confirmToggleAction = async () => {
+    const item = confirmToggle();
+    if (!item) return;
+    setActionLoading(true);
+    try {
+      await navigation.toggleVisible(item.id);
+      pushToast(item.visible ? "ซ่อนเมนูแล้ว" : "แสดงเมนูแล้ว", "success");
+      setConfirmToggle(null);
+    } catch {
+      pushToast("เปลี่ยนการแสดงเมนูไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const bottomNavItemLabel = () => navigation.getById(BOTTOM_NAV_PROMOTION_ITEM_ID)?.label ?? "Flash Sale";
 
   const siblingBounds = (item: ResolvedNavigationItem) => {
     const siblings = navigation
@@ -115,11 +132,13 @@ export default function AdminNavigationPage() {
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเมนู" }]} />
       <PageHeader
         title="จัดการเมนู"
-        description="จัดการเมนูนำทางของหน้าร้าน — เมนูแต่ละรายการชี้ไปยังหน้าแรก, หน้ารวมสินค้า, หน้าโปรโมชั่น, หมวดหมู่, คอลเลกชัน, สินค้า หรือลิงก์ภายนอก"
-        primaryAction={
-          <Button variant="primary" onClick={openCreate}>
-            <PlusIcon class="size-4" /> เพิ่มเมนู
-          </Button>
+        description="จัดการเมนูนำทางและลำดับเมนูบนหน้าร้าน"
+        actions={
+          <div class="flex flex-wrap items-center gap-2">
+            <Button variant="primary" onClick={openCreate}>
+              <PlusIcon class="size-4" /> เพิ่มเมนู
+            </Button>
+          </div>
         }
       />
 
@@ -128,9 +147,9 @@ export default function AdminNavigationPage() {
         fallback={
           <EmptyState
             icon={<NavigationIcon />}
-            title="ยังไม่มีรายการเมนู"
-            description="เพิ่มเมนูเพื่อกำหนดว่าหน้าเว็บไซต์จะแสดงลิงก์อะไรบ้างในแถบนำทาง"
-            actionLabel="เพิ่มเมนู"
+            title="ยังไม่มีเมนู"
+            description="เริ่มเพิ่มเมนูแรกของคุณ"
+            actionLabel="+ เพิ่มเมนู"
             onAction={openCreate}
             class="bg-surface-card shadow-card"
           />
@@ -143,34 +162,31 @@ export default function AdminNavigationPage() {
               const missingTarget = () => item.href === "";
               const unavailable = () => !missingTarget() && !item.available;
               return (
-                <div class="flex flex-wrap items-center gap-3 p-3 sm:p-4" style={{ "padding-left": `${1 + item.depth * 1.5}rem` }}>
+                <div class="flex items-center gap-3 p-3 sm:p-4" style={{ "padding-left": `${0.75 + item.depth * 1.5}rem` }}>
                   <div class="flex min-w-0 flex-1 items-center gap-3">
-                    <div class="flex shrink-0 flex-col items-center gap-0.5 text-ink-placeholder">
-                      <DragHandleIcon class="size-4" />
-                    </div>
-                    <div class="flex shrink-0 flex-col gap-0.5">
+                    <div class="flex shrink-0 items-center">
                       <button
                         type="button"
                         aria-label="เลื่อนขึ้น"
                         disabled={!bounds().canUp}
                         onClick={() => navigation.move(item.id, "up")}
-                        class="flex size-6 items-center justify-center rounded text-ink-gray transition-colors duration-150 hover:bg-surface-pink disabled:cursor-not-allowed disabled:opacity-30"
+                        class="flex size-9 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-surface-pink disabled:cursor-not-allowed disabled:opacity-30"
                       >
-                        <ArrowUpIcon class="size-3.5" />
+                        <ArrowUpIcon class="size-4" />
                       </button>
                       <button
                         type="button"
                         aria-label="เลื่อนลง"
                         disabled={!bounds().canDown}
                         onClick={() => navigation.move(item.id, "down")}
-                        class="flex size-6 items-center justify-center rounded text-ink-gray transition-colors duration-150 hover:bg-surface-pink disabled:cursor-not-allowed disabled:opacity-30"
+                        class="flex size-9 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-surface-pink disabled:cursor-not-allowed disabled:opacity-30"
                       >
-                        <ArrowDownIcon class="size-3.5" />
+                        <ArrowDownIcon class="size-4" />
                       </button>
                     </div>
 
                     <div class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-gray">
-                      {item.icon ? <NavIcon icon={item.icon} class="size-5 rounded-media" /> : <span class="text-xs">—</span>}
+                      {item.icon ? <NavIcon icon={item.icon} class="size-5 rounded-media" /> : <span class="text-xs">-</span>}
                     </div>
 
                     <div class="min-w-0 flex-1">
@@ -180,7 +196,7 @@ export default function AdminNavigationPage() {
                           {NAVIGATION_VISIBILITY_META[item.visible ? "visible" : "hidden"].label}
                         </StatusBadge>
                         <Show when={item.id === BOTTOM_NAV_PROMOTION_ITEM_ID}>
-                          <span class="rounded-pill bg-surface-pink px-2 py-0.5 text-[11px] font-medium text-brand-pink">แท็บ “โปรโมชั่น” แถบล่าง</span>
+                          <StatusBadge tone="info">แท็บโปรโมชั่นแถบล่าง</StatusBadge>
                         </Show>
                         <Show when={childCount(item.id) > 0}>
                           <span class="text-xs text-ink-placeholder">{childCount(item.id)} เมนูย่อย</span>
@@ -188,41 +204,24 @@ export default function AdminNavigationPage() {
                       </div>
                       <p class="truncate text-xs text-ink-gray">
                         {NAVIGATION_TARGET_TYPE_LABELS[item.targetType]}
-                        <Show when={item.href}> · {item.href}</Show>
+                        <Show when={item.href}> {item.href}</Show>
                       </p>
                       <Show when={missingTarget()}>
-                        <p class="text-xs font-medium text-danger-strong">⚠ ไม่พบปลายทางของเมนูนี้</p>
+                        <StatusBadge tone="danger" class="mt-1">ไม่พบปลายทางของเมนูนี้</StatusBadge>
                       </Show>
                       <Show when={unavailable()}>
-                        <p class="text-xs font-medium text-system-yellow">⚠ ปลายทางยังไม่พร้อมแสดงบนเว็บไซต์</p>
+                        <StatusBadge tone="warning" class="mt-1">ปลายทางยังไม่เปิดบนหน้าร้าน เมนูนี้จึงยังไม่แสดง</StatusBadge>
                       </Show>
                     </div>
                   </div>
 
-                  <div class="flex w-full shrink-0 items-center justify-end gap-1 sm:w-auto">
-                    <button
-                      type="button"
-                      onClick={() => navigation.toggleVisible(item.id)}
-                      class="rounded-pill border border-brand-pink px-3 py-1.5 text-xs font-medium text-brand-pink transition-colors duration-150 hover:bg-surface-pink"
-                    >
-                      {item.visible ? "ซ่อน" : "แสดง"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openEdit(item)}
-                      class="rounded-pill px-3 py-1.5 text-xs font-medium text-ink-gray transition-colors duration-150 hover:bg-surface-gray"
-                    >
-                      แก้ไข
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`ลบเมนู ${item.label}`}
-                      onClick={() => setConfirmDelete(item)}
-                      class="flex size-8 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-danger-soft hover:text-danger-strong"
-                    >
-                      <TrashIcon class="size-4" />
-                    </button>
-                  </div>
+                  <NavigationRowActionsMenu
+                    label={item.label}
+                    visible={item.visible}
+                    onEdit={() => openEdit(item)}
+                    onToggleVisible={() => setConfirmToggle(item)}
+                    onDelete={() => setConfirmDelete(item)}
+                  />
                 </div>
               );
             }}
@@ -233,8 +232,8 @@ export default function AdminNavigationPage() {
       {/* Storefront sync — same filter, same `NavIcon`, same sizes (24px mobile / 32px desktop) and weight rule (semibold when the item has an icon) as Header.tsx's pink category rail. */}
       <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
         <h2 class="text-base font-semibold text-ink">ตัวอย่างแถบเมนูบนหน้าร้าน</h2>
-        <p class="text-xs text-ink-gray">แสดงเฉพาะเมนูที่เปิดแสดงและปลายทางพร้อมใช้งาน ตามลำดับเดียวกับหน้าร้าน (เมนูย่อยไม่แสดงในแถบนี้)</p>
-        <For each={[{ label: "Desktop", icon: "size-8", text: "text-base", gap: "gap-6" }, { label: "Mobile", icon: "size-6", text: "text-sm", gap: "gap-2" }]}>
+        <p class="text-xs text-ink-gray">แสดงเฉพาะเมนูที่เปิดแสดงและปลายทางพร้อมใช้งาน เมนูย่อยแสดงเฉพาะในเมนูบนมือถือ</p>
+        <For each={[{ label: "เดสก์ท็อป", icon: "size-8", text: "text-base", gap: "gap-6" }, { label: "มือถือ", icon: "size-6", text: "text-sm", gap: "gap-2" }]}>
           {(device) => (
             <div class="flex flex-col gap-1.5">
               <p class="text-xs font-medium text-ink-gray">{device.label}</p>
@@ -255,8 +254,8 @@ export default function AdminNavigationPage() {
           )}
         </For>
         <p class="text-xs text-ink-gray">
-          แถบเมนูด้านล่าง (มือถือ/แท็บเล็ต): แท็บ “โปรโมชั่น” ไปที่ <span class="font-medium text-ink">{bottomNavPromotionHref()}</span> — ตามเมนู {BOTTOM_NAV_PROMOTION_ITEM_ID} (Flash Sale)
-          ถ้าเมนูนั้นถูกซ่อนหรือปลายทางยังไม่พร้อม จะใช้ {BOTTOM_NAV_PROMOTION_FALLBACK_HREF}
+          แท็บโปรโมชั่นในแถบล่างบนมือถือลิงก์ไปที่ <span class="font-medium text-ink">{bottomNavPromotionHref()}</span> ตามเมนู "{bottomNavItemLabel()}"
+          ถ้าเมนูนั้นถูกซ่อนหรือปลายทางยังไม่พร้อม จะใช้ {BOTTOM_NAV_PROMOTION_FALLBACK_HREF} แทน
         </p>
       </div>
 
@@ -278,16 +277,26 @@ export default function AdminNavigationPage() {
       <ConfirmDialog
         open={confirmDelete() !== null}
         onOpenChange={(open) => !open && setConfirmDelete(null)}
-        title="ลบเมนูนี้?"
+        title="ลบเมนู?"
         description={
           confirmDelete() && childCount(confirmDelete()!.id) > 0
             ? `คุณต้องการลบ "${confirmDelete()?.label ?? ""}" หรือไม่? เมนูย่อย ${childCount(confirmDelete()!.id)} รายการจะถูกย้ายไปเป็นเมนูระดับบนสุดแทนการลบ การกระทำนี้ไม่สามารถย้อนกลับได้`
             : `คุณต้องการลบ "${confirmDelete()?.label ?? ""}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`
         }
-        confirmLabel="ลบ"
+        confirmLabel="ลบเมนู"
         tone="danger"
         loading={actionLoading()}
         onConfirm={confirmDeleteAction}
+      />
+
+      <ConfirmDialog
+        open={confirmToggle() !== null}
+        onOpenChange={(open) => !open && setConfirmToggle(null)}
+        title={confirmToggle()?.visible ? "ซ่อนเมนูนี้?" : "แสดงเมนูนี้?"}
+        description={confirmToggle()?.visible ? `"${confirmToggle()?.label ?? ""}" จะถูกซ่อนจากหน้าร้าน` : `"${confirmToggle()?.label ?? ""}" จะกลับมาแสดงบนหน้าร้าน`}
+        confirmLabel={confirmToggle()?.visible ? "ซ่อนเมนู" : "แสดงเมนู"}
+        loading={actionLoading()}
+        onConfirm={confirmToggleAction}
       />
     </div>
   );

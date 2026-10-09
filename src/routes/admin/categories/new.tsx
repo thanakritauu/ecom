@@ -12,7 +12,7 @@ export default function AdminCategoryNewPage() {
 
   const handleSubmit = async (values: CategoryFormValues) => {
     const created = await store.add(values);
-    pushToast(`สร้างหมวดหมู่ "${created.name}" เรียบร้อยแล้ว`, "success");
+    pushToast("บันทึกหมวดหมู่เรียบร้อยแล้ว", "success");
     navigate(`/admin/categories/${created.id}`);
   };
 
@@ -23,10 +23,10 @@ export default function AdminCategoryNewPage() {
           { label: "แดชบอร์ด", href: "/admin" },
           { label: "สินค้า", href: "/admin/products" },
           { label: "หมวดหมู่", href: "/admin/categories" },
-          { label: "สร้างใหม่" },
+          { label: "เพิ่มหมวดหมู่" },
         ]}
       />
-      <PageHeader title="สร้างหมวดหมู่" description="กำหนดชื่อและ Slug ของหมวดหมู่นี้" />
+      <PageHeader title="เพิ่มหมวดหมู่" description="กำหนดชื่อและ Slug ของหมวดหมู่นี้" />
       <CategoryForm
         mode="create"
         isSlugTaken={(slug) => isCategorySlugTaken(store.categories(), slug)}

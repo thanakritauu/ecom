@@ -10,7 +10,7 @@ import { CategoryRowActionsMenu } from "~/components/admin/categories/CategoryRo
 import { CatalogIcon } from "~/components/admin/icons";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { CATEGORY_STATUS_META } from "~/lib/adminCategories";
+import { STOREFRONT_CATEGORY_ROUTE_SLUGS, CATEGORY_STATUS_META } from "~/lib/adminCategories";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { productsInCategory, findCategoryReferencesInPromotionPages } from "~/lib/masterDataRelations";
@@ -67,7 +67,7 @@ export default function AdminCategoryDetailPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สินค้า", href: "/admin/products" }, { label: "หมวดหมู่", href: "/admin/categories" }]} />
-          <EmptyState icon={<CatalogIcon />} title="ไม่พบหมวดหมู่นี้" description="หมวดหมู่นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/categories")} class="bg-surface-card shadow-card" />
+          <EmptyState icon={<CatalogIcon />} title="ไม่พบหมวดหมู่นี้" description="หมวดหมู่นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าหมวดหมู่" onAction={() => navigate("/admin/categories")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -91,9 +91,8 @@ export default function AdminCategoryDetailPage() {
               description={`/${c().slug}`}
               actions={
                 <div class="flex items-center gap-2">
-                  <StatusBadge tone={CATEGORY_STATUS_META[c().status].tone}>{CATEGORY_STATUS_META[c().status].label}</StatusBadge>
                   <Button variant="primary" href={`/admin/categories/${c().id}/edit`}>
-                    แก้ไข
+                    แก้ไขหมวดหมู่
                   </Button>
                   <CategoryRowActionsMenu
                     id={c().id}
@@ -119,7 +118,7 @@ export default function AdminCategoryDetailPage() {
                             <div class="min-w-0 flex-1">
                               <p class="truncate text-sm font-medium text-ink">{product.name}</p>
                               <p class="text-xs text-ink-gray">
-                                {product.sku} · {formatAdminCurrency(product.price)}
+                                {product.sku} ราคา {formatAdminCurrency(product.price)}
                               </p>
                             </div>
                           </a>
@@ -138,12 +137,15 @@ export default function AdminCategoryDetailPage() {
                 </Section>
 
                 <Section title="คำอธิบาย">
-                  <p class="text-sm text-ink-gray">{c().description || "—"}</p>
+                  <p class="text-sm text-ink-gray">{c().description || "-"}</p>
                 </Section>
 
-                <Section title="ข้อมูลเพิ่มเติม">
-                  <Row label="สร้างเมื่อ" value={c().createdAt} />
-                  <Row label="แก้ไขล่าสุด" value={c().updatedAt} />
+                <Section title="ข้อมูลหมวดหมู่">
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="ลิงก์หน้าร้าน" value={STOREFRONT_CATEGORY_ROUTE_SLUGS.includes(c().slug) ? `/${c().slug}` : "ไม่มีหน้าหมวดหมู่"} />
+                    <Row label="สร้างเมื่อ" value={c().createdAt || "-"} />
+                    <Row label="แก้ไขล่าสุด" value={c().updatedAt || "-"} />
+                  </dl>
                 </Section>
               </div>
             </div>
@@ -153,7 +155,7 @@ export default function AdminCategoryDetailPage() {
               onOpenChange={setConfirmDelete}
               title="ลบหมวดหมู่?"
               description={`คุณต้องการลบ "${c().name}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-              confirmLabel="ลบ"
+              confirmLabel="ลบหมวดหมู่"
               tone="danger"
               loading={actionLoading()}
               onConfirm={confirmDeleteAction}
@@ -166,9 +168,9 @@ export default function AdminCategoryDetailPage() {
               description={(() => {
                 const parts: string[] = [];
                 if (dependencyProductCount() > 0) parts.push(`มีสินค้า ${dependencyProductCount()} รายการที่ใช้หมวดหมู่นี้`);
-                if (navigationRefs().length > 0) parts.push(`ถูกใช้งานใน Navigation: ${navigationRefs().map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
-                if (pageRefs().length > 0) parts.push(`ถูกใช้งานใน Promotion Page: ${pageRefs().map((r) => (r.isHomepage ? "Homepage" : r.pageName)).join(", ")}`);
-                return `"${c().name}" — ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบหมวดหมู่นี้`;
+                if (navigationRefs().length > 0) parts.push(`ถูกใช้งานในเมนู: ${navigationRefs().map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
+                if (pageRefs().length > 0) parts.push(`ถูกใช้งานในหน้าแคมเปญ: ${pageRefs().map((r) => (r.isHomepage ? "หน้าแรก" : r.pageName)).join(", ")}`);
+                return `"${c().name}" ${parts.join(" และ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบหมวดหมู่นี้`;
               })()}
               confirmLabel="เข้าใจแล้ว"
               cancelLabel="ปิด"
@@ -192,7 +194,7 @@ function Section(props: { title: string; children: import("solid-js").JSX.Elemen
 
 function Row(props: { label: string; value: string }) {
   return (
-    <div class="flex items-center justify-between gap-3 text-sm">
+    <div class="flex items-center justify-between gap-3">
       <dt class="text-ink-gray">{props.label}</dt>
       <dd class="font-medium text-ink">{props.value}</dd>
     </div>

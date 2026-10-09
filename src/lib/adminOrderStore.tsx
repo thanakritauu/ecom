@@ -13,20 +13,21 @@ import {
   statusImpliedByEvents,
   type AdminOrder,
   type OrderStatus,
-  type ReturnRequestStatus,
 } from "./adminOrders";
 
 const STORAGE_KEY = "charmiss:admin:orders";
 /**
  * v2 = storefront-aligned model (6 storefront statuses, DHL tracking
- * events, split totals, returns). Anything saved under the old shape (a
+ * events, split totals). Anything saved under the old shape (a
  * bare array, v1) is dropped in favour of the fresh seed — its statuses
  * ("processing", "shipped", ...) no longer exist, so there's nothing safe
  * to migrate field by field. v3 = DHL ฿60 below ฿990, coupon codes /
  * gift lines / coins from the storefront's account orders, each seed
- * customer's own address — older copies reseed the same way.
+ * customer's own address — older copies reseed the same way. v4 = returns
+ * and refunds cut (storefront has none), mobile banking seeds, staff-only
+ * cancellation — older copies reseed.
  */
-const STORAGE_VERSION = 3;
+const STORAGE_VERSION = 4;
 
 function persist(orders: AdminOrder[]) {
   if (isServer) return;
@@ -80,7 +81,6 @@ type AdminOrderContextValue = {
   setTrackingNumber: (id: string, trackingNumber: string) => Promise<AdminOrder>;
   /** Records a DHL scan; moves the order forward if the scan implies a later status (never backward, never out of cancelled). */
   addTrackingEvent: (id: string, event: NewTrackingEvent) => Promise<AdminOrder>;
-  decideReturn: (id: string, decision: Exclude<ReturnRequestStatus, "requested">) => Promise<AdminOrder>;
 };
 
 const AdminOrderContext = createContext<AdminOrderContextValue>();
@@ -178,19 +178,8 @@ export function AdminOrderProvider(props: { children: JSX.Element }) {
     });
   };
 
-  const decideReturn: AdminOrderContextValue["decideReturn"] = async (id, decision) => {
-    await delay();
-    const current = getById(id);
-    if (!current?.returnRequest || current.returnRequest.status !== "requested") throw new Error("INVALID_STATE");
-    return mutate(id, (order) => ({
-      ...order,
-      returnRequest: { ...order.returnRequest!, status: decision, decidedAt: mockNowIso() },
-      paymentStatus: decision === "approved" ? "refunded" : order.paymentStatus,
-    }));
-  };
-
   return (
-    <AdminOrderContext.Provider value={{ orders, getById, updateOrderStatus, setTrackingNumber, addTrackingEvent, decideReturn }}>
+    <AdminOrderContext.Provider value={{ orders, getById, updateOrderStatus, setTrackingNumber, addTrackingEvent }}>
       {props.children}
     </AdminOrderContext.Provider>
   );

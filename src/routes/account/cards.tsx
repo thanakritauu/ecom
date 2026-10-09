@@ -3,9 +3,12 @@ import { clientOnly } from "@solidjs/start";
 import { AccountShell, AccountPanel } from "~/components/account/AccountShell";
 import { CardPaymentForm, EMPTY_CARD, validateCard, type CardInput } from "~/components/payment/CardPaymentForm";
 import { Button } from "~/components/shared/Button";
+import { EmptyState } from "~/components/shared/EmptyState";
+import { CardIcon } from "~/components/shared/icons";
 import { mockTokenizeCard } from "~/lib/payment";
 import { removeCard, resolveSavedCards, storeCard, type SavedCard } from "~/lib/savedCards";
 import { pushToast } from "~/lib/toast";
+import { focusFirstInvalid } from "~/lib/validators";
 import visaMark from "~/assets/icons/payment/visa.svg";
 import mastercardMark from "~/assets/icons/payment/mastercard.svg";
 
@@ -50,7 +53,10 @@ export default function AccountCardsPage() {
   const save = async (e: SubmitEvent) => {
     e.preventDefault();
     setSubmitted(true);
-    if (Object.keys(validateCard(card())).length > 0) return;
+    if (Object.keys(validateCard(card())).length > 0) {
+      focusFirstInvalid(e.currentTarget as HTMLFormElement);
+      return;
+    }
     setSaving(true);
     await new Promise((resolve) => setTimeout(resolve, 600)); // stands in for the gateway's tokenize + verify call
     const token = mockTokenizeCard(card().number);
@@ -100,13 +106,12 @@ export default function AccountCardsPage() {
             when={cards().length > 0}
             fallback={
               <Show when={!adding()}>
-                <div class="flex flex-col items-center gap-3 py-12 text-center">
-                  <p class="text-lg font-semibold text-ink">ยังไม่มีบัตรที่บันทึกไว้</p>
-                  <p class="max-w-xs text-sm text-ink-gray">บันทึกบัตรไว้ ครั้งหน้าชำระเงินได้เร็วขึ้น แค่กรอก CVV</p>
-                  <Button type="button" variant="primary" onClick={() => setAdding(true)}>
-                    เพิ่มบัตร
-                  </Button>
-                </div>
+                <EmptyState
+                  icon={CardIcon}
+                  title="ยังไม่มีบัตรที่บันทึกไว้"
+                  description="บันทึกบัตรไว้ ครั้งหน้าชำระเงินได้เร็วขึ้น แค่กรอก CVV"
+                  action={{ label: "เพิ่มบัตร", onClick: () => setAdding(true) }}
+                />
               </Show>
             }
           >
@@ -121,7 +126,7 @@ export default function AccountCardsPage() {
                     <span class="flex min-w-0 flex-1 flex-col">
                       <span class="text-sm font-semibold tracking-wider text-ink">•••• {c.last4}</span>
                       <span class="truncate text-xs text-ink-gray">
-                        หมดอายุ {c.expiry} · {c.holder}
+                        หมดอายุ {c.expiry} ชื่อบนบัตร {c.holder}
                       </span>
                     </span>
                     <button

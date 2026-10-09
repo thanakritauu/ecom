@@ -1,53 +1,83 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
+import { DropdownMenu } from "@kobalte/core/dropdown-menu";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
 import { Button } from "~/components/shared/Button";
 import { FilterBar } from "~/components/admin/FilterBar";
 import { Pagination } from "~/components/admin/Pagination";
 import { DataTable, type DataTableColumn } from "~/components/admin/DataTable";
-import { StatusBadge } from "~/components/admin/StatusBadge";
+import { StatusBadge, type StatusTone } from "~/components/admin/StatusBadge";
 import { EmptyState } from "~/components/admin/EmptyState";
-import { Skeleton } from "~/components/admin/Skeleton";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { AdminBulkActionBar } from "~/components/admin/AdminBulkActionBar";
-import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
-import { MarketingStatusSummary } from "~/components/admin/marketing/MarketingStatusSummary";
-import { MarketingRowActionsMenu } from "~/components/admin/marketing/MarketingRowActionsMenu";
-import { FlashSaleQuickView } from "~/components/admin/marketing/FlashSaleQuickView";
-import { RefreshIcon, LoyaltyIcon, PlusIcon } from "~/components/admin/icons";
+import { ExportMenu } from "~/components/admin/ExportMenu";
+import { MarketingStatusSummary, type StatusTab } from "~/components/admin/marketing/MarketingStatusSummary";
+import { MarketingListSkeleton } from "~/components/admin/marketing/MarketingListSkeleton";
+import { FlashSaleDialog, type FlashSaleTiming } from "~/components/admin/marketing/FlashSaleDialog";
+import { RefreshIcon, FlashBoltIcon, PlusIcon, MoreIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { useAdminProducts } from "~/lib/adminProductStore";
-import { MARKETING_STATUS_META, formatMarketingDate, type FlashSale, type MarketingStatus } from "~/lib/adminMarketing";
-import { useAdminMarketing } from "~/lib/adminMarketingStore";
+import { useAdminProducts, type AdminProduct } from "~/lib/adminProductStore";
+import { flashSaleRoundEndsAt, getDiscountPercent } from "~/lib/products";
+import type { ExportColumn } from "~/lib/adminExport";
 import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
 
-const SORT_OPTIONS = [
-  { value: "start-desc", label: "วันที่เริ่ม ใหม่→เก่า" },
-  { value: "start-asc", label: "วันที่เริ่ม เก่า→ใหม่" },
-  { value: "end-asc", label: "วันสิ้นสุด ใกล้ที่สุด" },
-  { value: "name-asc", label: "ชื่อ A→Z" },
+/**
+ * Flash Sale = products that carry the flash-sale fields (`flashSaleEndsAt`,
+ * `flashSaleDaily`). The Home Flash Sale rail shows exactly these, at the
+ * product's own price / compare-at price, with the stock bar from
+ * `stockLeft` / `stockTotal`. This page lists them and edits only those two
+ * fields on the product; price and stock stay on the product page.
+ */
+type FlashState = "live" | "soldout" | "ended" | "hidden";
+
+const FLASH_STATE_META: Record<FlashState, { label: string; tone: StatusTone }> = {
+  live: { label: "กำลังแสดง", tone: "success" },
+  soldout: { label: "สินค้าหมด", tone: "danger" },
+  ended: { label: "หมดเวลา", tone: "warning" },
+  hidden: { label: "ไม่ได้เปิดขาย", tone: "neutral" },
+};
+
+const TABS: StatusTab<"all" | FlashState>[] = [
+  { value: "all", label: "ทั้งหมด" },
+  ...(["live", "soldout", "ended", "hidden"] as const).map((s) => ({ value: s, label: FLASH_STATE_META[s].label })),
 ];
 
-export default function AdminFlashSaleListPage() {
-  const store = useAdminMarketing().flashSales;
+const SORT_OPTIONS = [
+  { value: "ends-asc", label: "เวลาจบ ใกล้ที่สุด" },
+  { value: "name-asc", label: "ชื่อสินค้า A-Z" },
+  { value: "stock-asc", label: "สต๊อก น้อยไปมาก" },
+  { value: "discount-desc", label: "ส่วนลด มากไปน้อย" },
+];
+
+const inFlashSale = (p: AdminProduct) => p.flashSaleEndsAt !== undefined || !!p.flashSaleDaily;
+const endsAtOf = (p: AdminProduct) => (p.flashSaleDaily ? flashSaleRoundEndsAt() : p.flashSaleEndsAt ?? 0);
+
+function flashState(p: AdminProduct, now = Date.now()): FlashState {
+  if (p.status !== "active") return "hidden";
+  if (!p.flashSaleDaily && endsAtOf(p) <= now) return "ended";
+  if ((p.stockLeft ?? 0) <= 0) return "soldout";
+  return "live";
+}
+
+const timeFormatter = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+const roundLabel = (p: AdminProduct) => (p.flashSaleDaily ? "รายวัน จบเที่ยงคืน" : `จบ ${timeFormatter.format(endsAtOf(p))} น.`);
+
+export default function AdminFlashSalePage() {
   const productStore = useAdminProducts();
   const navigate = useNavigate();
 
   const [search, setSearchRaw] = createSignal("");
-  const [statusFilter, setStatusFilterRaw] = createSignal<"all" | MarketingStatus>("all");
-  const [sort, setSortRaw] = createSignal("start-desc");
+  const [stateFilter, setStateFilterRaw] = createSignal<"all" | FlashState>("all");
+  const [sort, setSortRaw] = createSignal("ends-asc");
   const [page, setPage] = createSignal(1);
-  const [pageSize, setPageSizeRaw] = createSignal(10);
+  const [pageSize, setPageSizeRaw] = createSignal(20);
   const [listStatus, setListStatus] = createSignal<AsyncStatus>("loading");
   const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
-  const [quickViewId, setQuickViewId] = createSignal<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = createSignal<FlashSale | null>(null);
-  const [confirmToggle, setConfirmToggle] = createSignal<FlashSale | null>(null);
-  const [confirmBulkDelete, setConfirmBulkDelete] = createSignal(false);
+  const [dialog, setDialog] = createSignal<{ productIds?: string[]; initial?: { daily: boolean; endsAt?: number } } | null>(null);
+  const [confirmRemove, setConfirmRemove] = createSignal<AdminProduct[] | null>(null);
   const [actionLoading, setActionLoading] = createSignal(false);
-  const quickViewFlashSale = createMemo(() => (quickViewId() ? store.getById(quickViewId()!) : undefined));
 
   const loadList = () => {
     setListStatus("loading");
@@ -57,29 +87,31 @@ export default function AdminFlashSaleListPage() {
 
   const resetPage = () => setPage(1);
   const setSearch = (v: string) => { setSearchRaw(v); resetPage(); };
-  const setStatusFilter = (v: "all" | MarketingStatus) => { setStatusFilterRaw(v); resetPage(); };
+  const setStateFilter = (v: "all" | FlashState) => { setStateFilterRaw(v); resetPage(); };
   const setSort = (v: string) => { setSortRaw(v); resetPage(); };
   const setPageSize = (v: number) => { setPageSizeRaw(v); resetPage(); };
 
-  const hasActiveFilters = () => search().trim() !== "" || statusFilter() !== "all";
+  const hasActiveFilters = () => search().trim() !== "" || stateFilter() !== "all";
   const clearFilters = () => {
     setSearchRaw("");
-    setStatusFilterRaw("all");
+    setStateFilterRaw("all");
     resetPage();
   };
 
-  const statusCounts = createMemo(() => {
-    const tally: Partial<Record<"all" | MarketingStatus, number>> = { all: store.items().length };
-    for (const f of store.items()) tally[f.status] = (tally[f.status] ?? 0) + 1;
+  const items = createMemo(() => productStore.products().filter(inFlashSale));
+
+  const stateCounts = createMemo(() => {
+    const tally: Partial<Record<"all" | FlashState, number>> = { all: items().length };
+    for (const p of items()) tally[flashState(p)] = (tally[flashState(p)] ?? 0) + 1;
     return tally;
   });
 
   const filtered = createMemo(() => {
-    const status = statusFilter();
+    const state = stateFilter();
     const q = search().trim().toLowerCase();
-    return store.items().filter((f) => {
-      if (status !== "all" && f.status !== status) return false;
-      if (q && !`${f.name} ${f.id}`.toLowerCase().includes(q)) return false;
+    return items().filter((p) => {
+      if (state !== "all" && flashState(p) !== state) return false;
+      if (q && !`${p.name} ${p.sku}`.toLowerCase().includes(q)) return false;
       return true;
     });
   });
@@ -87,14 +119,14 @@ export default function AdminFlashSaleListPage() {
   const sorted = createMemo(() => {
     const list = [...filtered()];
     switch (sort()) {
-      case "start-asc":
-        return list.sort((a, b) => a.startDate.localeCompare(b.startDate));
-      case "end-asc":
-        return list.sort((a, b) => a.endDate.localeCompare(b.endDate));
       case "name-asc":
-        return list.sort((a, b) => a.name.localeCompare(b.name));
+        return list.sort((a, b) => a.name.localeCompare(b.name, "th"));
+      case "stock-asc":
+        return list.sort((a, b) => (a.stockLeft ?? 0) - (b.stockLeft ?? 0));
+      case "discount-desc":
+        return list.sort((a, b) => (getDiscountPercent(b) ?? 0) - (getDiscountPercent(a) ?? 0));
       default:
-        return list.sort((a, b) => b.startDate.localeCompare(a.startDate));
+        return list.sort((a, b) => endsAtOf(a) - endsAtOf(b));
     }
   });
 
@@ -102,7 +134,7 @@ export default function AdminFlashSaleListPage() {
   const currentPage = createMemo(() => Math.min(page(), totalPages()));
   const pageItems = createMemo(() => sorted().slice((currentPage() - 1) * pageSize(), currentPage() * pageSize()));
 
-  const allOnPageSelected = createMemo(() => pageItems().length > 0 && pageItems().every((f) => selectedIds().has(f.id)));
+  const allOnPageSelected = createMemo(() => pageItems().length > 0 && pageItems().every((p) => selectedIds().has(p.id)));
   const toggleSelect = (id: string) =>
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -112,65 +144,109 @@ export default function AdminFlashSaleListPage() {
   const toggleSelectAllOnPage = () =>
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (allOnPageSelected()) pageItems().forEach((f) => next.delete(f.id));
-      else pageItems().forEach((f) => next.add(f.id));
+      if (allOnPageSelected()) pageItems().forEach((p) => next.delete(p.id));
+      else pageItems().forEach((p) => next.add(p.id));
       return next;
     });
   const clearSelection = () => setSelectedIds(new Set<string>());
 
-  const requestDelete = (f: FlashSale) => setConfirmDelete(f);
-  const confirmDeleteAction = async () => {
-    const f = confirmDelete();
-    if (!f) return;
-    setActionLoading(true);
-    await store.remove(f.id);
-    setActionLoading(false);
-    setConfirmDelete(null);
-    pushToast(`ลบแคมเปญ "${f.name}" เรียบร้อยแล้ว`, "error");
+  /** Writes only the flash-sale fields of each product; returns how many saves failed. */
+  const writeFlashSale = async (ids: string[], fields: { flashSaleEndsAt?: number; flashSaleDaily?: boolean }) => {
+    const results = await Promise.allSettled(
+      ids.map((id) => productStore.patchProduct(id, fields)),
+    );
+    return results.filter((r) => r.status === "rejected").length;
   };
 
-  const requestToggle = (f: FlashSale) => setConfirmToggle(f);
-  const confirmToggleAction = async () => {
-    const f = confirmToggle();
-    if (!f) return;
-    const next: MarketingStatus = f.status === "disabled" ? "active" : "disabled";
-    setActionLoading(true);
-    await store.setStatus(f.id, next);
-    setActionLoading(false);
-    setConfirmToggle(null);
-    pushToast(next === "disabled" ? "ปิดใช้งานแคมเปญแล้ว" : "เปิดใช้งานแคมเปญแล้ว", "success");
-  };
-
-  const handleDuplicate = async (f: FlashSale) => {
-    const copy = await store.duplicate(f.id);
-    pushToast(`ทำสำเนาแคมเปญ "${f.name}" เรียบร้อยแล้ว`, "success");
-    navigate(`/admin/marketing/flash-sale/${copy.id}/edit`);
-  };
-
-  const confirmBulkDeleteAction = async () => {
-    const ids = [...selectedIds()];
-    setActionLoading(true);
-    await Promise.all(ids.map((id) => store.remove(id)));
-    setActionLoading(false);
-    setConfirmBulkDelete(false);
+  const saveTiming = async (ids: string[], timing: FlashSaleTiming) => {
+    const failed = await writeFlashSale(ids, timing.daily ? { flashSaleDaily: true, flashSaleEndsAt: flashSaleRoundEndsAt() } : { flashSaleDaily: undefined, flashSaleEndsAt: timing.endsAt });
+    const adding = dialog()?.productIds === undefined;
+    if (failed === 0) pushToast(adding ? `เพิ่ม ${ids.length} สินค้าในแฟลชเซลแล้ว` : "บันทึกเวลาแฟลชเซลเรียบร้อยแล้ว", "success");
+    else pushToast(`บันทึกไม่สำเร็จ ${failed} รายการ กรุณาลองใหม่อีกครั้ง`, "error");
     clearSelection();
-    pushToast(`ลบแคมเปญ ${ids.length} รายการเรียบร้อยแล้ว`, "error");
   };
 
-  const bulkSetStatus = async (status: MarketingStatus) => {
-    const ids = [...selectedIds()];
-    await Promise.all(ids.map((id) => store.setStatus(id, status)));
+  const confirmRemoveAction = async () => {
+    const list = confirmRemove();
+    if (!list) return;
+    setActionLoading(true);
+    const failed = await writeFlashSale(
+      list.map((p) => p.id),
+      { flashSaleDaily: undefined, flashSaleEndsAt: undefined },
+    );
+    setActionLoading(false);
+    setConfirmRemove(null);
     clearSelection();
-    pushToast(status === "active" ? `เปิดใช้งาน ${ids.length} รายการแล้ว` : `ปิดใช้งาน ${ids.length} รายการแล้ว`, "success");
+    if (failed === 0) pushToast(list.length === 1 ? `นำ "${list[0].name}" ออกจากแฟลชเซลแล้ว` : `นำ ${list.length} สินค้าออกจากแฟลชเซลแล้ว`, "error");
+    else pushToast(`นำออกไม่สำเร็จ ${failed} รายการ กรุณาลองใหม่อีกครั้ง`, "error");
   };
 
-  const firstProductName = (f: FlashSale) => {
-    const first = productStore.getById(f.items[0]?.productId ?? "");
-    if (!first) return "-";
-    return f.items.length > 1 ? `${first.name} +${f.items.length - 1}` : first.name;
+  const editTiming = (ids: string[]) => {
+    const first = productStore.getById(ids[0]);
+    setDialog({ productIds: ids, initial: { daily: !!first?.flashSaleDaily, endsAt: first?.flashSaleDaily ? undefined : first?.flashSaleEndsAt } });
   };
 
-  const columns: DataTableColumn<FlashSale>[] = [
+  const selectedProducts = () => [...selectedIds()].map((id) => productStore.getById(id)).filter((p): p is AdminProduct => !!p);
+
+  const exportColumns: ExportColumn<AdminProduct>[] = [
+    { header: "SKU", value: (p) => p.sku },
+    { header: "ชื่อสินค้า", value: (p) => p.name },
+    { header: "ราคา", value: (p) => p.price },
+    { header: "ราคาก่อนลด", value: (p) => p.compareAtPrice ?? "" },
+    { header: "สต๊อกคงเหลือ", value: (p) => p.stockLeft ?? 0 },
+    { header: "สต๊อกทั้งหมด", value: (p) => p.stockTotal ?? 0 },
+    { header: "รอบ", value: (p) => roundLabel(p) },
+    { header: "สถานะ", value: (p) => FLASH_STATE_META[flashState(p)].label },
+  ];
+
+  const StateBadge = (props: { row: AdminProduct }) => {
+    const meta = () => FLASH_STATE_META[flashState(props.row)];
+    return <StatusBadge tone={meta().tone}>{meta().label}</StatusBadge>;
+  };
+
+  const Price = (props: { row: AdminProduct }) => (
+    <div class="flex flex-col items-end gap-0.5 whitespace-nowrap">
+      <span class="font-medium text-ink">{formatAdminCurrency(props.row.price)}</span>
+      <Show when={props.row.compareAtPrice && props.row.compareAtPrice > props.row.price}>
+        <span class="text-xs text-ink-gray">
+          <s>{formatAdminCurrency(props.row.compareAtPrice!)}</s> ลด {getDiscountPercent(props.row)}%
+        </span>
+      </Show>
+    </div>
+  );
+
+  const stockText = (p: AdminProduct) => `${(p.stockLeft ?? 0).toLocaleString("th-TH")} / ${(p.stockTotal ?? p.stockLeft ?? 0).toLocaleString("th-TH")}`;
+
+  const RowMenu = (props: { row: AdminProduct; triggerClass?: string }) => (
+    <DropdownMenu placement="bottom-end" gutter={4}>
+      <DropdownMenu.Trigger
+        aria-label={`จัดการ ${props.row.name}`}
+        onClick={(e: MouseEvent) => e.stopPropagation()}
+        class={props.triggerClass ?? "flex size-9 shrink-0 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-surface-pink"}
+      >
+        <MoreIcon class="size-5" />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content class="z-50 w-52 rounded-card border border-border bg-surface-card p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+          <DropdownMenu.Item onSelect={() => editTiming([props.row.id])} class={MENU_ITEM}>
+            ตั้งเวลาแฟลชเซล
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => navigate(`/admin/products/${props.row.id}/edit`)} class={MENU_ITEM}>
+            แก้ไขสินค้า
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator class="my-1 h-px bg-border" />
+          <DropdownMenu.Item
+            onSelect={() => setConfirmRemove([props.row])}
+            class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm font-medium text-system-red outline-none transition-colors duration-150 hover:bg-danger-soft data-[highlighted]:bg-danger-soft"
+          >
+            นำออกจากแฟลชเซล
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu>
+  );
+
+  const columns: DataTableColumn<AdminProduct>[] = [
     {
       key: "select",
       label: "",
@@ -188,64 +264,52 @@ export default function AdminFlashSaleListPage() {
         />
       ),
     },
-    { key: "name", label: "Campaign", render: (row) => <p class="font-medium text-ink">{row.name}</p> },
-    { key: "products", label: "Products", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{firstProductName(row)}</span> },
     {
-      key: "price",
-      label: "Sale Price",
-      align: "right",
+      key: "product",
+      label: "สินค้า",
       render: (row) => (
-        <span class="font-medium text-ink">
-          {row.items.length > 0 ? formatAdminCurrency(Math.min(...row.items.map((i) => i.salePrice))) : "-"}
-        </span>
+        <div class="flex min-w-0 items-center gap-3">
+          <img src={row.image} alt="" class="size-11 shrink-0 rounded-media object-cover" />
+          <div class="min-w-0">
+            <p class="truncate text-sm font-medium text-ink">{row.name}</p>
+            <p class="text-xs text-ink-gray">{row.sku}</p>
+          </div>
+        </div>
       ),
     },
-    { key: "start", label: "Start", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{formatMarketingDate(row.startDate)}</span> },
-    { key: "end", label: "End", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{formatMarketingDate(row.endDate)}</span> },
-    { key: "status", label: "Status", render: (row) => <StatusBadge tone={MARKETING_STATUS_META[row.status].tone}>{MARKETING_STATUS_META[row.status].label}</StatusBadge> },
-    {
-      key: "actions",
-      label: "",
-      align: "right",
-      render: (row) => (
-        <MarketingRowActionsMenu
-          id={row.id}
-          name={row.name}
-          basePath="/admin/marketing/flash-sale"
-          isDisabled={row.status === "disabled"}
-          onDuplicate={() => handleDuplicate(row)}
-          onToggleStatus={() => requestToggle(row)}
-          onDelete={() => requestDelete(row)}
-        />
-      ),
-    },
+    { key: "price", label: "ราคา", align: "right", render: (row) => <Price row={row} /> },
+    { key: "stock", label: "สต๊อก", align: "right", render: (row) => <span class="whitespace-nowrap text-ink">{stockText(row)}</span> },
+    { key: "round", label: "รอบ", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{roundLabel(row)}</span> },
+    { key: "status", label: "สถานะ", render: (row) => <StateBadge row={row} /> },
+    { key: "actions", label: "", align: "right", render: (row) => <RowMenu row={row} /> },
   ];
 
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
-      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "แฟลชเซล" }]} />
+      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "แฟลชเซล" }]} />
       <PageHeader
         title="แฟลชเซล"
-        description="ราคา จำนวนสต็อก และเวลานับถอยหลังของสินค้าในส่วน Flash Sale หน้าแรก"
+        description="เลือกสินค้าที่ขึ้นในแฟลชเซลหน้าแรก และตั้งเวลาจบ"
         actions={
           <div class="flex flex-wrap items-center gap-2">
-            <Button href="/admin/marketing/flash-sale/new" variant="primary">
-              <PlusIcon class="size-4" /> สร้างแฟลชเซล
+            <ExportMenu filenameBase="flash-sale-report" columns={exportColumns} rows={sorted()} />
+            <Button variant="primary" onClick={() => setDialog({})}>
+              <PlusIcon class="size-4" /> เพิ่มสินค้า
             </Button>
           </div>
         }
       />
 
-      <MarketingStatusSummary value={statusFilter()} counts={statusCounts()} onChange={setStatusFilter} />
+      <MarketingStatusSummary tabs={TABS} value={stateFilter()} counts={stateCounts()} onChange={setStateFilter} />
 
       <FilterBar
-        search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาชื่อแคมเปญ, ID..." }}
+        search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาชื่อสินค้า, SKU..." }}
         filters={[]}
         onFilterChange={() => {}}
         sort={{ value: sort(), options: SORT_OPTIONS, onChange: setSort }}
       />
 
-      <Show when={listStatus() !== "loading"} fallback={<ListSkeleton />}>
+      <Show when={listStatus() !== "loading"} fallback={<MarketingListSkeleton />}>
         <Show
           when={listStatus() === "success"}
           fallback={
@@ -256,11 +320,11 @@ export default function AdminFlashSaleListPage() {
             when={sorted().length > 0}
             fallback={
               <EmptyState
-                icon={<LoyaltyIcon />}
-                title={hasActiveFilters() ? "ไม่พบแฟลชเซลที่ตรงกับการค้นหา" : "ยังไม่มีแฟลชเซล"}
-                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "เริ่มสร้างแฟลชเซลแรกของคุณ"}
-                actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "+ สร้างแฟลชเซล"}
-                onAction={hasActiveFilters() ? clearFilters : () => navigate("/admin/marketing/flash-sale/new")}
+                icon={<FlashBoltIcon />}
+                title={hasActiveFilters() ? "ไม่พบสินค้าที่ตรงกับการค้นหา" : "ยังไม่มีสินค้าในแฟลชเซล"}
+                description={hasActiveFilters() ? undefined : "ส่วนแฟลชเซลจะซ่อนจากหน้าแรกจนกว่าจะมีสินค้า"}
+                actionLabel={hasActiveFilters() ? "ล้างการค้นหา" : "+ เพิ่มสินค้า"}
+                onAction={hasActiveFilters() ? clearFilters : () => setDialog({})}
                 class="bg-surface-card shadow-card"
               />
             }
@@ -274,9 +338,9 @@ export default function AdminFlashSaleListPage() {
               columns={columns}
               rows={pageItems()}
               getRowKey={(row) => row.id}
-              onRowClick={(row) => setQuickViewId(row.id)}
+              onRowClick={(row) => editTiming([row.id])}
               renderMobileCard={(row) => (
-                <div class="flex gap-3 rounded-card bg-surface-card p-4 shadow-card">
+                <div class="flex gap-3 rounded-card bg-surface-card p-3 shadow-card">
                   <input
                     type="checkbox"
                     aria-label={`เลือก ${row.name}`}
@@ -285,15 +349,25 @@ export default function AdminFlashSaleListPage() {
                     onChange={() => toggleSelect(row.id)}
                     class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
                   />
-                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-2 text-left">
-                    <div class="flex items-start justify-between gap-2">
-                      <p class="truncate font-semibold text-ink">{row.name}</p>
-                      <StatusBadge class="shrink-0" tone={MARKETING_STATUS_META[row.status].tone}>{MARKETING_STATUS_META[row.status].label}</StatusBadge>
+                  <button type="button" onClick={() => editTiming([row.id])} class="font-normal flex min-w-0 flex-1 gap-3 text-left">
+                    <img src={row.image} alt="" class="size-16 shrink-0 rounded-media object-cover" />
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-sm font-medium text-ink">{row.name}</p>
+                      <p class="truncate text-xs text-ink-gray">{row.sku}</p>
+                      <p class="mt-1 text-sm font-semibold text-ink">
+                        {formatAdminCurrency(row.price)}
+                        <Show when={row.compareAtPrice && row.compareAtPrice > row.price}>
+                          <span class="ml-1.5 text-xs font-normal text-ink-gray">ลด {getDiscountPercent(row)}%</span>
+                        </Show>
+                      </p>
+                      <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <span class="whitespace-nowrap text-sm text-ink-gray">สต๊อก {stockText(row)}</span>
+                        <StateBadge row={row} />
+                      </div>
+                      <p class="mt-1 text-xs text-ink-placeholder">{roundLabel(row)}</p>
                     </div>
-                    <p class="truncate text-sm text-ink-gray">{firstProductName(row)}</p>
-                    <p class="truncate text-xs text-ink-gray">{formatMarketingDate(row.startDate)} - {formatMarketingDate(row.endDate)}</p>
-                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>
                   </button>
+                  <RowMenu row={row} triggerClass="flex size-9 shrink-0 items-center justify-center self-start rounded-pill text-ink-gray hover:bg-surface-pink" />
                 </div>
               )}
             />
@@ -307,74 +381,36 @@ export default function AdminFlashSaleListPage() {
         count={selectedIds().size}
         onClear={clearSelection}
         actions={[
-          { label: "เปิดใช้งาน", onClick: () => bulkSetStatus("active") },
-          { label: "ปิดใช้งาน", onClick: () => bulkSetStatus("disabled") },
-          { label: "ลบ", tone: "danger", onClick: () => setConfirmBulkDelete(true) },
+          { label: "ตั้งเวลา", onClick: () => editTiming([...selectedIds()]) },
+          { label: "นำออก", tone: "danger", onClick: () => setConfirmRemove(selectedProducts()) },
         ]}
       />
 
-      <QuickViewDrawer
-        open={quickViewFlashSale() !== undefined}
-        onOpenChange={(open) => !open && setQuickViewId(null)}
-        title={quickViewFlashSale()?.name ?? ""}
-        subtitle={quickViewFlashSale() ? `${quickViewFlashSale()!.items.length} สินค้า` : undefined}
-        onViewFull={() => {
-          const id = quickViewId();
-          setQuickViewId(null);
-          if (id) navigate(`/admin/marketing/flash-sale/${id}`);
-        }}
-      >
-        <Show when={quickViewFlashSale()}>{(f) => <FlashSaleQuickView flashSale={f()} />}</Show>
-      </QuickViewDrawer>
-
-      <ConfirmDialog
-        open={confirmDelete() !== null}
-        onOpenChange={(open) => !open && setConfirmDelete(null)}
-        title="ลบแฟลชเซล?"
-        description={`คุณต้องการลบ "${confirmDelete()?.name ?? ""}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-        confirmLabel="ลบ"
-        tone="danger"
-        loading={actionLoading()}
-        onConfirm={confirmDeleteAction}
+      <FlashSaleDialog
+        open={dialog() !== null}
+        onOpenChange={(open) => !open && setDialog(null)}
+        productIds={dialog()?.productIds}
+        initial={dialog()?.initial}
+        onSave={saveTiming}
       />
 
       <ConfirmDialog
-        open={confirmToggle() !== null}
-        onOpenChange={(open) => !open && setConfirmToggle(null)}
-        title={confirmToggle()?.status === "disabled" ? "เปิดใช้งานแฟลชเซลนี้?" : "ปิดใช้งานแฟลชเซลนี้?"}
-        description={confirmToggle()?.name ?? ""}
-        confirmLabel={confirmToggle()?.status === "disabled" ? "เปิดใช้งาน" : "ปิดใช้งาน"}
-        loading={actionLoading()}
-        onConfirm={confirmToggleAction}
-      />
-
-      <ConfirmDialog
-        open={confirmBulkDelete()}
-        onOpenChange={setConfirmBulkDelete}
-        title="ลบแฟลชเซลที่เลือก?"
-        description={`คุณต้องการลบแฟลชเซล ${selectedIds().size} รายการที่เลือกหรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-        confirmLabel="ลบ"
+        open={confirmRemove() !== null}
+        onOpenChange={(open) => !open && setConfirmRemove(null)}
+        title="นำออกจากแฟลชเซล?"
+        description={
+          (confirmRemove()?.length ?? 0) === 1
+            ? `"${confirmRemove()![0].name}" จะหายจากส่วนแฟลชเซลหน้าแรก สินค้ายังขายตามปกติ`
+            : `${confirmRemove()?.length ?? 0} สินค้าที่เลือกจะหายจากส่วนแฟลชเซลหน้าแรก สินค้ายังขายตามปกติ`
+        }
+        confirmLabel="นำออก"
         tone="danger"
         loading={actionLoading()}
-        onConfirm={confirmBulkDeleteAction}
+        onConfirm={confirmRemoveAction}
       />
     </div>
   );
 }
 
-function ListSkeleton() {
-  return (
-    <div class="flex flex-col gap-3">
-      {Array.from({ length: 5 }).map(() => (
-        <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
-          <div class="flex flex-1 flex-col gap-1.5">
-            <Skeleton class="h-4 w-1/3" />
-            <Skeleton class="h-3 w-1/4" />
-          </div>
-          <Skeleton class="h-6 w-20 rounded-pill" />
-          <Skeleton class="h-8 w-14 rounded-pill" />
-        </div>
-      ))}
-    </div>
-  );
-}
+const MENU_ITEM =
+  "flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink";

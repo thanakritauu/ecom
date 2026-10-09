@@ -4,7 +4,7 @@ import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { ChevronDownIcon, CloseXIcon } from "~/components/admin/icons";
 import { IconImageUploader } from "~/components/admin/IconImageUploader";
-import { PROMOTION_NAV_ICON_OPTIONS } from "~/lib/promotionNavIcons";
+import { Toggle } from "~/components/admin/Toggle";
 import {
   NAVIGATION_TARGET_TYPES,
   NAVIGATION_TARGET_TYPE_LABELS,
@@ -85,7 +85,7 @@ export function NavigationItemFormDrawer(props: {
   const targetOptions = createMemo((): { value: string; label: string }[] => {
     switch (targetType()) {
       case "promotion_page":
-        return props.pages.map((p) => ({ value: p.id, label: `${p.name} · ${LANDING_PAGE_STATUS_META[p.status].label}` }));
+        return props.pages.map((p) => ({ value: p.id, label: `${p.name} (${LANDING_PAGE_STATUS_META[p.status].label})` }));
       case "category":
         return props.categories.map((c) => ({ value: c.id, label: c.name }));
       case "collection":
@@ -124,7 +124,7 @@ export function NavigationItemFormDrawer(props: {
     const next: Record<string, string> = {};
     if (!label().trim()) next.label = "กรุณากรอกชื่อเมนู";
     if (needsTarget() && !targetId()) next.targetId = "กรุณาเลือกปลายทาง";
-    if (needsUrl() && !externalUrl().trim()) next.externalUrl = "กรุณากรอก URL";
+    if (needsUrl() && !externalUrl().trim()) next.externalUrl = "กรุณากรอก URL ภายนอก";
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -151,7 +151,7 @@ export function NavigationItemFormDrawer(props: {
         <div class="fixed inset-y-0 right-0 z-50 flex w-full sm:w-[480px]">
           <Dialog.Content class="flex size-full flex-col overflow-hidden bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-drawer-in data-[closed]:animate-drawer-out">
             <div class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
-              <Dialog.Title class="text-lg font-semibold text-ink">
+              <Dialog.Title class="text-base font-semibold text-ink">
                 {props.mode === "create" ? "เพิ่มเมนู" : "แก้ไขเมนู"}
               </Dialog.Title>
               <Dialog.CloseButton
@@ -163,9 +163,9 @@ export function NavigationItemFormDrawer(props: {
             </div>
 
             <form onSubmit={handleSubmit} class="flex flex-1 flex-col overflow-hidden">
-              <div class="flex flex-1 flex-col gap-5 overflow-y-auto p-5">
+              <div class="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
                 <TextField
-                  label="ชื่อเมนู (Label)"
+                  label="ชื่อเมนู"
                   required
                   value={label()}
                   onInput={(e) => setLabel(e.currentTarget.value)}
@@ -175,46 +175,14 @@ export function NavigationItemFormDrawer(props: {
                 />
 
                 <div class="flex flex-col gap-2">
-                  <span class="text-sm font-medium text-ink">ไอคอน (ไม่บังคับ)</span>
-                  {/* Storefront sync — the preset artwork keys Header/MobileMenu render through `NavIcon` (Iconic Glow, Flash Sale, ...), picked by key; uploading an image below is the alternative. */}
-                  <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="ไอคอนสำเร็จรูป">
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={icon() === NO_ICON_KEY}
-                      disabled={props.saving}
-                      onClick={() => setIcon(NO_ICON_KEY)}
-                      class="flex h-14 w-16 flex-col items-center justify-center gap-0.5 rounded-media border text-[10px] text-ink-gray transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50"
-                      classList={{ "border-brand-pink bg-surface-pink": icon() === NO_ICON_KEY, "border-border hover:border-brand-pink": icon() !== NO_ICON_KEY }}
-                    >
-                      <span class="text-base leading-none">—</span>
-                      ไม่มี
-                    </button>
-                    <For each={PROMOTION_NAV_ICON_OPTIONS}>
-                      {(opt) => (
-                        <button
-                          type="button"
-                          role="radio"
-                          aria-checked={icon() === opt.key}
-                          disabled={props.saving}
-                          onClick={() => setIcon(opt.key)}
-                          class="flex h-14 w-16 flex-col items-center justify-center gap-0.5 rounded-media border text-[10px] text-ink transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50"
-                          classList={{ "border-brand-pink bg-surface-pink": icon() === opt.key, "border-border hover:border-brand-pink": icon() !== opt.key }}
-                        >
-                          <opt.Icon class="size-6" />
-                          <span class="max-w-full truncate px-1">{opt.label}</span>
-                        </button>
-                      )}
-                    </For>
-                  </div>
-                  <span class="text-xs text-ink-gray">หรืออัปโหลดรูปไอคอนเอง</span>
+                  <span class="text-sm font-medium text-ink">ไอคอน</span>
                   <IconImageUploader value={icon()} onChange={setIcon} disabled={props.saving} />
-                  <span class="text-xs text-ink-gray">หน้าร้านแสดงไอคอนขนาด 24px (มือถือ) / 32px (เดสก์ท็อป) และชื่อเมนูที่มีไอคอนเป็นตัวหนา (semibold)</span>
+                  <span class="text-xs text-ink-gray">ไม่ใส่ก็ได้ เมนูที่มีไอคอนจะแสดงชื่อเป็นตัวหนา</span>
                 </div>
 
                 <label class="flex flex-col gap-1.5">
                   <span class="text-sm font-medium text-ink">
-                    ประเภทปลายทาง (Target Type)<span class="text-system-red"> *</span>
+                    ประเภทปลายทาง <span class="text-system-red">*</span>
                   </span>
                   <div class="relative">
                     <select
@@ -231,14 +199,14 @@ export function NavigationItemFormDrawer(props: {
 
                 <Show when={props.initial?.id === BOTTOM_NAV_PROMOTION_ITEM_ID}>
                   <p class="rounded-card bg-surface-pink px-3 py-2 text-xs text-ink">
-                    เมนูนี้กำหนดปลายทางของแท็บ “โปรโมชั่น” ในแถบเมนูด้านล่างบนมือถือ/แท็บเล็ตด้วย — ถ้าซ่อนเมนูนี้ แท็บจะไปที่ /promotion/flash-sale
+                    เมนูนี้เป็นปลายทางของแท็บโปรโมชั่นในแถบล่างบนมือถือด้วย ถ้าซ่อนเมนูนี้ แท็บจะไปที่ /promotion/flash-sale
                   </p>
                 </Show>
 
                 <Show when={needsTarget()}>
                   <label class="flex flex-col gap-1.5">
                     <span class="text-sm font-medium text-ink">
-                      ปลายทาง (Target)<span class="text-system-red"> *</span>
+                      ปลายทาง <span class="text-system-red">*</span>
                     </span>
                     <div class="relative">
                       <select
@@ -249,7 +217,7 @@ export function NavigationItemFormDrawer(props: {
                           errors().targetId ? "border-system-red" : "border-border"
                         }`}
                       >
-                        <option value="">— เลือกปลายทาง —</option>
+                        <option value="">เลือกปลายทาง</option>
                         <For each={targetOptions()}>{(opt) => <option value={opt.value}>{opt.label}</option>}</For>
                       </select>
                       <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
@@ -276,7 +244,7 @@ export function NavigationItemFormDrawer(props: {
                 </Show>
 
                 <label class="flex flex-col gap-1.5">
-                  <span class="text-sm font-medium text-ink">เมนูหลัก (Parent Menu)</span>
+                  <span class="text-sm font-medium text-ink">อยู่ใต้เมนู</span>
                   <div class="relative">
                     <select
                       value={parentId()}
@@ -284,22 +252,18 @@ export function NavigationItemFormDrawer(props: {
                       onChange={(e) => setParentId(e.currentTarget.value)}
                       class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
                     >
-                      <option value="">ไม่มี (เมนูระดับบนสุด)</option>
+                      <option value="">ไม่ระบุ</option>
                       <For each={parentOptions()}>{(item) => <option value={item.id}>{item.label}</option>}</For>
                     </select>
                     <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
                   </div>
+                  <span class="text-xs text-ink-gray">ไม่ระบุคือเมนูระดับบนสุด เมนูย่อยแสดงเฉพาะในเมนูบนมือถือ</span>
                 </label>
 
-                <label class="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={visible()}
-                    onChange={(e) => setVisible(e.currentTarget.checked)}
-                    disabled={props.saving}
-                    class="size-4 rounded accent-brand-pink"
-                  />
-                  <span class="text-sm font-medium text-ink">แสดงเมนูนี้บนหน้าเว็บไซต์</span>
+                <label class="flex flex-col gap-1.5">
+                  <span class="text-sm font-medium text-ink">การแสดงผล</span>
+                  <Toggle checked={visible()} onChange={setVisible} onLabel="แสดง" offLabel="ไม่แสดง" disabled={props.saving} />
+                  <span class="text-xs text-ink-gray">ปิดแล้วเมนูนี้จะไม่แสดงบนหน้าร้าน</span>
                 </label>
               </div>
 
@@ -311,7 +275,7 @@ export function NavigationItemFormDrawer(props: {
                   ยกเลิก
                 </Button>
                 <Button type="submit" variant="primary" class="flex-1" loading={props.saving}>
-                  บันทึก
+                  {props.saving ? "กำลังบันทึก..." : props.mode === "create" ? "บันทึกเมนู" : "บันทึกการเปลี่ยนแปลง"}
                 </Button>
               </div>
             </form>

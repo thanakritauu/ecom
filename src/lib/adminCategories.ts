@@ -3,9 +3,8 @@ import type { StatusTone } from "~/components/admin/StatusBadge";
 /**
  * Category Management — Phase 01 additional scope. A named, admin-curated
  * product taxonomy entry (e.g. "ปาก", "ตา") that the storefront's category
- * navigation and filters are built from, plus the taxonomy-specific fields a
- * real category needs: `slug` (its URL/filter key) and `image` (a
- * native-upload thumbnail).
+ * navigation and filters are built from, plus `slug` (its URL/filter key). No
+ * image: the storefront never shows one.
  *
  * Architecture Cleanup & Source of Truth — Category is Product
  * Classification only, never its own Product Collection: it used to also
@@ -29,7 +28,6 @@ export type AdminCategory = {
   name: string;
   slug: string;
   description: string;
-  image: string;
   status: CategoryStatus;
   createdAt: string;
   updatedAt: string;
@@ -37,7 +35,7 @@ export type AdminCategory = {
 
 export type CategoryFormValues = Omit<AdminCategory, "id" | "createdAt" | "updatedAt">;
 
-/** Same rules as `adminCampaigns.ts`'s `slugify` — plain ASCII lowercase + hyphen is the whole alphabet a slug needs. */
+/** Plain ASCII lowercase + hyphen is the whole alphabet a slug needs. */
 export function slugifyCategory(input: string): string {
   return input
     .toLowerCase()
@@ -58,7 +56,6 @@ export function normalizeCategory(c: Partial<AdminCategory> & { id: string }): A
     name: c.name ?? "",
     slug: c.slug ?? "",
     description: c.description ?? "",
-    image: c.image ?? "",
     status: c.status ?? "active",
     createdAt: c.createdAt ?? "",
     updatedAt: c.updatedAt ?? "",
@@ -91,7 +88,7 @@ export function categorySlugRouteWarning(slug: string): { tone: "error" | "warni
   const s = slug.trim().toLowerCase();
   if (!s) return undefined;
   if (STOREFRONT_RESERVED_ROOT_SLUGS.includes(s)) return { tone: "error", message: `/${s} เป็นหน้าที่ระบบใช้งานอยู่แล้ว กรุณาเลือก Slug อื่น` };
-  if (!STOREFRONT_CATEGORY_ROUTE_SLUGS.includes(s)) return { tone: "warning", message: `หน้าร้านยังไม่มีหน้า /${s} — ลูกค้าที่เปิดลิงก์นี้จะเจอหน้าไม่พบ (ต้องเพิ่มหน้าหมวดหมู่ในโค้ดก่อน)` };
+  if (!STOREFRONT_CATEGORY_ROUTE_SLUGS.includes(s)) return { tone: "warning", message: `หน้าร้านยังไม่มีหน้า /${s} หมวดหมู่นี้จะใช้ได้ในการค้นหาและตัวกรอง แต่ลิงก์ /${s} จะเปิดไม่เจอหน้า` };
   return undefined;
 }
 
@@ -112,7 +109,6 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     name: "คุชชั่น",
     slug: "cushion",
     description: "คุชชั่นและรองพื้นเนื้อบางเบา เพื่อผิวโกลว์ฉ่ำทั้งวัน",
-    image: "",
     status: "active",
   },
   {
@@ -120,7 +116,6 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     name: "ลิป",
     slug: "lip",
     description: "ลิปสติก ลิปทินท์ ลิปกลอส และผลิตภัณฑ์ดูแลริมฝีปาก",
-    image: "",
     status: "active",
   },
   {
@@ -128,7 +123,6 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     name: "แก้ม",
     slug: "cheek",
     description: "บลัชออน ไฮไลท์เตอร์ และผลิตภัณฑ์แต่งแก้ม",
-    image: "",
     status: "active",
   },
   {
@@ -136,7 +130,6 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     name: "ตาและคิ้ว",
     slug: "eye",
     description: "อายแชโดว์ อายไลน์เนอร์ มาสคาร่า ดินสอและเจลเขียนคิ้ว",
-    image: "",
     status: "active",
   },
   {
@@ -144,7 +137,6 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     name: "ดูแลผิว",
     slug: "skincare",
     description: "สกินแคร์บำรุงผิวหน้า ให้ผิวชุ่มชื้น แข็งแรง พร้อมแต่งหน้า",
-    image: "",
     status: "active",
   },
   {
@@ -152,7 +144,6 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     name: "กันแดดและบอดี้แคร์",
     slug: "suncare-bodycare",
     description: "กันแดดและผลิตภัณฑ์ดูแลผิวกาย ปกป้องผิวจากแดดทุกวัน",
-    image: "",
     status: "active",
   },
   {
@@ -162,7 +153,6 @@ const CATEGORY_SEEDS: (Omit<AdminCategory, "createdAt" | "updatedAt"> & { id: st
     name: "คิ้ว",
     slug: "brow",
     description: "ดินสอเขียนคิ้ว เจลเขียนคิ้ว และผลิตภัณฑ์แต่งคิ้ว",
-    image: "",
     status: "inactive",
   },
 ];

@@ -2,7 +2,12 @@ import { createSignal, For, onCleanup, onMount, Show, Suspense } from "solid-js"
 import { createAsync } from "@solidjs/router";
 import { ChevronIcon } from "~/components/shared/ChevronIcon";
 import { tiktokPlayerUrl, tiktokVideoUrl, type TikTokReviewClip } from "~/lib/tiktokReviews";
-import { getTikTokPosters } from "~/lib/tiktokPosters";
+import { getTikTokPosters, type PosterClip } from "~/lib/tiktokPosters";
+import { TIKTOK_REVIEW_CLIPS } from "~/lib/tiktokReviews";
+
+const SEED_CLIP_IDS = new Set(TIKTOK_REVIEW_CLIPS.map((c) => c.videoId));
+const extraPosterClips = (clips: TikTokReviewClip[]): PosterClip[] =>
+  clips.filter((c) => !c.coverUrl && !SEED_CLIP_IDS.has(c.videoId)).map((c) => ({ videoId: c.videoId, author: c.author }));
 import tiktokLogo from "~/assets/icons/social-tiktok.svg";
 
 /**
@@ -39,7 +44,8 @@ const SIZES = {
 export function TikTokReviewRail(props: { clips: TikTokReviewClip[]; label: string; size?: keyof typeof SIZES }) {
   const size = () => SIZES[props.size ?? "default"];
   let trackRef: HTMLDivElement | undefined;
-  const posters = createAsync(() => getTikTokPosters());
+  // Seed clips are always looked up; Admin-added ones without their own cover are passed along.
+  const posters = createAsync(() => getTikTokPosters(extraPosterClips(props.clips)));
   const [playing, setPlaying] = createSignal<string | null>(null);
   const [atStart, setAtStart] = createSignal(true);
   const [atEnd, setAtEnd] = createSignal(false);
@@ -81,7 +87,7 @@ export function TikTokReviewRail(props: { clips: TikTokReviewClip[]; label: stri
                       {/* Own boundary: covers stream in after the page — a slow TikTok lookup never holds up the PDP/Home render. */}
                       <Suspense fallback={<span class="absolute inset-0 bg-gradient-to-b from-ink/80 to-ink" aria-hidden="true" />}>
                         <Show
-                          when={posters()?.[clip.videoId]}
+                          when={clip.coverUrl ?? posters()?.[clip.videoId]}
                           fallback={
                             // No cover (lookup failed / not cached yet): a titled tile, never an empty box.
                             <span class="absolute inset-0 flex items-end bg-gradient-to-b from-ink/80 to-ink p-3 pb-4 text-left" aria-hidden="true">

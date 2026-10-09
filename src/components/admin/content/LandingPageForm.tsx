@@ -13,12 +13,13 @@ import { HomepageSectionsPreview } from "./HomepageSectionsPreview";
 import { HomepageFixedSectionsPanel } from "./HomepageFixedSectionsPanel";
 import { PromotionPagePreviewBody, isListingModePage } from "./PromotionPagePreviewBody";
 import { HOMEPAGE_FIXED_SECTIONS, HOMEPAGE_SECTION_TYPE_META, genHomepageSectionId, isValidYoutubeUrl, type HomepageSection, type HomepageSectionType } from "~/lib/adminHomepage";
-import { isValidDateRange } from "~/lib/adminMarketing";
-import { slugify, isReservedSlug, promotionPageHref, validatePublishRequirements, type LandingPage, type LandingPageFormValues, type LandingPageStatus, type PromotionPage } from "~/lib/adminContent";
+import { formatMarketingDateTime, isValidDateRange } from "~/lib/adminMarketing";
+import { StatusBadge } from "~/components/admin/StatusBadge";
+import { slugify, isReservedSlug, promotionPageHref, validatePublishRequirements, PROMOTION_PAGE_STATUS_META, type LandingPage, type LandingPageFormValues, type LandingPageStatus, type PromotionPage } from "~/lib/adminContent";
 import { writePreviewDraft } from "~/lib/adminPreviewDraft";
 import { pushToast } from "~/lib/toast";
 
-const ADD_SECTION_TYPE_OPTIONS: HomepageSectionType[] = ["hero", "product", "campaign", "content", "cta"];
+const ADD_SECTION_TYPE_OPTIONS: HomepageSectionType[] = ["hero", "product", "content", "cta"];
 const TODAY_LABEL = "18 ก.ย. 2569";
 
 function blankLandingSection(type: HomepageSectionType): HomepageSection {
@@ -38,23 +39,14 @@ function blankLandingSection(type: HomepageSectionType): HomepageSection {
     products: [],
     collectionId: "",
     categoryId: "",
-    campaignId: "",
     createdAt: TODAY_LABEL,
     updatedAt: TODAY_LABEL,
   };
 }
 
-const CREATE_STATUS_OPTIONS: { value: LandingPageStatus; label: string }[] = [
-  { value: "draft", label: "แบบร่าง" },
-  { value: "scheduled", label: "ตั้งเวลาไว้" },
-];
-
-const EDIT_STATUS_OPTIONS: { value: LandingPageStatus; label: string }[] = [
-  { value: "draft", label: "แบบร่าง" },
-  { value: "scheduled", label: "ตั้งเวลาไว้" },
-  { value: "published", label: "เผยแพร่แล้ว" },
-  { value: "unpublished", label: "ยกเลิกการเผยแพร่" },
-];
+const statusOption = (value: LandingPageStatus) => ({ value, label: PROMOTION_PAGE_STATUS_META[value].label });
+const CREATE_STATUS_OPTIONS = (["draft", "scheduled"] as LandingPageStatus[]).map(statusOption);
+const EDIT_STATUS_OPTIONS = (["draft", "scheduled", "published", "unpublished"] as LandingPageStatus[]).map(statusOption);
 
 /**
  * Landing Page Architecture & Promotion Page Migration — was
@@ -135,7 +127,7 @@ export function LandingPageForm(props: {
     setExpandedSectionId(created.id);
   };
 
-  /** §25/§10 — new id, "(สำเนา)" name; Product/Collection/Campaign REFERENCES (`products`/`collectionId`/`campaignId`) are copied as-is, still pointing at the same original entities, never duplicated as new entities. */
+  /** §25/§10 — new id, "(สำเนา)" name; Product/Collection REFERENCES (`products`/`collectionId`) are copied as-is, still pointing at the same original entities, never duplicated as new entities. */
   const duplicateSection = (id: string) => {
     setSections((list) => {
       const index = list.findIndex((s) => s.id === id);
@@ -210,7 +202,6 @@ export function LandingPageForm(props: {
       products: [],
       collectionId: "",
       categoryId: "",
-      campaignId: "",
       createdAt: TODAY_LABEL,
       updatedAt: TODAY_LABEL,
     };
@@ -225,7 +216,7 @@ export function LandingPageForm(props: {
     const draftPage: PromotionPage = { ...values, id: props.initial?.id ?? "draft", createdAt: props.initial?.createdAt ?? TODAY_LABEL, updatedAt: TODAY_LABEL };
     const draftId = writePreviewDraft("promotion-page", draftPage);
     if (!draftId) {
-      pushToast("ไม่สามารถเปิดตัวอย่างเต็มหน้าได้ในขณะนี้", "error");
+      pushToast("เปิดตัวอย่างเต็มหน้าไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
       return;
     }
     window.open(`/admin/preview/promotion-pages/${props.initial?.id ?? "draft"}?draft=${draftId}`, "_blank");
@@ -238,7 +229,7 @@ export function LandingPageForm(props: {
     if (!cleanSlug) next.slug = "กรุณากรอก Slug";
     else if (props.isSlugTaken(cleanSlug)) next.slug = "Slug นี้ถูกใช้ไปแล้ว กรุณาเลือก Slug อื่น";
     // §35 — reserved-route check doesn't apply to the Homepage's own record (it never routes through `/promotion/:slug`).
-    else if (!isHomepage() && isReservedSlug(cleanSlug)) next.slug = "Slug นี้ตรงกับ Route ที่ระบบใช้งานอยู่แล้ว กรุณาเลือก Slug อื่น";
+    else if (!isHomepage() && isReservedSlug(cleanSlug)) next.slug = "Slug นี้ซ้ำกับหน้าอื่นของเว็บไซต์ กรุณาเลือก Slug อื่น";
     if (startDate() && endDate() && !dateRangeValid()) next.endDate = "วันสิ้นสุดต้องอยู่หลังวันเริ่ม";
     if (videoUrl().trim() && !isValidYoutubeUrl(videoUrl())) next.videoUrl = "ลิงก์ YouTube ไม่ถูกต้อง";
     return next;
@@ -263,7 +254,7 @@ export function LandingPageForm(props: {
     try {
       await props.onSubmit(values);
     } catch {
-      setSubmitError("บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      setSubmitError("บันทึกหน้าแคมเปญไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     } finally {
       setSaving(false);
     }
@@ -289,7 +280,7 @@ export function LandingPageForm(props: {
       <div class="flex flex-col gap-6">
           <Section title="ข้อมูลพื้นฐาน">
             <Show when={isHomepage()}>
-              <p class="inline-flex w-fit items-center gap-1.5 rounded-pill bg-surface-pink px-3 py-1 text-sm font-medium text-brand-pink">★ หน้าแรก</p>
+              <StatusBadge tone="info" class="w-fit">หน้าแรก</StatusBadge>
             </Show>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <TextField
@@ -302,6 +293,7 @@ export function LandingPageForm(props: {
                 disabled={saving()}
                 class="sm:col-span-2"
               />
+              <Show when={!isHomepage()}>
               <TextField
                 label="Slug"
                 required
@@ -312,14 +304,13 @@ export function LandingPageForm(props: {
                 disabled={saving()}
                 class="sm:col-span-2"
               />
-              <Show when={!isHomepage()}>
                 <p class="-mt-2 text-xs text-ink-gray sm:col-span-2">
-                  URL หน้าร้าน: <span class="font-medium text-ink">{promotionPageHref({ isHomepage: false, slug: slugify(slug()) || "{slug}" })}</span>
+                  ลิงก์หน้าร้าน <span class="font-medium text-ink">{promotionPageHref({ isHomepage: false, slug: slugify(slug()) || "{slug}" })}</span>
                 </p>
               </Show>
               <Show when={isHomepage()}>
                 <p class="text-xs text-ink-gray sm:col-span-2">
-                  หน้านี้คือหน้าแรก — ลูกค้าเข้าถึงผ่าน <span class="font-medium text-ink">/</span> เสมอ ไม่ผ่าน /promotion/{"{slug}"} เหมือนหน้าอื่น (Slug ด้านบนใช้เพื่อความสมบูรณ์ของข้อมูลภายในเท่านั้น)
+                  หน้านี้คือหน้าแรกของเว็บไซต์ ลิงก์หน้าร้าน <span class="font-medium text-ink">/</span>
                 </p>
               </Show>
               <label class="flex flex-col gap-1.5">
@@ -350,11 +341,12 @@ export function LandingPageForm(props: {
             </div>
           </Section>
 
+          <Show when={!isHomepage()}>
           <Section title="แบนเนอร์หลัก">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <BannerUploader label="แบนเนอร์เดสก์ท็อป" device="desktop" value={bannerDesktop()} onChange={setBannerDesktop} />
-              <BannerUploader label="แบนเนอร์แท็บเล็ต" device="tablet" value={bannerTablet()} onChange={setBannerTablet} />
-              <BannerUploader label="แบนเนอร์มือถือ" device="mobile" value={bannerMobile()} onChange={setBannerMobile} />
+              <BannerUploader allowVideo label="แบนเนอร์เดสก์ท็อป" device="desktop" value={bannerDesktop()} onChange={(v) => setBannerDesktop(() => v)} />
+              <BannerUploader allowVideo label="แบนเนอร์แท็บเล็ต" device="tablet" value={bannerTablet()} onChange={(v) => setBannerTablet(() => v)} />
+              <BannerUploader allowVideo label="แบนเนอร์มือถือ" device="mobile" value={bannerMobile()} onChange={(v) => setBannerMobile(() => v)} />
             </div>
             <TextField
               label="วิดีโอ YouTube (แสดงแทนแบนเนอร์)"
@@ -364,9 +356,7 @@ export function LandingPageForm(props: {
               error={errors().videoUrl ?? (videoUrl().trim() && !isValidYoutubeUrl(videoUrl()) ? "ลิงก์ YouTube ไม่ถูกต้อง" : undefined)}
               disabled={saving()}
             />
-            <p class="text-xs text-ink-gray">
-              ใส่ลิงก์แล้วหน้าเว็บจะแสดงวิดีโอแทนแบนเนอร์ (แบนเนอร์ยังเก็บไว้ ลบลิงก์เพื่อกลับไปแสดงแบนเนอร์) — มีวิดีโอแล้วไม่ต้องอัปโหลดแบนเนอร์ก็เผยแพร่ได้ · ใช้กับหน้าที่ไม่มี Section เท่านั้น
-            </p>
+            <p class="text-xs text-ink-gray">ถ้าใส่ลิงก์ หน้าเว็บจะแสดงวิดีโอแทนแบนเนอร์ ใช้ได้เฉพาะหน้าที่ยังไม่มีส่วนเนื้อหา</p>
           </Section>
 
           <Section title="เนื้อหาหน้า">
@@ -388,8 +378,9 @@ export function LandingPageForm(props: {
 
           <Section title="เลือกสินค้า">
             <PromotionPageProductPicker selected={products()} onChange={setProducts} />
-            <p class="text-xs text-ink-gray">รายการสินค้านี้ใช้เมื่อยังไม่มีส่วนเนื้อหาด้านล่าง — เมื่อเพิ่มส่วนเนื้อหาแล้ว หน้าเว็บจะแสดงผลตามส่วนเนื้อหาแทน</p>
+            <p class="text-xs text-ink-gray">รายการสินค้านี้ใช้เมื่อยังไม่มีส่วนเนื้อหาด้านล่าง เมื่อเพิ่มส่วนเนื้อหาแล้ว หน้าเว็บจะแสดงผลตามส่วนเนื้อหาแทน</p>
           </Section>
+          </Show>
 
           <Show when={isHomepage()}>
             <Section title="โครงสร้างหน้าแรกบนหน้าร้าน">
@@ -397,9 +388,9 @@ export function LandingPageForm(props: {
             </Section>
           </Show>
 
-          <Section title="ส่วนประกอบของหน้า">
+          <Section title="ส่วนเนื้อหาของหน้า">
             <div class="flex flex-col gap-4">
-              <p class="text-sm text-ink-gray">ประกอบหน้าด้วยส่วนเนื้อหาสำเร็จรูปจาก Design System เดียวกับหน้าแรก — ไม่ใช่ Freeform Builder</p>
+              <p class="text-sm text-ink-gray">เพิ่มส่วนเนื้อหาแล้วจัดลำดับได้ตามต้องการ หน้าเว็บแสดงจากบนลงล่างตามลำดับนี้</p>
               <div class="flex flex-wrap gap-2">
                 <For each={ADD_SECTION_TYPE_OPTIONS}>
                   {(type) => (
@@ -412,7 +403,7 @@ export function LandingPageForm(props: {
 
               <Show
                 when={sections().length > 0}
-                fallback={<EmptyState icon={<LayersIcon />} title="ยังไม่มี Section" description="เพิ่ม Section เพื่อประกอบเนื้อหาของหน้านี้ (ไม่บังคับ)" class="bg-surface-gray/40" />}
+                fallback={<EmptyState icon={<LayersIcon />} title="ยังไม่มีส่วนเนื้อหา" description="เพิ่มส่วนเนื้อหาด้วยปุ่มด้านบน" class="bg-surface-gray/60" />}
               >
                 <div class="flex flex-col gap-3">
                   <For each={sections()}>
@@ -448,7 +439,7 @@ export function LandingPageForm(props: {
 
       <Show when={publishErrors().length > 0}>
         <div role="alert" class="rounded-card bg-danger-soft px-4 py-3 text-sm font-medium text-danger-strong">
-          <p class="mb-1">ไม่สามารถเผยแพร่ได้ กรุณาแก้ไขก่อน:</p>
+          <p class="mb-1">ยังเผยแพร่ไม่ได้ กรุณาแก้ไขรายการต่อไปนี้</p>
           <ul class="list-inside list-disc">
             {publishErrors().map((msg) => (
               <li>{msg}</li>
@@ -468,7 +459,7 @@ export function LandingPageForm(props: {
   const landingPagePreview = (
     <div class="flex flex-col gap-3 p-4 sm:p-5">
       <Button type="button" variant="outline" onClick={openFullPagePreview}>
-        <EyeIcon class="size-4" /> เปิดดูตัวอย่างเต็มหน้า (แท็บใหม่)
+        <EyeIcon class="size-4" /> ดูตัวอย่างเต็มหน้า
       </Button>
       {/* Storefront sync — a page `PromotionPageView` shows as a listing (flat, or one product section) previews as that listing, YouTube video included; everything else through the section renderer. */}
       <HomepageSectionsPreview
@@ -489,19 +480,19 @@ export function LandingPageForm(props: {
       />
       <Show when={isHomepage()}>
         <p class="text-xs text-ink-gray">
-          ตัวอย่างนี้แสดงเฉพาะส่วนที่แก้ไขได้ — บนหน้าร้านจะต่อด้วยส่วนคงที่:{" "}
+          ตัวอย่างนี้แสดงเฉพาะส่วนที่แก้ไขได้ บนหน้าร้านจะต่อด้วยส่วนคงที่ ได้แก่{" "}
           {HOMEPAGE_FIXED_SECTIONS.filter((f) => !f.editable)
             .map((f) => f.label)
-            .join(" → ")}
+            .join(", ")}
         </p>
       </Show>
       <Show when={startDate() && endDate()}>
         <p class="text-xs text-ink-gray">
-          {startDate()} {startTime()} — {endDate()} {endTime()}
+          ช่วงเวลาแสดง {formatMarketingDateTime(startDate(), startTime())} - {formatMarketingDateTime(endDate(), endTime())}
         </p>
       </Show>
       <Show when={startDate() && endDate() && !dateRangeValid()}>
-        <p class="text-xs text-system-red">ช่วงวันที่ไม่ถูกต้อง</p>
+        <p class="text-xs text-system-red">วันสิ้นสุดต้องอยู่หลังวันเริ่ม</p>
       </Show>
     </div>
   );
@@ -535,9 +526,9 @@ export function LandingPageForm(props: {
       <ConfirmDialog
         open={confirmDeleteSection() !== null}
         onOpenChange={(open) => !open && setConfirmDeleteSection(null)}
-        title="ลบ Section นี้หรือไม่?"
-        description={`ข้อมูลของ Section "${confirmDeleteSection()?.name ?? ""}" จะถูกนำออกจากหน้านี้`}
-        confirmLabel="ลบ"
+        title="ลบส่วนเนื้อหา?"
+        description={`คุณต้องการลบ "${confirmDeleteSection()?.name ?? ""}" ออกจากหน้านี้หรือไม่? มีผลเมื่อกดบันทึก`}
+        confirmLabel="ลบส่วนเนื้อหา"
         tone="danger"
         onConfirm={confirmDeleteSectionAction}
       />

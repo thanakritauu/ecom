@@ -6,8 +6,9 @@ import { Button } from "~/components/shared/Button";
 import starGold from "~/assets/icons/star-gold-4.svg";
 
 /**
- * Renders only when the product has curated review data — see products.ts
- * for why not every catalog item does. The list is the same `ReviewList`
+ * Always rendered: a product with no reviews yet gets the heading and the
+ * shared empty state (see products.ts for why not every catalog item has
+ * curated review data). The list is the same `ReviewList`
  * and the same combined reviews (`reviewsOfProduct`, never filtered by the
  * picked shade) as the Product Option Modal, so the two never show
  * different reviews or a different review layout.
@@ -28,10 +29,19 @@ export function ProductReviews(props: { product: Product }) {
   };
   const breakdown = () => props.product.ratingBreakdown;
   const total = () => breakdown()?.reduce((sum, n) => sum + n, 0) ?? 0;
+  const hasSummary = () => !!props.product.rating && !!breakdown() && reviews().length > 0;
 
   return (
-    <Show when={props.product.rating && breakdown() && props.product.reviews?.length}>
-      <section aria-labelledby="reviews-heading" class="flex flex-col items-center gap-5 sm:gap-6 lg:gap-8">
+    <section aria-labelledby="reviews-heading" class="flex flex-col items-center gap-5 sm:gap-6 lg:gap-8">
+      {/* No reviews yet: a plain heading over the shared empty state (ReviewList's fallback) instead of a summary of zeros. */}
+      <Show
+        when={hasSummary()}
+        fallback={
+          <h2 id="reviews-heading" class="scroll-mt-32 text-center text-2xl font-bold text-ink lg:text-3xl">
+            รีวิวสินค้า
+          </h2>
+        }
+      >
         {/* Rating summary — average on the left (always one line: the number at the page's heading size, 24 / 30px, + smaller gray "/ 5.0" on its
             baseline, stars and review count under it), distribution bars on the right, vertically centered.
             Side by side at every width — on a 375px phone the left column narrows (smaller number, 16px stars). */}
@@ -71,24 +81,24 @@ export function ProductReviews(props: { product: Product }) {
             </For>
           </div>
         </div>
+      </Show>
 
-        <div ref={listRef} class="flex w-full max-w-[600px] scroll-mt-32 flex-col gap-4">
-          <ReviewList reviews={visibleReviews()} onOpenMedia={(items, index, author) => setViewer({ items, index, author })} />
-          <div class="flex flex-wrap justify-center gap-3">
-            <Show when={remaining() > 0}>
-              <Button type="button" variant="outline" onClick={() => setShown((n) => n + REVIEW_PAGE_SIZE)}>
-                ดูรีวิวเพิ่มเติม ({remaining().toLocaleString("th-TH")})
-              </Button>
-            </Show>
-            <Show when={shown() > REVIEW_PAGE_SIZE && reviews().length > REVIEW_PAGE_SIZE}>
-              <button type="button" onClick={collapse} class="h-11 px-4 text-base font-medium text-ink-gray transition-colors hover:text-brand-pink">
-                ย่อรีวิว
-              </button>
-            </Show>
-          </div>
+      <div ref={listRef} class="flex w-full max-w-[600px] scroll-mt-32 flex-col gap-4">
+        <ReviewList reviews={visibleReviews()} onOpenMedia={(items, index, author) => setViewer({ items, index, author })} />
+        <div class="flex flex-wrap justify-center gap-3">
+          <Show when={remaining() > 0}>
+            <Button type="button" variant="outline" onClick={() => setShown((n) => n + REVIEW_PAGE_SIZE)}>
+              ดูรีวิวเพิ่มเติม ({remaining().toLocaleString("th-TH")})
+            </Button>
+          </Show>
+          <Show when={shown() > REVIEW_PAGE_SIZE && reviews().length > REVIEW_PAGE_SIZE}>
+            <button type="button" onClick={collapse} class="h-11 px-4 text-base font-medium text-ink-gray transition-colors hover:text-brand-pink">
+              ย่อรีวิว
+            </button>
+          </Show>
         </div>
-        <Show when={viewer()}>{(v) => <ReviewMediaViewer fixed state={v()} onChange={(index) => setViewer({ ...v(), index })} onClose={() => setViewer(null)} />}</Show>
-      </section>
-    </Show>
+      </div>
+      <Show when={viewer()}>{(v) => <ReviewMediaViewer fixed state={v()} onChange={(index) => setViewer({ ...v(), index })} onClose={() => setViewer(null)} />}</Show>
+    </section>
   );
 }

@@ -1,23 +1,45 @@
-import { createMemo, createSignal, Show } from "solid-js";
-import { useNavigate, useParams } from "@solidjs/router";
+import { createMemo, createSignal, For, Show, type JSX } from "solid-js";
+import { A, useNavigate, useParams } from "@solidjs/router";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
 import { Button } from "~/components/shared/Button";
+import { CouponCard } from "~/components/shared/CouponCard";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { MarketingRowActionsMenu } from "~/components/admin/marketing/MarketingRowActionsMenu";
-import { InventoryIcon } from "~/components/admin/icons";
+import { adminCouponTicket } from "~/components/admin/marketing/CouponQuickView";
+import { CouponTicketIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { MARKETING_STATUS_META, formatMarketingDate, formatCouponDiscount, formatMarketingDateShort, type MarketingStatus } from "~/lib/adminMarketing";
+import {
+  MARKETING_PHASE_META,
+  COUPON_DISCOUNT_TYPE_META,
+  formatCouponDiscount,
+  formatCouponLimit,
+  formatCouponMinSpend,
+  formatCouponUsage,
+  formatMarketingDateTime,
+  marketingPhase,
+} from "~/lib/adminMarketing";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
+import { useAdminOrders } from "~/lib/adminOrderStore";
+import { formatOrderDateLabel } from "~/lib/adminOrders";
 import { pushToast } from "~/lib/toast";
 
 export default function AdminCouponDetailPage() {
   const params = useParams<{ id: string }>();
   const store = useAdminMarketing().coupons;
+  const orderStore = useAdminOrders();
   const navigate = useNavigate();
   const coupon = createMemo(() => store.getById(params.id));
+  const usedIn = createMemo(() => {
+    const c = coupon();
+    if (!c) return [];
+    return orderStore
+      .orders()
+      .filter((o) => o.orderStatus !== "cancelled" && o.totals.couponCode === c.code)
+      .sort((a, b) => b.placedAt.localeCompare(a.placedAt));
+  });
 
   const [confirmDelete, setConfirmDelete] = createSignal(false);
   const [confirmToggle, setConfirmToggle] = createSignal(false);
@@ -27,19 +49,19 @@ export default function AdminCouponDetailPage() {
     const current = coupon();
     if (!current) return;
     const copy = await store.duplicate(current.id);
-    pushToast(`ทำสำเนาคูปอง "${current.code}" เรียบร้อยแล้ว`, "success");
+    pushToast(`ทำสำเนา "${current.code}" เรียบร้อยแล้ว`, "success");
     navigate(`/admin/marketing/coupons/${copy.id}/edit`);
   };
 
   const confirmToggleAction = async () => {
     const current = coupon();
     if (!current) return;
-    const next: MarketingStatus = current.status === "disabled" ? "active" : "disabled";
+    const turnOn = current.status === "disabled";
     setActionLoading(true);
-    await store.setStatus(current.id, next);
+    await store.setStatus(current.id, turnOn ? "active" : "disabled");
     setActionLoading(false);
     setConfirmToggle(false);
-    pushToast(next === "disabled" ? "ปิดใช้งานคูปองแล้ว" : "เปิดใช้งานคูปองแล้ว", "success");
+    pushToast(turnOn ? "เปิดใช้งานคูปองแล้ว" : "ปิดใช้งานคูปองแล้ว", "success");
   };
 
   const confirmDeleteAction = async () => {
@@ -49,7 +71,7 @@ export default function AdminCouponDetailPage() {
     await store.remove(current.id);
     setActionLoading(false);
     setConfirmDelete(false);
-    pushToast(`ลบคูปอง "${current.code}" เรียบร้อยแล้ว`, "error");
+    pushToast(`ลบ "${current.code}" เรียบร้อยแล้ว`, "error");
     navigate("/admin/marketing/coupons");
   };
 
@@ -58,27 +80,28 @@ export default function AdminCouponDetailPage() {
       when={coupon()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "คูปอง", href: "/admin/marketing/coupons" }]} />
-          <EmptyState icon={<InventoryIcon />} title="ไม่พบคูปองนี้" description="คูปองอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าคูปอง" onAction={() => navigate("/admin/marketing/coupons")} class="bg-surface-card shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "คูปอง", href: "/admin/marketing/coupons" }]} />
+          <EmptyState icon={<CouponTicketIcon />} title="ไม่พบคูปองนี้" description="คูปองอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าคูปอง" onAction={() => navigate("/admin/marketing/coupons")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
-      {(current) => {
-        const c = current;
+      {(c) => {
+        const phase = () => MARKETING_PHASE_META[marketingPhase(c())];
         return (
           <div class="flex flex-col gap-6">
-            <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "คูปอง", href: "/admin/marketing/coupons" }, { label: c().code }]} />
+            <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "คูปอง", href: "/admin/marketing/coupons" }, { label: c().code }]} />
             <PageHeader
               title={c().code}
-              description={c().description}
+              description={`${formatCouponDiscount(c())} ${formatCouponMinSpend(c())}`}
               actions={
                 <div class="flex items-center gap-2">
                   <Button variant="primary" href={`/admin/marketing/coupons/${c().id}/edit`}>
-                    แก้ไข
+                    แก้ไขคูปอง
                   </Button>
                   <MarketingRowActionsMenu
                     id={c().id}
                     name={c().code}
+                    entity="คูปอง"
                     basePath="/admin/marketing/coupons"
                     isDisabled={c().status === "disabled"}
                     hideView
@@ -93,49 +116,92 @@ export default function AdminCouponDetailPage() {
 
             <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div class="flex flex-col gap-6 lg:col-span-2">
-                <Section title="เงื่อนไขการใช้งาน">
-                  <Row label="ยอดซื้อขั้นต่ำ" value={c().minSpend ? formatAdminCurrency(c().minSpend!) : "ไม่มีขั้นต่ำ"} />
-                  <Row label="ส่วนลดสูงสุด" value={c().maxDiscount ? formatAdminCurrency(c().maxDiscount!) : "ไม่จำกัด"} />
-                  <Row label="จำนวนสิทธิ์ทั้งหมด" value={c().usageLimit ? c().usageLimit!.toLocaleString("th-TH") : "ไม่จำกัด"} />
-                  <Row label="จำกัดต่อลูกค้า" value={c().perCustomerLimit ? `${c().perCustomerLimit} ครั้ง` : "ไม่จำกัด"} />
+                <Section title="คูปองบนหน้าร้าน">
+                  <div class="max-w-[369px] px-1 pt-1">
+                    <CouponCard
+                      coupon={adminCouponTicket(c())}
+                      display
+                    />
+                  </div>
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="แสดงในหน้าแรก" value={c().showOnHome ? "แสดง" : "ไม่แสดง"} />
+                    <Row label="แสดงในหน้าชำระเงิน" value={c().showAtCheckout ? "แสดง" : "ไม่แสดง"} />
+                  </dl>
+                  <p class="text-xs text-ink-gray">ลูกค้ากรอกโค้ดนี้เองได้ที่หน้าชำระเงินเสมอเมื่อคูปองใช้งานอยู่</p>
                 </Section>
 
-                <Section title="การแสดงผลหน้าร้าน">
-                  <Row label="แสดงในหน้าแรก" value={c().showOnHome ? "แสดง" : "ไม่แสดง"} />
-                  <Row label="แสดงในหน้าชำระเงิน" value={c().showAtCheckout ? "แสดง" : "ไม่แสดง"} />
-                  <Row label="ข้อความวันหมดอายุบนคูปอง" value={`หมดอายุ ${formatMarketingDateShort(c().endDate)}`} />
-                  <Show when={c().discountType === "percentage"}>
-                    <p class="text-xs text-ink-gray">หน้าชำระเงินของร้านตอนนี้รองรับเฉพาะคูปองลดเป็นจำนวนเงิน (฿)</p>
+                <Section title={`คำสั่งซื้อที่ใช้คูปองนี้ (${usedIn().length.toLocaleString("th-TH")})`}>
+                  <Show when={usedIn().length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่มีคำสั่งซื้อที่ใช้คูปองนี้</p>}>
+                    <table class="w-full text-left text-sm">
+                      <thead>
+                        <tr class="border-b border-border text-xs uppercase text-ink-placeholder">
+                          <th class="py-2 pr-3 font-semibold">คำสั่งซื้อ</th>
+                          <th class="py-2 pr-3 font-semibold">ลูกค้า</th>
+                          <th class="py-2 pr-3 font-semibold">วันที่</th>
+                          <th class="py-2 text-right font-semibold">ส่วนลด</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <For each={usedIn().slice(0, 10)}>
+                          {(o) => (
+                            <tr class="border-b border-border last:border-0">
+                              <td class="py-2 pr-3">
+                                <A href={`/admin/orders/${o.id}`} class="font-medium text-brand-pink hover:underline">
+                                  {o.orderNumber}
+                                </A>
+                              </td>
+                              <td class="py-2 pr-3 text-ink">{o.customer.name}</td>
+                              <td class="whitespace-nowrap py-2 pr-3 text-ink-gray">{formatOrderDateLabel(o.placedAt)}</td>
+                              <td class="py-2 text-right font-medium text-ink">-{formatAdminCurrency(o.totals.couponDiscount)}</td>
+                            </tr>
+                          )}
+                        </For>
+                      </tbody>
+                    </table>
                   </Show>
                 </Section>
               </div>
 
               <div class="flex flex-col gap-6">
                 <Section title="สถานะ">
-                  <StatusBadge tone={MARKETING_STATUS_META[c().status].tone} class="w-fit">
-                    {MARKETING_STATUS_META[c().status].label}
+                  <StatusBadge tone={phase().tone} class="w-fit">
+                    {phase().label}
                   </StatusBadge>
+                  <p class="text-sm text-ink-gray">{c().status === "active" ? "เปิดใช้งานอยู่ ใช้ได้ตามช่วงเวลา" : "ปิดใช้งานอยู่ ลูกค้าใช้ไม่ได้"}</p>
                 </Section>
 
                 <Section title="ส่วนลด">
                   <p class="text-2xl font-bold text-ink">{formatCouponDiscount(c())}</p>
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="ประเภท" value={COUPON_DISCOUNT_TYPE_META[c().discountType].label} />
+                    <Show when={c().discountType === "percent"}>
+                      <Row label="ลดสูงสุด" value={c().maxDiscount ? formatAdminCurrency(c().maxDiscount!) : "ไม่จำกัด"} />
+                    </Show>
+                    <Row label="ยอดซื้อขั้นต่ำ" value={c().minSpend ? formatAdminCurrency(c().minSpend!) : "ไม่มีขั้นต่ำ"} />
+                  </dl>
+                </Section>
+
+                <Section title="จำกัดการใช้">
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="ใช้แล้ว" value={`${formatCouponUsage(usedIn().length, c().usageLimit)} ครั้ง`} />
+                    <Row label="จำกัดจำนวนครั้ง" value={formatCouponLimit(c().usageLimit)} />
+                    <Row label="จำกัดต่อลูกค้า" value={formatCouponLimit(c().perCustomerLimit)} />
+                  </dl>
                 </Section>
 
                 <Section title="ระยะเวลา">
-                  <Row label="เริ่ม" value={`${formatMarketingDate(c().startDate)} ${c().startTime}`} />
-                  <Row label="สิ้นสุด" value={`${formatMarketingDate(c().endDate)} ${c().endTime}`} />
-                </Section>
-
-                <Section title="การใช้งาน">
-                  <p class="text-2xl font-bold text-ink">
-                    {c().usageCount.toLocaleString("th-TH")}
-                    {c().usageLimit ? <span class="text-base font-normal text-ink-gray"> / {c().usageLimit!.toLocaleString("th-TH")}</span> : ""}
-                  </p>
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="เริ่ม" value={formatMarketingDateTime(c().startDate, c().startTime)} />
+                    <Row label="สิ้นสุด" value={formatMarketingDateTime(c().endDate, c().endTime)} />
+                  </dl>
                 </Section>
 
                 <Section title="ข้อมูลเพิ่มเติม">
-                  <Row label="สร้างเมื่อ" value={c().createdAt} />
-                  <Row label="แก้ไขล่าสุด" value={c().updatedAt} />
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="ID" value={c().id} />
+                    <Row label="สร้างเมื่อ" value={c().createdAt} />
+                    <Row label="แก้ไขล่าสุด" value={c().updatedAt} />
+                  </dl>
                 </Section>
               </div>
             </div>
@@ -144,7 +210,7 @@ export default function AdminCouponDetailPage() {
               open={confirmToggle()}
               onOpenChange={setConfirmToggle}
               title={c().status === "disabled" ? "เปิดใช้งานคูปองนี้?" : "ปิดใช้งานคูปองนี้?"}
-              description={c().code}
+              description={c().status === "disabled" ? `"${c().code}" จะใช้ได้ที่หน้าร้านตามวันที่ที่ตั้งไว้` : `"${c().code}" จะถูกซ่อนจากร้านค้าและใช้ไม่ได้ทันที`}
               confirmLabel={c().status === "disabled" ? "เปิดใช้งาน" : "ปิดใช้งาน"}
               loading={actionLoading()}
               onConfirm={confirmToggleAction}
@@ -155,7 +221,7 @@ export default function AdminCouponDetailPage() {
               onOpenChange={setConfirmDelete}
               title="ลบคูปอง?"
               description={`คุณต้องการลบ "${c().code}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-              confirmLabel="ลบ"
+              confirmLabel="ลบคูปอง"
               tone="danger"
               loading={actionLoading()}
               onConfirm={confirmDeleteAction}
@@ -167,7 +233,7 @@ export default function AdminCouponDetailPage() {
   );
 }
 
-function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
+function Section(props: { title: string; children: JSX.Element }) {
   return (
     <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
       <h2 class="text-base font-semibold text-ink">{props.title}</h2>
@@ -178,7 +244,7 @@ function Section(props: { title: string; children: import("solid-js").JSX.Elemen
 
 function Row(props: { label: string; value: string }) {
   return (
-    <div class="flex items-center justify-between gap-3 text-sm">
+    <div class="flex items-center justify-between gap-3">
       <dt class="text-ink-gray">{props.label}</dt>
       <dd class="font-medium text-ink">{props.value}</dd>
     </div>

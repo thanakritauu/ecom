@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js";
 import { CheckBadge } from "~/components/shared/icons";
+import { CloseXIcon } from "~/components/admin/icons";
 import { buildTrackingTimeline, formatEventTime } from "~/lib/orderTracking";
 import { CANCELLED_BY_LABEL, type AdminOrder } from "~/lib/adminOrders";
 
@@ -55,8 +56,8 @@ export function OrderTimeline(props: { order: Pick<AdminOrder, "shipping" | "ord
                   <p class="text-xs text-ink">{step.description}</p>
                 </Show>
                 <p class="text-xs text-ink-gray">
-                  {step.timestamp ? formatEventTime(step.timestamp) : "—"}
-                  <Show when={step.location}> · {step.location}</Show>
+                  {step.timestamp ? formatEventTime(step.timestamp) : "-"}
+                  <Show when={step.location}> {step.location}</Show>
                 </p>
               </div>
             </li>
@@ -65,8 +66,8 @@ export function OrderTimeline(props: { order: Pick<AdminOrder, "shipping" | "ord
       </For>
       <Show when={cancelled()}>
         <li class="flex gap-3">
-          <span class="flex size-6 shrink-0 items-center justify-center rounded-pill bg-surface-gray text-xs font-bold text-ink-gray" aria-hidden="true">
-            ×
+          <span class="flex size-6 shrink-0 items-center justify-center rounded-pill bg-surface-gray text-ink-gray" aria-hidden="true">
+            <CloseXIcon class="size-3.5" />
           </span>
           <div class="flex min-w-0 flex-col gap-0.5">
             <p class="text-sm font-medium text-ink">ยกเลิกคำสั่งซื้อ</p>
@@ -75,7 +76,7 @@ export function OrderTimeline(props: { order: Pick<AdminOrder, "shipping" | "ord
                 <>
                   <p class="text-xs text-ink">
                     {CANCELLED_BY_LABEL[c().by]}
-                    {c().reason ? ` · ${c().reason}` : ""}
+                    {c().reason ? ` ${c().reason}` : ""}
                   </p>
                   <p class="text-xs text-ink-gray">{formatEventTime(c().at)}</p>
                 </>

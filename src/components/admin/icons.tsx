@@ -353,16 +353,6 @@ export function CategoryGridIcon(props: { class?: string }) {
   );
 }
 
-export function BrandBadgeIcon(props: { class?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <circle cx="12" cy="9.5" r="6" />
-      <path d="m8.3 14.5-1.6 6 5.3-2.6 5.3 2.6-1.6-6" stroke-linejoin="round" />
-      <path d="m9.3 9.5 1.8 1.8 3.6-3.6" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  );
-}
-
 export function StackBoxesIcon(props: { class?: string }) {
   return (
     <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">

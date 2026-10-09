@@ -19,7 +19,7 @@ export default function AdminLandingPageEditPage() {
     const current = page();
     if (!current) return;
     await store.update(current.id, values);
-    pushToast("บันทึกการเปลี่ยนแปลงแล้ว", "success");
+    pushToast("บันทึกหน้าแคมเปญเรียบร้อยแล้ว", "success");
     navigate(`/admin/promotion-pages/${current.id}`);
   };
 
@@ -28,8 +28,8 @@ export default function AdminLandingPageEditPage() {
       when={page()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "หน้าโปรโมชั่น", href: "/admin/promotion-pages" }]} />
-          <EmptyState icon={<ContentIcon />} title="ไม่พบหน้าโปรโมชั่นนี้" description="หน้านี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/promotion-pages")} class="bg-surface-card shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "หน้าแคมเปญ", href: "/admin/promotion-pages" }]} />
+          <EmptyState icon={<ContentIcon />} title="ไม่พบหน้าแคมเปญนี้" description="หน้านี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปรายการหน้าแคมเปญ" onAction={() => navigate("/admin/promotion-pages")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -38,13 +38,12 @@ export default function AdminLandingPageEditPage() {
           <Breadcrumb
             items={[
               { label: "แดชบอร์ด", href: "/admin" },
-              { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
-              { label: "หน้าโปรโมชั่น", href: "/admin/promotion-pages" },
-              { label: current().name },
+              { label: "หน้าแคมเปญ", href: "/admin/promotion-pages" },
+              { label: current().name, href: `/admin/promotion-pages/${current().id}` },
               { label: "แก้ไข" },
             ]}
           />
-          <PageHeader title={`แก้ไขหน้าโปรโมชั่น: ${current().name}`} description="แก้ไขข้อมูลหน้าและบันทึกการเปลี่ยนแปลง" />
+          <PageHeader title={`แก้ไข: ${current().name}`} description="แก้ไขข้อมูลหน้าแคมเปญและบันทึกการเปลี่ยนแปลง" />
           <LandingPageForm
             mode="edit"
             initial={current()}

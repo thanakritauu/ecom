@@ -3,11 +3,9 @@ import { isServer } from "solid-js/web";
 import { TIKTOK_REVIEW_CLIPS } from "./tiktokReviews";
 
 /**
- * "คลิปรีวิว TikTok" — Admin's mock management of the clips the PDP and
- * Home's #CharmissReviews rail show (storefront: `tiktokReviews.ts` +
- * `TikTokReviewRail`). Seeded from the storefront's own clip list; the
- * storefront still reads `tiktokReviews.ts` directly, so edits here are a
- * mock of what a CMS-backed list would look like, not yet live.
+ * "คลิปรีวิว TikTok": the clips the PDP and Home's #CharmissReviews rail show.
+ * Seeded from `tiktokReviews.ts`; the storefront reads this store's key live
+ * (`storefrontTiktokClips.ts`: active clips, in this order).
  *
  * Kept as a module-level store (no Provider) so it works without a new
  * provider in `routes/admin.tsx` — same localStorage + seed-version pattern
@@ -47,9 +45,12 @@ export function parseTiktokUrl(url: string): { author: string; videoId: string }
 
 export const tiktokClipUrl = (clip: Pick<AdminTiktokClip, "author" | "videoId">) => `https://www.tiktok.com/@${clip.author}/video/${clip.videoId}`;
 
-const STORAGE_KEY = "charmiss:admin:tiktok-clips";
+export const TIKTOK_CLIPS_STORAGE_KEY = "charmiss:admin:tiktok-clips";
+const STORAGE_KEY = TIKTOK_CLIPS_STORAGE_KEY;
 const SEED_VERSION_KEY = "charmiss:admin:tiktok-clips:seed-version";
 const SEED_VERSION = 1;
+/** Fired after every save so the storefront rails in the same tab refresh (other tabs get `storage`). */
+export const TIKTOK_CLIPS_CHANGED_EVENT = "charmiss:tiktok-clips-changed";
 
 function normalizeClip(c: Partial<AdminTiktokClip> & { id: string }): AdminTiktokClip {
   return {
@@ -63,20 +64,27 @@ function normalizeClip(c: Partial<AdminTiktokClip> & { id: string }): AdminTikto
   };
 }
 
+/** The saved clip list, or the seed when nothing (or an older version) is stored. Shared by Admin and the storefront reader. */
+export function readStoredTiktokClips(): AdminTiktokClip[] {
+  if (isServer) return buildMockTiktokClips();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const version = Number(localStorage.getItem(SEED_VERSION_KEY) ?? 0);
+    // No migrations yet — a stored copy from an unknown/older version just falls back to the seed.
+    if (raw && version === SEED_VERSION) return (JSON.parse(raw) as AdminTiktokClip[]).map(normalizeClip);
+  } catch {
+    // storage unavailable — seed.
+  }
+  return buildMockTiktokClips();
+}
+
 const [clips, setClips] = createSignal<AdminTiktokClip[]>(buildMockTiktokClips());
 let hydrated = false;
 
 function hydrate() {
   if (hydrated || isServer) return;
   hydrated = true;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const version = Number(localStorage.getItem(SEED_VERSION_KEY) ?? 0);
-    // No migrations yet — a stored copy from an unknown/older version just falls back to the seed.
-    if (raw && version === SEED_VERSION) setClips((JSON.parse(raw) as AdminTiktokClip[]).map(normalizeClip));
-  } catch {
-    // storage unavailable — stays in-memory for this tab.
-  }
+  setClips(readStoredTiktokClips());
 }
 
 function mutate(fn: (list: AdminTiktokClip[]) => AdminTiktokClip[]) {
@@ -87,6 +95,7 @@ function mutate(fn: (list: AdminTiktokClip[]) => AdminTiktokClip[]) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     localStorage.setItem(SEED_VERSION_KEY, String(SEED_VERSION));
   } catch {}
+  window.dispatchEvent(new Event(TIKTOK_CLIPS_CHANGED_EVENT));
 }
 
 const simulateDelay = () => new Promise<void>((resolve) => setTimeout(resolve, 350 + Math.random() * 250));

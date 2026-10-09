@@ -5,9 +5,11 @@ import {
   type NavigationItemFormValues,
   buildMockNavigationItems,
   normalizeNavigationItem,
+  NAV_LATE_SEEDS_KEY,
+  withLateNavigationSeeds,
 } from "./adminNavigation";
 
-const STORAGE_KEY = "charmiss:admin:navigation:v6"; // v6 = Figma 132:2352 menu + คุชชั่น / ลิป / แก้ม / ตาและคิ้ว / ดูแลผิว / กันแดดและบอดี้แคร์
+const STORAGE_KEY = "charmiss:admin:navigation:v7"; // v7 = menu artwork back as image icons (v6 = Figma 132:2352 menu + categories)
 const TODAY_LABEL = "20 ก.ย. 2569";
 let nextId = 1000;
 
@@ -31,7 +33,15 @@ export function AdminNavigationProvider(props: { children: JSX.Element }) {
   onMount(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setItems((JSON.parse(raw) as NavigationItem[]).map(normalizeNavigationItem));
+      if (raw) {
+        let list = (JSON.parse(raw) as NavigationItem[]).map(normalizeNavigationItem);
+        if (!localStorage.getItem(NAV_LATE_SEEDS_KEY)) {
+          list = withLateNavigationSeeds(list);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+        }
+        setItems(list);
+      }
+      localStorage.setItem(NAV_LATE_SEEDS_KEY, "1");
     } catch {
       // storage unavailable — stays in-memory for this tab.
     }

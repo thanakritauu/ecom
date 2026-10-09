@@ -1,6 +1,8 @@
 import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
-import type { ResolvedCartLine, CheckoutTotals, Coupon, GiftPromotionState } from "~/lib/cartSelectors";
-import { AVAILABLE_COUPONS, MOCK_COIN_BALANCE, SHIPPING_FEE } from "~/lib/cartSelectors";
+import type { ResolvedCartLine, CheckoutTotals, Coupon } from "~/lib/cartSelectors";
+import type { GiftLine } from "~/lib/promotionEngine";
+import { MOCK_COIN_BALANCE, SHIPPING_FEE } from "~/lib/cartSelectors";
+import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
 import { formatTHB } from "../shared/PriceDisplay";
 import { ChevronIcon } from "../shared/ChevronIcon";
 import { CheckIcon } from "../shared/icons";
@@ -27,12 +29,14 @@ const CoinRedeemSheet = clientOnly(() => import("./CoinRedeemSheet").then((m) =>
  */
 export function CheckoutOrderSummary(props: {
   lines: ResolvedCartLine[];
-  /** Unlocked free gift only — shown as a ฿0 line, never added to the totals. */
-  gift?: GiftPromotionState;
+  /** Unlocked free gifts (one per unlocked tier of every active gift promo), shown as ฿0 lines, never added to the totals. */
+  gifts: GiftLine[];
   totals: CheckoutTotals;
   coupon: Coupon | undefined;
   onApplyCoupon: (coupon: Coupon) => void;
   onRemoveCoupon: () => void;
+  /** How many of this shopper's own orders used a code (coupon "จำกัดต่อลูกค้า"); 0 for a guest. */
+  couponUsesByShopper?: (code: string) => number;
   coinsRedeemed: number;
   /** Most coins this order can take (`maxRedeemableCoins`). */
   maxCoins: number;
@@ -41,10 +45,12 @@ export function CheckoutOrderSummary(props: {
   // Collapsed by default — the item list opens from the header.
   const [itemsExpanded, setItemsExpanded] = createSignal(false);
   const [couponPickerOpen, setCouponPickerOpen] = createSignal(false);
+  // Coupons come from Admin (Marketing > คูปอง): the listed ones, plus every switched-on code for typing in.
+  const storeCoupons = useStorefrontPromotions();
   const [coinSheetOpen, setCoinSheetOpen] = createSignal(false);
 
   return (
-    <div class="flex w-full flex-col rounded-card border border-surface-gray bg-white lg:sticky lg:top-6 lg:w-[390px] lg:shrink-0">
+    <div class="flex w-full flex-col rounded-card border border-surface-gray bg-white lg:sticky lg:top-6 lg:w-[clamp(390px,44%,560px)] lg:shrink-0">
       {/* The left column's wrapper (checkout.tsx) uses `p-4 lg:p-6` directly
           on its own outer edge with no border; this card's outer edge has a
           1px border instead, and this button (not the card root) is what
@@ -77,31 +83,32 @@ export function CheckoutOrderSummary(props: {
                 />
                 <div class="min-w-0 flex-1">
                   <p class="line-clamp-1 text-sm font-medium leading-[1.75] text-ink">{product.name}</p>
-                  <p class="text-xs text-ink-gray">
-                    {variant ? `ตัวเลือกสินค้า ${variant.label} · ` : ""}x{line.qty}
+                  <p class="flex flex-wrap gap-x-2 text-xs text-ink-gray">
+                    {variant && <span>ตัวเลือกสินค้า {variant.label}</span>}
+                    <span>x{line.qty}</span>
                   </p>
                 </div>
                 <p class="shrink-0 text-base font-semibold text-ink">{formatTHB(unitPrice * line.qty)}</p>
               </li>
             )}
           </For>
-          <Show when={props.gift}>
+          <For each={props.gifts}>
             {(g) => (
               <li class="flex list-none items-center gap-2">
                 <img
-                  src={g().product.image}
-                  alt={g().product.name}
+                  src={g.product.image}
+                  alt={g.product.name}
                   loading="lazy"
                   class="size-[66px] shrink-0 rounded-media border border-surface-gray object-cover"
                 />
                 <div class="min-w-0 flex-1">
-                  <p class="line-clamp-1 text-sm font-medium leading-[1.75] text-ink">{g().product.name}</p>
-                  <p class="text-xs text-ink-gray">ของแถมฟรี · x{g().qty}</p>
+                  <p class="line-clamp-1 text-sm font-medium leading-[1.75] text-ink">{g.product.name}</p>
+                  <p class="text-xs text-ink-gray">ของแถมฟรี x{g.qty}</p>
                 </div>
                 <p class="shrink-0 text-base font-semibold text-system-red">ฟรี</p>
               </li>
             )}
-          </Show>
+          </For>
         </ul>
       </Show>
 
@@ -135,8 +142,10 @@ export function CheckoutOrderSummary(props: {
         <CouponPickerSheet
           open={couponPickerOpen()}
           onOpenChange={setCouponPickerOpen}
-          coupons={AVAILABLE_COUPONS}
+          coupons={storeCoupons.checkoutCoupons()}
+          codeCoupons={storeCoupons.codeCoupons()}
           subtotal={props.totals.subtotal}
+          usedByShopper={props.couponUsesByShopper}
           applied={props.coupon}
           onApply={props.onApplyCoupon}
           onRemove={props.onRemoveCoupon}

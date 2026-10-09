@@ -59,7 +59,7 @@ export function ImportExcelDialog<T>(props: {
       const parsed = rows.map((raw, i) => props.parseRow(raw, i + 2)); // +2: header row is 1, data starts at 2 like a real spreadsheet
       setResults(parsed);
     } catch {
-      pushToast("ไม่สามารถอ่านไฟล์นี้ได้ กรุณาตรวจสอบรูปแบบไฟล์ (.xlsx, .xls, .csv)", "error");
+      pushToast("อ่านไฟล์นี้ไม่ได้ กรุณาใช้ไฟล์ .xlsx, .xls หรือ .csv", "error");
       reset();
     } finally {
       setParsing(false);
@@ -75,7 +75,7 @@ export function ImportExcelDialog<T>(props: {
     setImporting(true);
     try {
       await props.onConfirm(importable.map((r) => r.data));
-      pushToast(`นำเข้าข้อมูลสำเร็จ ${importable.length} รายการ`, "success");
+      pushToast(`นำเข้า ${importable.length.toLocaleString("th-TH")} รายการเรียบร้อยแล้ว`, "success");
       reset();
       props.onOpenChange(false);
     } catch {
@@ -98,7 +98,7 @@ export function ImportExcelDialog<T>(props: {
           <Dialog.Content class="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-card bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
             <div class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
               <Dialog.Title class="text-lg font-semibold text-ink">{props.title}</Dialog.Title>
-              <Dialog.CloseButton aria-label="ปิด" class="flex size-9 items-center justify-center rounded-pill text-ink-gray hover:bg-surface-pink">
+              <Dialog.CloseButton aria-label="ปิด" class="flex size-11 items-center justify-center rounded-pill text-ink-gray hover:bg-surface-pink">
                 <CloseXIcon />
               </Dialog.CloseButton>
             </div>
@@ -114,8 +114,8 @@ export function ImportExcelDialog<T>(props: {
                   <div class="flex flex-col items-center gap-4 rounded-card border-2 border-dashed border-border px-6 py-10 text-center">
                     <UploadIcon class="size-8 text-ink-placeholder" />
                     <div>
-                      <p class="text-sm font-medium text-ink">เลือกไฟล์ Excel หรือ CSV เพื่อนำเข้าข้อมูล</p>
-                      <p class="mt-1 text-xs text-ink-gray">รองรับ .xlsx, .xls, .csv</p>
+                      <p class="text-sm font-medium text-ink">เลือกไฟล์ Excel หรือ CSV ที่ต้องการนำเข้า</p>
+                      <p class="mt-1 text-xs text-ink-gray">รองรับไฟล์ .xlsx, .xls และ .csv ดาวน์โหลดเทมเพลตเพื่อดูหัวคอลัมน์ที่ต้องใช้</p>
                     </div>
                     <div class="flex flex-wrap items-center justify-center gap-3">
                       <Button type="button" variant="primary" loading={parsing()} onClick={() => fileInputRef?.click()}>
@@ -139,9 +139,9 @@ export function ImportExcelDialog<T>(props: {
                 }
               >
                 <div class="flex flex-col gap-4">
-                  <div class="flex flex-wrap items-center justify-between gap-2 rounded-card bg-surface-gray/40 px-4 py-3 text-sm">
-                    <span class="font-medium text-ink">นำเข้าจากไฟล์ "{fileName()}" — {results().length} รายการ</span>
-                    <button type="button" onClick={reset} class="text-brand-pink underline">
+                  <div class="flex flex-wrap items-center justify-between gap-2 rounded-card bg-surface-gray/60 px-4 py-3 text-sm">
+                    <span class="font-medium text-ink">ไฟล์ "{fileName()}" มี {results().length} รายการ</span>
+                    <button type="button" onClick={reset} class="min-h-11 font-medium text-brand-pink hover:underline">
                       เลือกไฟล์ใหม่
                     </button>
                   </div>
@@ -158,21 +158,21 @@ export function ImportExcelDialog<T>(props: {
                       <WarningTriangleIcon class="size-4 shrink-0 text-system-yellow" />
                       <div>
                         <p class="text-sm font-semibold text-ink">{warningCount()}</p>
-                        <p class="text-xs text-ink-gray">คำเตือน</p>
+                        <p class="text-xs text-ink-gray">นำเข้าได้ แต่ควรตรวจสอบ</p>
                       </div>
                     </div>
                     <div class="flex items-center gap-2 rounded-card bg-danger-soft px-3 py-2.5">
                       <ErrorCircleIcon class="size-4 shrink-0 text-system-red" />
                       <div>
                         <p class="text-sm font-semibold text-ink">{errorCount()}</p>
-                        <p class="text-xs text-ink-gray">ผิดพลาด (ข้ามรายการนี้)</p>
+                        <p class="text-xs text-ink-gray">ข้อมูลไม่ถูกต้อง จะไม่นำเข้า</p>
                       </div>
                     </div>
                   </div>
 
                   <div class="max-h-80 overflow-auto rounded-card border border-border">
                     <table class="w-full min-w-[480px] text-left text-sm">
-                      <thead class="sticky top-0 bg-surface-gray/60 text-xs uppercase tracking-wide text-ink-gray">
+                      <thead class="sticky top-0 bg-surface-card text-xs font-semibold uppercase tracking-wide text-ink-placeholder">
                         <tr>
                           <th class="px-3 py-2">แถว</th>
                           <For each={props.templateColumns}>{(c) => <th class="px-3 py-2">{c.label}</th>}</For>
@@ -187,7 +187,7 @@ export function ImportExcelDialog<T>(props: {
                               <For each={props.templateColumns}>{(c) => <td class="px-3 py-2 text-ink">{r.preview[c.key] ?? ""}</td>}</For>
                               <td class="px-3 py-2">
                                 <StatusBadge tone={r.status === "ready" ? "success" : r.status === "warning" ? "warning" : "danger"}>
-                                  {r.status === "ready" ? "พร้อมนำเข้า" : r.status === "warning" ? "คำเตือน" : "ผิดพลาด"}
+                                  {r.status === "ready" ? "พร้อมนำเข้า" : r.status === "warning" ? "ควรตรวจสอบ" : "ไม่นำเข้า"}
                                 </StatusBadge>
                                 <Show when={r.messages.length > 0}>
                                   <p class="mt-1 text-xs text-ink-gray">{r.messages.join(", ")}</p>
@@ -209,7 +209,7 @@ export function ImportExcelDialog<T>(props: {
                   ยกเลิก
                 </Button>
                 <Button type="button" variant="primary" loading={importing()} disabled={readyCount() + warningCount() === 0} onClick={confirmImport}>
-                  ยืนยันนำเข้า ({readyCount() + warningCount()} รายการ)
+                  นำเข้า {readyCount() + warningCount()} รายการ
                 </Button>
               </div>
             </Show>

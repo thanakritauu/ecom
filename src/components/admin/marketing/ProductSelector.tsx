@@ -78,7 +78,7 @@ export function ProductSelector(props: { selectedIds: string[]; onChange: (ids: 
                   <div class="min-w-0 flex-1">
                     <p class="truncate text-sm font-medium text-ink">{product.name}</p>
                     <p class="text-xs text-ink-gray">
-                      {product.sku} · {formatAdminCurrency(product.price)}
+                      {product.sku} ราคา {formatAdminCurrency(product.price)}
                     </p>
                   </div>
                 </button>

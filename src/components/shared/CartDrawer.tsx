@@ -2,14 +2,17 @@ import { Dialog } from "@kobalte/core/dialog";
 import { For, Show, createMemo } from "solid-js";
 import { A } from "@solidjs/router";
 import { useCart } from "~/lib/cart";
-import { resolveCartLines, computeCartTotal, resolveGiftPromotion } from "~/lib/cartSelectors";
+import { resolveCartLines, computeCartTotal } from "~/lib/cartSelectors";
+import { useCartPromotions } from "~/lib/storefrontPromotions";
+import { rearmPromoCelebrations } from "~/lib/promoCelebration";
 import { useProductCatalog } from "~/lib/productCatalog";
 import { Button } from "./Button";
 import { formatTHB } from "./PriceDisplay";
 import { CartItemRow } from "./CartItemRow";
-import { GiftPromotionBanner, rearmGiftCelebration } from "./GiftPromotionBanner";
+import { CartPromoBanners, promoCelebrationTargets } from "./CartPromoBanners";
 import { GiftItemRow } from "./GiftItemRow";
-import { CloseMark } from "./icons";
+import { CartIcon, CloseMark } from "./icons";
+import { EmptyState } from "./EmptyState";
 
 /**
  * Figma node 153:19197. Global — opened from the Header cart icon, from
@@ -23,9 +26,9 @@ export function CartDrawer() {
   const catalog = useProductCatalog();
   const resolvedLines = createMemo(() => resolveCartLines(cart.lines(), catalog.products()));
   const total = createMemo(() => computeCartTotal(resolvedLines()));
-  const gift = createMemo(() => resolveGiftPromotion(total(), catalog.products()));
-  // Always mounted (Header renders the drawer on every page), so it sees every unlocked → locked drop.
-  rearmGiftCelebration(() => gift()?.unlocked);
+  const promos = useCartPromotions(resolvedLines);
+  // Always mounted (Header renders the drawer on every page), so it sees every unlocked to locked drop.
+  rearmPromoCelebrations(() => promoCelebrationTargets(promos.freeShipping(), promos.gifts()));
 
   return (
     <Dialog open={cart.drawerOpen()} onOpenChange={(open) => (open ? cart.openDrawer() : cart.closeDrawer())}>
@@ -45,7 +48,7 @@ export function CartDrawer() {
 
             <Show when={resolvedLines().length > 0} fallback={<EmptyCart />}>
               <div class="flex flex-1 flex-col gap-4 overflow-y-auto p-6">
-                <Show when={gift()}>{(g) => <GiftPromotionBanner gift={g()} total={total()} />}</Show>
+                <CartPromoBanners freeShipping={promos.freeShipping()} gifts={promos.gifts()} />
 
                 <ul class="flex flex-col gap-4">
                   <For each={resolvedLines()}>
@@ -58,14 +61,14 @@ export function CartDrawer() {
                       </>
                     )}
                   </For>
-                  <Show when={gift()?.unlocked && gift()}>
+                  <For each={promos.giftLines()}>
                     {(g) => (
                       <>
                         <li class="h-px shrink-0 list-none bg-surface-gray" aria-hidden="true" />
-                        <GiftItemRow gift={g()} variant="drawer" />
+                        <GiftItemRow gift={g} variant="drawer" />
                       </>
                     )}
-                  </Show>
+                  </For>
                 </ul>
               </div>
 
@@ -108,11 +111,13 @@ export function CartDrawer() {
 function EmptyCart() {
   const cart = useCart();
   return (
-    <div class="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-      <p class="text-lg text-ink-gray">ตะกร้าของคุณยังว่างอยู่</p>
-      <Button type="button" variant="primary" onClick={() => cart.closeDrawer()}>
-        เลือกซื้อสินค้า
-      </Button>
+    <div class="flex flex-1 flex-col items-center justify-center p-6">
+      <EmptyState
+        icon={CartIcon}
+        title="ตะกร้าของคุณยังว่างอยู่"
+        description="เลือกสินค้าที่ชอบแล้วเพิ่มลงตะกร้าได้เลย"
+        action={{ label: "เลือกซื้อสินค้า", onClick: () => cart.closeDrawer() }}
+      />
     </div>
   );
 }

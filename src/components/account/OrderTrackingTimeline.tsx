@@ -51,7 +51,7 @@ export function OrderTrackingTimeline(props: { shipment: Shipment; /** Order tit
           {/* Same circular DHL mark as Checkout's delivery card. */}
           <img src={dhlLogo} alt="" class="size-10 shrink-0 sm:size-12" />
           <div class="min-w-0">
-            <p class="text-sm font-semibold text-ink">{carrier().name} · {props.shipment.method}</p>
+            <p class="text-sm font-semibold text-ink">{carrier().name} {props.shipment.method}</p>
             <Show
               when={props.shipment.trackingNumber}
               fallback={<p class="text-xs text-ink-gray">จะได้รับเลขพัสดุเมื่อส่งมอบสินค้าให้ {carrier().name}</p>}
@@ -126,7 +126,7 @@ function TimelineRow(props: { entry: TimelineEntry; isFirst: boolean; isLast: bo
         </Show>
         <p class="text-xs text-ink-gray">
           {props.entry.timestamp ? formatEventTime(props.entry.timestamp) : ""}
-          <Show when={props.isFirst && props.entry.location}> · {props.entry.location}</Show>
+          <Show when={props.isFirst && props.entry.location}> {props.entry.location}</Show>
         </p>
       </div>
     </li>

@@ -65,7 +65,7 @@ export const PAYMENT_WINDOW_HOURS = 24;
  */
 export const ORDERS_MOCK_NOW_ISO = "2026-10-02T15:00:00+07:00";
 
-export const AUTO_CANCEL_REASON = "ยกเลิกอัตโนมัติ — ไม่ได้ชำระเงินภายในเวลาที่กำหนด";
+export const AUTO_CANCEL_REASON = "ยกเลิกอัตโนมัติ เนื่องจากไม่ได้ชำระเงินภายในเวลาที่กำหนด";
 
 /** ISO (Bangkok "+07:00" form, like the seeds) — when a pending order's payment window closes. */
 export function getPaymentDeadline(order: Pick<Order, "placedAt">): string {

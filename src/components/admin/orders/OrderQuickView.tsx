@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import { A } from "@solidjs/router";
+import { Button } from "~/components/shared/Button";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { ReceiptIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
@@ -7,9 +7,10 @@ import {
   ORDER_STATUS_META,
   PAYMENT_STATUS_META,
   FULFILLMENT_STATUS_META,
-  RETURN_STATUS_META,
   CANCELLED_BY_LABEL,
   paymentFailureLabel,
+  formatOrderDateTimeLabel,
+  orderPaymentDeadline,
   type AdminOrder,
 } from "~/lib/adminOrders";
 import { OrderTimeline } from "./OrderTimeline";
@@ -25,7 +26,7 @@ export function OrderQuickView(props: { order: AdminOrder }) {
   const o = () => props.order;
 
   return (
-    <div class="flex flex-col gap-5">
+    <div class="flex flex-col gap-4">
       <div>
         <p class="text-base font-semibold text-ink">{o().orderNumber}</p>
         <p class="text-sm text-ink-gray">{o().createdAt}</p>
@@ -44,7 +45,7 @@ export function OrderQuickView(props: { order: AdminOrder }) {
           <span class="text-ink-gray">ชำระผ่าน</span>
           <span class="truncate font-medium text-ink">
             {o().payment.method}
-            {o().payment.detail ? ` · ${o().payment.detail}` : ""}
+            {o().payment.detail ? ` ${o().payment.detail}` : ""}
           </span>
         </div>
         <Show when={o().shipping.trackingNumber}>
@@ -62,11 +63,11 @@ export function OrderQuickView(props: { order: AdminOrder }) {
         <StatusBadge tone={ORDER_STATUS_META[o().orderStatus].tone}>{ORDER_STATUS_META[o().orderStatus].label}</StatusBadge>
         <StatusBadge tone={PAYMENT_STATUS_META[o().paymentStatus].tone}>{PAYMENT_STATUS_META[o().paymentStatus].label}</StatusBadge>
         <StatusBadge tone={FULFILLMENT_STATUS_META[o().fulfillmentStatus].tone}>{FULFILLMENT_STATUS_META[o().fulfillmentStatus].label}</StatusBadge>
-        <Show when={o().returnRequest}>
-          {(r) => <StatusBadge tone={RETURN_STATUS_META[r().status].tone}>{RETURN_STATUS_META[r().status].label}</StatusBadge>}
-        </Show>
       </div>
 
+      <Show when={o().orderStatus === "pending_payment"}>
+        <p class="rounded-card bg-warning-soft px-3 py-2 text-sm text-ink">ต้องชำระภายใน {formatOrderDateTimeLabel(orderPaymentDeadline(o()))} ไม่เช่นนั้นระบบจะยกเลิกอัตโนมัติ</p>
+      </Show>
       <Show when={o().payment.failureReason}>
         {(reason) => <p class="rounded-card bg-danger-soft px-3 py-2 text-sm text-danger-strong">ชำระเงินครั้งล่าสุดไม่สำเร็จ: {paymentFailureLabel(reason())}</p>}
       </Show>
@@ -74,18 +75,17 @@ export function OrderQuickView(props: { order: AdminOrder }) {
         {(c) => (
           <p class="rounded-card bg-surface-gray px-3 py-2 text-sm text-ink-gray">
             {CANCELLED_BY_LABEL[c().by]}
-            {c().reason ? ` · ${c().reason}` : ""}
+            {c().reason ? ` ${c().reason}` : ""}
           </p>
         )}
       </Show>
 
-      {/* Order + Receipt Phase §25 — "ดูใบเสร็จ" alongside the drawer's own "ดูรายละเอียดทั้งหมด" footer button. */}
-      <A
-        href={`/admin/orders/${o().id}/receipt`}
-        class="flex min-h-11 items-center justify-center gap-2 rounded-pill border border-border text-sm font-medium text-ink transition-colors duration-150 hover:bg-surface-pink"
-      >
-        <ReceiptIcon class="size-4" /> ดูใบเสร็จ
-      </A>
+      {/* "ดูใบเสร็จ" alongside the drawer's own "ดูรายละเอียดทั้งหมด" footer button; only a paid order has a receipt. */}
+      <Show when={o().paymentStatus === "paid"}>
+        <Button variant="outline" href={`/admin/orders/${o().id}/receipt`}>
+          <ReceiptIcon class="size-4" /> ดูใบเสร็จ
+        </Button>
+      </Show>
 
       <div class="flex flex-col gap-3">
         <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">สินค้าในคำสั่งซื้อ</p>
@@ -96,8 +96,8 @@ export function OrderQuickView(props: { order: AdminOrder }) {
               <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-medium text-ink">{item.name}</p>
                 <p class="text-xs text-ink-gray">
-                  {item.variantLabel ? `${item.variantLabel} · ` : ""}
-                  {formatAdminCurrency(item.unitPrice)} × {item.qty}
+                  {item.variantLabel ? `${item.variantLabel} ` : ""}
+                  {formatAdminCurrency(item.unitPrice)} x {item.qty}
                 </p>
                 <Show when={item.isFreeGift}>
                   <StatusBadge tone="success" class="mt-1">ของแถมฟรี</StatusBadge>
@@ -110,7 +110,7 @@ export function OrderQuickView(props: { order: AdminOrder }) {
       </div>
 
       <div class="flex flex-col gap-2">
-        <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">ติดตามการจัดส่ง (DHL)</p>
+        <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">ติดตามการจัดส่ง DHL</p>
         <OrderTimeline order={o()} />
       </div>
     </div>

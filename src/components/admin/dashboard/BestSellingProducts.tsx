@@ -1,8 +1,6 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { getBestSellingProducts, formatAdminCurrency } from "~/lib/adminDashboard";
-import { EmptyState } from "~/components/admin/EmptyState";
-import { CatalogIcon } from "~/components/admin/icons";
 import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
 import { ProductQuickView } from "~/components/admin/products/ProductQuickView";
 import { useAdminProducts } from "~/lib/adminProductStore";
@@ -24,7 +22,7 @@ export function BestSellingProducts() {
   return (
     <Show
       when={bestSellingProducts().length > 0}
-      fallback={<EmptyState icon={<CatalogIcon />} title="ยังไม่มีข้อมูลสินค้าขายดี" />}
+      fallback={<p class="text-sm text-ink-gray">ยังไม่มีข้อมูลสินค้าขายดี</p>}
     >
       <ul class="flex flex-col gap-1">
         <For each={bestSellingProducts()}>
@@ -33,15 +31,15 @@ export function BestSellingProducts() {
               <button
                 type="button"
                 onClick={() => setQuickViewId(entry.product.id)}
-                class="font-normal flex w-full items-center gap-3 rounded-card px-2 py-2.5 text-left transition-colors duration-150 hover:bg-surface-pink/40"
+                class="font-normal flex w-full items-center gap-3 rounded-card px-2 py-2.5 text-left transition-colors duration-150 lg:hover:bg-surface-pink/40"
               >
-                <img src={entry.product.image} alt="" class="size-12 shrink-0 rounded-media object-cover" />
+                <img src={entry.product.image} alt="" class="size-11 shrink-0 rounded-media object-cover" />
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-medium text-ink">{entry.product.name}</p>
                   <p class="truncate text-xs text-ink-gray">{entry.sku}</p>
                 </div>
                 <div class="shrink-0 text-right">
-                  <p class="text-sm font-semibold text-ink">{entry.sold.toLocaleString("th-TH")} sold</p>
+                  <p class="text-sm font-semibold text-ink">ขายแล้ว {entry.sold.toLocaleString("th-TH")} ชิ้น</p>
                   <p class="text-xs text-ink-gray">{formatAdminCurrency(entry.revenue)}</p>
                 </div>
               </button>
@@ -55,7 +53,11 @@ export function BestSellingProducts() {
         onOpenChange={(open) => !open && setQuickViewId(null)}
         title={quickViewProduct()?.name ?? ""}
         subtitle={quickViewProduct()?.sku}
-        onViewFull={() => navigate(`/admin/products/${quickViewId()}`)}
+        onViewFull={() => {
+          const id = quickViewId();
+          setQuickViewId(null);
+          if (id) navigate(`/admin/products/${id}`);
+        }}
       >
         <Show when={quickViewProduct()}>{(p) => <ProductQuickView product={p()} />}</Show>
       </QuickViewDrawer>

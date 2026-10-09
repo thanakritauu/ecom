@@ -3,6 +3,7 @@ import { A, useLocation } from "@solidjs/router";
 import { adminNavGroups, type AdminNavGroup } from "~/lib/adminNav";
 import { useAdminUI } from "~/lib/adminUI";
 import { ChevronRightIcon } from "./icons";
+import { ChevronIcon } from "~/components/shared/ChevronIcon";
 import logo from "~/assets/icons/logo-charmiss-pink.svg";
 
 /** Only a group with more than one item has anything worth hiding — Dashboard/Sales/Customers stay a single plain link with no header to click. */
@@ -126,7 +127,8 @@ export function AdminSidebar() {
                     }`}
                   >
                     <span>{group.label}</span>
-                    <ChevronRightIcon class={`size-3 shrink-0 transition-transform duration-150 ${isGroupExpanded(group) ? "rotate-90" : ""}`} />
+                    {/* V when collapsed, ^ when open (shared FAQ chevron). */}
+                    <ChevronIcon direction={isGroupExpanded(group) ? "up" : "down"} class="size-4 shrink-0" />
                   </button>
                 </Show>
               </Show>

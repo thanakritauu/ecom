@@ -3,15 +3,12 @@ import { Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { MoreIcon } from "~/components/admin/icons";
 
-/**
- * Same Kobalte dropdown shell as `PromotionPageRowActionsMenu`, but simpler:
- * Collections don't have Promotion Pages' Publish/Unpublish toggle (enabling
- * or disabling a Collection is just editing its Status field in the form),
- * so this menu only ever offers ดูรายละเอียด / แก้ไข / ลบ.
- */
+/** Same Kobalte dropdown shell as `LandingPageRowActionsMenu`: view, edit, on/off, delete. */
 export function CollectionRowActionsMenu(props: {
   id: string;
   name: string;
+  isActive: boolean;
+  onToggleStatus: () => void;
   onDelete: () => void;
   hideView?: boolean;
   triggerClass?: string;
@@ -42,14 +39,20 @@ export function CollectionRowActionsMenu(props: {
             onSelect={() => navigate(`${basePath}/${props.id}/edit`)}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
           >
-            แก้ไข
+            แก้ไขกลุ่มสินค้าพิเศษ
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={props.onToggleStatus}
+            class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
+          >
+            {props.isActive ? "ปิดใช้งาน" : "เปิดใช้งาน"}
           </DropdownMenu.Item>
           <DropdownMenu.Separator class="my-1 h-px bg-border" />
           <DropdownMenu.Item
             onSelect={props.onDelete}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm font-medium text-system-red outline-none transition-colors duration-150 hover:bg-danger-soft data-[highlighted]:bg-danger-soft"
           >
-            ลบ
+            ลบกลุ่มสินค้าพิเศษ
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

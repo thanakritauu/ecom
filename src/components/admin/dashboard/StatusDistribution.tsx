@@ -24,17 +24,17 @@ export function StatusDistribution() {
   const fulfillmentDist = createMemo(() => toDonutSlices(getFulfillmentStatusDistribution(orders.orders())));
 
   return (
-    <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <For each={[
         { title: "สถานะคำสั่งซื้อ", data: orderDist },
         { title: "สถานะการชำระเงิน", data: paymentDist },
         { title: "สถานะการจัดส่ง", data: fulfillmentDist },
       ]}>
         {(panel) => (
-          <div class="rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-            <h3 class="mb-4 text-sm font-semibold text-ink">{panel.title}</h3>
+          <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+            <h2 class="text-base font-semibold text-ink">{panel.title}</h2>
             <DonutChart slices={panel.data()} />
-          </div>
+          </section>
         )}
       </For>
     </div>

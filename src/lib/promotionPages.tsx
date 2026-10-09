@@ -21,7 +21,7 @@ const SEED_VERSION_KEY = "charmiss:admin:content:promotionPages:seedVersion";
  * never opened Admin — so `charmiss:admin:content:promotionPages` was never
  * written — resolved every `/promotion/:slug` link to "not found", even for
  * the seeded pages Admin itself would show as existing. Same fix already
- * applied to `collectionContent.tsx`/`campaignContent.tsx`/
+ * applied to `collectionContent.tsx`/
  * `categoryContent.tsx`: fall back to the same normalized baseline
  * `adminContentStore.tsx` starts from, used as BOTH the empty-storage
  * fallback AND the signal's initial value, so SSR and the client's first

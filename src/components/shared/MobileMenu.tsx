@@ -97,7 +97,7 @@ function MobileAccountRow(props: { onNavigate: () => void }) {
             onClick={() => {
               auth.logout();
               props.onNavigate();
-              pushToast("ออกจากระบบสำเร็จ", "success", "แล้วพบกันใหม่นะ 👋");
+              pushToast("ออกจากระบบสำเร็จ", "success", "แล้วพบกันใหม่นะ");
             }}
           >
             ออกจากระบบ

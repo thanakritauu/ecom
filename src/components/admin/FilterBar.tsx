@@ -26,7 +26,8 @@ export function FilterBar(props: {
   search: { value: string; onInput: (value: string) => void; placeholder?: string };
   filters: SelectFilterConfig[];
   onFilterChange: (id: string, value: string) => void;
-  sort: { value: string; options: SelectFilterOption[]; onChange: (value: string) => void };
+  /** Optional: lists with a single natural order can leave sort out. */
+  sort?: { value: string; options: SelectFilterOption[]; onChange: (value: string) => void };
 }) {
   const [mobileOpen, setMobileOpen] = createSignal(false);
   const [draft, setDraft] = createSignal<Record<string, string>>({});
@@ -78,10 +79,14 @@ export function FilterBar(props: {
           </button>
         </Show>
 
-        <NativeSelect
-          config={{ id: "sort", label: "เรียงตาม", value: props.sort.value, options: props.sort.options }}
-          onChange={props.sort.onChange}
-        />
+        <Show when={props.sort}>
+          {(sort) => (
+            <NativeSelect
+              config={{ id: "sort", label: "เรียงตาม", value: sort().value, options: sort().options }}
+              onChange={sort().onChange}
+            />
+          )}
+        </Show>
       </div>
 
       <Dialog open={mobileOpen()} onOpenChange={setMobileOpen}>
@@ -107,7 +112,7 @@ export function FilterBar(props: {
                         <select
                           value={draft()[filter.id] ?? filter.value}
                           onChange={(e) => setDraft((d) => ({ ...d, [filter.id]: e.currentTarget.value }))}
-                          class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card py-3 pl-3 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
+                          class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
                         >
                           <For each={filter.options}>{(opt) => <option value={opt.value}>{opt.label}</option>}</For>
                         </select>

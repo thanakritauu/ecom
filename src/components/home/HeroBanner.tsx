@@ -16,6 +16,9 @@ import heroAcneBalanceDesktop from "~/assets/images/hero/hero-banner-3-desktop.w
 import heroAcneBalanceTablet from "~/assets/images/hero/hero-banner-3-tablet.webp";
 import heroAcneBalanceMobile from "~/assets/images/hero/hero-banner-3-mobile.webp";
 import { BANNER_ASPECT_CLASS } from "~/components/shared/ResponsiveBanner";
+import { ResponsiveMedia } from "~/components/shared/MediaView";
+import { heroAssetDesktopMedia } from "~/lib/pageSections";
+import type { ResponsiveMediaSet } from "~/lib/media";
 
 /**
  * Each Hero frame is one flattened photo with its headline baked in — per
@@ -46,7 +49,7 @@ const heroSlides = [
         src={heroBanner1Desktop}
         tabletSrc={heroBanner1Tablet}
         mobileSrc={heroBanner1Mobile}
-        alt="Charmiss Charming Iconic Glow Cushion SPF50+ PA++++ — ผิวน้ำกลิ้ง โกลว์เรียกแสง คุชชั่นผิวฉ่ำ สูตรใหม่"
+        alt="Charmiss Charming Iconic Glow Cushion SPF50+ PA++++ ผิวน้ำกลิ้ง โกลว์เรียกแสง คุชชั่นผิวฉ่ำ สูตรใหม่"
         loading="eager"
         objectFit="contain"
         class={HERO_ASPECT_CLASS}
@@ -61,7 +64,7 @@ const heroSlides = [
         src={heroJuicyCheekDesktop}
         tabletSrc={heroJuicyCheekTablet}
         mobileSrc={heroJuicyCheekMobile}
-        alt="Charmiss Juicy Cheek Cushion Blush SPF15 PA+++ — แท็บซ้ำ ไม่กินรองพื้น #คุชชั่นบลัชไอคอล"
+        alt="Charmiss Juicy Cheek Cushion Blush SPF15 PA+++ แท็บซ้ำ ไม่กินรองพื้น #คุชชั่นบลัชไอคอล"
         loading="lazy"
         objectFit="contain"
         class={HERO_ASPECT_CLASS}
@@ -76,7 +79,7 @@ const heroSlides = [
         src={heroAcneBalanceDesktop}
         tabletSrc={heroAcneBalanceTablet}
         mobileSrc={heroAcneBalanceMobile}
-        alt="Charmiss Acne Balance Toner Pad — แพดจบสิว กู้ผิวไบรท์ #โทนเนอร์แพดชาร์มิส"
+        alt="Charmiss Acne Balance Toner Pad แพดจบสิว กู้ผิวไบรท์ #โทนเนอร์แพดชาร์มิส"
         loading="lazy"
         objectFit="contain"
         class={HERO_ASPECT_CLASS}
@@ -105,48 +108,19 @@ export function AdminHeroSlide(props: { section: HomepageSection; asset?: HeroAs
   const href = () => resolveHomepageDestinationHref(props.section.cta.destination, lookups);
   const Heading = () => (props.headingLevel === "h1" ? "h1" : "h2");
   const alt = () => props.section.title || props.section.name;
+  /** An image/video asset's three crops (each image or video), or the section's single banner set when it has no assets. */
+  const heroMedia = (): ResponsiveMediaSet =>
+    props.asset
+      ? { desktop: heroAssetDesktopMedia(props.asset), tablet: props.asset.tabletSource ?? "", mobile: props.asset.mobileSource ?? "" }
+      : props.section.banners;
 
   return (
     <div class="relative">
       <Show
-        when={props.asset}
-        fallback={
-          <Artwork
-            kind="image"
-            src={props.section.banners.desktop || props.section.banners.tablet || props.section.banners.mobile}
-            tabletSrc={props.section.banners.tablet || undefined}
-            mobileSrc={props.section.banners.mobile || undefined}
-            alt={alt()}
-            objectFit="contain"
-            class={HERO_ASPECT_CLASS}
-          />
-        }
+        when={props.asset?.type === "youtube" ? props.asset : undefined}
+        fallback={<ResponsiveMedia media={heroMedia()} alt={alt()} objectFit="contain" class={HERO_ASPECT_CLASS} audioButtonClass="right-1 top-1" />}
       >
-        {(asset) => (
-          <Show
-            when={asset().type === "youtube"}
-            fallback={
-              <Show
-                when={asset().type === "video"}
-                fallback={
-                  <Artwork
-                    kind="image"
-                    src={asset().source}
-                    tabletSrc={asset().tabletSource || undefined}
-                    mobileSrc={asset().mobileSource || undefined}
-                    alt={alt()}
-                    objectFit="contain"
-                    class={HERO_ASPECT_CLASS}
-                  />
-                }
-              >
-                <Artwork kind="video" src={asset().source} poster="" fallbackImage={props.section.banners.desktop || ""} alt={alt()} objectFit="contain" class={HERO_ASPECT_CLASS} />
-              </Show>
-            }
-          >
-            <Artwork kind="youtube" src={getYoutubeEmbedUrl(asset().source) ?? ""} alt={alt()} objectFit="contain" class={HERO_ASPECT_CLASS} />
-          </Show>
-        )}
+        {(asset) => <Artwork kind="youtube" src={getYoutubeEmbedUrl(asset().source) ?? ""} alt={alt()} objectFit="contain" class={HERO_ASPECT_CLASS} />}
       </Show>
       <Show when={props.section.eyebrow || props.section.title || props.section.description || (href() && props.section.cta.label)}>
         <div class="absolute inset-x-0 bottom-0 flex flex-col items-start gap-2 bg-gradient-to-t from-ink/60 to-transparent p-4 text-white sm:p-8">

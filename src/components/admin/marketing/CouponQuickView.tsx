@@ -1,71 +1,77 @@
-import { Show } from "solid-js";
 import { StatusBadge } from "~/components/admin/StatusBadge";
-import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { MARKETING_STATUS_META, formatMarketingDate, formatCouponDiscount, formatCouponPlacement, type Coupon } from "~/lib/adminMarketing";
+import { CouponCard, type Coupon as TicketCoupon } from "~/components/shared/CouponCard";
+import {
+  MARKETING_PHASE_META,
+  COUPON_DISCOUNT_TYPE_META,
+  formatCouponAmount,
+  formatCouponCap,
+  formatCouponDiscount,
+  formatCouponLimit,
+  formatCouponMinSpend,
+  formatCouponUsage,
+  formatCouponPlacement,
+  formatMarketingDateShort,
+  formatMarketingDateTime,
+  marketingPhase,
+  type Coupon,
+} from "~/lib/adminMarketing";
 
-/** Phase 07 #21 — Coupon Quick View, same Right Drawer pattern as every other Marketing entity. */
-export function CouponQuickView(props: { coupon: Coupon }) {
+/** An Admin coupon as the storefront ticket draws it (Quick View, detail page). */
+export function adminCouponTicket(c: Coupon): TicketCoupon {
+  return {
+    id: c.id,
+    amountLabel: formatCouponAmount(c),
+    capLabel: formatCouponCap(c),
+    image: c.image,
+    minSpendLabel: formatCouponMinSpend(c),
+    expiryLabel: `หมดอายุ ${formatMarketingDateShort(c.endDate)}`,
+  };
+}
+
+/** Coupon Quick View, Products' Quick View layout with the storefront ticket as its picture. */
+export function CouponQuickView(props: { coupon: Coupon; usageCount: number }) {
   const c = () => props.coupon;
+  const phase = () => MARKETING_PHASE_META[marketingPhase(c())];
 
   return (
-    <div class="flex flex-col gap-5">
+    <div class="flex flex-col gap-4">
+      <div class="px-1 pt-1">
+        <CouponCard
+          coupon={adminCouponTicket(c())}
+          display
+        />
+      </div>
+
       <div>
-        <p class="text-base font-mono font-semibold text-ink">{c().code}</p>
-        <p class="text-sm text-ink-gray">{c().description}</p>
+        <p class="text-base font-semibold text-ink">{c().code}</p>
+        <p class="mt-1 text-xl font-bold text-ink">{formatCouponDiscount(c())}</p>
+        <p class="text-sm text-ink-gray">{formatCouponMinSpend(c())}</p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
-        <StatusBadge tone={MARKETING_STATUS_META[c().status].tone}>{MARKETING_STATUS_META[c().status].label}</StatusBadge>
+        <StatusBadge tone={phase().tone}>{phase().label}</StatusBadge>
       </div>
 
-      <div class="flex flex-col gap-1.5 rounded-card bg-surface-gray/60 p-3 text-sm">
-        <div class="flex items-center justify-between">
-          <span class="text-ink-gray">ส่วนลด</span>
-          <span class="font-semibold text-ink">{formatCouponDiscount(c())}</span>
-        </div>
-        <Show when={c().minSpend}>
-          <div class="flex items-center justify-between">
-            <span class="text-ink-gray">ยอดซื้อขั้นต่ำ</span>
-            <span class="font-medium text-ink">{formatAdminCurrency(c().minSpend!)}</span>
-          </div>
-        </Show>
-        <Show when={c().maxDiscount}>
-          <div class="flex items-center justify-between">
-            <span class="text-ink-gray">ส่วนลดสูงสุด</span>
-            <span class="font-medium text-ink">{formatAdminCurrency(c().maxDiscount!)}</span>
-          </div>
-        </Show>
-        <div class="flex items-center justify-between">
-          <span class="text-ink-gray">การใช้งาน</span>
-          <span class="font-medium text-ink">
-            {c().usageCount.toLocaleString("th-TH")}
-            {c().usageLimit ? ` / ${c().usageLimit!.toLocaleString("th-TH")}` : ""}
-          </span>
-        </div>
-        <Show when={c().perCustomerLimit}>
-          <div class="flex items-center justify-between">
-            <span class="text-ink-gray">จำกัดต่อลูกค้า</span>
-            <span class="font-medium text-ink">{c().perCustomerLimit} ครั้ง</span>
-          </div>
-        </Show>
-        <div class="flex items-center justify-between">
-          <span class="text-ink-gray">แสดงที่หน้าร้าน</span>
-          <span class="font-medium text-ink">{formatCouponPlacement(c())}</span>
-        </div>
-        <div class="flex items-center justify-between">
-          <span class="text-ink-gray">เริ่ม</span>
-          <span class="font-medium text-ink">{formatMarketingDate(c().startDate)} {c().startTime}</span>
-        </div>
-        <div class="flex items-center justify-between">
-          <span class="text-ink-gray">สิ้นสุด</span>
-          <span class="font-medium text-ink">{formatMarketingDate(c().endDate)} {c().endTime}</span>
-        </div>
+      <div class="grid grid-cols-2 gap-3 rounded-card bg-surface-gray/60 p-3 text-sm">
+        <Field label="แสดงที่" value={formatCouponPlacement(c())} />
+        <Field label="ประเภทส่วนลด" value={COUPON_DISCOUNT_TYPE_META[c().discountType].label} />
+        <Field label="ใช้แล้ว" value={`${formatCouponUsage(props.usageCount, c().usageLimit)} ครั้ง`} />
+        <Field label="จำกัดจำนวนครั้ง" value={formatCouponLimit(c().usageLimit)} />
+        <Field label="จำกัดต่อลูกค้า" value={formatCouponLimit(c().perCustomerLimit)} />
+        <Field label="เริ่ม" value={formatMarketingDateTime(c().startDate, c().startTime)} />
+        <Field label="สิ้นสุด" value={formatMarketingDateTime(c().endDate, c().endTime)} />
       </div>
 
-      <div class="flex items-center justify-between text-xs text-ink-placeholder">
-        <span>สร้างเมื่อ {c().createdAt}</span>
-        <span>แก้ไขล่าสุด {c().updatedAt}</span>
-      </div>
+      <p class="text-xs text-ink-placeholder">แก้ไขล่าสุด {c().updatedAt}</p>
+    </div>
+  );
+}
+
+function Field(props: { label: string; value: string }) {
+  return (
+    <div>
+      <p class="text-xs text-ink-placeholder">{props.label}</p>
+      <p class="font-medium text-ink">{props.value}</p>
     </div>
   );
 }

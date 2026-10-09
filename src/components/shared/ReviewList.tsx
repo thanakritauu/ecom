@@ -3,7 +3,8 @@ import { ChevronIcon } from "~/components/shared/ChevronIcon";
 import type { Review } from "~/lib/types";
 import { reviewMedia, type ReviewMedia } from "~/lib/productReviews";
 import starGold from "~/assets/icons/star-gold-4.svg";
-import { CloseMark } from "./icons";
+import { CloseMark, StarIcon } from "./icons";
+import { EmptyState } from "./EmptyState";
 
 /**
  * The one review UI — shared by the Product Option Modal and the Product
@@ -23,12 +24,12 @@ export function ReviewList(props: {
     <Show
       when={props.reviews.length > 0}
       fallback={
-        <div class="flex flex-col items-center gap-2 px-2 py-10 text-center">
-          <span class="flex size-12 items-center justify-center rounded-pill bg-surface-gray text-xl text-ink-gray" aria-hidden="true">
-            ★
-          </span>
-          <p class="text-sm font-medium text-ink">{props.optionLabel ? `ยังไม่มีรีวิวสำหรับ “${props.optionLabel}”` : "ยังไม่มีรีวิวสำหรับสินค้านี้"}</p>
-        </div>
+        <EmptyState
+          size="compact"
+          icon={StarIcon}
+          title={props.optionLabel ? `ยังไม่มีรีวิวสำหรับ "${props.optionLabel}"` : "ยังไม่มีรีวิวสำหรับสินค้านี้"}
+          description="เป็นคนแรกที่รีวิว หลังได้รับสินค้า"
+        />
       }
     >
       <div class="flex flex-col gap-3 pt-1">
@@ -44,9 +45,9 @@ export function ReviewList(props: {
                   </span>
                   <div class="flex min-w-0 flex-1 flex-col">
                     <span class="truncate text-sm font-medium text-ink">{maskName(review.name)}</span>
-                    <span class="text-xs text-ink-gray">
-                      {review.variantLabel ? `ตัวเลือก: ${review.variantLabel} · ` : ""}
-                      {review.date}
+                    <span class="flex flex-wrap gap-x-2 text-xs text-ink-gray">
+                      {review.variantLabel && <span>ตัวเลือก: {review.variantLabel}</span>}
+                      <span>{review.date}</span>
                     </span>
                   </div>
                   <div class="flex shrink-0 items-center gap-0.5 pt-0.5" role="img" aria-label={`ให้คะแนน ${review.rating} จาก 5`}>
@@ -123,8 +124,11 @@ export function ReviewMediaViewer(props: {
       }}
     >
       <div class="flex shrink-0 items-center justify-between gap-3 px-4 py-3">
-        <span class="text-sm">
-          {props.state.author} · {props.state.index + 1} / {count()}
+        <span class="flex gap-x-2 text-sm">
+          <span>{props.state.author}</span>
+          <span>
+            {props.state.index + 1} / {count()}
+          </span>
         </span>
         <button ref={closeRef} type="button" onClick={props.onClose} class="group flex size-11 items-center justify-center">
           <CloseMark />

@@ -2,12 +2,10 @@ import type { ReceiptData } from "~/lib/receiptResolver";
 import { formatOrderAddress } from "~/lib/adminOrders";
 
 /**
- * Admin-local version of receiptResolver.ts's `buildReceiptHtmlDocument` /
- * `downloadReceiptHtml` (that shared file is read-only for the Orders
- * module): same self-contained printable HTML, plus what the storefront
- * order now carries — coupon and Charmiss Coin as separate lines, the
- * free-gift line, payment detail/reference and the optional
- * ที่อยู่ออกใบเสร็จรับเงิน. Still built only from `ReceiptData`.
+ * The downloadable receipt: a self-contained printable HTML file built only
+ * from `ReceiptData` — coupon and Charmiss Coin as separate lines, the
+ * free-gift line, payment detail/reference and the ที่อยู่ออกใบกำกับภาษี
+ * (billing address, or the shipping address when none was given).
  */
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -15,7 +13,7 @@ function escapeHtml(value: string): string {
 
 export function buildOrderReceiptHtml(data: ReceiptData, formatCurrency: (n: number) => string): string {
   const { order, totals, payment } = data;
-  const billTo = order.billingAddress;
+  const billTo = data.billing;
   const itemRows = data.items
     .map(
       (item) => `
@@ -51,7 +49,7 @@ export function buildOrderReceiptHtml(data: ReceiptData, formatCurrency: (n: num
 </head>
 <body>
   <h1>CHARMISS</h1>
-  <p class="muted">ใบเสร็จรับเงิน / Receipt</p>
+  <p class="muted">ใบเสร็จรับเงิน</p>
   <div class="row">
     <div>
       <div><strong>เลขที่ใบเสร็จ:</strong> ${escapeHtml(data.receiptNumber)}</div>
@@ -66,12 +64,8 @@ export function buildOrderReceiptHtml(data: ReceiptData, formatCurrency: (n: num
   </div>
   <div class="row">
     <div>
-      <div><strong>ที่อยู่ออกใบเสร็จรับเงิน</strong></div>
-      ${
-        billTo
-          ? `<div>${escapeHtml(billTo.recipientName)}</div><div>${escapeHtml(billTo.phone)}</div><div>${escapeHtml(formatOrderAddress(billTo))}</div>`
-          : `<div class="muted">ออกในชื่อลูกค้า</div>`
-      }
+      <div><strong>ที่อยู่ออกใบกำกับภาษี</strong></div>
+      <div>${escapeHtml(billTo.recipientName)}</div><div>${escapeHtml(billTo.phone)}</div><div>${escapeHtml(formatOrderAddress(billTo))}</div>
     </div>
     <div>
       <div><strong>ที่อยู่จัดส่ง</strong></div>
@@ -92,7 +86,7 @@ export function buildOrderReceiptHtml(data: ReceiptData, formatCurrency: (n: num
   </div>
   <div class="row">
     <div>
-      <div><strong>ช่องทางชำระเงิน:</strong> ${escapeHtml(payment.method)}${payment.detail ? ` (${escapeHtml(payment.detail)})` : ""}</div>
+      <div><strong>ช่องทางชำระเงิน:</strong> ${escapeHtml(payment.method)}${payment.detail ? ` ${escapeHtml(payment.detail)}` : ""}</div>
       ${payment.transactionId ? `<div class="muted">เลขอ้างอิง ${escapeHtml(payment.transactionId)}</div>` : ""}
     </div>
   </div>

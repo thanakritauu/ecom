@@ -76,7 +76,7 @@ function PayOrder(props: { order: Order; onPaid: (methodLabel: string) => Promis
   return (
     <Show
       when={!paid()}
-      fallback={<Notice success title="ชำระเงินสำเร็จ" body={`คำสั่งซื้อ ${props.order.id} · ${formatTHB(props.order.total)} — เรากำลังเตรียมการจัดส่งให้คุณ`} href={props.detailHref} cta="ดูรายละเอียดคำสั่งซื้อ" />}
+      fallback={<Notice success title="ชำระเงินสำเร็จ" body={`คำสั่งซื้อ ${props.order.id} ยอด ${formatTHB(props.order.total)} เรากำลังเตรียมจัดส่งสินค้าให้คุณ`} href={props.detailHref} cta="ดูรายละเอียดคำสั่งซื้อ" />}
     >
       <Show
         when={props.order.status === "pending_payment"}

@@ -36,6 +36,8 @@ function resolveOne(item: NavigationItem, lookups: NavigationLookups): { href: s
       return { href: "/", available: true };
     case "product_listing":
       return { href: "/products", available: true };
+    case "coupon_page":
+      return { href: "/coupons", available: true };
     case "external":
       return { href: item.externalUrl || "", available: !!item.externalUrl?.trim() };
     case "promotion_page": {

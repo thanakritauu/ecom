@@ -4,7 +4,7 @@ import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { COLLECTION_STATUS_META, type ProductCollection } from "~/lib/adminCollections";
 
-/** Mirrors `PromotionPageQuickView`'s general shape but simpler — no schedule/banner/discount fields, just name, status, description and a product preview list. */
+/** Mirrors `PromotionPageQuickView`'s general shape but simpler — just name, status and a product preview list. */
 export function CollectionQuickView(props: { collection: ProductCollection }) {
   const c = () => props.collection;
   const productStore = useAdminProducts();
@@ -15,7 +15,7 @@ export function CollectionQuickView(props: { collection: ProductCollection }) {
       .filter((x) => x !== undefined);
 
   return (
-    <div class="flex flex-col gap-5">
+    <div class="flex flex-col gap-4">
       <div>
         <p class="text-base font-semibold text-ink">{c().name}</p>
         <p class="text-sm text-ink-gray">{c().id}</p>
@@ -25,22 +25,13 @@ export function CollectionQuickView(props: { collection: ProductCollection }) {
         <StatusBadge tone={COLLECTION_STATUS_META[c().status].tone}>{COLLECTION_STATUS_META[c().status].label}</StatusBadge>
       </div>
 
-      <Show when={c().description}>
-        <div>
-          <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-placeholder">รายละเอียด</p>
-          <p class="text-sm text-ink-gray">{c().description}</p>
-        </div>
-      </Show>
-
-      <div class="flex flex-col gap-1.5 rounded-card bg-surface-gray/60 p-3 text-sm">
-        <div class="flex items-center justify-between">
-          <span class="text-ink-gray">จำนวนสินค้า</span>
-          <span class="font-medium text-ink">{c().products.length} รายการ</span>
-        </div>
+      <div class="grid grid-cols-2 gap-3 rounded-card bg-surface-gray/60 p-3 text-sm">
+        <Field label="จำนวนสินค้า" value={`${c().products.length.toLocaleString("th-TH")} สินค้า`} />
+        <Field label="แก้ไขล่าสุด" value={c().updatedAt || "-"} />
       </div>
 
       <div class="flex flex-col gap-2">
-        <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">ตัวอย่างสินค้า</p>
+        <p class="text-xs text-ink-placeholder">ตัวอย่างสินค้า</p>
         <Show when={previewProducts().length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่ได้เลือกสินค้า</p>}>
           <div class="flex flex-col gap-2">
             <For each={previewProducts()}>
@@ -57,11 +48,15 @@ export function CollectionQuickView(props: { collection: ProductCollection }) {
           </div>
         </Show>
       </div>
+    </div>
+  );
+}
 
-      <div class="flex items-center justify-between text-xs text-ink-placeholder">
-        <span>สร้างเมื่อ {c().createdAt}</span>
-        <span>แก้ไขล่าสุด {c().updatedAt}</span>
-      </div>
+function Field(props: { label: string; value: string }) {
+  return (
+    <div>
+      <p class="text-xs text-ink-placeholder">{props.label}</p>
+      <p class="font-medium text-ink">{props.value}</p>
     </div>
   );
 }

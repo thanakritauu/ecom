@@ -1,7 +1,8 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import type { Order } from "~/lib/types";
-import { Button } from "../shared/Button";
+import { EmptyState } from "../shared/EmptyState";
+import { DocumentIcon } from "../shared/icons";
 import { OrderCard } from "./OrderCard";
 import { LineContactNote } from "./OrderMeta";
 
@@ -21,6 +22,15 @@ const TABS: { key: TabKey; label: string; match?: (o: Order) => boolean; hidden?
   { key: "completed", label: "ส่งสำเร็จ", match: (o) => o.status === "completed" },
   { key: "cancelled", label: "ยกเลิก", match: (o) => o.status === "cancelled" },
 ];
+
+/** Empty state title per tab (the "ทั้งหมด" tab never shows one: no orders at all is `NoOrdersYet`). */
+const EMPTY_TAB_TITLE: Record<TabKey, string> = {
+  all: "ยังไม่มีคำสั่งซื้อ",
+  pending_payment: "ไม่มีคำสั่งซื้อที่รอชำระเงิน",
+  in_progress: "ไม่มีคำสั่งซื้อที่กำลังจัดส่ง",
+  completed: "ยังไม่มีคำสั่งซื้อที่ส่งสำเร็จ",
+  cancelled: "ไม่มีคำสั่งซื้อที่ยกเลิก",
+};
 
 export function OrderHistoryPanel(props: { orders: Order[]; ready: boolean }) {
   // `?tab=pending_payment` opens a tab directly (Checkout's "ชำระเงินไม่สำเร็จ" notice links here).
@@ -66,7 +76,7 @@ export function OrderHistoryPanel(props: { orders: Order[]; ready: boolean }) {
 
           <Show
             when={filteredOrders().length > 0}
-            fallback={<p class="py-16 text-center text-base text-ink-gray">ไม่มีคำสั่งซื้อในหมวดนี้</p>}
+            fallback={<EmptyState icon={DocumentIcon} title={EMPTY_TAB_TITLE[activeTab()]} description="ดูคำสั่งซื้ออื่นได้ที่แท็บทั้งหมด" />}
           >
             <div class="flex flex-col gap-4">
               <For each={filteredOrders()}>{(order) => <OrderCard order={order} />}</For>
@@ -81,13 +91,12 @@ export function OrderHistoryPanel(props: { orders: Order[]; ready: boolean }) {
 
 function NoOrdersYet() {
   return (
-    <div class="flex flex-col items-center justify-center gap-3 py-16 text-center">
-      <p class="text-lg font-semibold text-ink">ยังไม่มีประวัติการซื้อ</p>
-      <p class="max-w-xs text-sm text-ink-gray">เมื่อคุณสั่งซื้อสินค้า คำสั่งซื้อและสถานะการจัดส่งจะแสดงที่นี่</p>
-      <Button href="/products" variant="primary">
-        เริ่มช้อปเลย
-      </Button>
-    </div>
+    <EmptyState
+      icon={DocumentIcon}
+      title="ยังไม่มีประวัติการซื้อ"
+      description="เมื่อคุณสั่งซื้อสินค้า คำสั่งซื้อและสถานะการจัดส่งจะแสดงที่นี่"
+      action={{ label: "เริ่มช้อปเลย", href: "/products" }}
+    />
   );
 }
 

@@ -71,7 +71,7 @@ export function ProductVariantImages(props: {
         {(selected) => (
           <p class="text-xs text-ink-gray">
             SKU {selected().sku}
-            {selected().price !== undefined ? ` · ${formatAdminCurrency(selected().price!)}` : ""} · สต๊อก {selected().stock}
+            {selected().price !== undefined ? ` ราคา ${formatAdminCurrency(selected().price!)}` : ""} สต๊อก {selected().stock}
           </p>
         )}
       </Show>

@@ -169,7 +169,7 @@ export function QuickAddSheet(props: {
         <div class="flex flex-col gap-3">
           <p class="flex min-h-[24px] flex-wrap items-center gap-x-2 text-sm font-medium">
             <span class="text-black">ตัวเลือก:</span>
-            <span class="text-ink-gray">{selectedOption()?.label ?? "—"}</span>
+            <span class="text-ink-gray">{selectedOption()?.label ?? "-"}</span>
           </p>
           {/* Mobile: 3 tiles per row, each filling its column; from `sm` the fixed 100px tiles. */}
           <div role="radiogroup" aria-label="ตัวเลือกสินค้า" class="grid grid-cols-3 gap-3 sm:flex sm:flex-wrap">

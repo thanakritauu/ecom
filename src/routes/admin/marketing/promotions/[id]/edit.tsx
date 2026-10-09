@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "@solidjs/router";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
 import { EmptyState } from "~/components/admin/EmptyState";
-import { MarketingIcon } from "~/components/admin/icons";
+import { PromotionTagIcon } from "~/components/admin/icons";
 import { PromotionForm, type PromotionFormValues } from "~/components/admin/marketing/PromotionForm";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
 import { pushToast } from "~/lib/toast";
@@ -17,8 +17,8 @@ export default function AdminPromotionEditPage() {
   const handleSubmit = async (values: PromotionFormValues) => {
     const current = promotion();
     if (!current) return;
-    await store.update(current.id, { ...values, usageCount: current.usageCount });
-    pushToast("บันทึกการเปลี่ยนแปลงแล้ว", "success");
+    await store.update(current.id, values);
+    pushToast("บันทึกโปรโมชั่นเรียบร้อยแล้ว", "success");
     navigate(`/admin/marketing/promotions/${current.id}`);
   };
 
@@ -27,8 +27,8 @@ export default function AdminPromotionEditPage() {
       when={promotion()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "โปรโมชั่น", href: "/admin/marketing/promotions" }]} />
-          <EmptyState icon={<MarketingIcon />} title="ไม่พบโปรโมชั่นนี้" actionLabel="กลับไปหน้าโปรโมชั่น" onAction={() => navigate("/admin/marketing/promotions")} class="bg-surface-card shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "โปรโมชั่น", href: "/admin/marketing/promotions" }]} />
+          <EmptyState icon={<PromotionTagIcon />} title="ไม่พบโปรโมชั่นนี้" actionLabel="กลับไปหน้าโปรโมชั่น" onAction={() => navigate("/admin/marketing/promotions")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -37,9 +37,9 @@ export default function AdminPromotionEditPage() {
           <Breadcrumb
             items={[
               { label: "แดชบอร์ด", href: "/admin" },
-              { label: "การตลาด", href: "/admin/marketing" },
+              { label: "การตลาด" },
               { label: "โปรโมชั่น", href: "/admin/marketing/promotions" },
-              { label: current().name },
+              { label: current().name, href: `/admin/marketing/promotions/${current().id}` },
               { label: "แก้ไข" },
             ]}
           />

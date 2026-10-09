@@ -1,4 +1,6 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { hasMedia, type MediaValue } from "~/lib/media";
+import { MediaPreview } from "~/components/admin/MediaUploader";
 import { useNavigate, useParams } from "@solidjs/router";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
@@ -13,17 +15,15 @@ import { ContentIcon, EyeIcon, ImageIcon } from "~/components/admin/icons";
 import { HOMEPAGE_SECTION_TYPE_META } from "~/lib/adminHomepage";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { formatMarketingDate } from "~/lib/adminMarketing";
+import { formatMarketingDateTime } from "~/lib/adminMarketing";
 import { LANDING_PAGE_STATUS_META, validatePublishRequirements, findLandingPageReferences, promotionPageHref } from "~/lib/adminContent";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
 import { findNavigationReferences, describeNavigationReference } from "~/lib/adminNavigation";
-import { useAdminBanners } from "~/lib/adminBannerStore";
-import { useAdminCampaigns } from "~/lib/adminCampaignStore";
 import { pushToast } from "~/lib/toast";
 
 /**
- * หน้าโปรโมชั่น Architecture & หน้าโปรโมชั่น Migration — was
+ * หน้าแคมเปญ Architecture & หน้าแคมเปญ Migration — was
  * `routes/admin/content/promotion-pages/[id]/index.tsx`. Header / Hero
  * Banner / Content / Products / Metadata, same static-sections shape every
  * other Admin Detail page already uses. The "Frontend Navigation" section's
@@ -34,8 +34,6 @@ export default function AdminLandingPageDetailPage() {
   const params = useParams<{ id: string }>();
   const store = useAdminContent();
   const productStore = useAdminProducts();
-  const bannerStore = useAdminBanners();
-  const campaignStore = useAdminCampaigns();
   const navigation = useAdminNavigation();
   const navigate = useNavigate();
   const page = createMemo(() => store.getById(params.id));
@@ -47,7 +45,7 @@ export default function AdminLandingPageDetailPage() {
   const [actionLoading, setActionLoading] = createSignal(false);
   const [previewOpen, setPreviewOpen] = createSignal(false);
 
-  /** §44 — the Homepage can never be deleted (checked first); then §6/§19's dependency guard — a หน้าโปรโมชั่น a NavigationItem points at must never be deleted out from under it. */
+  /** §44 — the Homepage can never be deleted (checked first); then §6/§19's dependency guard — a หน้าแคมเปญ a NavigationItem points at must never be deleted out from under it. */
   const navigationRefs = createMemo(() => {
     const current = page();
     return current ? findNavigationReferences(navigation.items(), "promotion_page", current.id) : [];
@@ -61,13 +59,11 @@ export default function AdminLandingPageDetailPage() {
     else setConfirmDelete(true);
   };
 
-  /** §26 — checked fresh every time the delete dialog opens, across Banners/Campaigns/every other หน้าโปรโมชั่น's own Sections. */
+  /** §26 — checked fresh every time the delete dialog opens, across every other หน้าแคมเปญ's own Sections. */
   const deleteReferences = createMemo(() => {
     const current = page();
     if (!current) return [];
     return findLandingPageReferences(current.id, {
-      banners: bannerStore.banners(),
-      campaigns: campaignStore.campaigns(),
       allPages: store.pages(),
     });
   });
@@ -79,7 +75,7 @@ export default function AdminLandingPageDetailPage() {
       const errs = validatePublishRequirements(current);
       if (errs.length > 0) {
         setConfirmToggle(false);
-        pushToast(`ไม่สามารถเผยแพร่ได้: ${errs[0]}`, "error");
+        pushToast(`เผยแพร่ไม่ได้ ${errs[0]}`, "error");
         return;
       }
     }
@@ -87,7 +83,7 @@ export default function AdminLandingPageDetailPage() {
     await store.setStatus(current.id, current.status === "published" ? "unpublished" : "published");
     setActionLoading(false);
     setConfirmToggle(false);
-    pushToast(current.status === "published" ? "ยกเลิกการเผยแพร่แล้ว" : "เผยแพร่หน้าแล้ว", "success");
+    pushToast(current.status === "published" ? "ยกเลิกการเผยแพร่หน้าแล้ว" : "เผยแพร่หน้าแล้ว", "success");
   };
 
   const confirmDeleteAction = async () => {
@@ -114,8 +110,8 @@ export default function AdminLandingPageDetailPage() {
       when={page()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "หน้าโปรโมชั่น", href: "/admin/promotion-pages" }]} />
-          <EmptyState icon={<ContentIcon />} title="ไม่พบหน้าโปรโมชั่นนี้" description="หน้านี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/promotion-pages")} class="bg-surface-card shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "หน้าแคมเปญ", href: "/admin/promotion-pages" }]} />
+          <EmptyState icon={<ContentIcon />} title="ไม่พบหน้าแคมเปญนี้" description="หน้านี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปรายการหน้าแคมเปญ" onAction={() => navigate("/admin/promotion-pages")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -128,29 +124,23 @@ export default function AdminLandingPageDetailPage() {
             <Breadcrumb
               items={[
                 { label: "แดชบอร์ด", href: "/admin" },
-                { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
-                { label: "หน้าโปรโมชั่น", href: "/admin/promotion-pages" },
+                { label: "หน้าแคมเปญ", href: "/admin/promotion-pages" },
                 { label: p().name },
               ]}
             />
             <PageHeader
               title={p().name}
               description={promotionPageHref(p())}
-              status={
-                <Show when={p().isHomepage}>
-                  <span class="shrink-0 rounded-pill bg-surface-pink px-2.5 py-1 text-xs font-medium text-brand-pink">★ Homepage</span>
-                </Show>
-              }
               actions={
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                   <Button variant="outline" onClick={() => setPreviewOpen(true)}>
                     <EyeIcon class="size-4" /> ดูตัวอย่าง
                   </Button>
                   <Button variant="outline" onClick={() => window.open(`/admin/preview/promotion-pages/${p().id}`, "_blank")}>
-                    <EyeIcon class="size-4" /> เปิดเต็มหน้า
+                    <EyeIcon class="size-4" /> ดูตัวอย่างเต็มหน้า
                   </Button>
                   <Button variant="primary" href={`/admin/promotion-pages/${p().id}/edit`}>
-                    แก้ไข
+                    แก้ไขหน้าแคมเปญ
                   </Button>
                   <LandingPageRowActionsMenu
                     id={p().id}
@@ -169,10 +159,11 @@ export default function AdminLandingPageDetailPage() {
 
             <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div class="flex flex-col gap-6 lg:col-span-2">
+                <Show when={!p().isHomepage}>
                 <Section title="แบนเนอร์หลัก">
                   <div class="aspect-[3/1] w-full overflow-hidden rounded-media bg-surface-gray/60">
-                    <Show when={p().banners.desktop} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-8" /></div>}>
-                      <img src={p().banners.desktop} alt="" class="size-full object-cover" />
+                    <Show when={hasMedia(p().banners.desktop)} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-8" /></div>}>
+                      <MediaPreview value={p().banners.desktop} />
                     </Show>
                   </div>
                   <div class="grid grid-cols-2 gap-3">
@@ -181,9 +172,9 @@ export default function AdminLandingPageDetailPage() {
                   </div>
                   {/* Same field as the form's "วิดีโอ YouTube" — when set, the storefront shows it in place of the banners. */}
                   <div class="flex flex-col gap-1">
-                    <dt class="text-sm text-ink-gray">วิดีโอ YouTube (แสดงแทนแบนเนอร์)</dt>
+                    <dt class="text-sm text-ink-gray">วิดีโอ YouTube ที่แสดงแทนแบนเนอร์</dt>
                     <dd class="min-w-0 text-sm text-ink">
-                      <Show when={p().videoUrl} fallback="—">
+                      <Show when={p().videoUrl} fallback="-">
                         {(url) => (
                           <a href={url()} target="_blank" rel="noopener noreferrer" class="break-all text-brand-pink hover:underline">
                             {url()}
@@ -195,10 +186,12 @@ export default function AdminLandingPageDetailPage() {
                 </Section>
 
                 <Section title="เนื้อหาหน้า">
-                  <Row label="หัวข้อ" value={p().title || "—"} />
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="หัวข้อ" value={p().title || "-"} />
+                  </dl>
                   <div class="flex flex-col gap-1">
                     <dt class="text-sm text-ink-gray">คำอธิบาย</dt>
-                    <dd class="text-sm text-ink">{p().description || "—"}</dd>
+                    <dd class="whitespace-pre-line text-sm text-ink">{p().description || "-"}</dd>
                   </div>
                 </Section>
 
@@ -214,7 +207,7 @@ export default function AdminLandingPageDetailPage() {
                               <p class="truncate text-sm font-medium text-ink">{product!.name}</p>
                               <p class="text-xs text-ink-gray">
                                 {formatAdminCurrency(product!.price)}
-                                <Show when={ref.variantIds.length > 0}> · {ref.variantIds.length} ตัวเลือก</Show>
+                                <Show when={ref.variantIds.length > 0}> เลือกไว้ {ref.variantIds.length} ตัวเลือก</Show>
                               </p>
                             </div>
                           </div>
@@ -223,18 +216,19 @@ export default function AdminLandingPageDetailPage() {
                     </div>
                   </Show>
                 </Section>
+                </Show>
 
-                <Section title={`ส่วนประกอบของหน้า (${p().sections.length})`}>
-                  <Show when={p().sections.length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่ได้เพิ่มส่วนประกอบ — หน้านี้แสดงผลจากแบนเนอร์หลัก/เนื้อหาหน้า/สินค้าด้านบนเท่านั้น</p>}>
+                <Section title={`ส่วนเนื้อหาของหน้า (${p().sections.length})`}>
+                  <Show when={p().sections.length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่มีส่วนเนื้อหา หน้านี้แสดงแบนเนอร์ เนื้อหา และสินค้าด้านบน</p>}>
                     <div class="flex flex-col gap-2">
                       <For each={p().sections}>
                         {(s) => (
-                          <div class="flex items-center justify-between gap-3 rounded-card bg-surface-gray/40 px-3 py-2 text-sm">
+                          <div class="flex items-center justify-between gap-3 rounded-card bg-surface-gray/60 px-3 py-2 text-sm">
                             <div class="min-w-0 flex-1">
                               <p class="truncate font-medium text-ink">{s.name}</p>
                               <p class="text-xs text-ink-gray">{HOMEPAGE_SECTION_TYPE_META[s.type].label}</p>
                             </div>
-                            <StatusBadge tone={s.enabled ? "success" : "neutral"}>{s.enabled ? "แสดง" : "ซ่อน"}</StatusBadge>
+                            <StatusBadge tone={s.enabled ? "success" : "neutral"}>{s.enabled ? "แสดง" : "ไม่แสดง"}</StatusBadge>
                           </div>
                         )}
                       </For>
@@ -245,22 +239,29 @@ export default function AdminLandingPageDetailPage() {
 
               <div class="flex flex-col gap-6">
                 <Section title="สถานะ">
-                  <StatusBadge tone={LANDING_PAGE_STATUS_META[p().status].tone} class="w-fit">
-                    {LANDING_PAGE_STATUS_META[p().status].label}
-                  </StatusBadge>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <StatusBadge tone={LANDING_PAGE_STATUS_META[p().status].tone} class="w-fit">
+                      {LANDING_PAGE_STATUS_META[p().status].label}
+                    </StatusBadge>
+                    <Show when={p().isHomepage}>
+                      <StatusBadge tone="info">หน้าแรก</StatusBadge>
+                    </Show>
+                  </div>
                 </Section>
 
                 <Section title="ระยะเวลา">
-                  <Show when={p().startDate && p().endDate} fallback={<p class="text-sm text-ink-gray">ไม่ได้กำหนดระยะเวลา</p>}>
-                    <Row label="เริ่ม" value={`${formatMarketingDate(p().startDate)} ${p().startTime}`} />
-                    <Row label="สิ้นสุด" value={`${formatMarketingDate(p().endDate)} ${p().endTime}`} />
-                  </Show>
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="เริ่ม" value={formatMarketingDateTime(p().startDate, p().startTime)} />
+                    <Row label="สิ้นสุด" value={formatMarketingDateTime(p().endDate, p().endTime)} />
+                  </dl>
                 </Section>
 
                 <Section title="ข้อมูลเพิ่มเติม">
-                  <Row label="URL หน้าร้าน" value={p().isHomepage ? "/ (Homepage)" : promotionPageHref(p())} />
-                  <Row label="สร้างเมื่อ" value={p().createdAt} />
-                  <Row label="แก้ไขล่าสุด" value={p().updatedAt} />
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="ลิงก์หน้าร้าน" value={promotionPageHref(p())} />
+                    <Row label="สร้างเมื่อ" value={p().createdAt || "-"} />
+                    <Row label="แก้ไขล่าสุด" value={p().updatedAt || "-"} />
+                  </dl>
                 </Section>
               </div>
             </div>
@@ -269,7 +270,7 @@ export default function AdminLandingPageDetailPage() {
               open={confirmToggle()}
               onOpenChange={setConfirmToggle}
               title={p().status === "published" ? "ยกเลิกการเผยแพร่หน้านี้?" : "เผยแพร่หน้านี้?"}
-              description={p().name}
+              description={p().status === "published" ? `"${p().name}" จะถูกซ่อนจากหน้าร้าน` : `"${p().name}" จะแสดงบนหน้าร้านตามช่วงเวลาที่ตั้งไว้`}
               confirmLabel={p().status === "published" ? "ยกเลิกการเผยแพร่" : "เผยแพร่"}
               loading={actionLoading()}
               onConfirm={confirmToggleAction}
@@ -278,13 +279,13 @@ export default function AdminLandingPageDetailPage() {
             <ConfirmDialog
               open={confirmDelete()}
               onOpenChange={setConfirmDelete}
-              title="ลบหน้าโปรโมชั่น?"
+              title="ลบหน้าแคมเปญ?"
               description={
                 deleteReferences().length > 0
-                  ? `คุณต้องการลบ "${p().name}" หรือไม่? หน้านี้ถูกอ้างอิงอยู่โดย ${[...new Set(deleteReferences())].join(", ")} การกระทำนี้ไม่สามารถย้อนกลับได้`
+                  ? `คุณต้องการลบ "${p().name}" หรือไม่? ปุ่มใน ${[...new Set(deleteReferences())].join(", ")} ที่ลิงก์มาหน้านี้จะใช้ไม่ได้ การกระทำนี้ไม่สามารถย้อนกลับได้`
                   : `คุณต้องการลบ "${p().name}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`
               }
-              confirmLabel="ลบ"
+              confirmLabel="ลบหน้าแคมเปญ"
               tone="danger"
               loading={actionLoading()}
               onConfirm={confirmDeleteAction}
@@ -293,8 +294,8 @@ export default function AdminLandingPageDetailPage() {
             <ConfirmDialog
               open={blockedHomepageDelete()}
               onOpenChange={setBlockedHomepageDelete}
-              title="ไม่สามารถลบ Homepage ได้"
-              description="เว็บไซต์ต้องมี Homepage อยู่เสมอ — กรุณากำหนดหน้าโปรโมชั่นอื่นเป็น Homepage ก่อน (ฟีเจอร์นี้ยังไม่เปิดใช้งานใน Prototype นี้) จึงจะสามารถลบหน้านี้ได้"
+              title="ไม่สามารถลบได้"
+              description="หน้าแรกลบไม่ได้ เพราะเว็บไซต์ต้องมีหน้าแรกเสมอ"
               confirmLabel="เข้าใจแล้ว"
               cancelLabel="ปิด"
               onConfirm={() => setBlockedHomepageDelete(false)}
@@ -304,10 +305,10 @@ export default function AdminLandingPageDetailPage() {
               open={blockedDelete()}
               onOpenChange={setBlockedDelete}
               title="ไม่สามารถลบได้"
-              description={`"${p().name}" ถูกใช้งานใน Navigation อยู่ — เมนูที่อ้างอิง: ${navigationRefs()
-                .map((r) => `- ${describeNavigationReference(r, navigation.items())}`)
-                .join(" ")} กรุณาย้ายหรือแก้ไขเมนูเหล่านี้ในหน้า Navigation ก่อนลบหน้านี้`}
-              confirmLabel="ไปที่ Navigation"
+              description={`หน้าแคมเปญ "${p().name}" ถูกใช้งานในเมนู: ${navigationRefs()
+                .map((r) => describeNavigationReference(r, navigation.items()))
+                .join(", ")} กรุณาแก้ไขเมนูเหล่านี้ก่อนลบหน้านี้`}
+              confirmLabel="ไปที่เมนูนำทาง"
               cancelLabel="ปิด"
               onConfirm={() => {
                 setBlockedDelete(false);
@@ -339,7 +340,7 @@ function Section(props: { title: string; children: import("solid-js").JSX.Elemen
 
 function Row(props: { label: string; value: string }) {
   return (
-    <div class="flex items-center justify-between gap-3 text-sm">
+    <div class="flex items-center justify-between gap-3">
       <dt class="text-ink-gray">{props.label}</dt>
       <dd class="font-medium text-ink">{props.value}</dd>
     </div>
@@ -347,13 +348,13 @@ function Row(props: { label: string; value: string }) {
 }
 
 /** `aspectClass` — the storefront crop ratio for this slot (Tablet 4:3, Mobile 3:4 — `BANNER_DEVICE_SPECS`). */
-function BannerThumb(props: { label: string; src: string; aspectClass: string }) {
+function BannerThumb(props: { label: string; src: MediaValue; aspectClass: string }) {
   return (
     <div class="flex flex-col gap-1.5">
-      <p class="text-xs font-semibold uppercase tracking-wide text-ink-placeholder">{props.label}</p>
+      <p class="text-xs text-ink-placeholder">{props.label}</p>
       <div class={`${props.aspectClass} w-full overflow-hidden rounded-media bg-surface-gray/60`}>
-        <Show when={props.src} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-5" /></div>}>
-          <img src={props.src} alt="" class="size-full object-cover" />
+        <Show when={hasMedia(props.src)} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-5" /></div>}>
+          <MediaPreview value={props.src} />
         </Show>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { isServer } from "solid-js/web";
-import { buildMockCustomers, normalizeCustomer, type Customer, type SignupMethod } from "./adminCustomers";
+import { assignCustomerNumbers, buildMockCustomers, getCustomerCode, nextCustomerNo, normalizeCustomer, type Customer, type SignupMethod } from "./adminCustomers";
 import { todayThaiLabel, type CrmMember, type SignInIdentity } from "./crm";
 
 /**
@@ -14,7 +14,7 @@ const STORAGE_KEY = "charmiss:admin:customers"; // same key adminCustomerStore.t
 function readCustomers(): Customer[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Customer[]).map(normalizeCustomer) : buildMockCustomers();
+    return raw ? assignCustomerNumbers((JSON.parse(raw) as Customer[]).map(normalizeCustomer)) : buildMockCustomers();
   } catch {
     return buildMockCustomers();
   }
@@ -41,11 +41,11 @@ export function recordMemberSignIn(identity: SignInIdentity, crm: CrmMember | un
     ? { ...existing, birthDate: existing.birthDate ?? crm?.birthDate, gender: existing.gender ?? crm?.gender, updatedAt: today }
     : normalizeCustomer({
         id: `cust-web-${Date.now()}`,
+        customerNo: nextCustomerNo(list),
         firstName: firstName ?? "",
         lastName: rest.join(" "),
         email: profile.email,
         phone: profile.phone ? formatPhone(profile.phone) : "",
-        status: "active",
         memberSince: today,
         source: crm ? "crm_migrated" : "new_signup",
         signupMethod: identity.method as SignupMethod,
@@ -63,6 +63,22 @@ export function recordMemberSignIn(identity: SignInIdentity, crm: CrmMember | un
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {}
   return record;
+}
+
+/**
+ * The signed-in member's formal customer code ("CM-000002") for the storefront
+ * member card — read from the same Customer record Admin shows, matched the
+ * same way as sign-in. Undefined when no record exists (yet).
+ */
+export function findMemberCustomerCode(member: { crmMemberId?: string; phone: string; email: string }): string | undefined {
+  if (isServer) return undefined;
+  const phone = digits(member.phone);
+  const email = member.email.trim().toLowerCase();
+  const found = readCustomers().find(
+    (c) => (member.crmMemberId && c.crmMemberId === member.crmMemberId) || (phone && digits(c.phone) === phone) || (email && c.email.trim().toLowerCase() === email),
+  );
+  const code = found ? getCustomerCode(found) : "-";
+  return code === "-" ? undefined : code;
 }
 
 /**

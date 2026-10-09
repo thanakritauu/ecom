@@ -10,7 +10,6 @@ import { NewArrivalsSection } from "~/components/home/NewArrivalsSection";
 import { TrendingSection } from "~/components/home/TrendingSection";
 import { ReviewsSection } from "~/components/home/ReviewsSection";
 import { FAQSection } from "~/components/home/FAQSection";
-import { PromoPopup } from "~/components/home/PromoPopup";
 
 export default function Home() {
   const homepage = useHomepageContent();
@@ -29,7 +28,7 @@ export default function Home() {
             with the same content, now driven by Admin's Homepage Content
             (published) state; every other section below stays exactly as it
             was (not part of the 5 admin-manageable section types). */}
-        <HomepageSections sections={homepage.sections()} productRows={1} swipe />
+        <HomepageSections sections={homepage.sections()} productRows={1} swipe hideEmptyProductSections />
         <FlashSaleSection />
         <BestSellersSection />
         <CouponSection />
@@ -39,7 +38,6 @@ export default function Home() {
         <FAQSection />
       </main>
       <Footer />
-      <PromoPopup />
     </>
   );
 }

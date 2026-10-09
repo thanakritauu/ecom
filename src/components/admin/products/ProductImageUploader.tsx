@@ -1,37 +1,46 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Index, Show } from "solid-js";
 import { ChevronIcon } from "~/components/shared/ChevronIcon";
 import { CloseXIcon, ImageIcon, StarIcon } from "~/components/admin/icons";
+import { MediaPreview, VideoOptionsFields } from "~/components/admin/MediaUploader";
+import { asVideo, isVideoMedia, mediaAccept, mediaImage, mediaSrc, prepareMediaFile, revokeMedia, VIDEO_RULE_HINT, type MediaValue } from "~/lib/media";
 
 /**
  * Final UI & Regression Overrides #1 — every "add/upload/replace image"
- * action in Admin opens the User's real OS file browser (`<input
- * type="file" accept="image/*">`), never a mock library/modal. There is no
- * upload backend in this prototype, so a selected file becomes an Object
- * URL (`URL.createObjectURL`) instead of a server response — the UX
- * (Browse → Select → Preview → Save) reads the same as a real upload; only
- * the storage step underneath is swapped out. One component, reused as-is
- * for both Product Gallery and every Variant's own images, so both surfaces
- * behave identically by construction.
+ * action in Admin opens the User's real OS file browser, never a mock
+ * library/modal. There is no upload backend in this prototype, so a
+ * selected file becomes an Object URL (`URL.createObjectURL`) instead of a
+ * server response. One component, reused for both Product Gallery and every
+ * Variant's own images, so both surfaces behave identically by construction.
  *
  * CMS + Frontend Final Refinement §8 — `maxImages` and `mainImage`/
  * `onSetMain` are both optional and additive: Variant Images (no `maxImages`,
  * no `mainImage`) keeps behaving exactly as before (uncapped, no pin
- * affordance); only the Product Gallery call site opts into a 10-image cap
+ * affordance); only the Product Gallery call site opts into a 10-item cap
  * and the "ตั้งเป็นรูปหลัก" (Set as Main Photo) pin.
+ *
+ * Video: with `allowVideo` (Product Gallery only) an item may be an MP4
+ * video (`MediaValue`, see `~/lib/media`). Each video gets its poster + sound
+ * fields under the tiles; the poster is what cards, lists and the "รูปหลัก"
+ * pin use (`mediaImage`), so a video never reaches a product card.
  */
 export function ProductImageUploader(props: {
-  images: string[];
-  onChange: (images: string[]) => void;
-  /** Caps how many images a single "Add" action may bring in at once — replace (single-slot) is never capped by this. */
+  images: MediaValue[];
+  onChange: (images: MediaValue[]) => void;
+  /** Caps how many items a single "Add" action may bring in at once — replace (single-slot) is never capped by this. */
   maxImages?: number;
-  /** The current Main Photo's URL, if the caller tracks one explicitly. */
+  /** The current Main Photo's URL (an image URL or a video's poster URL). */
   mainImage?: string;
   onSetMain?: (url: string) => void;
+  /** Let items be MP4 videos too. Default: images only. */
+  allowVideo?: boolean;
 }) {
   const [pendingUrls, setPendingUrls] = createSignal<Set<string>>(new Set());
   const [replaceIndex, setReplaceIndex] = createSignal<number | null>(null);
+  const [errors, setErrors] = createSignal<string[]>([]);
   let fileInputRef: HTMLInputElement | undefined;
 
+  const allowVideo = () => !!props.allowVideo;
+  const unit = () => (allowVideo() ? "ไฟล์" : "รูป");
   const atLimit = () => props.maxImages !== undefined && props.images.length >= props.maxImages;
 
   const openAddPicker = () => {
@@ -49,8 +58,7 @@ export function ProductImageUploader(props: {
 
   const settle = (url: string) => {
     // Brief "uploading" beat so this reads like a real upload completing,
-    // not an instant local-only swap — matches the Browse → Select →
-    // Preview → Upload/Save flow the spec calls for.
+    // not an instant local-only swap.
     setTimeout(() => {
       setPendingUrls((set) => {
         const next = new Set(set);
@@ -60,36 +68,58 @@ export function ProductImageUploader(props: {
     }, 600);
   };
 
-  const handleFilesSelected = (e: Event) => {
-    const files = Array.from((e.currentTarget as HTMLInputElement).files ?? []);
-    if (files.length === 0) return;
-
-    if (replaceIndex() !== null) {
-      const url = URL.createObjectURL(files[0]);
-      const oldUrl = props.images[replaceIndex()!];
-      const next = [...props.images];
-      next[replaceIndex()!] = url;
-      props.onChange(next);
-      if (oldUrl?.startsWith("blob:")) URL.revokeObjectURL(oldUrl);
-      setPendingUrls((set) => new Set([...set, url]));
-      settle(url);
-      return;
-    }
-
-    // §8 — a single Add action never brings in more than the room left under `maxImages` (when set); this is a UI guard, not a silent truncation of already-saved images.
-    const room = props.maxImages !== undefined ? Math.max(0, props.maxImages - props.images.length) : files.length;
-    const accepted = files.slice(0, room);
-    if (accepted.length === 0) return;
-    const urls = accepted.map((file) => URL.createObjectURL(file));
-    props.onChange([...props.images, ...urls]);
+  const markPending = (values: MediaValue[]) => {
+    const urls = values.map(mediaSrc);
     setPendingUrls((set) => new Set([...set, ...urls]));
     urls.forEach(settle);
   };
 
+  const handleFilesSelected = async (e: Event) => {
+    const files = Array.from((e.currentTarget as HTMLInputElement).files ?? []);
+    if (files.length === 0) return;
+    setErrors([]);
+    const index = replaceIndex();
+
+    if (index !== null) {
+      const result = await prepareMediaFile(files[0], { allowVideo: allowVideo() });
+      if (!result.ok) {
+        setErrors([result.error]);
+        return;
+      }
+      const old = props.images[index];
+      // Video replaced by another video keeps its poster/sound settings.
+      const value = isVideoMedia(result.value) && isVideoMedia(old) ? { ...result.value, poster: old.poster, hasAudio: old.hasAudio } : result.value;
+      const next = [...props.images];
+      next[index] = value;
+      props.onChange(next);
+      if (isVideoMedia(value) && isVideoMedia(old)) {
+        if (old.src.startsWith("blob:")) URL.revokeObjectURL(old.src);
+      } else {
+        revokeMedia(old);
+      }
+      markPending([value]);
+      return;
+    }
+
+    // §8 — a single Add action never brings in more than the room left under `maxImages` (when set).
+    const room = props.maxImages !== undefined ? Math.max(0, props.maxImages - props.images.length) : files.length;
+    const accepted: MediaValue[] = [];
+    const nextErrors: string[] = [];
+    for (const file of files.slice(0, room)) {
+      const result = await prepareMediaFile(file, { allowVideo: allowVideo() });
+      if (result.ok) accepted.push(result.value);
+      else nextErrors.push(`${file.name}: ${result.error}`);
+    }
+    setErrors(nextErrors);
+    if (accepted.length === 0) return;
+    props.onChange([...props.images, ...accepted]);
+    markPending(accepted);
+  };
+
   const removeAt = (index: number) => {
-    const url = props.images[index];
+    const value = props.images[index];
     props.onChange(props.images.filter((_, i) => i !== index));
-    if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
+    revokeMedia(value);
   };
 
   const move = (index: number, dir: -1 | 1) => {
@@ -100,34 +130,43 @@ export function ProductImageUploader(props: {
     props.onChange(next);
   };
 
+  const updateAt = (index: number, value: MediaValue) => {
+    const next = [...props.images];
+    const old = next[index];
+    next[index] = value;
+    props.onChange(next);
+    // Keep the "รูปหลัก" pin on this item when its poster changes.
+    if (props.onSetMain && props.mainImage && props.mainImage === mediaImage(old) && mediaImage(value)) props.onSetMain(mediaImage(value));
+  };
+
+  const videos = () => props.images.map((value, index) => ({ video: asVideo(value), index })).filter((x) => x.video);
+
   return (
     <div class="flex flex-col gap-3">
-      {/* Hidden native file input — every Browse/Add/Replace action below
-          just calls `.click()` on this one; the OS file browser is what
-          actually opens. */}
-      <input ref={fileInputRef} type="file" accept="image/*" multiple={replaceIndex() === null} class="hidden" onChange={handleFilesSelected} />
+      {/* Hidden native file input — every Browse/Add/Replace action below just calls `.click()` on this one. */}
+      <input ref={fileInputRef} type="file" accept={mediaAccept(allowVideo())} multiple={replaceIndex() === null} class="hidden" onChange={handleFilesSelected} />
 
       <div class="flex flex-wrap gap-3">
         <For each={props.images}>
-          {(src, i) => {
-            const isMain = () => props.mainImage !== undefined && props.mainImage === src;
+          {(item, i) => {
+            const still = () => mediaImage(item);
+            const isMain = () => props.mainImage !== undefined && !!still() && props.mainImage === still();
+            const posterMissing = () => isVideoMedia(item) && !item.poster;
             return (
-              <div class="group relative size-20 shrink-0 overflow-hidden rounded-media border sm:size-24" classList={{ "border-brand-pink": isMain(), "border-border": !isMain() }}>
-                <button
-                  type="button"
-                  onClick={() => openReplacePicker(i())}
-                  aria-label="เปลี่ยนรูปภาพ"
-                  class="block size-full"
-                >
-                  <img src={src} alt="" class="size-full object-cover" classList={{ "opacity-40": pendingUrls().has(src) }} />
+              <div
+                class="group relative size-20 shrink-0 overflow-hidden rounded-media border sm:size-24"
+                classList={{ "border-brand-pink": isMain(), "border-system-red": !isMain() && posterMissing(), "border-border": !isMain() && !posterMissing() }}
+              >
+                <button type="button" onClick={() => openReplacePicker(i())} aria-label={isVideoMedia(item) ? "เปลี่ยนวิดีโอ" : "เปลี่ยนรูปภาพ"} class="block size-full">
+                  <MediaPreview value={item} dimmed={pendingUrls().has(mediaSrc(item))} />
                 </button>
-                <Show when={pendingUrls().has(src)}>
+                <Show when={pendingUrls().has(mediaSrc(item))}>
                   <div class="absolute inset-0 flex items-center justify-center bg-ink/10" aria-hidden="true">
                     <span class="loading loading-spinner loading-sm text-white" />
                   </div>
                 </Show>
-                <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-ink/60 py-1 text-center text-[10px] font-medium text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                  เปลี่ยนรูป
+                <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-ink/60 py-1 text-center text-[10px] font-medium text-white opacity-0 transition-opacity duration-150 lg:group-hover:opacity-100">
+                  {isVideoMedia(item) ? "เปลี่ยนวิดีโอ" : "เปลี่ยนรูป"}
                 </div>
                 <button
                   type="button"
@@ -135,29 +174,31 @@ export function ProductImageUploader(props: {
                     e.stopPropagation();
                     removeAt(i());
                   }}
-                  aria-label="ลบรูปภาพ"
+                  aria-label={isVideoMedia(item) ? "ลบวิดีโอ" : "ลบรูปภาพ"}
                   class="absolute right-1 top-1 flex size-6 items-center justify-center rounded-pill bg-ink/70 text-white"
                 >
                   <CloseXIcon class="size-2.5" />
                 </button>
 
-                {/* §8 — Main Photo pin: a persistent "รูปหลัก" badge on whichever image is main, a one-click "ตั้งเป็นรูปหลัก" affordance on every other image (revealed on hover, same convention as "เปลี่ยนรูป"). Only rendered when the caller opted in via `mainImage`/`onSetMain` (Product Gallery) — Variant Images passes neither, so this block never renders there. */}
+                {/* §8 — Main Photo pin, only when the caller opted in via `mainImage`/`onSetMain` (Product Gallery). A video can be main once it has a poster. */}
                 <Show when={props.onSetMain}>
                   {(onSetMain) => (
                     <Show
                       when={isMain()}
                       fallback={
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSetMain()(src);
-                          }}
-                          aria-label="ตั้งเป็นรูปหลัก"
-                          class="absolute left-1 top-1 flex size-6 items-center justify-center rounded-pill bg-ink/70 text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-                        >
-                          <StarIcon class="size-3" />
-                        </button>
+                        <Show when={still()}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSetMain()(still());
+                            }}
+                            aria-label="ตั้งเป็นรูปหลัก"
+                            class="absolute left-1 top-1 flex size-6 items-center justify-center rounded-pill bg-ink/70 text-white opacity-0 transition-opacity duration-150 lg:group-hover:opacity-100"
+                          >
+                            <StarIcon class="size-3" />
+                          </button>
+                        </Show>
                       }
                     >
                       <span class="absolute left-1 top-1 flex items-center gap-1 rounded-pill bg-brand-pink px-2 py-0.5 text-[10px] font-semibold text-white">
@@ -207,14 +248,35 @@ export function ProductImageUploader(props: {
           class="flex size-20 shrink-0 flex-col items-center justify-center gap-1 rounded-media border border-dashed border-border text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:text-ink-gray sm:size-24"
         >
           <ImageIcon class="size-5" />
-          <span class="text-xs">เพิ่มรูป</span>
+          <span class="text-xs">{allowVideo() ? "เพิ่มรูปหรือวิดีโอ" : "เพิ่มรูป"}</span>
         </button>
       </div>
 
+      <For each={errors()}>
+        {(message) => (
+          <p class="text-xs text-system-red" role="alert">
+            {message}
+          </p>
+        )}
+      </For>
+
       <Show when={props.maxImages !== undefined}>
         <p class="text-xs text-ink-gray">
-          {props.images.length}/{props.maxImages} รูป — เพิ่มได้ครั้งละสูงสุด {props.maxImages} รูป
+          {props.images.length}/{props.maxImages} {unit()} เพิ่มได้ครั้งละไม่เกิน {props.maxImages} {unit()}
         </p>
+      </Show>
+      <Show when={allowVideo()}>
+        <p class="text-xs text-ink-gray">{VIDEO_RULE_HINT}</p>
+      </Show>
+
+      <Show when={videos().length > 0}>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Index each={videos()}>
+            {(entry) => (
+              <VideoOptionsFields title={`วิดีโอลำดับที่ ${entry().index + 1}`} value={entry().video!} onChange={(value) => updateAt(entry().index, value)} />
+            )}
+          </Index>
+        </div>
       </Show>
     </div>
   );

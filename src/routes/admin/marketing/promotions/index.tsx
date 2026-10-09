@@ -8,61 +8,55 @@ import { Pagination } from "~/components/admin/Pagination";
 import { DataTable, type DataTableColumn } from "~/components/admin/DataTable";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { EmptyState } from "~/components/admin/EmptyState";
-import { Skeleton } from "~/components/admin/Skeleton";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { AdminBulkActionBar } from "~/components/admin/AdminBulkActionBar";
 import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
-import { DateRangeSelector } from "~/components/admin/dashboard/DateRangeSelector";
-import { MarketingStatusSummary } from "~/components/admin/marketing/MarketingStatusSummary";
+import { ExportMenu } from "~/components/admin/ExportMenu";
+import { Toggle } from "~/components/admin/Toggle";
+import { MarketingStatusSummary, MARKETING_PHASE_TABS } from "~/components/admin/marketing/MarketingStatusSummary";
+import { MarketingListSkeleton } from "~/components/admin/marketing/MarketingListSkeleton";
 import { MarketingRowActionsMenu } from "~/components/admin/marketing/MarketingRowActionsMenu";
 import { PromotionQuickView } from "~/components/admin/marketing/PromotionQuickView";
-import { RefreshIcon, MarketingIcon, PlusIcon } from "~/components/admin/icons";
+import { RefreshIcon, PromotionTagIcon, PlusIcon } from "~/components/admin/icons";
 import {
-  MARKETING_STATUS_META,
+  MARKETING_PHASE_META,
+  PROMOTION_TYPES,
   PROMOTION_TYPE_META,
   formatMarketingDate,
+  formatMarketingDateTime,
   formatPromotionDiscount,
+  marketingPhase,
+  type MarketingPhase,
   type Promotion,
   type PromotionType,
-  type MarketingStatus,
 } from "~/lib/adminMarketing";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
 import { useAdminProducts } from "~/lib/adminProductStore";
+import type { ExportColumn } from "~/lib/adminExport";
 import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
-import type { DashboardPeriodKey } from "~/lib/adminDashboard";
 
 const SORT_OPTIONS = [
-  { value: "start-desc", label: "วันที่เริ่ม ใหม่→เก่า" },
-  { value: "start-asc", label: "วันที่เริ่ม เก่า→ใหม่" },
+  { value: "start-desc", label: "วันที่เริ่ม ใหม่ไปเก่า" },
+  { value: "start-asc", label: "วันที่เริ่ม เก่าไปใหม่" },
   { value: "end-asc", label: "วันสิ้นสุด ใกล้ที่สุด" },
-  { value: "name-asc", label: "ชื่อ A→Z" },
-  { value: "name-desc", label: "ชื่อ Z→A" },
+  { value: "name-asc", label: "ชื่อโปรโมชั่น A-Z" },
+  { value: "name-desc", label: "ชื่อโปรโมชั่น Z-A" },
 ];
-
-const TODAY_DAY = 17;
-function dayOf(date: string): number {
-  return Number(date.match(/-(\d+)$/)?.[1] ?? TODAY_DAY);
-}
-function withinPeriod(date: string, period: DashboardPeriodKey): boolean {
-  if (period === "today") return dayOf(date) === TODAY_DAY;
-  if (period === "7d") return Math.abs(TODAY_DAY - dayOf(date)) <= 7;
-  return true;
-}
 
 export default function AdminPromotionListPage() {
   const store = useAdminMarketing().promotions;
   const navigate = useNavigate();
   const productStore = useAdminProducts();
-  const summary = (p: Promotion) => formatPromotionDiscount(p, p.giftProductId ? productStore.getById(p.giftProductId)?.name : undefined);
+  const summary = (p: Promotion) => formatPromotionDiscount(p, (id) => productStore.getById(id)?.name);
+  const phaseOf = (p: Promotion) => marketingPhase(p);
 
   const [search, setSearchRaw] = createSignal("");
-  const [statusFilter, setStatusFilterRaw] = createSignal<"all" | MarketingStatus>("all");
+  const [phaseFilter, setPhaseFilterRaw] = createSignal<"all" | MarketingPhase>("all");
   const [typeFilter, setTypeFilterRaw] = createSignal<"all" | PromotionType>("all");
-  const [dateFilter, setDateFilter] = createSignal<DashboardPeriodKey>("30d");
   const [sort, setSortRaw] = createSignal("start-desc");
   const [page, setPage] = createSignal(1);
-  const [pageSize, setPageSizeRaw] = createSignal(10);
+  const [pageSize, setPageSizeRaw] = createSignal(20);
   const [listStatus, setListStatus] = createSignal<AsyncStatus>("loading");
   const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
   const [quickViewId, setQuickViewId] = createSignal<string | null>(null);
@@ -80,36 +74,33 @@ export default function AdminPromotionListPage() {
 
   const resetPage = () => setPage(1);
   const setSearch = (v: string) => { setSearchRaw(v); resetPage(); };
-  const setStatusFilter = (v: "all" | MarketingStatus) => { setStatusFilterRaw(v); resetPage(); };
+  const setPhaseFilter = (v: "all" | MarketingPhase) => { setPhaseFilterRaw(v); resetPage(); };
   const setTypeFilter = (v: string) => { setTypeFilterRaw(v as "all" | PromotionType); resetPage(); };
-  const setDateFilterAndReset = (v: DashboardPeriodKey) => { setDateFilter(v); resetPage(); };
   const setSort = (v: string) => { setSortRaw(v); resetPage(); };
   const setPageSize = (v: number) => { setPageSizeRaw(v); resetPage(); };
 
-  const hasActiveFilters = () => search().trim() !== "" || statusFilter() !== "all" || typeFilter() !== "all";
+  const hasActiveFilters = () => search().trim() !== "" || phaseFilter() !== "all" || typeFilter() !== "all";
   const clearFilters = () => {
     setSearchRaw("");
-    setStatusFilterRaw("all");
+    setPhaseFilterRaw("all");
     setTypeFilterRaw("all");
     resetPage();
   };
 
-  const statusCounts = createMemo(() => {
-    const tally: Partial<Record<"all" | MarketingStatus, number>> = { all: store.items().length };
-    for (const p of store.items()) tally[p.status] = (tally[p.status] ?? 0) + 1;
+  const phaseCounts = createMemo(() => {
+    const tally: Partial<Record<"all" | MarketingPhase, number>> = { all: store.items().length };
+    for (const p of store.items()) tally[phaseOf(p)] = (tally[phaseOf(p)] ?? 0) + 1;
     return tally;
   });
 
   const filtered = createMemo(() => {
-    const status = statusFilter();
+    const phase = phaseFilter();
     const type = typeFilter();
-    const period = dateFilter();
     const q = search().trim().toLowerCase();
     return store.items().filter((p) => {
-      if (status !== "all" && p.status !== status) return false;
+      if (phase !== "all" && phaseOf(p) !== phase) return false;
       if (type !== "all" && p.type !== type) return false;
-      if (!withinPeriod(p.startDate, period)) return false;
-      if (q && !`${p.name} ${p.id}`.toLowerCase().includes(q)) return false;
+      if (q && !p.name.toLowerCase().includes(q)) return false;
       return true;
     });
   });
@@ -122,9 +113,9 @@ export default function AdminPromotionListPage() {
       case "end-asc":
         return list.sort((a, b) => a.endDate.localeCompare(b.endDate));
       case "name-asc":
-        return list.sort((a, b) => a.name.localeCompare(b.name));
+        return list.sort((a, b) => a.name.localeCompare(b.name, "th"));
       case "name-desc":
-        return list.sort((a, b) => b.name.localeCompare(a.name));
+        return list.sort((a, b) => b.name.localeCompare(a.name, "th"));
       default:
         return list.sort((a, b) => b.startDate.localeCompare(a.startDate));
     }
@@ -150,7 +141,6 @@ export default function AdminPromotionListPage() {
     });
   const clearSelection = () => setSelectedIds(new Set<string>());
 
-  const requestDelete = (p: Promotion) => setConfirmDelete(p);
   const confirmDeleteAction = async () => {
     const p = confirmDelete();
     if (!p) return;
@@ -161,17 +151,30 @@ export default function AdminPromotionListPage() {
     pushToast(`ลบ "${p.name}" เรียบร้อยแล้ว`, "error");
   };
 
-  const requestToggle = (p: Promotion) => setConfirmToggle(p);
   const confirmToggleAction = async () => {
     const p = confirmToggle();
     if (!p) return;
-    const next: MarketingStatus = p.status === "disabled" ? "active" : "disabled";
+    const turnOn = p.status === "disabled";
     setActionLoading(true);
-    await store.setStatus(p.id, next);
+    await store.setStatus(p.id, turnOn ? "active" : "disabled");
     setActionLoading(false);
     setConfirmToggle(null);
-    pushToast(next === "disabled" ? "ปิดใช้งานโปรโมชั่นแล้ว" : "เปิดใช้งานโปรโมชั่นแล้ว", "success");
+    pushToast(turnOn ? "เปิดใช้งานโปรโมชั่นแล้ว" : "ปิดใช้งานโปรโมชั่นแล้ว", "success");
   };
+
+  // Quick on/off for trying promos on the storefront: no confirm, the cart updates as soon as it's saved.
+  const [switching, setSwitching] = createSignal<string | null>(null);
+  const switchLive = async (p: Promotion, on: boolean) => {
+    setSwitching(p.id);
+    await store.setStatus(p.id, on ? "active" : "disabled");
+    setSwitching(null);
+    pushToast(on ? `เปิดใช้ "${p.name}" แล้ว` : `ปิด "${p.name}" แล้ว`, "success");
+  };
+  const LiveSwitch = (props: { row: Promotion }) => (
+    <span onClick={(e) => e.stopPropagation()} class="inline-flex">
+      <Toggle checked={props.row.status === "active"} onChange={(on) => switchLive(props.row, on)} onLabel="เปิด" offLabel="ปิด" disabled={switching() === props.row.id} />
+    </span>
+  );
 
   const handleDuplicate = async (p: Promotion) => {
     const copy = await store.duplicate(p.id);
@@ -189,14 +192,33 @@ export default function AdminPromotionListPage() {
     pushToast(`ลบโปรโมชั่น ${ids.length} รายการเรียบร้อยแล้ว`, "error");
   };
 
-  const bulkSetStatus = async (status: MarketingStatus) => {
+  const bulkSetStatus = async (status: "active" | "disabled") => {
     const ids = [...selectedIds()];
     await Promise.all(ids.map((id) => store.setStatus(id, status)));
     clearSelection();
     pushToast(status === "active" ? `เปิดใช้งาน ${ids.length} รายการแล้ว` : `ปิดใช้งาน ${ids.length} รายการแล้ว`, "success");
   };
 
-  const scopeLabel = (p: Promotion) => (p.productIds.length === 0 ? "ทุกสินค้า" : `${p.productIds.length} สินค้า`);
+  const scopeLabel = (p: Promotion) => {
+    if (p.type === "bundle") return `${p.bundleItems?.length ?? 0} สินค้าในเซ็ต`;
+    if (p.type === "buy_x_get_y") return `ซื้อ ${p.buyItems?.length ?? 0} แถม ${p.getItems?.length ?? 0} สินค้า`;
+    return p.productIds.length === 0 ? "ทุกสินค้า" : `${p.productIds.length} สินค้า`;
+  };
+  const PhaseBadge = (props: { row: Promotion; class?: string }) => {
+    const meta = () => MARKETING_PHASE_META[phaseOf(props.row)];
+    return <StatusBadge tone={meta().tone} class={props.class}>{meta().label}</StatusBadge>;
+  };
+
+  const exportColumns: ExportColumn<Promotion>[] = [
+    { header: "ชื่อโปรโมชั่น", value: (p) => p.name },
+    { header: "ประเภท", value: (p) => PROMOTION_TYPE_META[p.type].label },
+    { header: "เงื่อนไข", value: (p) => summary(p) },
+    { header: "สินค้าที่เข้าร่วม", value: (p) => scopeLabel(p) },
+    { header: "แสดงในตะกร้า", value: (p) => (p.showInCart ? "แสดง" : "ไม่แสดง") },
+    { header: "เริ่ม", value: (p) => formatMarketingDateTime(p.startDate, p.startTime) },
+    { header: "สิ้นสุด", value: (p) => formatMarketingDateTime(p.endDate, p.endTime) },
+    { header: "สถานะ", value: (p) => MARKETING_PHASE_META[phaseOf(p)].label },
+  ];
 
   const columns: DataTableColumn<Promotion>[] = [
     {
@@ -218,23 +240,20 @@ export default function AdminPromotionListPage() {
     },
     {
       key: "name",
-      label: "Promotion",
+      label: "โปรโมชั่น",
       render: (row) => (
-        <div class="flex flex-col gap-1">
-          <p class="font-medium text-ink">{row.name}</p>
-          <Show when={row.showInCart}>
-            <StatusBadge tone="info" class="w-fit">แสดงในตะกร้า</StatusBadge>
-          </Show>
+        <div class="flex min-w-0 flex-col gap-0.5">
+          <p class="truncate text-sm font-medium text-ink">{row.name}</p>
+          <p class="text-xs text-ink-gray">{PROMOTION_TYPE_META[row.type].label}{row.showInCart ? " แสดงในตะกร้า" : ""}</p>
         </div>
       ),
     },
-    { key: "type", label: "Type", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{PROMOTION_TYPE_META[row.type].label}</span> },
-    { key: "scope", label: "Products", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{scopeLabel(row)}</span> },
-    { key: "discount", label: "Discount", render: (row) => <span class="line-clamp-2 max-w-72 font-medium text-ink">{summary(row)}</span> },
-    { key: "start", label: "Start", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{formatMarketingDate(row.startDate)}</span> },
-    { key: "end", label: "End", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{formatMarketingDate(row.endDate)}</span> },
-    { key: "status", label: "Status", render: (row) => <StatusBadge tone={MARKETING_STATUS_META[row.status].tone}>{MARKETING_STATUS_META[row.status].label}</StatusBadge> },
-    { key: "usage", label: "Usage", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.usageCount.toLocaleString("th-TH")}</span> },
+    { key: "discount", label: "เงื่อนไข", render: (row) => <span class="line-clamp-2 max-w-72 font-medium text-ink">{summary(row)}</span> },
+    { key: "scope", label: "สินค้า", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{scopeLabel(row)}</span> },
+    { key: "start", label: "เริ่ม", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{formatMarketingDate(row.startDate)}</span> },
+    { key: "end", label: "สิ้นสุด", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{formatMarketingDate(row.endDate)}</span> },
+    { key: "status", label: "สถานะ", render: (row) => <PhaseBadge row={row} /> },
+    { key: "live", label: "เปิดใช้", render: (row) => <LiveSwitch row={row} /> },
     {
       key: "actions",
       label: "",
@@ -243,11 +262,12 @@ export default function AdminPromotionListPage() {
         <MarketingRowActionsMenu
           id={row.id}
           name={row.name}
+          entity="โปรโมชั่น"
           basePath="/admin/marketing/promotions"
           isDisabled={row.status === "disabled"}
           onDuplicate={() => handleDuplicate(row)}
-          onToggleStatus={() => requestToggle(row)}
-          onDelete={() => requestDelete(row)}
+          onToggleStatus={() => setConfirmToggle(row)}
+          onDelete={() => setConfirmDelete(row)}
         />
       ),
     },
@@ -255,41 +275,37 @@ export default function AdminPromotionListPage() {
 
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
-      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "โปรโมชั่น" }]} />
+      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "โปรโมชั่น" }]} />
       <PageHeader
         title="โปรโมชั่น"
-        description="จัดการส่วนลดและโปรโมชั่นของ Charmiss"
+        description="จัดการโปรส่งฟรี ของแถม ส่วนลด ซื้อ X แถม Y และชุดสินค้า"
         actions={
           <div class="flex flex-wrap items-center gap-2">
+            <ExportMenu filenameBase="promotions-report" columns={exportColumns} rows={sorted()} />
             <Button href="/admin/marketing/promotions/new" variant="primary">
-              <PlusIcon class="size-4" /> สร้างโปรโมชั่น
+              <PlusIcon class="size-4" /> เพิ่มโปรโมชั่น
             </Button>
           </div>
         }
       />
 
-      <MarketingStatusSummary value={statusFilter()} counts={statusCounts()} onChange={setStatusFilter} />
+      <MarketingStatusSummary tabs={MARKETING_PHASE_TABS} value={phaseFilter()} counts={phaseCounts()} onChange={setPhaseFilter} />
 
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <div class="flex-1">
-          <FilterBar
-            search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาชื่อโปรโมชั่น, ID..." }}
-            filters={[
-              {
-                id: "type",
-                label: "ประเภท",
-                value: typeFilter(),
-                options: [{ value: "all", label: "ทุกประเภท" }, ...Object.entries(PROMOTION_TYPE_META).map(([value, meta]) => ({ value, label: meta.label }))],
-              },
-            ]}
-            onFilterChange={(id, value) => { if (id === "type") setTypeFilter(value); }}
-            sort={{ value: sort(), options: SORT_OPTIONS, onChange: setSort }}
-          />
-        </div>
-        <DateRangeSelector value={dateFilter()} onChange={setDateFilterAndReset} />
-      </div>
+      <FilterBar
+        search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาชื่อโปรโมชั่น..." }}
+        filters={[
+          {
+            id: "type",
+            label: "ประเภท",
+            value: typeFilter(),
+            options: [{ value: "all", label: "ทุกประเภท" }, ...PROMOTION_TYPES.map((t) => ({ value: t, label: PROMOTION_TYPE_META[t].label }))],
+          },
+        ]}
+        onFilterChange={(id, value) => { if (id === "type") setTypeFilter(value); }}
+        sort={{ value: sort(), options: SORT_OPTIONS, onChange: setSort }}
+      />
 
-      <Show when={listStatus() !== "loading"} fallback={<ListSkeleton />}>
+      <Show when={listStatus() !== "loading"} fallback={<MarketingListSkeleton />}>
         <Show
           when={listStatus() === "success"}
           fallback={
@@ -300,10 +316,10 @@ export default function AdminPromotionListPage() {
             when={sorted().length > 0}
             fallback={
               <EmptyState
-                icon={<MarketingIcon />}
+                icon={<PromotionTagIcon />}
                 title={hasActiveFilters() ? "ไม่พบโปรโมชั่นที่ตรงกับการค้นหา" : "ยังไม่มีโปรโมชั่น"}
-                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "เริ่มสร้างโปรโมชั่นแรกของคุณ"}
-                actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "+ สร้างโปรโมชั่น"}
+                description={hasActiveFilters() ? undefined : "เริ่มเพิ่มโปรโมชั่นแรกของคุณ"}
+                actionLabel={hasActiveFilters() ? "ล้างการค้นหา" : "+ เพิ่มโปรโมชั่น"}
                 onAction={hasActiveFilters() ? clearFilters : () => navigate("/admin/marketing/promotions/new")}
                 class="bg-surface-card shadow-card"
               />
@@ -320,27 +336,46 @@ export default function AdminPromotionListPage() {
               getRowKey={(row) => row.id}
               onRowClick={(row) => setQuickViewId(row.id)}
               renderMobileCard={(row) => (
-                <div class="flex gap-3 rounded-card bg-surface-card p-4 shadow-card">
-                  <input
-                    type="checkbox"
-                    aria-label={`เลือก ${row.name}`}
-                    checked={selectedIds().has(row.id)}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={() => toggleSelect(row.id)}
-                    class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
-                  />
-                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-2 text-left">
-                    <div class="flex items-start justify-between gap-2">
-                      <p class="truncate font-semibold text-ink">{row.name}</p>
-                      <StatusBadge class="shrink-0" tone={MARKETING_STATUS_META[row.status].tone}>{MARKETING_STATUS_META[row.status].label}</StatusBadge>
-                    </div>
-                    <p class="truncate text-sm text-ink-gray">{PROMOTION_TYPE_META[row.type].label} · {summary(row)}</p>
-                    <Show when={row.showInCart}>
-                      <StatusBadge tone="info" class="w-fit">แสดงในตะกร้า</StatusBadge>
-                    </Show>
-                    <p class="truncate text-xs text-ink-gray">{scopeLabel(row)} · {formatMarketingDate(row.startDate)} - {formatMarketingDate(row.endDate)}</p>
-                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>
-                  </button>
+                <div class="flex flex-col gap-3 rounded-card bg-surface-card p-3 shadow-card">
+                  <div class="flex gap-3">
+                    <input
+                      type="checkbox"
+                      aria-label={`เลือก ${row.name}`}
+                      checked={selectedIds().has(row.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleSelect(row.id)}
+                      class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
+                    />
+                    <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col text-left">
+                      <p class="truncate text-sm font-medium text-ink">{row.name}</p>
+                      <p class="truncate text-xs text-ink-gray">{PROMOTION_TYPE_META[row.type].label} {scopeLabel(row)}</p>
+                      <p class="mt-1 line-clamp-2 text-sm font-semibold text-ink">{summary(row)}</p>
+                      <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <PhaseBadge row={row} />
+                        <Show when={row.showInCart}>
+                          <StatusBadge tone="info">แสดงในตะกร้า</StatusBadge>
+                        </Show>
+                      </div>
+                      <p class="mt-1 text-xs text-ink-placeholder">
+                        {formatMarketingDate(row.startDate)} - {formatMarketingDate(row.endDate)}
+                      </p>
+                    </button>
+                    <MarketingRowActionsMenu
+                      id={row.id}
+                      name={row.name}
+                      entity="โปรโมชั่น"
+                      basePath="/admin/marketing/promotions"
+                      isDisabled={row.status === "disabled"}
+                      onDuplicate={() => handleDuplicate(row)}
+                      onToggleStatus={() => setConfirmToggle(row)}
+                      onDelete={() => setConfirmDelete(row)}
+                      triggerClass="flex size-9 shrink-0 items-center justify-center self-start rounded-pill text-ink-gray hover:bg-surface-pink"
+                    />
+                  </div>
+                  <div class="flex items-center justify-between border-t border-border pt-3">
+                    <span class="text-sm text-ink-gray">เปิดใช้บนหน้าร้าน</span>
+                    <LiveSwitch row={row} />
+                  </div>
                 </div>
               )}
             />
@@ -379,7 +414,7 @@ export default function AdminPromotionListPage() {
         onOpenChange={(open) => !open && setConfirmDelete(null)}
         title="ลบโปรโมชั่น?"
         description={`คุณต้องการลบ "${confirmDelete()?.name ?? ""}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-        confirmLabel="ลบ"
+        confirmLabel="ลบโปรโมชั่น"
         tone="danger"
         loading={actionLoading()}
         onConfirm={confirmDeleteAction}
@@ -389,7 +424,11 @@ export default function AdminPromotionListPage() {
         open={confirmToggle() !== null}
         onOpenChange={(open) => !open && setConfirmToggle(null)}
         title={confirmToggle()?.status === "disabled" ? "เปิดใช้งานโปรโมชั่นนี้?" : "ปิดใช้งานโปรโมชั่นนี้?"}
-        description={`"${confirmToggle()?.name ?? ""}"`}
+        description={
+          confirmToggle()?.status === "disabled"
+            ? `"${confirmToggle()?.name ?? ""}" จะมีผลในตะกร้าตามวันที่ที่ตั้งไว้`
+            : `"${confirmToggle()?.name ?? ""}" จะหยุดมีผลในตะกร้าทันที`
+        }
         confirmLabel={confirmToggle()?.status === "disabled" ? "เปิดใช้งาน" : "ปิดใช้งาน"}
         loading={actionLoading()}
         onConfirm={confirmToggleAction}
@@ -400,7 +439,7 @@ export default function AdminPromotionListPage() {
         onOpenChange={setConfirmBulkDelete}
         title="ลบโปรโมชั่นที่เลือก?"
         description={`คุณต้องการลบโปรโมชั่น ${selectedIds().size} รายการที่เลือกหรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-        confirmLabel="ลบ"
+        confirmLabel="ลบโปรโมชั่น"
         tone="danger"
         loading={actionLoading()}
         onConfirm={confirmBulkDeleteAction}
@@ -409,19 +448,3 @@ export default function AdminPromotionListPage() {
   );
 }
 
-function ListSkeleton() {
-  return (
-    <div class="flex flex-col gap-3">
-      {Array.from({ length: 5 }).map(() => (
-        <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
-          <div class="flex flex-1 flex-col gap-1.5">
-            <Skeleton class="h-4 w-1/3" />
-            <Skeleton class="h-3 w-1/4" />
-          </div>
-          <Skeleton class="h-6 w-20 rounded-pill" />
-          <Skeleton class="h-8 w-14 rounded-pill" />
-        </div>
-      ))}
-    </div>
-  );
-}

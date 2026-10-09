@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { mediaImage } from "~/lib/media";
 import { TextField } from "~/components/shared/TextField";
 import { SearchInput } from "~/components/admin/SearchInput";
 import { StatusBadge } from "~/components/admin/StatusBadge";
@@ -16,16 +17,16 @@ import { categoryListHref, collectionListHref, type HomepageDestination } from "
 const TYPE_OPTIONS: { value: HomepageDestination["type"]; label: string }[] = [
   { value: "none", label: "ไม่มี" },
   { value: "internal", label: "หน้าภายในเว็บไซต์" },
-  { value: "landingPage", label: "Landing Page" },
+  { value: "landingPage", label: "หน้าแคมเปญ" },
   { value: "product", label: "สินค้า" },
   { value: "category", label: "หมวดหมู่สินค้า" },
-  { value: "collection", label: "Product Collection" },
+  { value: "collection", label: "กลุ่มสินค้าพิเศษ" },
   { value: "external", label: "ลิงก์ภายนอก" },
 ];
 
 /**
  * §10/§11/§18 — one destination picker reused by Hero/Promotion Banner/
- * Campaign/Content's CTA. Choosing "Landing Page"/"สินค้า"/"หมวดหมู่สินค้า"/
+ * Content/CTA sections. Choosing "Landing Page"/"สินค้า"/"หมวดหมู่สินค้า"/
  * "Product Collection" never asks for a URL — the id picked here is resolved
  * at render time (`resolveHomepageDestinationHref`), so slug/id stays the
  * one source of truth for the actual link. Category/Collection resolve to
@@ -68,7 +69,7 @@ export function DestinationSelector(props: { value: HomepageDestination; onChang
   return (
     <div class="flex flex-col gap-3">
       <label class="flex flex-col gap-1.5">
-        <span class="text-sm font-medium text-ink">Destination</span>
+        <span class="text-sm font-medium text-ink">ปลายทาง</span>
         <div class="relative">
           <select
             value={props.value.type}
@@ -85,7 +86,7 @@ export function DestinationSelector(props: { value: HomepageDestination; onChang
 
       <Show when={props.value.type === "internal"}>
         <TextField
-          label="พาธหน้าภายในเว็บไซต์"
+          label="ลิงก์หน้าในเว็บไซต์"
           placeholder="/products"
           value={(props.value as { path: string }).path}
           onInput={(e) => props.onChange({ type: "internal", path: e.currentTarget.value })}
@@ -133,12 +134,12 @@ function LandingPagePicker(props: { value: string; onChange: (id: string) => voi
 
   return (
     <div class="flex flex-col gap-2 rounded-card border border-border p-3">
-      <SearchInput value={search()} onInput={setSearch} placeholder="ค้นหา Landing Page..." />
+      <SearchInput value={search()} onInput={setSearch} placeholder="ค้นหาหน้าแคมเปญ..." />
       <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
-        <Show when={filtered().length > 0} fallback={<p class="p-3 text-center text-sm text-ink-gray">ไม่พบ Landing Page</p>}>
+        <Show when={filtered().length > 0} fallback={<p class="p-3 text-center text-sm text-ink-gray">ไม่พบหน้าแคมเปญ</p>}>
           <For each={filtered()}>
             {(page) => (
-              <label class="flex cursor-pointer items-center gap-3 rounded-card p-2 transition-colors duration-150 hover:bg-surface-pink/30">
+              <label class="flex cursor-pointer items-center gap-3 rounded-card p-2 transition-colors duration-150 hover:bg-surface-pink/40">
                 <input
                   type="radio"
                   name="landing-page-destination"
@@ -147,8 +148,8 @@ function LandingPagePicker(props: { value: string; onChange: (id: string) => voi
                   class="size-4 accent-brand-pink"
                 />
                 <div class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
-                  <Show when={page.banners.desktop} fallback={<ImageIcon class="size-4" />}>
-                    <img src={page.banners.desktop} alt="" class="size-full object-cover" />
+                  <Show when={mediaImage(page.banners.desktop)} fallback={<ImageIcon class="size-4" />}>
+                    <img src={mediaImage(page.banners.desktop)} alt="" class="size-full object-cover" />
                   </Show>
                 </div>
                 <div class="min-w-0 flex-1">
@@ -163,7 +164,7 @@ function LandingPagePicker(props: { value: string; onChange: (id: string) => voi
       </div>
       <Show when={props.value !== ""}>
         <p class="text-xs text-ink-gray">
-          Destination: <span class="font-medium text-ink">/promotion/{store.getById(props.value)?.slug ?? "?"}</span>
+          ลิงก์ <span class="font-medium text-ink">/promotion/{store.getById(props.value)?.slug ?? "?"}</span>
         </p>
       </Show>
     </div>
@@ -186,7 +187,7 @@ function SingleProductPicker(props: { value: string; onChange: (id: string) => v
         <Show when={filtered().length > 0} fallback={<p class="p-3 text-center text-sm text-ink-gray">ไม่พบสินค้า</p>}>
           <For each={filtered()}>
             {(product) => (
-              <label class="flex cursor-pointer items-center gap-3 rounded-card p-2 transition-colors duration-150 hover:bg-surface-pink/30">
+              <label class="flex cursor-pointer items-center gap-3 rounded-card p-2 transition-colors duration-150 hover:bg-surface-pink/40">
                 <input
                   type="radio"
                   name="product-destination"
@@ -198,7 +199,7 @@ function SingleProductPicker(props: { value: string; onChange: (id: string) => v
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-medium text-ink">{product.name}</p>
                   <p class="text-xs text-ink-gray">
-                    {product.sku} · {formatAdminCurrency(product.price)}
+                    {product.sku} ราคา {formatAdminCurrency(product.price)}
                   </p>
                 </div>
               </label>
@@ -226,7 +227,7 @@ function CategoryPicker(props: { value: string; onChange: (id: string) => void }
         <Show when={filtered().length > 0} fallback={<p class="p-3 text-center text-sm text-ink-gray">ไม่พบหมวดหมู่</p>}>
           <For each={filtered()}>
             {(category) => (
-              <label class="flex cursor-pointer items-center gap-3 rounded-card p-2 transition-colors duration-150 hover:bg-surface-pink/30">
+              <label class="flex cursor-pointer items-center gap-3 rounded-card p-2 transition-colors duration-150 hover:bg-surface-pink/40">
                 <input
                   type="radio"
                   name="category-destination"
@@ -234,11 +235,6 @@ function CategoryPicker(props: { value: string; onChange: (id: string) => void }
                   onChange={() => props.onChange(category.id)}
                   class="size-4 accent-brand-pink"
                 />
-                <div class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
-                  <Show when={category.image} fallback={<ImageIcon class="size-4" />}>
-                    <img src={category.image} alt="" class="size-full object-cover" />
-                  </Show>
-                </div>
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-medium text-ink">{category.name}</p>
                   <p class="truncate text-xs text-ink-gray">/{category.slug}</p>
@@ -251,7 +247,7 @@ function CategoryPicker(props: { value: string; onChange: (id: string) => void }
       </div>
       <Show when={props.value !== ""}>
         <p class="text-xs text-ink-gray">
-          Destination: <span class="font-medium text-ink">{categoryListHref(store.getById(props.value)?.slug ?? "?")}</span>
+          ลิงก์ <span class="font-medium text-ink">{categoryListHref(store.getById(props.value)?.slug ?? "?")}</span>
         </p>
       </Show>
     </div>
@@ -269,12 +265,12 @@ function CollectionPicker(props: { value: string; onChange: (id: string) => void
 
   return (
     <div class="flex flex-col gap-2 rounded-card border border-border p-3">
-      <SearchInput value={search()} onInput={setSearch} placeholder="ค้นหา Collection..." />
+      <SearchInput value={search()} onInput={setSearch} placeholder="ค้นหากลุ่มสินค้าพิเศษ..." />
       <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
-        <Show when={filtered().length > 0} fallback={<p class="p-3 text-center text-sm text-ink-gray">ไม่พบ Collection</p>}>
+        <Show when={filtered().length > 0} fallback={<p class="p-3 text-center text-sm text-ink-gray">ไม่พบกลุ่มสินค้าพิเศษ</p>}>
           <For each={filtered()}>
             {(collection) => (
-              <label class="flex cursor-pointer items-center gap-3 rounded-card p-2 transition-colors duration-150 hover:bg-surface-pink/30">
+              <label class="flex cursor-pointer items-center gap-3 rounded-card p-2 transition-colors duration-150 hover:bg-surface-pink/40">
                 <input
                   type="radio"
                   name="collection-destination"
@@ -294,7 +290,7 @@ function CollectionPicker(props: { value: string; onChange: (id: string) => void
       </div>
       <Show when={props.value !== ""}>
         <p class="text-xs text-ink-gray">
-          Destination: <span class="font-medium text-ink">{collectionListHref(props.value)}</span>
+          ลิงก์ <span class="font-medium text-ink">{collectionListHref(props.value)}</span>
         </p>
       </Show>
     </div>

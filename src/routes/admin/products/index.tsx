@@ -32,7 +32,6 @@ import {
   type ProductFormValues,
 } from "~/lib/adminProductStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
-import { useAdminBrands } from "~/lib/adminBrandStore";
 import { useAdminCollections } from "~/lib/adminCollectionStore";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
@@ -47,13 +46,12 @@ const LEGACY_CATEGORY_LABELS: Record<string, string> = { eye: "ตา", cheek: "
 
 /** §08-11 — Import Excel template/columns/validation for Products, the flagship module named explicitly in the spec. */
 const PRODUCT_IMPORT_COLUMNS = [
-  { key: "name", label: "Product Name" },
+  { key: "name", label: "ชื่อสินค้า" },
   { key: "sku", label: "SKU" },
-  { key: "category", label: "Category" },
-  { key: "brand", label: "Brand" },
-  { key: "price", label: "Price" },
-  { key: "stock", label: "Stock" },
-  { key: "status", label: "Status" },
+  { key: "category", label: "หมวดหมู่" },
+  { key: "price", label: "ราคา" },
+  { key: "stock", label: "สต๊อก" },
+  { key: "status", label: "สถานะ" },
 ];
 
 const PRODUCT_STATUS_LABELS: Record<string, AdminProductStatus> = {
@@ -66,19 +64,18 @@ const PRODUCT_STATUS_LABELS: Record<string, AdminProductStatus> = {
 };
 
 const SORT_OPTIONS = [
-  { value: "name-asc", label: "ชื่อสินค้า A–Z" },
-  { value: "name-desc", label: "ชื่อสินค้า Z–A" },
-  { value: "price-asc", label: "ราคา ต่ำ→สูง" },
-  { value: "price-desc", label: "ราคา สูง→ต่ำ" },
-  { value: "stock-asc", label: "สต๊อก น้อย→มาก" },
-  { value: "stock-desc", label: "สต๊อก มาก→น้อย" },
+  { value: "name-asc", label: "ชื่อสินค้า A-Z" },
+  { value: "name-desc", label: "ชื่อสินค้า Z-A" },
+  { value: "price-asc", label: "ราคา ต่ำไปสูง" },
+  { value: "price-desc", label: "ราคา สูงไปต่ำ" },
+  { value: "stock-asc", label: "สต๊อก น้อยไปมาก" },
+  { value: "stock-desc", label: "สต๊อก มากไปน้อย" },
   { value: "best-selling", label: "ขายดีที่สุด" },
 ];
 
 export default function AdminProductListPage() {
   const store = useAdminProducts();
   const categoryStore = useAdminCategories();
-  const brandStore = useAdminBrands();
   const collectionStore = useAdminCollections();
   const contentStore = useAdminContent();
   const navigation = useAdminNavigation();
@@ -86,7 +83,6 @@ export default function AdminProductListPage() {
 
   const [search, setSearchRaw] = createSignal("");
   const [categoryFilter, setCategoryFilterRaw] = createSignal("all");
-  const [brandFilter, setBrandFilterRaw] = createSignal("all");
   const [statusFilter, setStatusFilterRaw] = createSignal("all");
   const [stockFilter, setStockFilterRaw] = createSignal("all");
   const [sort, setSortRaw] = createSignal("name-asc");
@@ -105,7 +101,7 @@ export default function AdminProductListPage() {
   const quickViewProduct = createMemo(() => (quickViewId() ? store.getById(quickViewId()!) : undefined));
   const [importOpen, setImportOpen] = createSignal(false);
 
-  /** §11 — required fields, duplicate SKU, invalid price/quantity, and unresolved Category/Brand/Status references are all checked here, per row, before anything is written to the Product Store. */
+  /** §11 — required fields, duplicate SKU, invalid price/quantity, and unresolved Category/Status references are all checked here, per row, before anything is written to the Product Store. */
   const parseProductImportRow = (raw: Record<string, string>, rowIndex: number): ImportRowResult<ProductFormValues> => {
     const messages: string[] = [];
     let status: "ready" | "warning" | "error" = "ready";
@@ -116,13 +112,12 @@ export default function AdminProductListPage() {
     };
     const cell = (...keys: string[]) => keys.map((k) => (raw[k] ?? "").toString().trim()).find((v) => v !== "") ?? "";
 
-    const name = cell("Product Name", "name");
+    const name = cell("ชื่อสินค้า", "Product Name", "name");
     const sku = cell("SKU", "sku");
-    const categoryName = cell("Category", "category");
-    const brandName = cell("Brand", "brand");
-    const priceRaw = cell("Price", "price");
-    const stockRaw = cell("Stock", "stock");
-    const statusRaw = cell("Status", "status");
+    const categoryName = cell("หมวดหมู่", "Category", "category");
+    const priceRaw = cell("ราคา", "Price", "price");
+    const stockRaw = cell("สต๊อก", "Stock", "stock");
+    const statusRaw = cell("สถานะ", "Status", "status");
 
     if (!name) flag("ไม่มีชื่อสินค้า");
     if (!sku) flag("ไม่มี SKU");
@@ -135,24 +130,19 @@ export default function AdminProductListPage() {
     if (Number.isNaN(stock) || stock < 0) flag("จำนวนสต๊อกไม่ถูกต้อง");
 
     const category = categoryName ? categoryStore.categories().find((c) => c.name.trim().toLowerCase() === categoryName.toLowerCase()) : undefined;
-    if (categoryName && !category) flag(`ไม่พบหมวดหมู่ "${categoryName}" — จะบันทึกโดยไม่ระบุหมวดหมู่`, "warning");
-
-    const brand = brandName ? brandStore.brands().find((b) => b.name.trim().toLowerCase() === brandName.toLowerCase()) : undefined;
-    if (brandName && !brand) flag(`ไม่พบแบรนด์ "${brandName}" — จะบันทึกโดยไม่ระบุแบรนด์`, "warning");
+    if (categoryName && !category) flag(`ไม่พบหมวดหมู่ "${categoryName}" จึงจะบันทึกโดยไม่ระบุหมวดหมู่`, "warning");
 
     const resolvedStatus = statusRaw ? PRODUCT_STATUS_LABELS[statusRaw.toLowerCase()] : "draft";
-    if (statusRaw && !resolvedStatus) flag(`สถานะ "${statusRaw}" ไม่ถูกต้อง (ใช้ active/draft/disabled) — จะบันทึกเป็น Draft`, "warning");
+    if (statusRaw && !resolvedStatus) flag(`สถานะ "${statusRaw}" ไม่ถูกต้อง ใช้ได้เฉพาะ เปิดขาย, แบบร่าง หรือ ปิดการขาย จึงจะบันทึกเป็นแบบร่าง`, "warning");
 
     return {
       row: rowIndex,
       status,
       messages,
-      preview: { name: name || "-", sku: sku || "-", category: categoryName || "-", brand: brandName || "-", price: priceRaw || "-", stock: stockRaw || "-", status: statusRaw || "-" },
+      preview: { name: name || "-", sku: sku || "-", category: categoryName || "-", price: priceRaw || "-", stock: stockRaw || "-", status: statusRaw || "-" },
       data: {
         name: name || `สินค้านำเข้า #${rowIndex}`,
         sku: sku || `IMPORT-${rowIndex}`,
-        brand: brand?.name ?? brandName,
-        brandId: brand?.id ?? "",
         categoryId: category?.id ?? "",
         price: Number.isFinite(price) && price > 0 ? price : 0,
         stockLeft: Number.isFinite(stock) && stock >= 0 ? stock : 0,
@@ -180,14 +170,13 @@ export default function AdminProductListPage() {
 
   const productExportColumns: ExportColumn<AdminProduct>[] = [
     { header: "SKU", value: (p) => p.sku },
-    { header: "Product Name", value: (p) => p.name },
-    { header: "Category", value: (p) => categoryStore.getById(p.categoryId)?.name ?? "" },
-    { header: "Brand", value: (p) => brandStore.getById(p.brandId)?.name ?? p.brand ?? "" },
-    { header: "Price", value: (p) => p.price },
-    { header: "Stock", value: (p) => p.stockLeft ?? 0 },
-    { header: "Sold", value: (p) => p.soldCount ?? 0 },
-    { header: "Status", value: (p) => ADMIN_PRODUCT_STATUS_META[p.status].label },
-    { header: "Updated", value: (p) => p.updatedAt },
+    { header: "ชื่อสินค้า", value: (p) => p.name },
+    { header: "หมวดหมู่", value: (p) => categoryStore.getById(p.categoryId)?.name ?? "" },
+    { header: "ราคา", value: (p) => p.price },
+    { header: "สต๊อก", value: (p) => p.stockLeft ?? 0 },
+    { header: "ขายแล้ว", value: (p) => p.soldCount ?? 0 },
+    { header: "สถานะ", value: (p) => ADMIN_PRODUCT_STATUS_META[p.status].label },
+    { header: "แก้ไขล่าสุด", value: (p) => p.updatedAt },
   ];
 
   const loadList = () => {
@@ -199,19 +188,17 @@ export default function AdminProductListPage() {
   const resetPage = () => setPage(1);
   const setSearch = (v: string) => { setSearchRaw(v); resetPage(); };
   const setCategoryFilter = (v: string) => { setCategoryFilterRaw(v); resetPage(); };
-  const setBrandFilter = (v: string) => { setBrandFilterRaw(v); resetPage(); };
   const setStatusFilter = (v: string) => { setStatusFilterRaw(v); resetPage(); };
   const setStockFilter = (v: string) => { setStockFilterRaw(v); resetPage(); };
   const setSort = (v: string) => { setSortRaw(v); resetPage(); };
   const setPageSize = (v: number) => { setPageSizeRaw(v); resetPage(); };
 
   const hasActiveFilters = () =>
-    search().trim() !== "" || categoryFilter() !== "all" || brandFilter() !== "all" || statusFilter() !== "all" || stockFilter() !== "all";
+    search().trim() !== "" || categoryFilter() !== "all" || statusFilter() !== "all" || stockFilter() !== "all";
 
   const clearFilters = () => {
     setSearchRaw("");
     setCategoryFilterRaw("all");
-    setBrandFilterRaw("all");
     setStatusFilterRaw("all");
     setStockFilterRaw("all");
     resetPage();
@@ -222,15 +209,13 @@ export default function AdminProductListPage() {
     return store.products().filter((p) => {
       if (q) {
         const categoryName = categoryStore.getById(p.categoryId)?.name ?? "";
-        const brandName = brandStore.getById(p.brandId)?.name ?? p.brand;
-        const haystack = `${p.name} ${p.sku} ${brandName} ${categoryName}`.toLowerCase();
+        const haystack = `${p.name} ${p.sku} ${categoryName}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       // Real Category id (Admin Master Data Foundation) — replaces the old
       // 3-value `p.category` enum comparison, so all 5 Categories are
       // actually filterable here, not just eye/cheek/lip.
       if (categoryFilter() !== "all" && p.categoryId !== categoryFilter()) return false;
-      if (brandFilter() !== "all" && p.brandId !== brandFilter()) return false;
       if (statusFilter() !== "all" && p.status !== statusFilter()) return false;
       if (stockFilter() !== "all" && getStockStatus(p) !== (stockFilter() as StockStatus)) return false;
       return true;
@@ -312,7 +297,7 @@ export default function AdminProductListPage() {
   const confirmToggleAction = async () => {
     const product = confirmToggle();
     if (!product) return;
-    const nextStatus: AdminProductStatus = product.status === "disabled" ? "active" : "disabled";
+    const nextStatus: AdminProductStatus = product.status === "active" ? "disabled" : "active";
     setActionLoading(true);
     await store.setStatus(product.id, nextStatus);
     setActionLoading(false);
@@ -338,7 +323,7 @@ export default function AdminProductListPage() {
     setConfirmBulkDelete(false);
     clearSelection();
     if (blocked.length > 0) {
-      pushToast(`ลบไม่สำเร็จ ${blocked.length} รายการ (มีการใช้งานอยู่) — ลบสำเร็จ ${ok.length} รายการ`, "warning");
+      pushToast(`ลบสำเร็จ ${ok.length} รายการ และลบไม่ได้ ${blocked.length} รายการเพราะยังมีการใช้งานอยู่`, "warning");
     } else {
       pushToast(`ลบสินค้า ${ok.length} รายการเรียบร้อยแล้ว`, "error");
     }
@@ -348,7 +333,7 @@ export default function AdminProductListPage() {
     const ids = [...selectedIds()];
     await Promise.all(ids.map((id) => store.setStatus(id, status)));
     clearSelection();
-    pushToast(status === "active" ? `เปิดใช้งาน ${ids.length} รายการแล้ว` : `ปิดใช้งาน ${ids.length} รายการแล้ว`, "success");
+    pushToast(status === "active" ? `เปิดขาย ${ids.length} รายการแล้ว` : `ปิดการขาย ${ids.length} รายการแล้ว`, "success");
   };
 
   const columns: DataTableColumn<AdminProduct>[] = [
@@ -377,7 +362,7 @@ export default function AdminProductListPage() {
     },
     {
       key: "product",
-      label: "Product",
+      label: "สินค้า",
       render: (row) => (
         <div class="flex min-w-0 items-center gap-3">
           <img src={row.image} alt="" class="size-11 shrink-0 rounded-media object-cover" />
@@ -393,20 +378,14 @@ export default function AdminProductListPage() {
     { key: "sku", label: "SKU", render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.sku}</span> },
     {
       key: "category",
-      label: "Category",
+      label: "หมวดหมู่",
       hideBelowXl: true,
       render: (row) => <span class="text-ink-gray">{categoryStore.getById(row.categoryId)?.name ?? LEGACY_CATEGORY_LABELS[row.category ?? ""] ?? "-"}</span>,
     },
-    {
-      key: "brand",
-      label: "Brand",
-      hideBelowXl: true,
-      render: (row) => <span class="text-ink-gray">{brandStore.getById(row.brandId)?.name ?? row.brand ?? "-"}</span>,
-    },
-    { key: "price", label: "Price", align: "right", render: (row) => <span class="font-medium text-ink">{formatAdminCurrency(row.price)}</span> },
+    { key: "price", label: "ราคา", align: "right", render: (row) => <span class="font-medium text-ink">{formatAdminCurrency(row.price)}</span> },
     {
       key: "stock",
-      label: "Stock",
+      label: "สต๊อก",
       render: (row) => {
         const stockStatus = getStockStatus(row);
         // Global UI Correction — Final Refinement #3: number and status
@@ -420,15 +399,15 @@ export default function AdminProductListPage() {
         );
       },
     },
-    { key: "sold", label: "Sold", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.soldCount ?? 0}</span> },
+    { key: "sold", label: "ขายแล้ว", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.soldCount ?? 0}</span> },
     {
       key: "status",
-      label: "Status",
+      label: "สถานะ",
       render: (row) => (
         <StatusBadge tone={ADMIN_PRODUCT_STATUS_META[row.status].tone}>{ADMIN_PRODUCT_STATUS_META[row.status].label}</StatusBadge>
       ),
     },
-    { key: "updated", label: "Updated", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.updatedAt}</span> },
+    { key: "updated", label: "แก้ไขล่าสุด", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.updatedAt}</span> },
     {
       key: "actions",
       label: "",
@@ -449,7 +428,7 @@ export default function AdminProductListPage() {
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สินค้า" }]} />
       <PageHeader
         title="สินค้า"
-        description="จัดการสินค้า ราคา สต็อก และข้อมูลผลิตภัณฑ์ของ Charmiss"
+        description="จัดการสินค้า ราคา สต๊อก และข้อมูลที่แสดงบนหน้าร้าน"
         actions={
           <div class="flex flex-wrap items-center gap-2">
             <ExportMenu filenameBase="products-report" columns={productExportColumns} rows={sorted()} />
@@ -464,7 +443,7 @@ export default function AdminProductListPage() {
       />
 
       <FilterBar
-        search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาชื่อสินค้า, SKU, แบรนด์..." }}
+        search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาชื่อสินค้า, SKU..." }}
         filters={[
           {
             id: "category",
@@ -473,16 +452,10 @@ export default function AdminProductListPage() {
             options: [{ value: "all", label: "ทุกหมวดหมู่" }, ...categoryStore.categories().map((c) => ({ value: c.id, label: c.name }))],
           },
           {
-            id: "brand",
-            label: "แบรนด์",
-            value: brandFilter(),
-            options: [{ value: "all", label: "ทุกแบรนด์" }, ...brandStore.brands().map((b) => ({ value: b.id, label: b.name }))],
-          },
-          {
             id: "status",
             label: "สถานะ",
             value: statusFilter(),
-            options: [{ value: "all", label: "ทุกสถานะ" }, { value: "active", label: "Active" }, { value: "draft", label: "Draft" }, { value: "disabled", label: "Disabled" }],
+            options: [{ value: "all", label: "ทุกสถานะ" }, { value: "active", label: ADMIN_PRODUCT_STATUS_META.active.label }, { value: "draft", label: ADMIN_PRODUCT_STATUS_META.draft.label }, { value: "disabled", label: ADMIN_PRODUCT_STATUS_META.disabled.label }],
           },
           {
             id: "stock",
@@ -498,7 +471,6 @@ export default function AdminProductListPage() {
         ]}
         onFilterChange={(id, value) => {
           if (id === "category") setCategoryFilter(value);
-          if (id === "brand") setBrandFilter(value);
           if (id === "status") setStatusFilter(value);
           if (id === "stock") setStockFilter(value);
         }}
@@ -563,7 +535,7 @@ export default function AdminProductListPage() {
                         <p class="mt-1 text-sm font-semibold text-ink">{formatAdminCurrency(row.price)}</p>
                         <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <span class="flex items-center gap-1.5 whitespace-nowrap text-sm text-ink-gray">
-                            Stock {row.stockLeft ?? 0}
+                            สต๊อก {row.stockLeft ?? 0}
                             <StatusBadge tone={STOCK_STATUS_META[stockStatus].tone}>{stockStatusLabel(row)}</StatusBadge>
                           </span>
                           <StatusBadge tone={ADMIN_PRODUCT_STATUS_META[row.status].tone}>{ADMIN_PRODUCT_STATUS_META[row.status].label}</StatusBadge>
@@ -592,8 +564,8 @@ export default function AdminProductListPage() {
         count={selectedIds().size}
         onClear={clearSelection}
         actions={[
-          { label: "เปิดใช้งาน", onClick: () => bulkSetStatus("active") },
-          { label: "ปิดใช้งาน", onClick: () => bulkSetStatus("disabled") },
+          { label: "เปิดขาย", onClick: () => bulkSetStatus("active") },
+          { label: "ปิดการขาย", onClick: () => bulkSetStatus("disabled") },
           { label: "ลบ", tone: "danger", onClick: () => setConfirmBulkDelete(true) },
         ]}
       />
@@ -631,10 +603,10 @@ export default function AdminProductListPage() {
           const b = blockedDelete();
           if (!b) return "";
           const parts: string[] = [];
-          if (b.deps.collections.length > 0) parts.push(`ถูกใช้งานใน Collection: ${b.deps.collections.map((c) => c.name).join(", ")}`);
-          if (b.deps.navRefs.length > 0) parts.push(`ถูกใช้งานใน Navigation: ${b.deps.navRefs.map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
-          if (b.deps.pageRefs.length > 0) parts.push(`ถูกใช้งานใน Promotion Page: ${b.deps.pageRefs.map((r) => (r.isHomepage ? "Homepage" : r.pageName)).join(", ")}`);
-          return `"${b.product.name}" — ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบสินค้านี้`;
+          if (b.deps.collections.length > 0) parts.push(`ถูกใช้งานในกลุ่มสินค้าพิเศษ: ${b.deps.collections.map((c) => c.name).join(", ")}`);
+          if (b.deps.navRefs.length > 0) parts.push(`ถูกใช้งานในเมนู: ${b.deps.navRefs.map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
+          if (b.deps.pageRefs.length > 0) parts.push(`ถูกใช้งานในหน้าแคมเปญ: ${b.deps.pageRefs.map((r) => (r.isHomepage ? "หน้าแรก" : r.pageName)).join(", ")}`);
+          return `สินค้า "${b.product.name}" ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบสินค้านี้`;
         })()}
         confirmLabel="เข้าใจแล้ว"
         cancelLabel="ปิด"
@@ -644,9 +616,9 @@ export default function AdminProductListPage() {
       <ConfirmDialog
         open={confirmToggle() !== null}
         onOpenChange={(open) => !open && setConfirmToggle(null)}
-        title={confirmToggle()?.status === "disabled" ? "เปิดการขายสินค้านี้?" : "ปิดการขายสินค้านี้?"}
-        description={`"${confirmToggle()?.name ?? ""}" จะ${confirmToggle()?.status === "disabled" ? "กลับมาแสดงในร้านค้า" : "ถูกซ่อนจากร้านค้า"}`}
-        confirmLabel={confirmToggle()?.status === "disabled" ? "เปิดการขาย" : "ปิดการขาย"}
+        title={confirmToggle()?.status === "active" ? "ปิดการขายสินค้านี้?" : "เปิดการขายสินค้านี้?"}
+        description={`"${confirmToggle()?.name ?? ""}" จะ${confirmToggle()?.status === "active" ? "ถูกซ่อนจากหน้าร้านทุกหน้า" : "แสดงบนหน้าร้านและลูกค้าสั่งซื้อได้"}`}
+        confirmLabel={confirmToggle()?.status === "active" ? "ปิดการขาย" : "เปิดการขาย"}
         loading={actionLoading()}
         onConfirm={confirmToggleAction}
       />
@@ -666,7 +638,7 @@ export default function AdminProductListPage() {
         open={importOpen()}
         onOpenChange={setImportOpen}
         title="นำเข้าสินค้าจาก Excel"
-        description="เลือกไฟล์ Excel/CSV ที่มีคอลัมน์ Product Name, SKU, Category, Brand, Price, Stock, Status ระบบจะตรวจสอบข้อมูลก่อนนำเข้าจริง"
+        description="เลือกไฟล์ Excel หรือ CSV ที่มีคอลัมน์ ชื่อสินค้า, SKU, หมวดหมู่, ราคา, สต๊อก, สถานะ ระบบจะตรวจข้อมูลให้ก่อนนำเข้า"
         templateColumns={PRODUCT_IMPORT_COLUMNS}
         parseRow={parseProductImportRow}
         onConfirm={handleProductImport}

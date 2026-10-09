@@ -37,13 +37,10 @@ export function PaymentFailedDialog(props: {
               <p class="font-semibold leading-[1.75] text-ink">{msg().title}</p>
             </div>
             <Dialog.Description class="flex flex-col gap-1 text-sm leading-[1.75] text-ink-gray sm:text-base sm:leading-[1.75]">
-              <span>คำสั่งซื้อของคุณรอการชำระเงิน — ยังไม่มีการตัดเงินจากรายการนี้</span>
+              <span>คำสั่งซื้อของคุณยังรอชำระเงินอยู่ ระบบยังไม่ได้ตัดเงินจากรายการนี้</span>
               <span>
-                ชำระภายหลังได้ที่{" "}
-                <span class="font-semibold text-ink">
-                  <span class="whitespace-nowrap">โปรไฟล์ ›</span> <span class="whitespace-nowrap">ประวัติการซื้อ ›</span>{" "}
-                  <span class="whitespace-nowrap">รอชำระเงิน</span>
-                </span>
+                ชำระภายหลังได้ที่เมนู<span class="font-semibold text-ink">โปรไฟล์</span> หัวข้อ<span class="font-semibold text-ink">ประวัติการซื้อ</span>{" "}
+                ในแท็บ<span class="font-semibold text-ink">รอชำระเงิน</span>
               </span>
             </Dialog.Description>
 

@@ -13,6 +13,7 @@ import googleIcon from "~/assets/icons/social-google.svg";
 import coinMark from "~/assets/icons/charmiss-coin.png";
 import { CloseMark } from "./icons";
 import { Button } from "./Button";
+import { FieldError } from "./TextField";
 
 /**
  * Login / Register (prototype). Steps: start (phone first, or email, LINE,
@@ -63,8 +64,10 @@ export function AuthModal() {
   // Phone only for now (email sign-in is kept in the flow but not offered).
   const channel = (): Channel => "phone";
   const [contact, setContact] = createSignal("");
-  const [contactError, setContactError] = createSignal<string>();
+  // Errors show once the button was pressed, then follow the input live (and clear when fixed).
+  const [contactTried, setContactTried] = createSignal(false);
   const [otp, setOtp] = createSignal("");
+  const [otpTried, setOtpTried] = createSignal(false);
   const [resendIn, setResendIn] = createSignal(0);
   const [formError, setFormError] = createSignal<string>();
   const [result, setResult] = createSignal<SignInResult>();
@@ -85,6 +88,13 @@ export function AuthModal() {
   onCleanup(() => clearInterval(resendTimer));
 
   const contactValid = () => (channel() === "phone" ? PHONE_PATTERN.test(contact().trim()) && contact().replace(/\D/g, "").length === 10 : EMAIL_PATTERN.test(contact().trim()));
+  const contactError = (): string | undefined => {
+    if (!contactTried() || contactValid()) return undefined;
+    const phone = channel() === "phone";
+    if (!contact().trim()) return phone ? "กรุณากรอกเบอร์โทรศัพท์" : "กรุณากรอกอีเมล";
+    return phone ? "กรุณากรอกเบอร์โทรศัพท์ 10 หลัก เช่น 081-234-5678" : "กรุณากรอกอีเมลให้ถูกต้อง เช่น name@example.com";
+  };
+  const otpError = () => (otpTried() && otp().length < OTP_LENGTH ? `กรุณากรอกรหัส OTP ให้ครบ ${OTP_LENGTH} หลัก` : undefined);
   const maskedContact = () => {
     const v = contact().trim();
     if (channel() === "email") return v.replace(/^(.{2}).*(@.*)$/, "$1•••$2");
@@ -96,8 +106,9 @@ export function AuthModal() {
     clearInterval(resendTimer);
     setStep("start");
     setContact("");
-    setContactError(undefined);
+    setContactTried(false);
     setOtp("");
+    setOtpTried(false);
     setFormError(undefined);
     setResult(undefined);
     setBirthDay("");
@@ -114,13 +125,14 @@ export function AuthModal() {
 
   const requestOtp = (e?: SubmitEvent) => {
     e?.preventDefault();
+    setContactTried(true);
     if (!contactValid()) {
-      setContactError(channel() === "phone" ? "กรุณากรอกเบอร์โทรศัพท์ 10 หลัก เช่น 081-234-5678" : "กรุณากรอกอีเมลให้ถูกต้อง เช่น name@example.com");
       document.getElementById("auth-modal-contact")?.focus();
       return;
     }
-    setContactError(undefined);
+    setContactTried(false);
     setOtp("");
+    setOtpTried(false);
     setStep("otp");
     startResendTimer();
     setTimeout(() => document.getElementById("auth-modal-otp")?.focus(), 50);
@@ -150,7 +162,7 @@ export function AuthModal() {
     if (result()?.member === "crm") {
       setStep("welcome-back");
     } else {
-      pushToast("สมัครสมาชิกสำเร็จ", "success", "ยินดีต้อนรับสู่ Charmiss Club 🎉");
+      pushToast("สมัครสมาชิกสำเร็จ", "success", "ยินดีต้อนรับสู่ Charmiss Club");
       close();
     }
   };
@@ -164,6 +176,10 @@ export function AuthModal() {
     if (Number(birthDay()) > daysInMonth()) setBirthDay(""); // e.g. 31 then เดือน กุมภาพันธ์ — ask for the day again
   });
   const birthIso = () => `${birthYear()}-${birthMonth().padStart(2, "0")}-${birthDay().padStart(2, "0")}`;
+  // Each dropdown has its own "missing" message; the date rules below only run once all three are picked.
+  const dayError = () => (moreInfoTried() && asks("birthDate") && !birthDay() ? "กรุณาเลือกวัน" : undefined);
+  const monthError = () => (moreInfoTried() && asks("birthDate") && !birthMonth() ? "กรุณาเลือกเดือน" : undefined);
+  const yearError = () => (moreInfoTried() && asks("birthDate") && !birthYear() ? "กรุณาเลือกปี" : undefined);
   const birthError = (): string | undefined => {
     if (!asks("birthDate")) return undefined;
     if (!birthDay() || !birthMonth() || !birthYear()) return "กรุณาเลือกวัน เดือน และปีเกิดให้ครบ";
@@ -175,6 +191,8 @@ export function AuthModal() {
     if (thirteenth > now) return `ต้องมีอายุ ${MIN_AGE} ปีขึ้นไป`;
     return undefined;
   };
+  // Wrong date / too young — only once day, month and year are all picked (the missing ones have their own messages).
+  const dateRuleError = () => (moreInfoTried() && birthDay() && birthMonth() && birthYear() ? birthError() : undefined);
   const genderError = () => (asks("gender") && !gender() ? "กรุณาเลือกเพศ" : undefined);
   const moreInfoSubtitle = () =>
     asks("birthDate") && asks("gender") ? "ระบุวันเกิด และเพศ เพื่อรับสิทธิพิเศษจากเรา" : asks("birthDate") ? "ระบุวันเกิด เพื่อรับสิทธิพิเศษจากเรา" : "ระบุเพศ เพื่อรับสิทธิพิเศษจากเรา";
@@ -183,7 +201,9 @@ export function AuthModal() {
     e.preventDefault();
     setMoreInfoTried(true);
     if (birthError() || genderError()) {
-      document.getElementById(birthError() ? "auth-modal-birth-day" : "auth-modal-gender-female")?.focus();
+      // Focus the first field that's wrong: day → month → year (a bad/too-young date goes back to the day) → gender.
+      const first = !birthError() ? "auth-modal-gender-female" : birthDay() && !birthMonth() ? "auth-modal-birth-month" : birthDay() && birthMonth() && !birthYear() ? "auth-modal-birth-year" : "auth-modal-birth-day";
+      document.getElementById(first)?.focus();
       return;
     }
     setSavingMoreInfo(true);
@@ -266,7 +286,6 @@ export function AuthModal() {
                     value={contact()}
                     onInput={(e) => {
                       setContact(channel() === "phone" ? e.currentTarget.value.replace(/[^\d-]/g, "") : e.currentTarget.value);
-                      if (contactError()) setContactError(undefined);
                     }}
                     aria-invalid={!!contactError()}
                     aria-describedby={contactError() ? "auth-modal-contact-error" : undefined}
@@ -274,11 +293,7 @@ export function AuthModal() {
                       contactError() ? "border-system-red" : "border-surface-gray"
                     }`}
                   />
-                  <Show when={contactError()}>
-                    <p id="auth-modal-contact-error" role="alert" class="text-sm text-system-red">
-                      {contactError()}
-                    </p>
-                  </Show>
+                  <FieldError id="auth-modal-contact-error" message={contactError()} />
                   {/* Grey until the number/email is complete, then the brand pink. */}
                   <button
                     type="submit"
@@ -362,7 +377,8 @@ export function AuthModal() {
                           class="flex aspect-square items-center justify-center rounded-[14px] border text-2xl font-semibold text-ink transition-colors duration-150"
                           classList={{
                             "border-brand-pink bg-surface-pink/40": i() === Math.min(otp().length, OTP_LENGTH - 1),
-                            "border-surface-gray": i() !== Math.min(otp().length, OTP_LENGTH - 1),
+                            "border-system-red": !!otpError() && i() !== Math.min(otp().length, OTP_LENGTH - 1),
+                            "border-surface-gray": !otpError() && i() !== Math.min(otp().length, OTP_LENGTH - 1),
                           }}
                         >
                           {otp()[i()] ?? ""}
@@ -378,14 +394,23 @@ export function AuthModal() {
                     maxlength={OTP_LENGTH}
                     value={otp()}
                     onInput={(e) => onOtpInput(e.currentTarget.value)}
+                    aria-invalid={!!otpError()}
+                    aria-describedby={otpError() ? "auth-modal-otp-error" : undefined}
                     class="absolute inset-0 size-full cursor-text opacity-0"
                   />
                 </label>
+                <div class="-mt-4 w-full empty:hidden">
+                  <FieldError id="auth-modal-otp-error" message={otpError()} />
+                </div>
 
+                {/* Grey until all 6 digits are in, but still pressable — an early press says what's missing. */}
                 <button
                   type="button"
-                  disabled={otp().length < OTP_LENGTH}
-                  onClick={() => signIn({ method: channel(), value: contact().trim() })}
+                  onClick={() => {
+                    setOtpTried(true);
+                    if (otp().length < OTP_LENGTH) return document.getElementById("auth-modal-otp")?.focus();
+                    void signIn({ method: channel(), value: contact().trim() });
+                  }}
                   class="flex min-h-[44px] w-full items-center justify-center rounded-pill px-4 py-2.5 text-base font-medium transition-colors duration-150"
                   classList={{ "bg-brand-pink text-white": otp().length === OTP_LENGTH, "bg-surface-gray text-ink-gray": otp().length < OTP_LENGTH }}
                 >
@@ -434,24 +459,21 @@ export function AuthModal() {
 
                 <form onSubmit={saveMoreInfo} novalidate class="flex w-full flex-col gap-5">
                   <Show when={asks("birthDate")}>
-                    <fieldset class="flex flex-col gap-1.5" aria-describedby={moreInfoTried() && birthError() ? "auth-modal-birth-error" : undefined}>
+                    <fieldset class="flex flex-col gap-1.5" aria-describedby={dateRuleError() ? "auth-modal-birth-error" : undefined}>
                       <legend class="mb-1.5 text-sm font-medium text-ink">วันเดือนปีเกิด</legend>
-                      <div class="grid grid-cols-[1fr_1.6fr_1.2fr] gap-2">
-                        <BirthSelect id="auth-modal-birth-day" label="วัน" value={birthDay()} onChange={setBirthDay} invalid={moreInfoTried() && !!birthError()}>
+                      {/* Columns sized so at 375px each "กรุณาเลือก…" message stays on one line and "พฤศจิกายน" / "2556" aren't cut. */}
+                      <div class="grid grid-cols-[minmax(0,21fr)_minmax(0,29fr)_minmax(0,19fr)] items-start gap-2">
+                        <BirthSelect id="auth-modal-birth-day" label="วัน" value={birthDay()} onChange={setBirthDay} error={dayError()} invalid={!!dateRuleError()}>
                           <For each={Array.from({ length: daysInMonth() }, (_, i) => i + 1)}>{(d) => <option value={String(d)}>{d}</option>}</For>
                         </BirthSelect>
-                        <BirthSelect id="auth-modal-birth-month" label="เดือน" value={birthMonth()} onChange={setBirthMonth} invalid={moreInfoTried() && !!birthError()}>
+                        <BirthSelect id="auth-modal-birth-month" label="เดือน" value={birthMonth()} onChange={setBirthMonth} error={monthError()} invalid={!!dateRuleError()}>
                           <For each={THAI_MONTHS}>{(m, i) => <option value={String(i() + 1)}>{m}</option>}</For>
                         </BirthSelect>
-                        <BirthSelect id="auth-modal-birth-year" label="ปี (พ.ศ.)" value={birthYear()} onChange={setBirthYear} invalid={moreInfoTried() && !!birthError()}>
+                        <BirthSelect id="auth-modal-birth-year" label="ปี (พ.ศ.)" value={birthYear()} onChange={setBirthYear} error={yearError()} invalid={!!dateRuleError()}>
                           <For each={years}>{(y) => <option value={String(y)}>{y + 543}</option>}</For>
                         </BirthSelect>
                       </div>
-                      <Show when={moreInfoTried() && birthError()}>
-                        <p id="auth-modal-birth-error" role="alert" class="text-sm text-system-red">
-                          {birthError()}
-                        </p>
-                      </Show>
+                      <FieldError id="auth-modal-birth-error" message={dateRuleError()} />
                     </fieldset>
                   </Show>
 
@@ -463,7 +485,11 @@ export function AuthModal() {
                           {(g) => (
                             <label
                               class="flex min-h-11 cursor-pointer items-center gap-2 rounded-pill border px-4 text-sm text-ink transition-colors duration-150"
-                              classList={{ "border-brand-pink bg-surface-pink": gender() === g.value, "border-surface-gray bg-white": gender() !== g.value }}
+                              classList={{
+                                "border-brand-pink bg-surface-pink": gender() === g.value,
+                                "border-system-red bg-white": gender() !== g.value && !!(moreInfoTried() && genderError()),
+                                "border-surface-gray bg-white": gender() !== g.value && !(moreInfoTried() && genderError()),
+                              }}
                             >
                               <input
                                 id={`auth-modal-gender-${g.value}`}
@@ -472,6 +498,7 @@ export function AuthModal() {
                                 value={g.value}
                                 checked={gender() === g.value}
                                 onChange={() => setGender(g.value)}
+                                aria-invalid={!!(moreInfoTried() && genderError())}
                                 class="size-4 accent-brand-pink"
                               />
                               {g.label}
@@ -479,11 +506,7 @@ export function AuthModal() {
                           )}
                         </For>
                       </div>
-                      <Show when={moreInfoTried() && genderError()}>
-                        <p id="auth-modal-gender-error" role="alert" class="text-sm text-system-red">
-                          {genderError()}
-                        </p>
-                      </Show>
+                      <FieldError id="auth-modal-gender-error" message={moreInfoTried() ? genderError() : undefined} />
                     </fieldset>
                   </Show>
 
@@ -537,27 +560,42 @@ export function AuthModal() {
 }
 
 /** One of the birth date's day / month / year dropdowns — the TextField box look, with the shared chevron. */
-function BirthSelect(props: { id: string; label: string; value: string; onChange: (value: string) => void; invalid: boolean; children: JSX.Element }) {
+function BirthSelect(props: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  /** This dropdown's own "missing" message, shown right under it. */
+  error?: string;
+  /** Red border without a message of its own (the whole date breaks a rule). */
+  invalid: boolean;
+  children: JSX.Element;
+}) {
+  const errorId = `${props.id}-error`;
   return (
-    <div class="relative">
-      <label for={props.id} class="sr-only">
-        {props.label}
-      </label>
-      <select
-        id={props.id}
-        value={props.value}
-        onChange={(e) => props.onChange(e.currentTarget.value)}
-        aria-invalid={props.invalid}
-        class={`h-11 w-full appearance-none rounded-card border bg-surface-card pl-3 pr-8 text-base outline-none transition-colors duration-150 focus:border-brand-pink ${
-          props.invalid ? "border-system-red" : "border-border"
-        } ${props.value ? "text-ink" : "text-ink-placeholder"}`}
-      >
-        <option value="" disabled>
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <div class="relative">
+        <label for={props.id} class="sr-only">
           {props.label}
-        </option>
-        {props.children}
-      </select>
-      <ChevronIcon direction="down" class="pointer-events-none absolute right-2.5 top-1/2 size-5 -translate-y-1/2 text-ink-gray" />
+        </label>
+        <select
+          id={props.id}
+          value={props.value}
+          onChange={(e) => props.onChange(e.currentTarget.value)}
+          aria-invalid={!!props.error || props.invalid}
+          aria-describedby={props.error ? errorId : props.invalid ? "auth-modal-birth-error" : undefined}
+          class={`h-11 w-full appearance-none rounded-card border bg-surface-card pl-2.5 pr-7 text-base outline-none transition-colors duration-150 focus:border-brand-pink ${
+            props.error || props.invalid ? "border-system-red" : "border-border"
+          } ${props.value ? "text-ink" : "text-ink-placeholder"}`}
+        >
+          <option value="" disabled>
+            {props.label}
+          </option>
+          {props.children}
+        </select>
+        <ChevronIcon direction="down" class="pointer-events-none absolute right-2 top-1/2 size-5 -translate-y-1/2 text-ink-gray" />
+      </div>
+      <FieldError id={errorId} message={props.error} />
     </div>
   );
 }

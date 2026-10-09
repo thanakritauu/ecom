@@ -98,7 +98,7 @@ function OrderDetail(props: {
         <Banner tone="warning">
           <span class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span class="flex flex-col">
-              <span>รอชำระเงิน — ระบบจะเริ่มเตรียมและจัดส่งสินค้าหลังชำระเงินเรียบร้อย</span>
+              <span>รอชำระเงิน เราจะเริ่มเตรียมและจัดส่งสินค้าทันทีที่ชำระเงินเรียบร้อย</span>
               {/* Past this time the order is cancelled automatically (PAYMENT_WINDOW_HOURS) */}
               <span class="text-sm">
                 ชำระภายใน <span class="font-semibold">{formatEventTime(getPaymentDeadline(props.order))}</span> มิฉะนั้นคำสั่งซื้อจะถูกยกเลิกอัตโนมัติ
@@ -127,7 +127,7 @@ function OrderDetail(props: {
                 ที่อยู่จัดส่ง
               </h2>
               <p class="text-sm font-semibold text-ink">
-                {props.order.shippingAddress.recipientName} <span class="font-normal text-ink-gray">· {props.order.shippingAddress.phone}</span>
+                {props.order.shippingAddress.recipientName} <span class="font-normal text-ink-gray">{props.order.shippingAddress.phone}</span>
               </p>
               <p class="text-sm text-ink">{formatAddress(props.order.shippingAddress)}</p>
             </section>
@@ -171,7 +171,7 @@ function OrderDetail(props: {
                 >
                   <div class="flex min-h-[44px] flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-pill bg-success-soft px-4 py-2 text-base font-medium text-success">
                     <span class="flex items-center gap-1.5">
-                      <CheckIcon class="size-4" /> รีวิวแล้ว · ขอบคุณสำหรับรีวิว
+                      <CheckIcon class="size-4" /> รีวิวแล้ว ขอบคุณสำหรับความคิดเห็น
                     </span>
                     <Show when={getOrderRating(props.order)}>{(r) => <ReviewStars rating={r()} class="size-4" showValue={r() % 1 !== 0} />}</Show>
                   </div>

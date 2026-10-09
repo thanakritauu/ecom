@@ -179,7 +179,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
 
       <Show when={discountPercent() && !outOfStock()}>
         <Badge tone="red" class="absolute left-[7px] top-[7px]">
-          -{discountPercent()}%
+          ลด {discountPercent()}%
         </Badge>
       </Show>
 

@@ -1,5 +1,6 @@
 import type { Product, ProductVariant } from "./types";
 import type { AdminVariant } from "./adminProductStore";
+import { isVideoMedia, type MediaValue } from "./media";
 
 /**
  * Phase 02 §3/§4 — the one place a storefront variant is resolved into
@@ -38,6 +39,17 @@ const unique = (list: (string | undefined)[]) => [...new Set(list.filter((s): s 
 export function productGallery(product: Product): string[] {
   const images = product.images?.length ? product.images : [product.image];
   return unique([product.mainImage, ...images, product.image]);
+}
+
+/**
+ * Turns a list of still images (a product's gallery strings) back into what
+ * the PDP should play: an entry whose still is a gallery video's poster
+ * becomes that video, everything else stays an image. Cards never call this.
+ */
+export function withProductVideos(product: Product, stills: string[]): MediaValue[] {
+  const videos = new Map<string, MediaValue>();
+  for (const item of product.media ?? []) if (isVideoMedia(item) && item.poster) videos.set(item.poster, item);
+  return stills.map((src) => videos.get(src) ?? src);
 }
 
 function adminVariantsOf(product: Product): AdminVariant[] {

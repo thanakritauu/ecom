@@ -7,12 +7,12 @@ import { WishlistProvider } from "~/lib/wishlist";
 import { ProductCatalogProvider } from "~/lib/productCatalog";
 import { LandingPagesProvider } from "~/lib/promotionPages";
 import { HomepageContentProvider } from "~/lib/homepageContent";
-import { CampaignContentProvider } from "~/lib/campaignContent";
 import { CollectionContentProvider } from "~/lib/collectionContent";
 import { CategoryContentProvider } from "~/lib/categoryContent";
-import { BrandContentProvider } from "~/lib/brandContent";
 import { NavigationContentProvider } from "~/lib/navigationContent";
 import { ToastViewport } from "~/lib/toast";
+import { StorefrontPromotionsProvider } from "~/lib/storefrontPromotions";
+import { PromoPopup } from "~/components/home/PromoPopup";
 import "./app.css";
 
 export default function App() {
@@ -23,25 +23,25 @@ export default function App() {
           <CartProvider>
             <WishlistProvider>
               <ProductCatalogProvider>
-                <LandingPagesProvider>
-                  <CategoryContentProvider>
-                    <BrandContentProvider>
-                      <CampaignContentProvider>
-                        <CollectionContentProvider>
-                          <NavigationContentProvider>
-                            <HomepageContentProvider>
-                              <Suspense>{props.children}</Suspense>
-                              {/* Global, mounted once here (not per-route) — a toast pushed from any
-                                  page (Checkout, Account, a Product Card's wishlist error, ...) must
-                                  render regardless of which route triggered it. */}
-                              <ToastViewport />
-                            </HomepageContentProvider>
-                          </NavigationContentProvider>
-                        </CollectionContentProvider>
-                      </CampaignContentProvider>
-                    </BrandContentProvider>
-                  </CategoryContentProvider>
-                </LandingPagesProvider>
+                <StorefrontPromotionsProvider>
+                  <LandingPagesProvider>
+                    <CategoryContentProvider>
+                      <CollectionContentProvider>
+                        <NavigationContentProvider>
+                          <HomepageContentProvider>
+                            <Suspense>{props.children}</Suspense>
+                            {/* Global, mounted once here (not per-route) — a toast pushed from any
+                                page (Checkout, Account, a Product Card's wishlist error, ...) must
+                                render regardless of which route triggered it. */}
+                            <ToastViewport />
+                            {/* Site-wide: opens on whichever storefront pages Admin picked (never on /admin). */}
+                            <PromoPopup />
+                          </HomepageContentProvider>
+                        </NavigationContentProvider>
+                      </CollectionContentProvider>
+                    </CategoryContentProvider>
+                  </LandingPagesProvider>
+                </StorefrontPromotionsProvider>
               </ProductCatalogProvider>
             </WishlistProvider>
           </CartProvider>

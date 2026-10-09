@@ -4,10 +4,10 @@ import type { PaymentFailureReason } from "./payment";
 import { FAILURE_MESSAGES } from "./payment";
 import { allProducts } from "./products";
 import { formatAdminCurrency } from "./adminDashboard";
-import { applyPaymentDeadline, MOCK_ORDERS as ACCOUNT_ORDERS, getPaymentStatus as getAccountPaymentStatus } from "./accountData";
+import { applyPaymentDeadline, AUTO_CANCEL_REASON, getPaymentDeadline, MOCK_ORDERS as ACCOUNT_ORDERS, getPaymentStatus as getAccountPaymentStatus } from "./accountData";
 import { AVAILABLE_COUPONS, COIN_TO_BAHT_RATE, computeCoinsEarned, computeShippingFee, DELIVERY, GIFT_PROMOTION, PAYMENT_METHODS, type PaymentMethodId } from "./cartSelectors";
 import type { TierId } from "./membership";
-import { getShipmentStatus, RETURN_REASONS, SHIPMENT_STATUS_META } from "./orderTracking";
+import { getShipmentStatus, SHIPMENT_STATUS_META } from "./orderTracking";
 import { formatAddress } from "./checkoutData";
 
 /**
@@ -21,8 +21,8 @@ import { formatAddress } from "./checkoutData";
  */
 export type OrderStatus = "pending_payment" | "preparing" | "handed_over" | "shipping" | "completed" | "cancelled";
 
-/** Storefront's `paid`/`pending`/`cancelled` (accountData.ts) + `refunded`, which only an approved return produces. */
-export type PaymentStatus = "paid" | "pending" | "cancelled" | "refunded";
+/** Storefront's `paid`/`pending`/`cancelled` (accountData.ts). */
+export type PaymentStatus = "paid" | "pending" | "cancelled";
 
 /** = storefront `ShipmentStatus`, always derived from the DHL tracking events (`getShipmentStatus`), never set by hand. */
 export type FulfillmentStatus = ShipmentStatus;
@@ -40,7 +40,6 @@ export const PAYMENT_STATUS_META: Record<PaymentStatus, { label: string; tone: S
   paid: { label: "ชำระเงินสำเร็จ", tone: "success" },
   pending: { label: "รอชำระเงิน", tone: "warning" },
   cancelled: { label: "ยกเลิกการชำระเงิน", tone: "neutral" },
-  refunded: { label: "คืนเงินแล้ว", tone: "neutral" },
 };
 
 /** Labels straight from the storefront's `SHIPMENT_STATUS_META`; only the tone is Admin's own. */
@@ -56,8 +55,8 @@ export const FULFILLMENT_STATUS_META: Record<FulfillmentStatus, { label: string;
  * The only transitions Change Status may offer — one step at a time, same
  * flow as the storefront. Cancel follows the storefront rule
  * (`orderTracking.ts` `canCancelOrder`): only until the parcel is handed to
- * DHL. Returns/refunds aren't a status here — they're a `returnRequest` on a
- * completed order, decided separately.
+ * DHL. The storefront has no self-serve cancel or return: customers ask on
+ * LINE and staff cancel here.
  */
 export const VALID_NEXT_ORDER_STATUS: Record<OrderStatus, OrderStatus[]> = {
   pending_payment: ["preparing", "cancelled"],
@@ -150,40 +149,24 @@ export type OrderShippingInfo = {
 /** One-line display with the storefront's own แขวง/เขต (or ตำบล/อำเภอ) prefixing rules. */
 export const formatOrderAddress = (a: OrderAddress) => formatAddress({ id: "", label: "", ...a });
 
-/** ที่อยู่ออกใบเสร็จรับเงิน — optional, like Checkout's billing form; `recipientName` may be a company name (`companyAllowed`). */
-export type OrderBillingAddress = OrderAddress & { isCompany?: boolean };
+/** ที่อยู่ออกใบกำกับภาษี — optional, like Checkout's billing form (unset = same as shipping); `recipientName` may be a company name (`companyAllowed`). */
+export type OrderBillingAddress = OrderAddress;
 
 export type OrderCancellation = {
-  by: "customer" | "admin" | "system";
+  /** "system" = the storefront's 24h payment-deadline auto-cancel; "admin" = staff (customers ask on LINE). */
+  by: "admin" | "system";
   /** ISO 8601. */
   at: string;
   reason?: string;
 };
 
-export type ReturnRequestStatus = "requested" | "approved" | "rejected";
-
-/** Storefront `ReturnRequest` + the decision Admin makes on it. */
-export type OrderReturnRequest = {
-  itemIndexes: number[];
-  reason: string;
-  note?: string;
-  /** ISO 8601. */
-  requestedAt: string;
-  status: ReturnRequestStatus;
-  decidedAt?: string;
-};
-
-export const RETURN_STATUS_META: Record<ReturnRequestStatus, { label: string; tone: StatusTone }> = {
-  requested: { label: "รอตรวจสอบคำขอคืน", tone: "warning" },
-  approved: { label: "อนุมัติคืนสินค้า", tone: "success" },
-  rejected: { label: "ปฏิเสธคำขอคืน", tone: "danger" },
-};
-
 export const CANCELLED_BY_LABEL: Record<OrderCancellation["by"], string> = {
-  customer: "ลูกค้ายกเลิก",
-  admin: "แอดมินยกเลิก",
+  admin: "ร้านค้ายกเลิก",
   system: "ระบบยกเลิกอัตโนมัติ",
 };
+
+/** Storefront rule (accountData.ts): an unpaid order is cancelled automatically 24 hours after it was placed. */
+export const orderPaymentDeadline = (order: Pick<AdminOrder, "placedAt">) => getPaymentDeadline(order);
 
 export const paymentFailureLabel = (reason: PaymentFailureReason) => FAILURE_MESSAGES[reason].title;
 
@@ -209,7 +192,6 @@ export type AdminOrder = {
   paymentStatus: PaymentStatus;
   fulfillmentStatus: FulfillmentStatus;
   cancellation?: OrderCancellation;
-  returnRequest?: OrderReturnRequest;
 };
 
 // ---------------------------------------------------------------------------
@@ -304,11 +286,6 @@ export function deriveFulfillmentStatus(shipping: OrderShippingInfo): Fulfillmen
 /** Storefront rule (`canCancelOrder`): cancellable until the parcel is handed to the carrier. */
 export function canCancelOrder(order: Pick<AdminOrder, "orderStatus" | "shipping">): boolean {
   return VALID_NEXT_ORDER_STATUS[order.orderStatus].includes("cancelled") && getShipmentStatus(order.shipping) === "awaiting_shipment";
-}
-
-/** Refund amount of an approved return = the returned lines' paid total (gift lines are ฿0). */
-export function returnRefundAmount(order: Pick<AdminOrder, "items" | "returnRequest">): number {
-  return (order.returnRequest?.itemIndexes ?? []).reduce((sum, i) => sum + (order.items[i]?.lineTotal ?? 0), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -406,7 +383,6 @@ const COMPANY_BILLING: OrderBillingAddress = {
   district: "เขตคลองเตย",
   province: "กรุงเทพมหานคร",
   postalCode: "10110",
-  isCompany: true,
 };
 
 const SHIPPING_METHOD = DELIVERY.method;
@@ -442,7 +418,6 @@ type OrderSeed = {
   coinsRedeemed?: number;
   failureReason?: PaymentFailureReason;
   cancellation?: Omit<OrderCancellation, "at"> & { afterHours: number };
-  returnRequest?: Omit<OrderReturnRequest, "requestedAt" | "decidedAt"> & { afterHours: number };
 };
 
 /**
@@ -458,22 +433,22 @@ const ADMIN_ORDER_SEEDS: OrderSeed[] = [
   { seq: 1034, placedAt: "2026-10-02T10:40:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["trend-2", 1]], orderStatus: "pending_payment", methodId: "card", card: { brand: "VISA", last4: "0002" }, failureReason: "card_declined" },
   { seq: 1033, placedAt: "2026-10-02T10:05:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["best-2", 1], ["new-7", 1]], orderStatus: "preparing", methodId: "card", card: { brand: "VISA", last4: "4242" }, couponCode: "SAVE50" },
   { seq: 1024, placedAt: "2026-09-10T20:15:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], items: [["flash-1", 2], ["best-3", 1]], orderStatus: "completed", methodId: "card", card: { brand: "MASTERCARD", last4: "5100" } },
-  { seq: 1023, placedAt: "2026-09-10T13:02:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["new-2", 1]], orderStatus: "cancelled", methodId: "promptpay", cancellation: { by: "system", reason: "ไม่ชำระเงินภายในเวลาที่กำหนด", afterHours: 24 } },
+  { seq: 1023, placedAt: "2026-09-10T13:02:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["new-2", 1]], orderStatus: "cancelled", methodId: "promptpay", cancellation: { by: "system", reason: AUTO_CANCEL_REASON, afterHours: 24 } },
   { seq: 1022, placedAt: "2026-09-09T19:40:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["trend-1", 2]], orderStatus: "completed", methodId: "truemoney", couponCode: "SAVE20" },
-  { seq: 1021, placedAt: "2026-09-09T13:25:00+07:00", customer: CUSTOMERS[3], address: ADDRESSES[3], items: [["feature-1", 1], ["flash-4", 2]], orderStatus: "completed", methodId: "card", card: { brand: "VISA", last4: "4242" }, returnRequest: { itemIndexes: [1], reason: RETURN_REASONS[1], note: "ฝาตลับแตกตั้งแต่เปิดกล่อง", status: "requested", afterHours: 120 } },
-  { seq: 1020, placedAt: "2026-09-09T08:10:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["best-5", 1]], orderStatus: "cancelled", methodId: "card", card: { brand: "VISA", last4: "9995" }, failureReason: "insufficient_funds", cancellation: { by: "system", reason: "ไม่ชำระเงินภายในเวลาที่กำหนด", afterHours: 24 } },
+  { seq: 1021, placedAt: "2026-09-09T13:25:00+07:00", customer: CUSTOMERS[3], address: ADDRESSES[3], items: [["feature-1", 1], ["flash-4", 2]], orderStatus: "completed", methodId: "card", card: { brand: "VISA", last4: "4242" } },
+  { seq: 1020, placedAt: "2026-09-09T08:10:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["best-5", 1]], orderStatus: "cancelled", methodId: "card", card: { brand: "VISA", last4: "9995" }, failureReason: "insufficient_funds", cancellation: { by: "system", reason: AUTO_CANCEL_REASON, afterHours: 24 } },
   { seq: 1019, placedAt: "2026-09-08T18:12:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], items: [["new-4", 1], ["trend-6", 1]], orderStatus: "completed", methodId: "promptpay" },
-  { seq: 1018, placedAt: "2026-09-08T10:48:00+07:00", customer: CUSTOMERS[5], address: ADDRESSES[5], items: [["flash-7", 1]], orderStatus: "cancelled", methodId: "card", card: { brand: "JCB", last4: "0505" }, cancellation: { by: "customer", reason: "สั่งซื้อซ้ำ", afterHours: 1 } },
+  { seq: 1018, placedAt: "2026-09-08T10:48:00+07:00", customer: CUSTOMERS[5], address: ADDRESSES[5], items: [["flash-7", 1]], orderStatus: "cancelled", methodId: "card", card: { brand: "JCB", last4: "0505" }, cancellation: { by: "admin", reason: "ลูกค้าแจ้งทาง LINE ว่าสั่งซื้อซ้ำ", afterHours: 1 } },
   { seq: 1017, placedAt: "2026-09-07T21:30:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], items: [["feature-3", 1], ["best-1", 2], ["new-1", 2]], orderStatus: "completed", methodId: "card", card: { brand: "MASTERCARD", last4: "5100" }, couponCode: "SAVE50" },
-  { seq: 1016, placedAt: "2026-09-07T15:05:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["trend-3", 1]], orderStatus: "completed", methodId: "promptpay" },
+  { seq: 1016, placedAt: "2026-09-07T15:05:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["trend-3", 1]], orderStatus: "completed", methodId: "mobilebanking" },
   { seq: 1015, placedAt: "2026-09-07T09:20:00+07:00", customer: CUSTOMERS[3], address: ADDRESSES[3], items: [["flash-2", 1]], orderStatus: "completed", methodId: "truemoney" },
-  { seq: 1014, placedAt: "2026-09-06T20:55:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["best-8", 1], ["new-6", 1]], orderStatus: "completed", methodId: "card", card: { brand: "VISA", last4: "1881" }, returnRequest: { itemIndexes: [0], reason: RETURN_REASONS[4], note: undefined, status: "rejected", afterHours: 360 } },
-  { seq: 1013, placedAt: "2026-09-06T12:35:00+07:00", customer: CUSTOMERS[5], address: ADDRESSES[5], items: [["trend-9", 3]], orderStatus: "completed", methodId: "card", card: { brand: "VISA", last4: "4242" }, returnRequest: { itemIndexes: [0], reason: RETURN_REASONS[0], note: "ได้รับเฉดสีไม่ตรงกับที่สั่ง", status: "approved", afterHours: 72 } },
-  { seq: 1012, placedAt: "2026-09-05T19:10:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["feature-5", 1]], orderStatus: "cancelled", methodId: "card", card: { brand: "VISA", last4: "4242" }, cancellation: { by: "customer", reason: "ต้องการเปลี่ยนตัวเลือกสินค้า", afterHours: 2 } },
+  { seq: 1014, placedAt: "2026-09-06T20:55:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["best-8", 1], ["new-6", 1]], orderStatus: "completed", methodId: "card", card: { brand: "VISA", last4: "1881" } },
+  { seq: 1013, placedAt: "2026-09-06T12:35:00+07:00", customer: CUSTOMERS[5], address: ADDRESSES[5], items: [["trend-9", 3]], orderStatus: "completed", methodId: "card", card: { brand: "VISA", last4: "4242" } },
+  { seq: 1012, placedAt: "2026-09-05T19:10:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["feature-5", 1]], orderStatus: "cancelled", methodId: "card", card: { brand: "VISA", last4: "4242" }, cancellation: { by: "admin", reason: "ลูกค้าแจ้งทาง LINE ว่าต้องการเปลี่ยนสีสินค้า", afterHours: 2 } },
   { seq: 1011, placedAt: "2026-09-05T10:45:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], billing: COMPANY_BILLING, items: [["flash-9", 1], ["best-10", 1]], orderStatus: "completed", methodId: "card", card: { brand: "MASTERCARD", last4: "5100" }, couponCode: "SAVE20" },
-  { seq: 1010, placedAt: "2026-09-04T20:30:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["new-8", 1]], orderStatus: "completed", methodId: "promptpay" },
+  { seq: 1010, placedAt: "2026-09-04T20:30:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["new-8", 1]], orderStatus: "completed", methodId: "mobilebanking" },
   { seq: 1009, placedAt: "2026-09-04T11:00:00+07:00", customer: CUSTOMERS[3], address: ADDRESSES[3], items: [["trend-4", 1], ["flash-11", 1]], orderStatus: "completed", methodId: "truemoney", coinsRedeemed: 300 },
-  { seq: 1008, placedAt: "2026-09-03T17:25:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["best-6", 2]], orderStatus: "cancelled", methodId: "promptpay", cancellation: { by: "system", reason: "ไม่ชำระเงินภายในเวลาที่กำหนด", afterHours: 24 } },
+  { seq: 1008, placedAt: "2026-09-03T17:25:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["best-6", 2]], orderStatus: "cancelled", methodId: "promptpay", cancellation: { by: "system", reason: AUTO_CANCEL_REASON, afterHours: 24 } },
   { seq: 1007, placedAt: "2026-09-03T09:40:00+07:00", customer: CUSTOMERS[5], address: ADDRESSES[5], items: [["new-9", 1]], orderStatus: "completed", methodId: "promptpay" },
 ];
 
@@ -504,15 +479,7 @@ function buildAdminSeedOrder(seed: OrderSeed): AdminOrder {
     events,
     address: seed.address,
   };
-  const returnRequest: OrderReturnRequest | undefined = seed.returnRequest && {
-    itemIndexes: seed.returnRequest.itemIndexes,
-    reason: seed.returnRequest.reason,
-    note: seed.returnRequest.note,
-    status: seed.returnRequest.status,
-    requestedAt: addHours(seed.placedAt, seed.returnRequest.afterHours),
-    decidedAt: seed.returnRequest.status === "requested" ? undefined : addHours(seed.placedAt, seed.returnRequest.afterHours + 20),
-  };
-  const paymentStatus: PaymentStatus = returnRequest?.status === "approved" ? "refunded" : isPaid ? "paid" : seed.orderStatus === "cancelled" ? "cancelled" : "pending";
+  const paymentStatus: PaymentStatus = isPaid ? "paid" : seed.orderStatus === "cancelled" ? "cancelled" : "pending";
   return {
     id: orderNumber,
     orderNumber,
@@ -536,7 +503,6 @@ function buildAdminSeedOrder(seed: OrderSeed): AdminOrder {
     paymentStatus,
     fulfillmentStatus: deriveFulfillmentStatus(shipping),
     cancellation: seed.cancellation && { by: seed.cancellation.by, reason: seed.cancellation.reason, at: addHours(seed.placedAt, seed.cancellation.afterHours) },
-    returnRequest,
   };
 }
 
@@ -616,9 +582,8 @@ function buildFromAccountOrder(order: Order): AdminOrder {
     orderStatus: order.status,
     paymentStatus: accountPayment,
     fulfillmentStatus: deriveFulfillmentStatus(shipping),
-    // The storefront's payment-deadline auto-cancel reads as a system cancel, worded like Admin's own seeds.
-    cancellation: order.cancelledAt ? (order.cancelReason ? { by: "system", reason: "ไม่ชำระเงินภายในเวลาที่กำหนด", at: order.cancelledAt } : { by: "customer", at: order.cancelledAt }) : undefined,
-    returnRequest: order.returnRequest && { ...order.returnRequest, status: "requested" },
+    // The storefront's payment-deadline auto-cancel reads as a system cancel with the storefront's own reason.
+    cancellation: order.cancelledAt ? (order.cancelReason ? { by: "system", reason: AUTO_CANCEL_REASON, at: order.cancelledAt } : { by: "admin", reason: "ลูกค้าแจ้งยกเลิกทาง LINE", at: order.cancelledAt }) : undefined,
   };
 }
 
@@ -632,11 +597,11 @@ export const MOCK_ORDERS: AdminOrder[] = [...ADMIN_ORDER_SEEDS.map(buildAdminSee
  * (`/account/points`): redeemed coins unless the order was cancelled; earned
  * on the amount paid excl. shipping × the customer's tier multiplier —
  * credited once delivered ("earned"), until then "pending"; nothing on an
- * unpaid, cancelled or refunded order.
+ * unpaid or cancelled order.
  */
 export function orderCoinMovements(order: AdminOrder, tier: TierId): { used: number; earned: number; state?: "earned" | "pending" } {
   const used = order.orderStatus === "cancelled" ? 0 : order.totals.coinsRedeemed;
-  const earns = order.orderStatus !== "cancelled" && order.orderStatus !== "pending_payment" && order.paymentStatus !== "refunded";
+  const earns = order.orderStatus !== "cancelled" && order.orderStatus !== "pending_payment";
   if (!earns) return { used, earned: 0 };
   return { used, earned: computeCoinsEarned(order.totals.grandTotal - order.totals.shippingFee, tier), state: order.orderStatus === "completed" ? "earned" : "pending" };
 }

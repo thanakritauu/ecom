@@ -4,17 +4,15 @@ import type { PromotionPageProductRef } from "./adminContent";
 /**
  * Product Collection Management — a simple named, admin-curated group of
  * products (e.g. "Best Sellers", "Skincare") that other modules (a Homepage
- * product section, a Campaign) can reference as a product source instead of
- * hand-picking products every time. Deliberately much simpler than a
- * Promotion Page: no banners, no schedule, no destination/CTA, no slug —
- * just Name, Description, Status, and a Product list.
+ * product section) can reference as a product source instead of
+ * hand-picking products every time. Name (staff only), on/off status and a
+ * product list; the storefront only shows the products of an active one.
  */
-export type CollectionStatus = "active" | "inactive" | "draft";
+export type CollectionStatus = "active" | "inactive";
 
 export const COLLECTION_STATUS_META: Record<CollectionStatus, { label: string; tone: StatusTone }> = {
   active: { label: "เปิดใช้งาน", tone: "success" },
   inactive: { label: "ปิดใช้งาน", tone: "neutral" },
-  draft: { label: "แบบร่าง", tone: "neutral" },
 };
 
 /**
@@ -25,7 +23,6 @@ export const COLLECTION_STATUS_META: Record<CollectionStatus, { label: string; t
 export type ProductCollection = {
   id: string;
   name: string;
-  description: string;
   status: CollectionStatus;
   products: PromotionPageProductRef[];
   createdAt: string;
@@ -40,12 +37,12 @@ export type ProductCollectionFormValues = Omit<ProductCollection, "id" | "create
  * shape relies on, so every collection is normalized before a component
  * ever reads it.
  */
-export function normalizeProductCollection(c: Partial<ProductCollection> & { id: string }): ProductCollection {
+export function normalizeProductCollection(c: Omit<Partial<ProductCollection>, "status"> & { id: string; status?: string }): ProductCollection {
   return {
     id: c.id,
     name: c.name ?? "",
-    description: c.description ?? "",
-    status: c.status ?? "draft",
+    // Older saves may carry "draft" (removed: it behaved exactly like "inactive").
+    status: c.status === "active" ? "active" : "inactive",
     products: Array.isArray(c.products)
       ? c.products.map((ref) => ({ productId: ref.productId, variantIds: Array.isArray(ref.variantIds) ? ref.variantIds : [] }))
       : [],
@@ -70,7 +67,6 @@ const COLLECTION_SEEDS: (Omit<ProductCollection, "createdAt" | "updatedAt"> & { 
   {
     id: "collection-001",
     name: "สินค้าขายดี",
-    description: "รวมสินค้าขายดีที่ลูกค้าซื้อซ้ำมากที่สุด เหมาะสำหรับแสดงบนหน้าแรก",
     status: "active",
     products: [
       { productId: "best-1", variantIds: [] },
@@ -82,7 +78,6 @@ const COLLECTION_SEEDS: (Omit<ProductCollection, "createdAt" | "updatedAt"> & { 
   {
     id: "collection-002",
     name: "สินค้ามาใหม่",
-    description: "คอลเลกชันสินค้าที่เพิ่งเปิดตัวใหม่ล่าสุด",
     status: "active",
     products: [
       { productId: "new-2", variantIds: [] },
@@ -92,7 +87,6 @@ const COLLECTION_SEEDS: (Omit<ProductCollection, "createdAt" | "updatedAt"> & { 
   {
     id: "collection-003",
     name: "สกินแคร์",
-    description: "กลุ่มสินค้าดูแลผิวหน้าและผิวกายสำหรับแคมเปญเฉพาะทาง",
     status: "inactive",
     products: [
       { productId: "feature-1", variantIds: [] },
@@ -103,8 +97,7 @@ const COLLECTION_SEEDS: (Omit<ProductCollection, "createdAt" | "updatedAt"> & { 
   {
     id: "collection-004",
     name: "รายการแนะนำ",
-    description: "สินค้าที่ทีมงานคัดสรรแนะนำเป็นพิเศษ",
-    status: "draft",
+    status: "inactive",
     products: [
       { productId: "trend-3", variantIds: [] },
       { productId: "best-8", variantIds: [] },
@@ -113,7 +106,6 @@ const COLLECTION_SEEDS: (Omit<ProductCollection, "createdAt" | "updatedAt"> & { 
   {
     id: "collection-005",
     name: "Summer Essentials",
-    description: "รวมไอเทมที่ต้องมีติดกระเป๋าช่วงหน้าร้อน",
     status: "active",
     products: [
       { productId: "trend-1", variantIds: [] },

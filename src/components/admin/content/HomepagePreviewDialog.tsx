@@ -19,12 +19,12 @@ export function HomepagePreviewDialog(props: { open: boolean; onOpenChange: (ope
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
           <Dialog.Content class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-card bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
             <div class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
-              <Dialog.Title class="text-lg font-semibold text-ink">Preview Homepage</Dialog.Title>
+              <Dialog.Title class="text-base font-semibold text-ink">ตัวอย่างหน้าเว็บ</Dialog.Title>
               <Dialog.CloseButton aria-label="ปิด" class="flex size-9 items-center justify-center rounded-pill text-ink-gray hover:bg-surface-pink">
                 <CloseXIcon />
               </Dialog.CloseButton>
             </div>
-            <div class="flex-1 overflow-y-auto bg-surface-gray/40 p-5">
+            <div class="flex-1 overflow-y-auto bg-surface-gray/60 p-5">
               <HomepageSectionsPreview sections={props.sections} />
             </div>
           </Dialog.Content>

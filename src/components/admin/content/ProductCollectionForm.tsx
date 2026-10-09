@@ -3,17 +3,11 @@ import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
-import { ChevronDownIcon } from "~/components/admin/icons";
+import { Toggle } from "~/components/admin/Toggle";
 import { PromotionPageProductPicker } from "./PromotionPageProductPicker";
 import { HomepageSections } from "~/components/home/HomepageSections";
 import { emptyBanners, emptyCta, type HomepageSection } from "~/lib/adminHomepage";
 import type { CollectionStatus, ProductCollection, ProductCollectionFormValues } from "~/lib/adminCollections";
-
-const STATUS_OPTIONS: { value: CollectionStatus; label: string }[] = [
-  { value: "active", label: "เปิดใช้งาน" },
-  { value: "inactive", label: "ปิดใช้งาน" },
-  { value: "draft", label: "แบบร่าง" },
-];
 
 /**
  * One Create/Edit form shared by `/new` and `/:id/edit`, same "one form, two
@@ -24,13 +18,12 @@ const STATUS_OPTIONS: { value: CollectionStatus; label: string }[] = [
  */
 export function ProductCollectionForm(props: {
   initial?: ProductCollection;
-  mode: "create" | "edit";
+  submitLabel: string;
   onSubmit: (values: ProductCollectionFormValues) => Promise<void>;
   onCancel: () => void;
 }) {
   const [name, setName] = createSignal(props.initial?.name ?? "");
-  const [description, setDescription] = createSignal(props.initial?.description ?? "");
-  const [status, setStatus] = createSignal<CollectionStatus>(props.initial?.status ?? "draft");
+  const [status, setStatus] = createSignal<CollectionStatus>(props.initial?.status ?? "active");
   const [products, setProducts] = createSignal(props.initial?.products ?? []);
 
   const [errors, setErrors] = createSignal<Record<string, string>>({});
@@ -39,7 +32,7 @@ export function ProductCollectionForm(props: {
 
   const validate = (): Record<string, string> => {
     const next: Record<string, string> = {};
-    if (!name().trim()) next.name = "กรุณากรอกชื่อ Collection";
+    if (!name().trim()) next.name = "กรุณากรอกชื่อกลุ่มสินค้าพิเศษ";
     return next;
   };
 
@@ -51,7 +44,6 @@ export function ProductCollectionForm(props: {
 
     const values: ProductCollectionFormValues = {
       name: name().trim(),
-      description: description().trim(),
       status: status(),
       products: products(),
     };
@@ -61,7 +53,7 @@ export function ProductCollectionForm(props: {
     try {
       await props.onSubmit(values);
     } catch {
-      setSubmitError("บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      setSubmitError("บันทึกกลุ่มสินค้าพิเศษไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     } finally {
       setSaving(false);
     }
@@ -80,11 +72,11 @@ export function ProductCollectionForm(props: {
   const previewSection = createMemo<HomepageSection>(() => ({
     id: "collection-preview",
     type: "product",
-    name: name() || "Collection",
+    name: name() || "กลุ่มสินค้าพิเศษ",
     enabled: true,
-    eyebrow: "คอลเลกชัน",
+    eyebrow: "",
     title: name(),
-    description: description(),
+    description: "",
     banners: emptyBanners(),
     assets: [],
     cta: emptyCta(),
@@ -93,56 +85,34 @@ export function ProductCollectionForm(props: {
     products: products(),
     collectionId: "",
     categoryId: "",
-    campaignId: "",
     createdAt: "",
     updatedAt: "",
   }));
 
   const collectionForm = (
     <>
-      <Section title="ข้อมูลพื้นฐาน">
+      <Section title="ข้อมูลกลุ่มสินค้าพิเศษ">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
-            label="ชื่อ Collection"
+            label="ชื่อกลุ่มสินค้าพิเศษ"
             required
-            placeholder="สินค้าขายดี"
+            placeholder="เช่น สินค้าขายดี"
             value={name()}
             onInput={(e) => setName(e.currentTarget.value)}
             error={errors().name}
             disabled={saving()}
             class="sm:col-span-2"
           />
-          <label class="flex flex-col gap-1.5 sm:col-span-2">
-            <span class="text-sm font-medium text-ink">คำอธิบาย</span>
-            <textarea
-              value={description()}
-              disabled={saving()}
-              placeholder="รวมสินค้าขายดีที่ลูกค้าซื้อซ้ำมากที่สุด"
-              onInput={(e) => setDescription(e.currentTarget.value)}
-              rows={3}
-              class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-            />
-          </label>
+          <p class="-mt-2 text-xs text-ink-gray sm:col-span-2">ชื่อนี้เห็นเฉพาะทีมงาน ใช้เลือกกลุ่มสินค้าพิเศษในส่วนรายการสินค้าและเมนู</p>
           <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium text-ink">สถานะ</span>
-            <div class="relative">
-              <select
-                value={status()}
-                disabled={saving()}
-                onChange={(e) => setStatus(e.currentTarget.value as CollectionStatus)}
-                class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-              >
-                {STATUS_OPTIONS.map((opt) => (
-                  <option value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-              <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
-            </div>
+            <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
+            <Toggle checked={status() === "active"} onChange={(on) => setStatus(on ? "active" : "inactive")} disabled={saving()} />
+            <span class="text-xs text-ink-gray">ปิดแล้วส่วนที่ใช้กลุ่มสินค้าพิเศษนี้จะไม่แสดงสินค้าบนหน้าร้าน</span>
           </label>
         </div>
       </Section>
 
-      <Section title="สินค้าใน Collection">
+      <Section title="สินค้าในกลุ่มสินค้าพิเศษ">
         <PromotionPageProductPicker selected={products()} onChange={setProducts} />
       </Section>
 
@@ -172,7 +142,7 @@ export function ProductCollectionForm(props: {
             ยกเลิก
           </Button>
           <Button type="submit" variant="primary" loading={saving()}>
-            {props.mode === "create" ? "สร้าง Collection" : "บันทึกการเปลี่ยนแปลง"}
+            {saving() ? "กำลังบันทึก..." : props.submitLabel}
           </Button>
         </div>
       </AdminFloatingBar>

@@ -7,14 +7,21 @@ import { StatusBadge } from "~/components/admin/StatusBadge";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { MarketingRowActionsMenu } from "~/components/admin/marketing/MarketingRowActionsMenu";
-import { MarketingIcon } from "~/components/admin/icons";
+import { PromotionTagIcon } from "~/components/admin/icons";
+import { PromotionGiftTiers } from "~/components/admin/marketing/PromotionGiftTiers";
+import { PromotionBuyGetView, PromotionBundleView } from "~/components/admin/marketing/PromotionItems";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import {
-  MARKETING_STATUS_META,
+  MARKETING_PHASE_META,
   PROMOTION_TYPE_META,
-  formatMarketingDate,
+  formatMarketingDateTime,
   formatPromotionDiscount,
-  type MarketingStatus,
+  marketingPhase,
+  PROMOTION_CONDITION_META,
+  promotionCondition,
+  promotionGiftTiers,
+  promotionHasProductScope,
+  isStorefrontPromotion,
 } from "~/lib/adminMarketing";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
 import { pushToast } from "~/lib/toast";
@@ -41,12 +48,12 @@ export default function AdminPromotionDetailPage() {
   const confirmToggleAction = async () => {
     const current = promotion();
     if (!current) return;
-    const next: MarketingStatus = current.status === "disabled" ? "active" : "disabled";
+    const turnOn = current.status === "disabled";
     setActionLoading(true);
-    await store.setStatus(current.id, next);
+    await store.setStatus(current.id, turnOn ? "active" : "disabled");
     setActionLoading(false);
     setConfirmToggle(false);
-    pushToast(next === "disabled" ? "ปิดใช้งานโปรโมชั่นแล้ว" : "เปิดใช้งานโปรโมชั่นแล้ว", "success");
+    pushToast(turnOn ? "เปิดใช้งานโปรโมชั่นแล้ว" : "ปิดใช้งานโปรโมชั่นแล้ว", "success");
   };
 
   const confirmDeleteAction = async () => {
@@ -65,22 +72,23 @@ export default function AdminPromotionDetailPage() {
       when={promotion()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "โปรโมชั่น", href: "/admin/marketing/promotions" }]} />
-          <EmptyState icon={<MarketingIcon />} title="ไม่พบโปรโมชั่นนี้" description="โปรโมชั่นอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าโปรโมชั่น" onAction={() => navigate("/admin/marketing/promotions")} class="bg-surface-card shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "โปรโมชั่น", href: "/admin/marketing/promotions" }]} />
+          <EmptyState icon={<PromotionTagIcon />} title="ไม่พบโปรโมชั่นนี้" description="โปรโมชั่นอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าโปรโมชั่น" onAction={() => navigate("/admin/marketing/promotions")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
       {(current) => {
         const p = current;
-        const gift = () => (p().giftProductId ? productStore.getById(p().giftProductId!) : undefined);
+        const productName = (id: string) => productStore.getById(id)?.name;
         const scopeProducts = () => p().productIds.map((id) => productStore.getById(id)).filter((x) => x !== undefined);
+        const phase = () => MARKETING_PHASE_META[marketingPhase(p())];
 
         return (
           <div class="flex flex-col gap-6">
             <Breadcrumb
               items={[
                 { label: "แดชบอร์ด", href: "/admin" },
-                { label: "การตลาด", href: "/admin/marketing" },
+                { label: "การตลาด" },
                 { label: "โปรโมชั่น", href: "/admin/marketing/promotions" },
                 { label: p().name },
               ]}
@@ -91,12 +99,13 @@ export default function AdminPromotionDetailPage() {
               actions={
                 <div class="flex items-center gap-2">
                   <Button variant="primary" href={`/admin/marketing/promotions/${p().id}/edit`}>
-                    แก้ไข
+                    แก้ไขโปรโมชั่น
                   </Button>
                   <MarketingRowActionsMenu
                     id={p().id}
                     name={p().name}
                     basePath="/admin/marketing/promotions"
+                    entity="โปรโมชั่น"
                     isDisabled={p().status === "disabled"}
                     hideView
                     onDuplicate={handleDuplicate}
@@ -110,27 +119,27 @@ export default function AdminPromotionDetailPage() {
 
             <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div class="flex flex-col gap-6 lg:col-span-2">
-                <Section title="รายละเอียด">
-                  <p class="text-sm text-ink-gray">{p().description ?? "ยังไม่มีคำอธิบาย"}</p>
-                </Section>
-
                 <Show when={p().type === "gift_with_purchase"}>
-                  <Section title="ของแถม">
-                    <Show when={gift()} fallback={<p class="text-sm text-ink-gray">ยังไม่ได้เลือกสินค้าของแถม</p>}>
-                      {(g) => (
-                        <div class="flex items-center gap-3">
-                          <img src={g().image} alt="" class="size-11 shrink-0 rounded-media object-cover" />
-                          <div class="min-w-0 flex-1">
-                            <p class="truncate text-sm font-medium text-ink">{g().name}</p>
-                            <p class="text-xs text-ink-gray">{g().sku}</p>
-                          </div>
-                          <span class="shrink-0 text-sm font-medium text-ink">x{p().giftQty ?? 1}</span>
-                        </div>
-                      )}
-                    </Show>
+                  <Section title={promotionGiftTiers(p()).length > 1 ? `ของแถมขั้นบันได ${promotionGiftTiers(p()).length} ขั้น` : "ของแถม"}>
+                    <PromotionGiftTiers promotion={p()} size="md" />
+                    <p class="text-sm text-ink-gray">นับจาก{PROMOTION_CONDITION_META[promotionCondition(p())].label} ของแถมสะสมตามขั้นที่ลูกค้าซื้อถึง</p>
                   </Section>
                 </Show>
 
+                <Show when={p().type === "buy_x_get_y"}>
+                  <Section title="ซื้อ X แถม Y">
+                    <PromotionBuyGetView buyItems={p().buyItems ?? []} getItems={p().getItems ?? []} />
+                    <p class="text-sm text-ink-gray">ลูกค้าซื้อครบทุกรายการด้านซ้าย ได้รับฟรีทุกรายการด้านขวา</p>
+                  </Section>
+                </Show>
+
+                <Show when={p().type === "bundle"}>
+                  <Section title="สินค้าในเซ็ต">
+                    <PromotionBundleView promotion={p()} />
+                  </Section>
+                </Show>
+
+                <Show when={promotionHasProductScope(p().type)}>
                 <Section title="สินค้าที่เข้าร่วม">
                   <Show when={p().productIds.length > 0} fallback={<p class="text-sm text-ink-gray">ใช้กับสินค้าทั้งหมด</p>}>
                     <div class="flex flex-col gap-3">
@@ -148,36 +157,43 @@ export default function AdminPromotionDetailPage() {
                     </div>
                   </Show>
                 </Section>
+                </Show>
               </div>
 
               <div class="flex flex-col gap-6">
                 <Section title="สถานะ">
-                  <StatusBadge tone={MARKETING_STATUS_META[p().status].tone} class="w-fit">
-                    {MARKETING_STATUS_META[p().status].label}
+                  <StatusBadge tone={phase().tone} class="w-fit">
+                    {phase().label}
                   </StatusBadge>
+                  <p class="text-sm text-ink-gray">{p().status === "active" ? "เปิดใช้งานอยู่ มีผลตามช่วงเวลา" : "ปิดใช้งานอยู่ ยังไม่มีผล"}</p>
                 </Section>
 
-                <Section title="ส่วนลด">
-                  <p class="text-2xl font-bold text-ink">{formatPromotionDiscount(p(), gift()?.name)}</p>
+                <Section title="เงื่อนไข">
+                  <p class="text-2xl font-bold text-ink">{formatPromotionDiscount(p(), productName)}</p>
                 </Section>
 
-                <Section title="การแสดงผลหน้าร้าน">
-                  <Row label="แสดงในตะกร้า" value={p().showInCart ? "แสดง" : "ไม่แสดง"} />
-                </Section>
+                <Show when={isStorefrontPromotion(p())}>
+                  <Section title="การแสดงผลหน้าร้าน">
+                    <dl class="flex flex-col gap-1.5 text-sm">
+                      <Row label="แสดงในตะกร้า" value={p().showInCart ? "แสดง" : "ไม่แสดง"} />
+                      <Row label="นับจาก" value={PROMOTION_CONDITION_META[promotionCondition(p())].label} />
+                    </dl>
+                  </Section>
+                </Show>
 
                 <Section title="ระยะเวลา">
-                  <Row label="เริ่ม" value={`${formatMarketingDate(p().startDate)} ${p().startTime}`} />
-                  <Row label="สิ้นสุด" value={`${formatMarketingDate(p().endDate)} ${p().endTime}`} />
-                </Section>
-
-                <Section title="การใช้งาน">
-                  <p class="text-2xl font-bold text-ink">{p().usageCount.toLocaleString("th-TH")}</p>
-                  <p class="text-sm text-ink-gray">ครั้งที่ใช้งานแล้ว</p>
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="เริ่ม" value={formatMarketingDateTime(p().startDate, p().startTime)} />
+                    <Row label="สิ้นสุด" value={formatMarketingDateTime(p().endDate, p().endTime)} />
+                  </dl>
                 </Section>
 
                 <Section title="ข้อมูลเพิ่มเติม">
-                  <Row label="สร้างเมื่อ" value={p().createdAt} />
-                  <Row label="แก้ไขล่าสุด" value={p().updatedAt} />
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="ID" value={p().id} />
+                    <Row label="สร้างเมื่อ" value={p().createdAt} />
+                    <Row label="แก้ไขล่าสุด" value={p().updatedAt} />
+                  </dl>
                 </Section>
               </div>
             </div>
@@ -186,7 +202,7 @@ export default function AdminPromotionDetailPage() {
               open={confirmToggle()}
               onOpenChange={setConfirmToggle}
               title={p().status === "disabled" ? "เปิดใช้งานโปรโมชั่นนี้?" : "ปิดใช้งานโปรโมชั่นนี้?"}
-              description={p().name}
+              description={p().status === "disabled" ? `"${p().name}" จะมีผลในตะกร้าตามวันที่ที่ตั้งไว้` : `"${p().name}" จะหยุดมีผลในตะกร้าทันที`}
               confirmLabel={p().status === "disabled" ? "เปิดใช้งาน" : "ปิดใช้งาน"}
               loading={actionLoading()}
               onConfirm={confirmToggleAction}
@@ -197,7 +213,7 @@ export default function AdminPromotionDetailPage() {
               onOpenChange={setConfirmDelete}
               title="ลบโปรโมชั่น?"
               description={`คุณต้องการลบ "${p().name}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-              confirmLabel="ลบ"
+              confirmLabel="ลบโปรโมชั่น"
               tone="danger"
               loading={actionLoading()}
               onConfirm={confirmDeleteAction}
@@ -220,7 +236,7 @@ function Section(props: { title: string; children: import("solid-js").JSX.Elemen
 
 function Row(props: { label: string; value: string }) {
   return (
-    <div class="flex items-center justify-between gap-3 text-sm">
+    <div class="flex items-center justify-between gap-3">
       <dt class="text-ink-gray">{props.label}</dt>
       <dd class="font-medium text-ink">{props.value}</dd>
     </div>

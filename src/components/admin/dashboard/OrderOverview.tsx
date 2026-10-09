@@ -28,12 +28,12 @@ export function OrderOverview() {
           return (
             <A
               href={`/admin/orders?status=${status}`}
-              class="flex flex-col gap-2 rounded-card bg-surface-card p-4 shadow-card transition-colors duration-150 hover:bg-surface-pink/40"
+              class="font-normal flex flex-col gap-2 rounded-card bg-surface-card p-4 shadow-card transition-colors duration-150 lg:hover:bg-surface-pink/40"
             >
               <StatusBadge tone={meta.tone} class="w-fit">
                 {meta.label}
               </StatusBadge>
-              <p class="text-2xl font-bold text-ink">{counts()[status] ?? 0}</p>
+              <p class="text-2xl font-bold text-ink">{(counts()[status] ?? 0).toLocaleString("th-TH")}</p>
             </A>
           );
         }}

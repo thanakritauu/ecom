@@ -19,7 +19,7 @@ export default function AdminCustomerEditPage() {
     const current = customer();
     if (!current) return;
     const updated = await store.update(current.id, values);
-    pushToast("บันทึกการเปลี่ยนแปลงแล้ว", "success");
+    pushToast("บันทึกลูกค้าเรียบร้อยแล้ว", "success");
     navigate(`/admin/customers/${updated.id}`);
   };
 
@@ -33,7 +33,7 @@ export default function AdminCustomerEditPage() {
             icon={<CustomersIcon />}
             title="ไม่พบลูกค้ารายนี้"
             description="ลูกค้ารายนี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง"
-            actionLabel="กลับไปหน้ารายการ"
+            actionLabel="กลับไปหน้าลูกค้า"
             onAction={() => navigate("/admin/customers")}
             class="bg-surface-card shadow-card"
           />
@@ -52,7 +52,7 @@ export default function AdminCustomerEditPage() {
           />
           <PageHeader title={`แก้ไข: ${getCustomerFullName(current())}`} description="แก้ไขข้อมูลลูกค้าและบันทึกการเปลี่ยนแปลง" />
           <CustomerForm
-            mode="edit"
+            submitLabel="บันทึกการเปลี่ยนแปลง"
             initial={current()}
             isEmailTaken={(email) => isCustomerEmailTaken(store.customers(), email, current().id)}
             isPhoneTaken={(phone) => isCustomerPhoneTaken(store.customers(), phone, current().id)}

@@ -120,7 +120,7 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
               <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span class="flex items-center gap-1 text-sm text-ink-gray">
                   <img src={starGold} alt="" class="size-5" />
-                  {props.product.rating?.toFixed(1) ?? "—"}/5
+                  {props.product.rating?.toFixed(1) ?? "-"}/5
                 </span>
                 <Show when={props.product.reviewCount}>
                   <a href="#reviews-heading" class="text-sm text-ink-gray underline-offset-2 hover:underline">
@@ -128,17 +128,12 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
                   </a>
                 </Show>
                 <Show when={props.product.soldCount}>
-                  <span class="text-sm text-ink-gray">· ขายแล้ว {props.product.soldCount!.toLocaleString("th-TH")} ชิ้น</span>
+                  <span class="text-sm text-ink-gray">ขายแล้ว {props.product.soldCount!.toLocaleString("th-TH")} ชิ้น</span>
                 </Show>
-                <span
-                  class="rounded-pill px-2 py-0.5 text-xs font-semibold"
-                  classList={{
-                    "bg-success-soft text-success": !outOfStock(),
-                    "bg-danger-soft text-danger-strong": outOfStock(),
-                  }}
-                >
-                  {outOfStock() ? "สินค้าหมด" : "พร้อมส่ง"}
-                </span>
+                {/* Only the out-of-stock state gets a badge; in stock needs no label (owner removed "พร้อมส่ง"). */}
+                <Show when={outOfStock()}>
+                  <span class="rounded-pill bg-danger-soft px-2 py-0.5 text-xs font-semibold text-danger-strong">สินค้าหมด</span>
+                </Show>
               </div>
 
               <h1 class="text-2xl font-bold text-ink lg:text-[28px] lg:leading-[1.4]">{props.product.name}</h1>
@@ -197,8 +192,9 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
               </Show>
 
               <div ref={addToCartRef} class="flex items-center gap-3">
-                <QuantityStepper value={quantity()} onChange={setQuantity} max={props.product.stockLeft} disabled={outOfStock()} />
-                <AddToCartButton size="lg" class="flex-1" outOfStock={outOfStock()} loading={addStatus() === "loading"} onClick={addToCart} />
+                {/* PDP only: number + label at the same 18px as "ซื้อเลย" below (owner request); elsewhere both stay 14px. */}
+                <QuantityStepper value={quantity()} onChange={setQuantity} max={props.product.stockLeft} disabled={outOfStock()} large />
+                <AddToCartButton size="lg" large class="flex-1" outOfStock={outOfStock()} loading={addStatus() === "loading"} onClick={addToCart} />
               </div>
 
               <Button type="button" variant="outline" size="lg" class="w-full" disabled={outOfStock()} onClick={buyNow}>

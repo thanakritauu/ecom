@@ -104,11 +104,8 @@ export function HamburgerIcon(props: { class?: string }) {
 }
 
 /**
- * Promotion Page → Frontend Navigation add-on — a small curated icon set an
- * admin can pick from for a nav item's `[Icon] Label` (see
- * `~/lib/promotionNavIcons`), reusing this same file rather than starting a
- * second icon system for it. Same `currentColor`/stroke-1.8 house style as
- * every icon above.
+ * Small line icons (tag, star, gift, ...) shared by coupons, reviews and
+ * cart rows. Same `currentColor`/stroke-1.8 house style as every icon above.
  */
 export function TagIcon(props: { class?: string }) {
   return (
@@ -127,17 +124,6 @@ export function StarIcon(props: { class?: string }) {
   );
 }
 
-export function FireIcon(props: { class?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <path
-        d="M12 21c4 0 7-2.7 7-6.5 0-2.4-1.2-4-2.4-5.4.1 1.3-.4 2.3-1.2 2.9.2-2.8-1-5.3-3.4-7-1 1.9-.9 3.6-2 5-.7.9-1.7 1.5-2 2.8-.2.9-.2 1.8 0 2.6C7.4 14 7 12.9 7 11.5 5.7 13 5 14.4 5 16c0 3 3 5 7 5Z"
-        stroke-linejoin="round"
-      />
-    </svg>
-  );
-}
-
 export function GiftIcon(props: { class?: string }) {
   return (
     <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -148,11 +134,14 @@ export function GiftIcon(props: { class?: string }) {
   );
 }
 
-export function SparkleIcon(props: { class?: string }) {
+/** Free shipping: same 1.8 stroke as `GiftIcon`, so the two promo banners read as a pair. */
+export function TruckIcon(props: { class?: string }) {
   return (
-    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <path d="M11 3c.5 2.8 1.4 4.4 3.5 5.5C12.4 9.6 11.5 11.2 11 14c-.5-2.8-1.4-4.4-3.5-5.5C9.6 7.4 10.5 5.8 11 3Z" stroke-linejoin="round" />
-      <path d="M18.5 13c.3 1.6.8 2.5 2 3.1-1.2.6-1.7 1.5-2 3.1-.3-1.6-.8-2.5-2-3.1 1.2-.6 1.7-1.5 2-3.1Z" stroke-linejoin="round" />
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+      <path d="M2.5 6.5h11v9.5h-11z" />
+      <path d="M13.5 9.5h4l3.5 3.5v3h-7.5z" />
+      <circle cx="6.5" cy="17.5" r="1.8" fill="white" />
+      <circle cx="17" cy="17.5" r="1.8" fill="white" />
     </svg>
   );
 }
@@ -203,5 +192,75 @@ export function CheckBadge(props: { class?: string }) {
     <span class={`flex shrink-0 items-center justify-center rounded-pill text-white ${props.class ?? "size-6 bg-brand-pink"}`} aria-hidden="true">
       <CheckIcon />
     </span>
+  );
+}
+
+/** Magnifier — the same glyph the SearchBar draws inline. */
+export function SearchIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+/** Location pin — addresses. */
+export function PinIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z" stroke-linejoin="round" />
+      <circle cx="12" cy="10" r="2.3" />
+    </svg>
+  );
+}
+
+/** Payment card — saved cards. */
+export function CardIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <rect x="3" y="5.5" width="18" height="13" rx="2" />
+      <path d="M3 10h18M7 15h4" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+/** Coin — Charmiss Coin history (line style, for the empty state; the brand coin artwork stays a PNG elsewhere). */
+export function CoinIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="5" />
+    </svg>
+  );
+}
+
+/** Play button — review clips. */
+export function PlayIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <rect x="3" y="4.5" width="18" height="15" rx="3" />
+      <path d="M10 9.2v5.6l4.6-2.8L10 9.2Z" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+/** Video sound on: speaker + two waves, same 1.8 line style as the icons above. Pair with `SpeakerOffIcon`. */
+export function SpeakerOnIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+      <path d="M15.5 9.2a4 4 0 0 1 0 5.6M18.2 6.6a7.6 7.6 0 0 1 0 10.8" />
+    </svg>
+  );
+}
+
+/** Video muted: same speaker with an X where the waves were. */
+export function SpeakerOffIcon(props: { class?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+      <path d="M15.5 9.5l5 5M20.5 9.5l-5 5" />
+    </svg>
   );
 }

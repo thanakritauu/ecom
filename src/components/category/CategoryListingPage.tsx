@@ -44,7 +44,7 @@ export function CategoryListingPage(props: { categorySlug: string; categoryTitle
       <main class="flex flex-col overflow-x-hidden bg-white pb-6 pt-6 sm:pt-8 lg:pt-10">
         <Container width="wide" class="flex flex-col gap-3 sm:gap-4">
           <ListingHeading title={category()?.name || props.categoryTitle} description={category()?.description} />
-          <ProductCollectionListing products={products()} />
+          <ProductCollectionListing products={products()} emptyTitle="ยังไม่มีสินค้าในหมวดนี้" />
         </Container>
       </main>
       <Footer />

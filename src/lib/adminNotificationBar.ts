@@ -2,17 +2,12 @@ import promoBadge99 from "~/assets/images/promo/promo-strip-badge-99.png";
 import deliveryIcon from "~/assets/icons/delivery.svg";
 
 /**
- * CMS Final Admin UX Refinement §02-08 — "โปรโมชั่นแถบ" (user-facing name;
- * internal model name kept as "NotificationBar" per the spec's own "ไม่
- * จำเป็นต้องเปลี่ยน" allowance). Exactly two FIXED, distinctly-shaped slots —
- * not a reorderable list — matching the real storefront's two hardcoded
- * bars (Header.tsx's purple "Promo strip" + pink "Utility bar"):
- *   - `purple`: Icon + Text + Link + a single on/off Toggle.
- *   - `pink`: Icon (optional) + Text + Link (optional), always visible, no
- *     toggle, no order — position and left-alignment are fixed by which
- *     slot it is, never admin-configurable (§06/§07).
- * Management UI only this phase — nothing here is read by the Customer
- * Frontend yet (Header.tsx keeps rendering its own hardcoded copy).
+ * The storefront's two top bars (`PromoStrip` purple + `UtilityBar` pink in
+ * `~/components/shared/PromotionStrip.tsx`). Admin edits them in
+ * /admin/notifications; the storefront reads the same localStorage key live
+ * (`~/lib/storefrontPromotionStrip`), seed = the original hardcoded copy.
+ *   - `purple`: icon + text + optional link + on/off.
+ *   - `pink`: icon + text + optional link, always shown (desktop only).
  */
 export type PromotionStripContent = {
   icon: string;
@@ -27,9 +22,13 @@ export type PromotionStripState = {
   updatedAt: string;
 };
 
+export const PROMOTION_STRIP_STORAGE_KEY = "charmiss:admin:promotion-strip";
+/** Fired by the admin store after it saves so a storefront page in the same tab updates (the `storage` event only reaches other tabs). */
+export const PROMOTION_STRIP_CHANGED_EVENT = "charmiss:promotion-strip-changed";
+
 const TODAY_LABEL = "22 ก.ย. 2569";
 
-/** §16 (prior phase) — the exact two bars the real storefront currently hardcodes, reproduced here as the seed so the CMS starts out truthfully describing what's live today. */
+/** The two bars exactly as the storefront shipped them. */
 export function buildMockPromotionStripState(): PromotionStripState {
   return {
     purple: {
@@ -49,15 +48,25 @@ export function buildMockPromotionStripState(): PromotionStripState {
   };
 }
 
-/** A state persisted before a field existed on it comes back with it `undefined` unless backfilled — same root-cause guard every other Admin store's `normalize*` applies. */
 /** `/promotions` never had a route — saved bars from before the fix point at the real promotions page instead. */
 const fixLegacyLink = <T extends { linkUrl?: string }>(bar: T): T => (bar.linkUrl === "/promotions" ? { ...bar, linkUrl: "/promotion/promotions" } : bar);
 
-export function normalizePromotionStripState(state: PromotionStripState): PromotionStripState {
+export function normalizePromotionStripState(state: Partial<PromotionStripState> | undefined): PromotionStripState {
   const seed = buildMockPromotionStripState();
   return {
-    purple: fixLegacyLink({ ...seed.purple, ...state.purple, enabled: state.purple?.enabled ?? true }),
-    pink: fixLegacyLink({ ...seed.pink, ...state.pink }),
-    updatedAt: state.updatedAt ?? TODAY_LABEL,
+    purple: fixLegacyLink({ ...seed.purple, ...state?.purple, enabled: state?.purple?.enabled ?? true }),
+    pink: fixLegacyLink({ ...seed.pink, ...state?.pink }),
+    updatedAt: state?.updatedAt ?? TODAY_LABEL,
   };
+}
+
+/** Reads the saved bars (or the seed). Safe on the server. */
+export function readStoredPromotionStrip(): PromotionStripState {
+  if (typeof localStorage === "undefined") return buildMockPromotionStripState();
+  try {
+    const raw = localStorage.getItem(PROMOTION_STRIP_STORAGE_KEY);
+    return raw ? normalizePromotionStripState(JSON.parse(raw) as PromotionStripState) : buildMockPromotionStripState();
+  } catch {
+    return buildMockPromotionStripState();
+  }
 }

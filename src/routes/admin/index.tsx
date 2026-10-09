@@ -1,6 +1,5 @@
-import { createSignal, onMount, Show, For } from "solid-js";
+import { createMemo, createSignal, onMount, Show, For } from "solid-js";
 import { PageHeader } from "~/components/shared/PageHeader";
-import { EmptyState } from "~/components/admin/EmptyState";
 import { DateRangeSelector } from "~/components/admin/dashboard/DateRangeSelector";
 import { KpiCard, KpiCardSkeleton } from "~/components/admin/dashboard/KpiCard";
 import { DailySalesChart } from "~/components/admin/dashboard/DailySalesChart";
@@ -12,205 +11,140 @@ import { QuickActions } from "~/components/admin/dashboard/QuickActions";
 import { PeriodComparisonTable } from "~/components/admin/dashboard/PeriodComparisonTable";
 import { StatusDistribution } from "~/components/admin/dashboard/StatusDistribution";
 import { PerformancePanels } from "~/components/admin/dashboard/PerformancePanels";
-import { ComparisonPanel } from "~/components/admin/dashboard/ComparisonPanel";
 import { Skeleton } from "~/components/admin/Skeleton";
-import { RevenueIcon, OrdersIcon, AovIcon, CustomersIcon, RefreshIcon } from "~/components/admin/icons";
-import { formatAdminCurrency, DASHBOARD_PERIODS, type DashboardPeriodKey } from "~/lib/adminDashboard";
-import { useAdminCustomers } from "~/lib/adminCustomerStore";
-import type { AsyncStatus } from "~/lib/types";
+import { RevenueIcon, OrdersIcon, AovIcon, CustomersIcon } from "~/components/admin/icons";
+import { formatAdminCurrency, DASHBOARD_PERIOD_OPTIONS, type DashboardPeriodKey, type DateRange } from "~/lib/adminDashboard";
+import { changePercent, getOrderKpis, previousRange, resolvePeriodRange } from "~/lib/adminDashboardAnalytics";
+import { formatMarketingDate } from "~/lib/adminMarketing";
+import { useAdminOrders } from "~/lib/adminOrderStore";
 
 /**
- * CMS Final Admin UX Refinement §14-17 — section order is now fixed to:
- * KPI → Sales Chart → Performance (Category/Brand/Promotion) → Comparison
- * (Period table + dataset Line Chart) → Order Overview → Recent Orders →
- * Order Status Distribution → Best Selling Products → Low Stock → Quick
- * Actions. This is the authoritative order at every breakpoint (a single
- * `flex flex-col` — nothing here reorders itself per breakpoint), per the
- * spec's explicit "ยึดตำแหน่งนี้เป็นหลัก ไม่ต้อง preserve order เดิม".
+ * Dashboard — every number comes from the Admin stores: KPIs and the period
+ * comparison from orders in the selected range (vs the same number of days
+ * before it), daily sales from paid orders, rankings from the catalog, and
+ * status counts / recent orders from the order store.
  */
 export default function AdminDashboardPage() {
-  const customerStore = useAdminCustomers();
+  const orderStore = useAdminOrders();
   const [period, setPeriod] = createSignal<DashboardPeriodKey>("7d");
-  const [salesStatus, setSalesStatus] = createSignal<AsyncStatus>("idle");
-  const [sectionsReady, setSectionsReady] = createSignal(false);
+  const [customRange, setCustomRange] = createSignal<DateRange>();
+  const [ready, setReady] = createSignal(false);
 
-  const loadSales = () => {
-    setSalesStatus("loading");
-    setTimeout(() => {
-      // Small, deliberate chance to demonstrate the widget's error/retry state (PART 25) — same kind of mock failure rate cart.tsx/auth.tsx already use elsewhere in this prototype.
-      setSalesStatus(Math.random() < 0.1 ? "error" : "success");
-    }, 550);
-  };
+  onMount(() => setTimeout(() => setReady(true), 450));
 
-  onMount(() => {
-    loadSales();
-    setTimeout(() => setSectionsReady(true), 450);
-  });
+  const range = createMemo(() => resolvePeriodRange(period(), customRange()));
+  const current = createMemo(() => getOrderKpis(orderStore.orders(), range()));
+  const previous = createMemo(() => getOrderKpis(orderStore.orders(), previousRange(range())));
+  const periodLabel = () =>
+    period() === "custom" ? `${formatMarketingDate(range().from)} - ${formatMarketingDate(range().to)}` : (DASHBOARD_PERIOD_OPTIONS.find((o) => o.key === period())?.label ?? "");
 
-  /**
-   * Phase 05 §26 — "Customers" is the one KPI this Dashboard already had a
-   * slot for that a real Store now backs; every other KPI (revenue/orders/
-   * AOV) stays exactly the period-mocked value it always was — swapping
-   * those too would need real historical per-period order data this
-   * prototype doesn't track, which is a redesign this phase explicitly
-   * defers. Only `.value` is overridden (a live, accurate "how many
-   * customers exist right now" count from the real Customer Store);
-   * `changePercent` stays the existing mock, since an accurate period-over-
-   * period change needs historical customer snapshots this prototype has no
-   * source for. Overridden once here (not inside `KpiCard`/
-   * `PeriodComparisonTable` themselves) so both readers of `data()` can never
-   * disagree about what "Customers" means, per §30.
-   */
-  const data = () => {
-    const base = DASHBOARD_PERIODS[period()];
-    return { ...base, kpis: { ...base.kpis, customers: { ...base.kpis.customers, value: customerStore.customers().length } } };
+  const handlePeriodChange = (key: DashboardPeriodKey, next?: DateRange) => {
+    setPeriod(key);
+    if (next) setCustomRange(next);
   };
 
   return (
     <div class="flex flex-col gap-6">
       <PageHeader
-        title="Dashboard"
-        description="ภาพรวมการขายและการดำเนินงานของ Charmiss"
-        actions={<DateRangeSelector value={period()} onChange={setPeriod} />}
+        title="แดชบอร์ด"
+        description="ดูภาพรวมยอดขาย คำสั่งซื้อ และสินค้าของ Charmiss"
+        actions={<DateRangeSelector value={period()} range={customRange()} onChange={handlePeriodChange} />}
       />
 
-      {/* KPI Cards */}
       <Show
-        when={salesStatus() !== "loading"}
+        when={ready()}
         fallback={
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             <For each={[0, 1, 2, 3]}>{() => <KpiCardSkeleton />}</For>
           </div>
         }
       >
-        <Show
-          when={salesStatus() === "success"}
-          fallback={
-            <EmptyState
-              tone="error"
-              icon={<RefreshIcon />}
-              title="ไม่สามารถโหลดข้อมูลยอดขายได้"
-              description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง"
-              actionLabel="ลองอีกครั้ง"
-              onAction={loadSales}
-              class="bg-surface-card shadow-card"
-            />
-          }
-        >
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard
-              label="ยอดขาย"
-              value={formatAdminCurrency(data().kpis.revenue.value)}
-              changePercent={data().kpis.revenue.changePercent}
-              icon={<RevenueIcon />}
-            />
-            <KpiCard
-              label="Orders"
-              value={`${data().kpis.orders.value.toLocaleString("th-TH")} orders`}
-              changePercent={data().kpis.orders.changePercent}
-              icon={<OrdersIcon />}
-            />
-            <KpiCard
-              label="Average Order Value"
-              value={formatAdminCurrency(data().kpis.aov.value)}
-              changePercent={data().kpis.aov.changePercent}
-              icon={<AovIcon />}
-            />
-            <KpiCard
-              label="Customers"
-              value={data().kpis.customers.value.toLocaleString("th-TH")}
-              changePercent={data().kpis.customers.changePercent}
-              icon={<CustomersIcon />}
-            />
-          </div>
-        </Show>
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard label="ยอดขาย" value={formatAdminCurrency(current().revenue)} changePercent={changePercent(current().revenue, previous().revenue)} icon={<RevenueIcon />} />
+          <KpiCard
+            label="คำสั่งซื้อ"
+            value={`${current().orders.toLocaleString("th-TH")} รายการ`}
+            changePercent={changePercent(current().orders, previous().orders)}
+            icon={<OrdersIcon />}
+          />
+          <KpiCard label="มูลค่าเฉลี่ยต่อคำสั่งซื้อ" value={formatAdminCurrency(current().aov)} changePercent={changePercent(current().aov, previous().aov)} icon={<AovIcon />} />
+          <KpiCard
+            label="ลูกค้า"
+            value={`${current().customers.toLocaleString("th-TH")} คน`}
+            changePercent={changePercent(current().customers, previous().customers)}
+            icon={<CustomersIcon />}
+          />
+        </div>
       </Show>
 
-      {/* กราฟยอดขาย — day-of-month Line Chart, own month picker */}
       <DailySalesChart />
 
-      {/* ประสิทธิภาพตามหมวดหมู่ / แบรนด์ / โปรโมชั่น — §14, right after the Sales Chart */}
-      <div class="flex flex-col gap-3">
-        <h2 class="text-base font-semibold text-ink">ประสิทธิภาพตามหมวดหมู่ / แบรนด์ / โปรโมชั่น</h2>
-        <Show
-          when={sectionsReady()}
-          fallback={
-            <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <For each={[0, 1, 2, 3]}>{() => <Skeleton class="h-52 rounded-card" />}</For>
-            </div>
-          }
-        >
-          <PerformancePanels />
-        </Show>
-      </div>
-
-      {/* กราฟเปรียบเทียบข้อมูล — Period-over-period table + the dataset Line Chart, kept adjacent */}
-      <Show when={salesStatus() === "success"}>
-        <PeriodComparisonTable data={data()} />
-      </Show>
-      <Show when={sectionsReady()} fallback={<Skeleton class="h-72 rounded-card" />}>
-        <ComparisonPanel />
+      <Show when={ready()} fallback={<Skeleton class="h-56 rounded-card" />}>
+        <PeriodComparisonTable periodLabel={periodLabel()} current={current()} previous={previous()} />
       </Show>
 
-      {/* Order Overview */}
-      <div class="flex flex-col gap-3">
-        <h2 class="text-base font-semibold text-ink">Order Overview</h2>
+      <Show
+        when={ready()}
+        fallback={
+          <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <For each={[0, 1, 2, 3]}>{() => <Skeleton class="h-52 rounded-card" />}</For>
+          </div>
+        }
+      >
+        <PerformancePanels />
+      </Show>
+
+      <section class="flex flex-col gap-3">
+        <h2 class="text-base font-semibold text-ink">ภาพรวมคำสั่งซื้อ</h2>
         <Show
-          when={sectionsReady()}
+          when={ready()}
           fallback={
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              <For each={[0, 1, 2, 3, 4]}>{() => <Skeleton class="h-20 rounded-card" />}</For>
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <For each={[0, 1, 2, 3, 4, 5]}>{() => <Skeleton class="h-20 rounded-card" />}</For>
             </div>
           }
         >
           <OrderOverview />
         </Show>
-      </div>
+      </section>
 
-      {/* คำสั่งซื้อล่าสุด */}
-      <div class="flex flex-col gap-3">
+      <section class="flex flex-col gap-3">
         <h2 class="text-base font-semibold text-ink">คำสั่งซื้อล่าสุด</h2>
-        <Show when={sectionsReady()} fallback={<Skeleton class="h-64 rounded-card" />}>
+        <Show when={ready()} fallback={<Skeleton class="h-64 rounded-card" />}>
           <RecentOrdersTable />
         </Show>
-      </div>
+      </section>
 
-      {/* การกระจายสถานะคำสั่งซื้อ — §15, right after Recent Orders */}
-      <div class="flex flex-col gap-3">
-        <h2 class="text-base font-semibold text-ink">การกระจายสถานะคำสั่งซื้อ</h2>
-        <Show
-          when={sectionsReady()}
-          fallback={
-            <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <For each={[0, 1, 2]}>{() => <Skeleton class="h-40 rounded-card" />}</For>
-            </div>
-          }
-        >
-          <StatusDistribution />
-        </Show>
-      </div>
+      <Show
+        when={ready()}
+        fallback={
+          <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <For each={[0, 1, 2]}>{() => <Skeleton class="h-40 rounded-card" />}</For>
+          </div>
+        }
+      >
+        <StatusDistribution />
+      </Show>
 
-      {/* Best Selling Products + Low Stock */}
-      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div class="rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-          <h2 class="mb-2 text-base font-semibold text-ink">สินค้าขายดี</h2>
-          <Show when={sectionsReady()} fallback={<SectionListSkeleton />}>
+      <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+          <h2 class="text-base font-semibold text-ink">สินค้าขายดี</h2>
+          <Show when={ready()} fallback={<SectionListSkeleton />}>
             <BestSellingProducts />
           </Show>
-        </div>
-        <div class="rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-          <h2 class="mb-2 text-base font-semibold text-ink">สินค้าใกล้หมด</h2>
-          <Show when={sectionsReady()} fallback={<SectionListSkeleton />}>
+        </section>
+        <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+          <h2 class="text-base font-semibold text-ink">สินค้าใกล้หมด</h2>
+          <Show when={ready()} fallback={<SectionListSkeleton />}>
             <LowStockList />
           </Show>
-        </div>
+        </section>
       </div>
 
-      {/* Quick Actions */}
-      <div class="flex flex-col gap-3">
-        <h2 class="text-base font-semibold text-ink">Quick Actions</h2>
+      <section class="flex flex-col gap-3">
+        <h2 class="text-base font-semibold text-ink">ทางลัด</h2>
         <QuickActions />
-      </div>
+      </section>
     </div>
   );
 }
@@ -221,7 +155,7 @@ function SectionListSkeleton() {
       <For each={[0, 1, 2]}>
         {() => (
           <div class="flex items-center gap-3">
-            <Skeleton class="size-12 shrink-0 rounded-media" />
+            <Skeleton class="size-11 shrink-0 rounded-media" />
             <div class="flex flex-1 flex-col gap-1.5">
               <Skeleton class="h-4 w-3/4" />
               <Skeleton class="h-3 w-1/3" />

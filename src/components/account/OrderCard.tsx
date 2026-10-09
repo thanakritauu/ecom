@@ -47,7 +47,7 @@ export function OrderCard(props: { order: Order }) {
           คำสั่งซื้อ {props.order.id}
         </A>
         <p class="text-sm text-ink-gray">
-          {formatOrderDate(props.order.placedAt)} · {itemCount()} ชิ้น
+          {formatOrderDate(props.order.placedAt)} จำนวน {itemCount()} ชิ้น
         </p>
       </div>
 
@@ -84,7 +84,7 @@ export function OrderCard(props: { order: Order }) {
           <Show when={props.order.shipment.trackingNumber}>
             {(n) => (
               <span class="text-xs text-ink-gray">
-                {CARRIERS[props.order.shipment.carrier].name} · <span class="font-medium text-ink">{n()}</span>
+                {CARRIERS[props.order.shipment.carrier].name} เลขพัสดุ <span class="font-medium text-ink">{n()}</span>
               </span>
             )}
           </Show>
@@ -144,8 +144,9 @@ export function OrderItemMeta(props: { item: OrderItem; unitPrice?: boolean }) {
     <Show
       when={props.item.isGift}
       fallback={
-        <p class="text-xs text-ink-gray">
-          {props.item.variantLabel} · <span class="whitespace-nowrap">{props.unitPrice ? `${formatTHB(props.item.price)} x ${props.item.qty}` : `x${props.item.qty}`}</span>
+        <p class="flex flex-wrap gap-x-2 text-xs text-ink-gray">
+          <span>{props.item.variantLabel}</span>
+          <span class="whitespace-nowrap">{props.unitPrice ? `${formatTHB(props.item.price)} x ${props.item.qty}` : `x${props.item.qty}`}</span>
         </p>
       }
     >

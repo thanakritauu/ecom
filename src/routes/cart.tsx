@@ -3,14 +3,17 @@ import { Header } from "~/components/shared/Header";
 import { Footer } from "~/components/shared/Footer";
 import { Container } from "~/components/shared/Container";
 import { Button } from "~/components/shared/Button";
+import { EmptyState } from "~/components/shared/EmptyState";
+import { CartIcon } from "~/components/shared/icons";
 import { ProductRail } from "~/components/shared/ProductRail";
 import { CartItemRow } from "~/components/shared/CartItemRow";
-import { GiftPromotionBanner } from "~/components/shared/GiftPromotionBanner";
+import { CartPromoBanners } from "~/components/shared/CartPromoBanners";
 import { GiftItemRow } from "~/components/shared/GiftItemRow";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
 import { formatTHB } from "~/components/shared/PriceDisplay";
 import { useCart } from "~/lib/cart";
-import { resolveCartLines, computeCartTotal, resolveGiftPromotion } from "~/lib/cartSelectors";
+import { resolveCartLines, computeCartTotal } from "~/lib/cartSelectors";
+import { useCartPromotions } from "~/lib/storefrontPromotions";
 import { useProductCatalog } from "~/lib/productCatalog";
 
 /**
@@ -31,10 +34,8 @@ export default function CartPage() {
   const catalog = useProductCatalog();
   const resolvedLines = createMemo(() => resolveCartLines(cart.lines(), catalog.products()));
   const total = createMemo(() => computeCartTotal(resolvedLines()));
-  const gift = createMemo(() => resolveGiftPromotion(total(), catalog.products()));
-  const hasUnavailableItem = createMemo(() =>
-    resolvedLines().some(({ product }) => product.stockLeft !== undefined && product.stockLeft <= 0),
-  );
+  const promos = useCartPromotions(resolvedLines);
+  const hasUnavailableItem = createMemo(() => resolvedLines().some(({ product }) => product.stockLeft !== undefined && product.stockLeft <= 0));
 
   const recommended = createMemo(() => {
     const inCart = new Set(resolvedLines().map((l) => l.product.id));
@@ -50,15 +51,15 @@ export default function CartPage() {
             <h1 class="text-2xl font-bold text-ink lg:text-[31px]">ตะกร้าสินค้า</h1>
 
             <Show when={resolvedLines().length > 0} fallback={<EmptyCartPage />}>
-              <Show when={gift()}>{(g) => <GiftPromotionBanner gift={g()} total={total()} showAmounts />}</Show>
+              <CartPromoBanners freeShipping={promos.freeShipping()} gifts={promos.gifts()} showAmounts />
 
               <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
-                <ul class="flex flex-1 flex-col gap-4 rounded-card bg-white p-4 lg:p-6">
+                <ul class="flex min-w-0 flex-1 flex-col gap-4 rounded-card bg-white p-4 lg:p-6">
                   <For each={resolvedLines()}>{(entry) => <CartItemRow entry={entry} variant="page" />}</For>
-                  <Show when={gift()?.unlocked && gift()}>{(g) => <GiftItemRow gift={g()} variant="page" />}</Show>
+                  <For each={promos.giftLines()}>{(g) => <GiftItemRow gift={g} variant="page" />}</For>
                 </ul>
 
-                <div class="flex flex-col gap-0 rounded-card border border-surface-gray bg-white lg:sticky lg:top-6 lg:w-[390px] lg:shrink-0">
+                <div class="flex flex-col gap-0 rounded-card border border-surface-gray bg-white lg:sticky lg:top-6 lg:w-[clamp(390px,44%,560px)] lg:shrink-0">
                   <div class="flex items-center justify-between p-4">
                     <p class="text-lg font-semibold text-ink">สรุปคำสั่งซื้อ</p>
                     <p class="text-sm text-ink-gray">สินค้าทั้งหมด {cart.count()} ชิ้น</p>
@@ -155,11 +156,13 @@ export default function CartPage() {
 
 function EmptyCartPage() {
   return (
-    <div class="flex flex-col items-center justify-center gap-4 rounded-card bg-white py-20 text-center">
-      <p class="text-lg text-ink-gray">ตะกร้าของคุณยังว่างอยู่</p>
-      <Button href="/" variant="primary">
-        เลือกซื้อสินค้า
-      </Button>
+    <div class="rounded-card bg-white py-6">
+      <EmptyState
+        icon={CartIcon}
+        title="ตะกร้าของคุณยังว่างอยู่"
+        description="เลือกสินค้าที่ชอบแล้วเพิ่มลงตะกร้าได้เลย"
+        action={{ label: "เลือกซื้อสินค้า", href: "/products" }}
+      />
     </div>
   );
 }

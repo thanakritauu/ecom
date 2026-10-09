@@ -1,11 +1,12 @@
 import type { StatusTone } from "~/components/admin/StatusBadge";
 import { isValidDateRange } from "./adminMarketing";
-import { normalizeHomepageSection, validateHeroAssets, isValidYoutubeUrl, type HomepageSection, type HomepageDestination } from "./pageSections";
+import { normalizeHomepageSection, isHomepageSectionType, validateHeroAssets, isValidYoutubeUrl, type HomepageSection, type HomepageDestination } from "./pageSections";
 import { buildHomepageSectionBaseline, buildLiveHeroAssets, HOMEPAGE_HERO_SECTION_ID } from "./adminHomepage";
 import heroBanner1 from "~/assets/images/hero/hero-banner-1.png";
 import heroBanner2 from "~/assets/images/hero/hero-banner-2.png";
 import heroBanner3 from "~/assets/images/hero/hero-banner-3.png";
 import { upgradeSeedBanners } from "./seedBanners";
+import { mediaErrors, normalizeMediaSet, type MediaValue } from "./media";
 
 /**
  * Landing Page Architecture & Promotion Page Migration, extended by
@@ -45,10 +46,11 @@ export const PROMOTION_PAGE_STATUS_META: Record<PromotionPageStatus, { label: st
   unpublished: { label: "ยกเลิกการเผยแพร่", tone: "warning" },
 };
 
+/** Each crop is an image (plain string) or a video (`MediaItem`), see `~/lib/media`. */
 export type PromotionPageBanners = {
-  desktop: string;
-  tablet: string;
-  mobile: string;
+  desktop: MediaValue;
+  tablet: MediaValue;
+  mobile: MediaValue;
 };
 
 /**
@@ -130,7 +132,7 @@ export function slugify(input: string): string {
  */
 /**
  * Seed section ids that have been removed from the baseline for good (the
- * homepage "9.9 Beauty Sale" campaign section). A browser that saved Admin
+ * homepage "9.9 Beauty Sale" section). A browser that saved Admin
  * content before the removal still has them in localStorage — they're
  * dropped here, on every read, so they disappear from Admin's Homepage
  * editor and the storefront alike and aren't written back on the next save.
@@ -146,11 +148,7 @@ export function normalizePromotionPage(p: Partial<PromotionPage> & { id: string 
     slug: p.slug ?? "",
     isHomepage: p.isHomepage ?? false,
     status: p.status ?? "draft",
-    banners: upgradeSeedBanners({
-      desktop: p.banners?.desktop ?? "",
-      tablet: p.banners?.tablet ?? "",
-      mobile: p.banners?.mobile ?? "",
-    }),
+    banners: upgradeSeedBanners(normalizeMediaSet(p.banners)),
     title: p.title ?? "",
     description: p.description ?? "",
     // A page saved before `videoUrl` existed picks up its seeded video (Iconic Glow → Charmiss x Sanrio).
@@ -158,7 +156,10 @@ export function normalizePromotionPage(p: Partial<PromotionPage> & { id: string 
     products: Array.isArray(p.products)
       ? p.products.map((ref) => ({ productId: ref.productId, variantIds: Array.isArray(ref.variantIds) ? ref.variantIds : [] }))
       : [],
-    sections: Array.isArray(p.sections) ? p.sections.filter((sec) => !RETIRED_SECTION_IDS.has(sec?.id)).map(normalizeHomepageSection) : [],
+    // Sections of a removed type (the old "campaign" section, which embedded a now-deleted Campaign) are dropped the same way.
+    sections: Array.isArray(p.sections)
+      ? p.sections.filter((sec) => sec && !RETIRED_SECTION_IDS.has(sec.id) && (sec.type === undefined || isHomepageSectionType(sec.type))).map(normalizeHomepageSection)
+      : [],
     startDate: p.startDate ?? "",
     startTime: p.startTime ?? "00:00",
     endDate: p.endDate ?? "",
@@ -205,25 +206,37 @@ export function promotionPageHref(p: Pick<PromotionPage, "isHomepage" | "slug">)
  * incorrectly block publishing a perfectly valid section-built page
  * (including Homepage, which always uses sections).
  */
+/** Every video crop needs its poster before saving. `owner` prefixes the message, e.g. a section name. */
+function bannerMediaErrors(banners: PromotionPageBanners, owner?: string): string[] {
+  const prefix = owner ? `${owner}: ` : "";
+  return [
+    ...mediaErrors(banners.desktop, `${prefix}แบนเนอร์เดสก์ท็อป`),
+    ...mediaErrors(banners.tablet, `${prefix}แบนเนอร์แท็บเล็ต`),
+    ...mediaErrors(banners.mobile, `${prefix}แบนเนอร์มือถือ`),
+  ];
+}
+
 export function validatePublishRequirements(
   values: Pick<PromotionPageFormValues, "name" | "slug" | "title" | "banners" | "videoUrl" | "products" | "sections" | "startDate" | "startTime" | "endDate" | "endTime" | "isHomepage">,
 ): string[] {
   const errors: string[] = [];
   if (!values.name.trim()) errors.push("กรุณากรอกชื่อหน้า");
   if (!values.slug.trim()) errors.push("กรุณากรอก Slug");
-  else if (!values.isHomepage && isReservedSlug(values.slug)) errors.push("Slug นี้ตรงกับ Route ที่ระบบใช้งานอยู่แล้ว กรุณาเลือก Slug อื่น");
+  else if (!values.isHomepage && isReservedSlug(values.slug)) errors.push("Slug นี้ซ้ำกับหน้าอื่นของเว็บไซต์ กรุณาเลือก Slug อื่น");
   if (values.sections.length === 0) {
-    if (!values.title.trim()) errors.push("กรุณากรอก Title");
+    if (!values.title.trim()) errors.push("กรุณากรอกหัวข้อ");
     // A YouTube video takes the banner's place on the storefront (`PromotionPageView`), so it satisfies the banner requirement on its own.
-    if (!values.banners.desktop && !values.videoUrl.trim()) errors.push("กรุณาอัปโหลด Desktop Banner หรือใส่ลิงก์วิดีโอ YouTube");
+    if (!values.banners.desktop && !values.videoUrl.trim()) errors.push("กรุณาอัปโหลดแบนเนอร์เดสก์ท็อป หรือใส่ลิงก์วิดีโอ YouTube");
     if (values.products.length === 0) errors.push("กรุณาเลือกสินค้าอย่างน้อย 1 รายการ");
+    errors.push(...bannerMediaErrors(values.banners));
   }
   if (values.videoUrl.trim() && !isValidYoutubeUrl(values.videoUrl)) errors.push("ลิงก์วิดีโอ YouTube ไม่ถูกต้อง");
   if (values.startDate && values.endDate && !isValidDateRange(values.startDate, values.startTime, values.endDate, values.endTime)) {
-    errors.push("ช่วงวันที่ไม่ถูกต้อง");
+    errors.push("วันสิ้นสุดต้องอยู่หลังวันเริ่ม");
   }
   for (const section of values.sections) {
     if (section.type === "hero") errors.push(...validateHeroAssets(section.assets));
+    errors.push(...bannerMediaErrors(section.banners, section.name || section.title));
   }
   return errors;
 }
@@ -300,7 +313,6 @@ function seedAutoProductSection(
     products: [],
     collectionId: "",
     categoryId: "",
-    campaignId: "",
     createdAt: TODAY_LABEL,
     updatedAt: TODAY_LABEL,
   };
@@ -311,7 +323,7 @@ function seedAutoProductSection(
  * incrementing `let nextId` counter, which is fine as long as
  * `buildMockPromotionPages()` is only ever called once per process, but
  * breaks the "baseline builder purity" rule every other content module
- * (`adminCategories.ts`, `adminBanners.ts`, `adminCampaigns.ts`,
+ * (`adminCategories.ts`,
  * `adminCollections.ts`) already follows — a fixed id per seed, so calling
  * this function from two independent provider trees (Admin's own store *and*
  * the customer-side read-only fallback this migration adds in
@@ -586,7 +598,7 @@ function upgradeToV3(stored: PromotionPage[], fromVersion: number): PromotionPag
         ...p,
         sections: p.sections.map((sec) =>
           sec.id === HOMEPAGE_HERO_SECTION_ID && !sec.enabled && sec.assets.length === 0 && sec.title === "New Year New Glow"
-            ? { ...sec, name: "Hero Banner หน้าแรก", enabled: false, title: "", description: "", banners: { desktop: "", tablet: "", mobile: "" }, assets: buildLiveHeroAssets(), cta: { label: "", destination: { type: "none" } } }
+            ? { ...sec, name: "แบนเนอร์สไลด์หน้าแรก", enabled: false, title: "", description: "", banners: { desktop: "", tablet: "", mobile: "" }, assets: buildLiveHeroAssets(), cta: { label: "", destination: { type: "none" } } }
             : sec,
         ),
       };
@@ -603,13 +615,10 @@ const linksToPage = (destination: HomepageDestination | undefined, pageId: strin
 
 /**
  * §26/§44 — before a Landing Page is deleted, this checks every other place
- * a `landingPage` `HomepageDestination` could point at it (a Banner's CTA, a
- * Campaign's CTA, or another Promotion Page's own Section CTA) and returns a
- * human-readable list so the delete confirmation can warn the admin instead
- * of silently leaving a dangling `/promotion/:slug` link behind. Structural
- * parameter types (not `Banner`/`Campaign` imports) keep this file's only
- * dependency direction intact — this module is depended on by
- * `adminBanners.ts`/`adminCampaigns.ts`, never the other way around.
+ * a `landingPage` `HomepageDestination` could point at it (another
+ * Promotion Page's own Section CTA) and returns a human-readable list so the
+ * delete confirmation can warn the admin instead of silently leaving a
+ * dangling `/promotion/:slug` link behind.
  *
  * Promotion Page / Homepage Architecture — Homepage is now just another row
  * in `refs.allPages` (the `allPages` loop below already walks its
@@ -619,22 +628,14 @@ const linksToPage = (destination: HomepageDestination | undefined, pageId: strin
 export function findLandingPageReferences(
   pageId: string,
   refs: {
-    banners: { name: string; destination: HomepageDestination }[];
-    campaigns: { name: string; cta: { destination: HomepageDestination } }[];
     allPages: PromotionPage[];
   },
 ): string[] {
   const hits: string[] = [];
-  for (const b of refs.banners) {
-    if (linksToPage(b.destination, pageId)) hits.push(`Banner "${b.name}"`);
-  }
-  for (const c of refs.campaigns) {
-    if (linksToPage(c.cta.destination, pageId)) hits.push(`Campaign "${c.name}"`);
-  }
   for (const p of refs.allPages) {
     if (p.id === pageId) continue;
     for (const s of p.sections) {
-      if (linksToPage(s.cta.destination, pageId)) hits.push(`${p.isHomepage ? "Homepage" : "Landing Page"} "${p.name}"`);
+      if (linksToPage(s.cta.destination, pageId)) hits.push(`${p.isHomepage ? "หน้าแรก" : "หน้าแคมเปญ"} "${p.name}"`);
     }
   }
   return hits;

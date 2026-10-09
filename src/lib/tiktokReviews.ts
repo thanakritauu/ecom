@@ -5,8 +5,9 @@ import { RAIL_ASSIGNMENTS } from "./watsonsCatalog";
  * (`tiktok.com/player/v1/:id`), so the clips stay hosted and credited on
  * TikTok. Home's #CharmissReviews shows every clip; every Product Detail
  * Page shows them too, with the clips mapped to that product (`productIds`)
- * first and the rest of the brand's clips after. To change what's shown, edit this list: the id is the number at
- * the end of the video URL (`tiktok.com/@handle/video/<id>`). No API/token.
+ * first and the rest of the brand's clips after. This list is the seed: Admin
+ * (รีวิว > คลิปรีวิว TikTok) edits the live list, read by `storefrontTiktokClips.ts`.
+ * The id is the number at the end of the video URL (`tiktok.com/@handle/video/<id>`). No API/token.
  */
 export type TikTokReviewClip = {
   videoId: string;
@@ -16,6 +17,8 @@ export type TikTokReviewClip = {
   title: string;
   /** Catalog product ids this clip reviews — only those PDPs show it. Unset = Home only. */
   productIds?: string[];
+  /** Cover uploaded in Admin; wins over the cover TikTok returns (`tiktokPosters.ts`). */
+  coverUrl?: string;
 };
 
 /** Mock slot ids that show a given real product (Watsons code), across every merchandising rail. */
@@ -52,13 +55,13 @@ export const TIKTOK_REVIEW_CLIPS: TikTokReviewClip[] = [
 export const isClipOfProduct = (clip: TikTokReviewClip, productId: string) => !!clip.productIds?.includes(productId);
 
 /** PDP order: this product's own clips first, then every other clip — so every PDP has clips. */
-export const tiktokClipsForProduct = (productId: string) => [
-  ...TIKTOK_REVIEW_CLIPS.filter((clip) => isClipOfProduct(clip, productId)),
-  ...TIKTOK_REVIEW_CLIPS.filter((clip) => !isClipOfProduct(clip, productId)),
+export const tiktokClipsForProduct = (productId: string, clips: TikTokReviewClip[] = TIKTOK_REVIEW_CLIPS) => [
+  ...clips.filter((clip) => isClipOfProduct(clip, productId)),
+  ...clips.filter((clip) => !isClipOfProduct(clip, productId)),
 ];
 
 /** Only loaded after a tap (see TikTokReviewRail), so it starts playing straight away. */
 export const tiktokPlayerUrl = (videoId: string) =>
   `https://www.tiktok.com/player/v1/${videoId}?autoplay=1&music_info=0&description=0&rel=0&native_context_menu=0`;
 
-export const tiktokVideoUrl = (clip: TikTokReviewClip) => `https://www.tiktok.com/@${clip.author}/video/${clip.videoId}`;
+export const tiktokVideoUrl = (clip: Pick<TikTokReviewClip, "author" | "videoId">) => `https://www.tiktok.com/@${clip.author}/video/${clip.videoId}`;

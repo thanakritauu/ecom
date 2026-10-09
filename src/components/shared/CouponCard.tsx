@@ -1,23 +1,31 @@
 import { createSignal, Show } from "solid-js";
 import { Button } from "./Button";
 import { CouponDetailSheet } from "./CouponDetailSheet";
-import ticketShape from "~/assets/icons/coupon-ticket-shape.svg";
 import dashedLine from "~/assets/icons/coupon-dashed-line.svg";
 import percentIcon from "~/assets/icons/coupon-percent.svg";
 import type { Coupon as StoreCoupon } from "~/lib/cartSelectors";
 
+/** Two half-height layers, each with one notch: top edge and bottom edge at x=100px, 8px radius. */
+const TICKET_MASK =
+  "radial-gradient(circle at 100px 0, transparent 8px, #000 8.5px) top / 100% 51% no-repeat, radial-gradient(circle at 100px 100%, transparent 8px, #000 8.5px) bottom / 100% 51% no-repeat";
+
 export type Coupon = {
   id: string;
   amountLabel: string;
+  /** "ลดสูงสุด ฿200": a capped % coupon's extra line under the amount. */
+  capLabel?: string;
+  /** Admin's coupon thumbnail, shown in the stub instead of the % artwork. */
+  image?: string;
   minSpendLabel: string;
   expiryLabel: string;
   /** The catalog coupon behind the ticket — when set, tapping the card opens its details & conditions. */
   source?: StoreCoupon;
 };
 
-/** The ticket for one of `AVAILABLE_COUPONS` — Home's section and Checkout's picker print the exact same three lines. */
+/** The ticket for one storefront coupon: Home's section and Checkout's picker print the exact same three lines. */
 export function couponTicket(c: StoreCoupon): Coupon {
-  return { id: c.code, amountLabel: c.label, minSpendLabel: `ขั้นต่ำ ฿${c.minSpend.toLocaleString("th-TH")}`, expiryLabel: c.expiresLabel, source: c };
+  const minSpendLabel = c.minSpend > 0 ? `ขั้นต่ำ ฿${c.minSpend.toLocaleString("th-TH")}` : "ไม่มีขั้นต่ำ";
+  return { id: c.code, amountLabel: c.amountLabel, capLabel: c.capLabel, image: c.image, minSpendLabel, expiryLabel: c.expiresLabel, source: c };
 }
 
 /**
@@ -96,26 +104,37 @@ export function CouponCard(props: {
    */
   return (
     <div class="relative h-[104px] w-full">
-      <img
-        src={ticketShape}
-        alt=""
-        aria-hidden="true"
-        class="pointer-events-none absolute left-[-3.25%] top-[-9.62%] h-[123.08%] w-[106.5%] max-w-none"
-      />
+      {/* Ticket outline drawn in CSS (was a 369px SVG stretched to fit, which bent the notches and corners at other
+          widths): 16px corners, 8px notches centred on the dashed line at 100px, Figma's shadow (y 2, blur 12, 10%). */}
+      <div aria-hidden="true" class="pointer-events-none absolute inset-0 [filter:drop-shadow(0_2px_12px_rgba(90,106,133,0.1))]">
+        <div class="size-full rounded-2xl bg-white" style={{ "-webkit-mask": TICKET_MASK, mask: TICKET_MASK }} />
+      </div>
       <Show when={props.coupon.source && !props.display}>
         <button
           type="button"
           class="absolute inset-0 rounded-card font-normal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-pink"
           aria-haspopup="dialog"
-          aria-label={`ดูรายละเอียดคูปอง ${props.coupon.amountLabel} ${props.coupon.minSpendLabel}`}
+          aria-label={`ดูรายละเอียดคูปอง ${props.coupon.amountLabel}${props.coupon.capLabel ? ` ${props.coupon.capLabel}` : ""} ${props.coupon.minSpendLabel}`}
           onClick={() => setDetailOpen(true)}
         />
       </Show>
-      <img src={percentIcon} alt="" aria-hidden="true" class="pointer-events-none absolute left-[31px] top-[20px] h-[63px] w-[43px]" />
+      {/* Stub: Admin's thumbnail (64px, centred in the 100px stub) or the % artwork. */}
+      <Show
+        when={props.coupon.image}
+        fallback={<img src={percentIcon} alt="" aria-hidden="true" class="pointer-events-none absolute left-[31px] top-[20px] h-[63px] w-[43px]" />}
+      >
+        {(src) => <img src={src()} alt="" aria-hidden="true" class="pointer-events-none absolute left-[18px] top-[20px] size-16 rounded-xl object-cover" />}
+      </Show>
       <img src={dashedLine} alt="" aria-hidden="true" class="pointer-events-none absolute left-[99.5px] top-2 h-[88px] w-px" />
       <div class="pointer-events-none absolute inset-y-0 left-[100px] right-0 flex items-center justify-between gap-2 p-4">
         <div class="flex min-w-0 flex-col">
-          <p class="whitespace-nowrap text-xl font-bold leading-7 text-system-red">{props.coupon.amountLabel}</p>
+          {/* A capped % coupon adds one line, so its amount line is 4px shorter to keep all four inside the 104px ticket. */}
+          <p class="whitespace-nowrap text-xl font-bold text-system-red" classList={{ "leading-7": !props.coupon.capLabel, "leading-6": !!props.coupon.capLabel }}>
+            {props.coupon.amountLabel}
+          </p>
+          <Show when={props.coupon.capLabel}>
+            <p class="whitespace-nowrap text-xs font-medium leading-4 text-system-red">{props.coupon.capLabel}</p>
+          </Show>
           <p class="text-sm font-medium leading-5 text-ink">{props.coupon.minSpendLabel}</p>
           <p class="whitespace-nowrap text-xs leading-[normal] text-ink-gray">{props.coupon.expiryLabel}</p>
         </div>

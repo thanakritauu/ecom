@@ -59,7 +59,7 @@ export default function BeamCheckoutMockPage() {
       <div class="flex w-full max-w-[440px] flex-col gap-4">
         <header class="flex flex-col items-center gap-1 text-center">
           <h1 class="text-2xl font-bold text-ink">Beam Checkout</h1>
-          <p class="rounded-pill bg-warning-soft px-3 py-1 text-xs font-semibold leading-[1.75] text-ink">หน้าจำลองของ Beam (Beam payment page — mock)</p>
+          <p class="rounded-pill bg-warning-soft px-3 py-1 text-xs font-semibold leading-[1.75] text-ink">หน้าจำลองของ Beam (mock)</p>
         </header>
 
         <Show
@@ -104,12 +104,12 @@ export default function BeamCheckoutMockPage() {
               when={status() !== "done"}
               fallback={
                 <p class="rounded-card bg-surface-gray/60 p-4 text-center text-sm leading-[1.75] text-ink" role="status">
-                  {doneText()} — ปิดหน้าต่างนี้ได้
+                  {doneText()} ปิดหน้าต่างนี้ได้เลย
                 </p>
               }
             >
               <p class="rounded-card bg-surface-gray/60 p-3 text-xs leading-[1.75] text-ink-gray">
-                หน้านี้เป็นหน้าจำลองสำหรับทดสอบ ไม่มีการเรียกเก็บเงินจริง — เลือกผลการชำระเงินด้านล่าง
+                หน้านี้เป็นหน้าจำลองสำหรับทดสอบ ไม่มีการเรียกเก็บเงินจริง เลือกผลการชำระเงินที่ต้องการด้านล่างได้เลย
               </p>
               <div class="flex flex-col gap-2">
                 <Button type="button" variant="primary" size="lg" class="w-full" loading={status() === "processing"} onClick={succeed}>

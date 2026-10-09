@@ -1,11 +1,11 @@
 import { Popover } from "@kobalte/core/popover";
-import { For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
+import { useNavigate } from "@solidjs/router";
 import { useAdminNotifications, formatRelativeTimeTH } from "~/lib/adminNotifications";
 import { BellIcon } from "./icons";
 
 /**
- * Spec PART 12/13 — a real Notification panel (mock data + localStorage
- * persistence only, no backend): empty state, title/description/time per
+ * Topbar notification panel (seed data + localStorage, no backend): empty state, title/description/time per
  * item, read/unread visual distinction, mark-one/mark-all-as-read, unread
  * count badge. Built on Kobalte `Popover` (not `DropdownMenu`) since this is
  * an arbitrary content panel to scan, not a list of actionable menu items —
@@ -15,9 +15,19 @@ import { BellIcon } from "./icons";
  */
 export function AdminNotificationPanel() {
   const store = useAdminNotifications();
+  const navigate = useNavigate();
+  const [open, setOpen] = createSignal(false);
+
+  const openItem = (id: string, href?: string) => {
+    store.markAsRead(id);
+    if (href) {
+      setOpen(false);
+      navigate(href);
+    }
+  };
 
   return (
-    <Popover placement="bottom-end" gutter={8}>
+    <Popover placement="bottom-end" gutter={8} open={open()} onOpenChange={setOpen}>
       <Popover.Trigger
         aria-label="การแจ้งเตือน"
         class="relative flex size-11 items-center justify-center rounded-pill bg-surface-gray text-ink transition-colors duration-150 hover:bg-surface-gray/70"
@@ -35,9 +45,9 @@ export function AdminNotificationPanel() {
               <button
                 type="button"
                 onClick={() => store.markAllAsRead()}
-                class="text-xs font-medium text-brand-pink hover:underline"
+                class="min-h-9 text-xs font-medium text-brand-pink hover:underline"
               >
-                อ่านทั้งหมด
+                อ่านแล้วทั้งหมด
               </button>
             </Show>
           </div>
@@ -53,7 +63,7 @@ export function AdminNotificationPanel() {
                     <li>
                       <button
                         type="button"
-                        onClick={() => store.markAsRead(n.id)}
+                        onClick={() => openItem(n.id, n.href)}
                         class="font-normal flex w-full items-start gap-2.5 border-b border-border px-4 py-3 text-left transition-colors duration-150 last:border-b-0 hover:bg-surface-pink/40"
                       >
                         <span

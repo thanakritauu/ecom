@@ -1,7 +1,9 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import type { Product } from "~/lib/types";
+import { isVideoMedia, mediaImage, type MediaValue } from "~/lib/media";
 import { flashSaleRoundEndsAt, getDiscountPercent } from "~/lib/products";
 import {
+  ADMIN_PRODUCT_STATUS_META,
   LOW_STOCK_THRESHOLD,
   STOREFRONT_CATEGORY_SLUGS,
   type AdminProduct,
@@ -10,12 +12,12 @@ import {
   type ProductFormValues,
 } from "~/lib/adminProductStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
-import { useAdminBrands } from "~/lib/adminBrandStore";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
 import { ChevronDownIcon } from "~/components/admin/icons";
+import { Toggle } from "~/components/admin/Toggle";
 import { ProductCard } from "~/components/shared/ProductCard";
 import { ProductImageUploader } from "./ProductImageUploader";
 import { ProductVariantsEditor } from "./ProductVariantsEditor";
@@ -33,11 +35,16 @@ function defaultFlashSaleDatetimeLocal(): string {
 /** Optional number field → `undefined` when blank (so the card hides that row), otherwise the number. */
 const optionalNumber = (raw: string) => (raw.trim() === "" || Number.isNaN(Number(raw)) ? undefined : Number(raw));
 
-const STATUS_OPTIONS: { value: AdminProductStatus; label: string }[] = [
-  { value: "active", label: "Active" },
-  { value: "draft", label: "Draft" },
-  { value: "disabled", label: "Disabled" },
-];
+const STATUS_OPTIONS: { value: AdminProductStatus; label: string }[] = (["active", "draft", "disabled"] as const).map((value) => ({
+  value,
+  label: ADMIN_PRODUCT_STATUS_META[value].label,
+}));
+
+const STATUS_HINT: Record<AdminProductStatus, string> = {
+  active: "แสดงบนหน้าร้านและลูกค้าสั่งซื้อได้",
+  draft: "ยังไม่แสดงบนหน้าร้าน",
+  disabled: "ซ่อนจากหน้าร้านทุกหน้า รวมถึงตะกร้าของลูกค้า",
+};
 
 /**
  * PART 15/16 — one shared form for both `/admin/products/new` and
@@ -52,11 +59,9 @@ export function ProductForm(props: {
   onCancel: () => void;
 }) {
   const categoryStore = useAdminCategories();
-  const brandStore = useAdminBrands();
 
   const [name, setName] = createSignal(props.initial?.name ?? "");
   const [sku, setSku] = createSignal(props.initial?.sku ?? "");
-  const [brandId, setBrandId] = createSignal(props.initial?.brandId ?? "");
   const [categoryId, setCategoryId] = createSignal(props.initial?.categoryId ?? "");
   const [description, setDescription] = createSignal(props.initial?.description ?? "");
   const [price, setPrice] = createSignal(props.initial ? String(props.initial.price) : "");
@@ -68,9 +73,11 @@ export function ProductForm(props: {
   const [soldCount, setSoldCount] = createSignal(props.initial?.soldCount !== undefined ? String(props.initial.soldCount) : "");
   const [reviewCount, setReviewCount] = createSignal(props.initial?.reviewCount !== undefined ? String(props.initial.reviewCount) : "");
   const [status, setStatus] = createSignal<AdminProductStatus>(props.initial?.status ?? "active");
-  const [images, setImages] = createSignal<string[]>(
-    props.initial?.images?.length ? props.initial.images : props.initial?.image ? [props.initial.image] : [],
+  // Gallery items (images and videos, `~/lib/media`); `images` is the still-image twin every card/list reads (a video counts as its poster).
+  const [media, setMedia] = createSignal<MediaValue[]>(
+    props.initial?.media?.length ? props.initial.media : props.initial?.images?.length ? props.initial.images : props.initial?.image ? [props.initial.image] : [],
   );
+  const images = () => media().map(mediaImage).filter(Boolean);
   const [mainImage, setMainImage] = createSignal<string | undefined>(props.initial?.mainImage);
   // §8 — falls back to the Gallery's first photo whenever no explicit pin exists yet, or the pinned photo was since removed — never crashes, never silently keeps pointing at a URL that's no longer in the Gallery.
   const effectiveMainImage = () => (mainImage() && images().includes(mainImage()!) ? mainImage()! : images()[0]);
@@ -98,9 +105,10 @@ export function ProductForm(props: {
     const stockNum = Number(stockLeft());
     if (stockLeft().trim() === "" || Number.isNaN(stockNum) || stockNum < 0) next.stock = "จำนวนสต๊อกต้องเป็นตัวเลขและไม่ติดลบ";
     const ratingNum = optionalNumber(rating());
-    if (ratingNum !== undefined && (ratingNum < 0 || ratingNum > 5)) next.rating = "คะแนนต้องอยู่ระหว่าง 0–5";
+    if (ratingNum !== undefined && (ratingNum < 0 || ratingNum > 5)) next.rating = "คะแนนต้องอยู่ระหว่าง 0-5";
     const totalNum = optionalNumber(stockTotal());
     if (flashSaleEnabled() && totalNum !== undefined && totalNum < stockNum) next.stockTotal = "จำนวนทั้งหมดต้องไม่น้อยกว่าสต๊อกคงเหลือ";
+    if (media().some((m) => isVideoMedia(m) && !m.poster)) next.images = "วิดีโอทุกตัวในแกลเลอรีต้องมีภาพปก";
     return next;
   };
 
@@ -114,12 +122,9 @@ export function ProductForm(props: {
     setSubmitError(undefined);
     try {
       const selectedCategory = categoryStore.getById(categoryId());
-      const selectedBrand = brandStore.getById(brandId());
       await props.onSubmit({
         name: name().trim(),
         sku: sku().trim(),
-        brand: selectedBrand?.name ?? "",
-        brandId: brandId(),
         // The slug the storefront filters/menus by (cushion, lip, cheek, eye,
         // skincare, suncare-bodycare) — only set when the picked Category's
         // slug is one of those; `categoryId` is the real reference.
@@ -133,6 +138,7 @@ export function ProductForm(props: {
         status: status(),
         images: images(),
         mainImage: effectiveMainImage(),
+        media: media().some(isVideoMedia) ? media() : undefined,
         adminVariants: variants(),
         flashSaleEndsAt: flashSaleEndsAtValue(),
         flashSaleDaily: flashSaleEnabled() && flashSaleDaily(),
@@ -213,21 +219,6 @@ export function ProductForm(props: {
               <TextField label="ชื่อสินค้า" required value={name()} onInput={(e) => setName(e.currentTarget.value)} error={errors().name} disabled={saving()} class="sm:col-span-2" />
               <TextField label="SKU" required value={sku()} onInput={(e) => setSku(e.currentTarget.value)} error={errors().sku} disabled={saving()} />
               <label class="flex flex-col gap-1.5">
-                <span class="text-sm font-medium text-ink">แบรนด์</span>
-                <div class="relative">
-                  <select
-                    value={brandId()}
-                    disabled={saving()}
-                    onChange={(e) => setBrandId(e.currentTarget.value)}
-                    class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                  >
-                    <option value="">ไม่ระบุ</option>
-                    <For each={brandStore.brands()}>{(b) => <option value={b.id}>{b.name}</option>}</For>
-                  </select>
-                  <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
-                </div>
-              </label>
-              <label class="flex flex-col gap-1.5 sm:col-span-2">
                 <span class="text-sm font-medium text-ink">
                   หมวดหมู่ <span class="text-system-red">*</span>
                 </span>
@@ -260,11 +251,14 @@ export function ProductForm(props: {
             </div>
           </Section>
 
-          <Section title="รูปภาพสินค้า (Product Gallery)">
-            <ProductImageUploader images={images()} onChange={setImages} maxImages={10} mainImage={effectiveMainImage()} onSetMain={setMainImage} />
+          <Section title="รูปภาพและวิดีโอสินค้า">
+            <ProductImageUploader allowVideo images={media()} onChange={setMedia} maxImages={10} mainImage={effectiveMainImage()} onSetMain={setMainImage} />
+            <Show when={errors().images}>
+              <p class="text-sm text-system-red">{errors().images}</p>
+            </Show>
           </Section>
 
-          <Section title="ตัวเลือกสินค้า (Variants)">
+          <Section title="ตัวเลือกสินค้า">
             <ProductVariantsEditor variants={variants()} onChange={setVariants} />
           </Section>
         </div>
@@ -277,24 +271,18 @@ export function ProductForm(props: {
             </div>
             <Show when={previewProduct().discountPercent}>
               <p class="text-xs text-ink-gray">
-                ป้ายส่วนลดที่จะแสดง: <span class="font-semibold text-system-red">-{previewProduct().discountPercent}%</span> (คำนวณจากราคาก่อนลด/ราคาขาย)
+                ป้ายส่วนลดบนการ์ดสินค้า <span class="font-semibold text-system-red">-{previewProduct().discountPercent}%</span> คำนวณจากราคาก่อนลดและราคาขาย
               </p>
             </Show>
           </Section>
 
           <Section title="แฟลชเซล">
-            <label class="flex items-center gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={flashSaleEnabled()}
-                disabled={saving()}
-                onChange={(e) => setFlashSaleEnabled(e.currentTarget.checked)}
-                class="size-4 accent-brand-pink"
-              />
-              เปิดใช้งานแฟลชเซลสำหรับสินค้านี้
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-ink">แสดงในแฟลชเซล</span>
+              <Toggle checked={flashSaleEnabled()} onChange={setFlashSaleEnabled} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
+              <span class="text-xs text-ink-gray">สินค้าจะขึ้นในส่วนแฟลชเซลหน้าแรกพร้อมเวลานับถอยหลัง ในราคาขายด้านบน</span>
             </label>
             <Show when={flashSaleEnabled()}>
-              <div class="mt-3">
               <TextField
                 label="จำนวนทั้งหมดของแฟลชเซล"
                 type="number"
@@ -305,29 +293,23 @@ export function ProductForm(props: {
                 error={errors().stockTotal}
                 disabled={saving()}
               />
-              </div>
-              <p class="mt-1 text-xs text-ink-gray">แถบสต๊อกบนการ์ดแฟลชเซล = สต๊อกคงเหลือ / จำนวนทั้งหมด</p>
-              <label class="mt-3 flex items-center gap-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  checked={flashSaleDaily()}
-                  disabled={saving()}
-                  onChange={(e) => setFlashSaleDaily(e.currentTarget.checked)}
-                  class="size-4 accent-brand-pink"
-                />
-                รอบรายวัน (00:00–23:59 สิ้นสุดเที่ยงคืนทุกวัน เหมือนหน้าร้าน)
+              <p class="-mt-2 text-xs text-ink-gray">แถบบนการ์ดแสดงสต๊อกคงเหลือเทียบกับจำนวนนี้</p>
+              <label class="flex flex-col gap-1.5">
+                <span class="text-sm font-medium text-ink">รอบรายวัน</span>
+                <Toggle checked={flashSaleDaily()} onChange={setFlashSaleDaily} disabled={saving()} />
+                <span class="text-xs text-ink-gray">จบตอนเที่ยงคืนและเริ่มรอบใหม่ทุกวัน ถ้าปิดต้องกำหนดเวลาสิ้นสุดเอง</span>
               </label>
               <Show when={!flashSaleDaily()}>
-              <label class="mt-3 flex flex-col gap-1.5">
-                <span class="text-sm font-medium text-ink">สิ้นสุดเวลา</span>
-                <input
-                  type="datetime-local"
-                  value={flashSaleEndsAtLocal()}
-                  disabled={saving()}
-                  onInput={(e) => setFlashSaleEndsAtLocal(e.currentTarget.value)}
-                  class="h-11 w-full rounded-card border border-border bg-surface-card px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                />
-              </label>
+                <label class="flex flex-col gap-1.5">
+                  <span class="text-sm font-medium text-ink">สิ้นสุดเวลา</span>
+                  <input
+                    type="datetime-local"
+                    value={flashSaleEndsAtLocal()}
+                    disabled={saving()}
+                    onInput={(e) => setFlashSaleEndsAtLocal(e.currentTarget.value)}
+                    class="h-11 w-full rounded-card border border-border bg-surface-card px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+                  />
+                </label>
               </Show>
             </Show>
           </Section>
@@ -335,18 +317,18 @@ export function ProductForm(props: {
           <Section title="สต๊อกสินค้า">
             <div class="grid grid-cols-2 gap-4">
               <TextField label="จำนวนสต๊อก" required type="number" min="0" value={stockLeft()} onInput={(e) => setStockLeft(e.currentTarget.value)} error={errors().stock} disabled={saving()} />
-              <TextField label="แจ้งเตือนเมื่อเหลือไม่เกิน" type="number" min="0" value={lowStockThreshold()} onInput={(e) => setLowStockThreshold(e.currentTarget.value)} disabled={saving()} />
+              <TextField label="ใกล้หมดเมื่อเหลือ" type="number" min="0" value={lowStockThreshold()} onInput={(e) => setLowStockThreshold(e.currentTarget.value)} disabled={saving()} />
             </div>
-            <p class="text-xs text-ink-gray">ตะกร้าหน้าร้านแสดง "เหลือ X ชิ้นสุดท้าย" เมื่อเหลือไม่เกิน {LOW_STOCK_THRESHOLD} ชิ้น</p>
+            <p class="text-xs text-ink-gray">เมื่อสต๊อกเหลือไม่เกิน {optionalNumber(lowStockThreshold()) ?? LOW_STOCK_THRESHOLD} ชิ้น ตะกร้าจะขึ้นป้าย "เหลือ X ชิ้นสุดท้าย"</p>
           </Section>
 
-          <Section title="คะแนนและยอดขาย (แสดงบน Product Card)">
+          <Section title="คะแนนและยอดขาย">
             <div class="grid grid-cols-3 gap-4">
               <TextField label="คะแนนรีวิว" type="number" min="0" max="5" step="0.1" value={rating()} onInput={(e) => setRating(e.currentTarget.value)} error={errors().rating} disabled={saving()} />
               <TextField label="ขายแล้ว (ชิ้น)" type="number" min="0" value={soldCount()} onInput={(e) => setSoldCount(e.currentTarget.value)} disabled={saving()} />
               <TextField label="จำนวนรีวิว" type="number" min="0" value={reviewCount()} onInput={(e) => setReviewCount(e.currentTarget.value)} disabled={saving()} />
             </div>
-            <p class="text-xs text-ink-gray">เว้นว่างเพื่อซ่อนแถวคะแนน/ยอดขายบนการ์ด</p>
+            <p class="text-xs text-ink-gray">แสดงบนการ์ดสินค้า ถ้าเว้นว่างจะไม่แสดงแถวคะแนนและยอดขาย</p>
           </Section>
 
           <Section title="สถานะ">
@@ -363,6 +345,7 @@ export function ProductForm(props: {
               </select>
               <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
             </div>
+            <p class="text-xs text-ink-gray">{STATUS_HINT[status()]}</p>
           </Section>
         </div>
       </div>
@@ -378,7 +361,7 @@ export function ProductForm(props: {
   const productPreview = (
     <Show
       when={images().length > 0}
-      fallback={<p class="p-4 text-sm text-ink-gray sm:p-5">อัปโหลดรูปสินค้าอย่างน้อย 1 รูปเพื่อดูตัวอย่าง Product Card</p>}
+      fallback={<p class="p-4 text-sm text-ink-gray sm:p-5">อัปโหลดรูปสินค้าอย่างน้อย 1 รูปเพื่อดูตัวอย่างการ์ดสินค้า</p>}
     >
       <div class="p-4 sm:p-5">
         <ProductCard product={previewProduct()} flashSale={flashSaleEnabled()} />

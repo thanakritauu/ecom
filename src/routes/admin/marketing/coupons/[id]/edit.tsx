@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "@solidjs/router";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
 import { EmptyState } from "~/components/admin/EmptyState";
-import { InventoryIcon } from "~/components/admin/icons";
+import { CouponTicketIcon } from "~/components/admin/icons";
 import { CouponForm, type CouponFormValues } from "~/components/admin/marketing/CouponForm";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
 import { pushToast } from "~/lib/toast";
@@ -17,8 +17,8 @@ export default function AdminCouponEditPage() {
   const handleSubmit = async (values: CouponFormValues) => {
     const current = coupon();
     if (!current) return;
-    await store.update(current.id, { ...values, usageCount: current.usageCount });
-    pushToast("บันทึกการเปลี่ยนแปลงแล้ว", "success");
+    await store.update(current.id, values);
+    pushToast("บันทึกคูปองเรียบร้อยแล้ว", "success");
     navigate(`/admin/marketing/coupons/${current.id}`);
   };
 
@@ -27,8 +27,8 @@ export default function AdminCouponEditPage() {
       when={coupon()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด", href: "/admin/marketing" }, { label: "คูปอง", href: "/admin/marketing/coupons" }]} />
-          <EmptyState icon={<InventoryIcon />} title="ไม่พบคูปองนี้" actionLabel="กลับไปหน้าคูปอง" onAction={() => navigate("/admin/marketing/coupons")} class="bg-surface-card shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "คูปอง", href: "/admin/marketing/coupons" }]} />
+          <EmptyState icon={<CouponTicketIcon />} title="ไม่พบคูปองนี้" description="คูปองอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าคูปอง" onAction={() => navigate("/admin/marketing/coupons")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -37,14 +37,20 @@ export default function AdminCouponEditPage() {
           <Breadcrumb
             items={[
               { label: "แดชบอร์ด", href: "/admin" },
-              { label: "การตลาด", href: "/admin/marketing" },
+              { label: "การตลาด" },
               { label: "คูปอง", href: "/admin/marketing/coupons" },
-              { label: current().code },
+              { label: current().code, href: `/admin/marketing/coupons/${current().id}` },
               { label: "แก้ไข" },
             ]}
           />
-          <PageHeader title={`แก้ไข: ${current().code}`} description="แก้ไขเงื่อนไขคูปองและบันทึกการเปลี่ยนแปลง" />
-          <CouponForm initial={current()} submitLabel="บันทึกการเปลี่ยนแปลง" onSubmit={handleSubmit} onCancel={() => navigate(`/admin/marketing/coupons/${current().id}`)} />
+          <PageHeader title={`แก้ไข: ${current().code}`} description="แก้ไขข้อมูลคูปองและบันทึกการเปลี่ยนแปลง" />
+          <CouponForm
+            initial={current()}
+            submitLabel="บันทึกการเปลี่ยนแปลง"
+            takenCodes={store.items().filter((c) => c.id !== current().id).map((c) => c.code.toUpperCase())}
+            onSubmit={handleSubmit}
+            onCancel={() => navigate(`/admin/marketing/coupons/${current().id}`)}
+          />
         </div>
       )}
     </Show>

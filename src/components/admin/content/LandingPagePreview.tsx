@@ -1,4 +1,6 @@
 import { Dialog } from "@kobalte/core/dialog";
+import { hasMedia } from "~/lib/media";
+import { MediaPreview } from "~/components/admin/MediaUploader";
 import { createSignal, For, Show } from "solid-js";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
@@ -16,19 +18,19 @@ type PreviewDevice = "desktop" | "mobile";
  */
 function LandingPagePreviewContent(props: { banners: PromotionPageBanners; title: string; description: string; products: PromotionPageProductRef[]; device: PreviewDevice }) {
   const store = useAdminProducts();
-  const bannerSrc = () => (props.device === "mobile" ? props.banners.mobile || props.banners.desktop : props.banners.desktop);
+  const bannerSrc = () => (props.device === "mobile" ? (hasMedia(props.banners.mobile) ? props.banners.mobile : props.banners.desktop) : props.banners.desktop);
 
   return (
     <div class="flex flex-col" classList={{ "mx-auto w-full max-w-[360px]": props.device === "mobile" }}>
       <div class="w-full overflow-hidden bg-surface-gray/60" classList={{ "aspect-[3/1]": props.device !== "mobile", "aspect-[3/4]": props.device === "mobile" }}>
-        <Show when={bannerSrc()} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-8" /></div>}>
-          <img src={bannerSrc()} alt="" class="size-full object-cover" />
+        <Show when={hasMedia(bannerSrc())} fallback={<div class="flex size-full items-center justify-center text-ink-placeholder"><ImageIcon class="size-8" /></div>}>
+          <MediaPreview value={bannerSrc()} />
         </Show>
       </div>
 
       <div class="flex flex-col gap-2 px-4 py-5 text-center">
-        <h2 class="text-xl font-bold text-ink">{props.title || "Title"}</h2>
-        <p class="text-sm text-ink-gray">{props.description || "Description"}</p>
+        <h2 class="text-xl font-bold text-ink">{props.title || "หัวข้อ"}</h2>
+        <p class="text-sm text-ink-gray">{props.description || "คำอธิบาย"}</p>
       </div>
 
       <div class="grid gap-3 px-4 pb-5" classList={{ "grid-cols-2": props.device === "mobile", "grid-cols-4": props.device === "desktop" }}>
@@ -77,22 +79,22 @@ export function LandingPagePreviewDialog(props: {
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
           <Dialog.Content class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-card bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
             <div class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
-              <Dialog.Title class="text-lg font-semibold text-ink">Preview หน้า Landing Page</Dialog.Title>
+              <Dialog.Title class="text-base font-semibold text-ink">ตัวอย่างหน้าแคมเปญ</Dialog.Title>
               <div class="flex items-center gap-3">
                 <div class="flex items-center gap-1 rounded-pill bg-surface-gray p-1">
                   <button
                     type="button"
                     onClick={() => setDevice("desktop")}
-                    class={`min-h-9 rounded-pill px-3 text-sm font-medium transition-colors duration-150 ${device() === "desktop" ? "bg-surface-card text-ink shadow-sm" : "text-ink-gray"}`}
+                    class={`min-h-9 rounded-pill px-3 text-sm font-medium transition-colors duration-150 ${device() === "desktop" ? "bg-surface-card text-ink shadow-card" : "text-ink-gray"}`}
                   >
-                    Desktop
+                    เดสก์ท็อป
                   </button>
                   <button
                     type="button"
                     onClick={() => setDevice("mobile")}
-                    class={`min-h-9 rounded-pill px-3 text-sm font-medium transition-colors duration-150 ${device() === "mobile" ? "bg-surface-card text-ink shadow-sm" : "text-ink-gray"}`}
+                    class={`min-h-9 rounded-pill px-3 text-sm font-medium transition-colors duration-150 ${device() === "mobile" ? "bg-surface-card text-ink shadow-card" : "text-ink-gray"}`}
                   >
-                    Mobile
+                    มือถือ
                   </button>
                 </div>
                 <Dialog.CloseButton aria-label="ปิด" class="flex size-9 items-center justify-center rounded-pill text-ink-gray hover:bg-surface-pink">
@@ -100,7 +102,7 @@ export function LandingPagePreviewDialog(props: {
                 </Dialog.CloseButton>
               </div>
             </div>
-            <div class="flex-1 overflow-y-auto bg-surface-gray/40 p-5">
+            <div class="flex-1 overflow-y-auto bg-surface-gray/60 p-5">
               <div class="mx-auto overflow-hidden rounded-card bg-surface-card shadow-card" classList={{ "max-w-3xl": device() === "desktop" }}>
                 <LandingPagePreviewContent banners={props.banners} title={props.title} description={props.description} products={props.products} device={device()} />
               </div>

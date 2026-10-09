@@ -55,7 +55,7 @@ export function ProductRowActionsMenu(props: {
             onSelect={props.onToggleStatus}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
           >
-            {props.product.status === "disabled" ? "เปิดการขายสินค้า" : "ปิดการขายสินค้า"}
+            {props.product.status === "active" ? "ปิดการขายสินค้า" : "เปิดการขายสินค้า"}
           </DropdownMenu.Item>
           <DropdownMenu.Separator class="my-1 h-px bg-border" />
           <DropdownMenu.Item

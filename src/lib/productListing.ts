@@ -2,7 +2,7 @@ import type { Product } from "./types";
 import { matchesSearch } from "./productSearch";
 
 /**
- * Product / Category / Brand / Collection Source-of-Truth Cleanup (§4/§8/§26)
+ * Product / Category / Collection Source-of-Truth Cleanup (§4/§8/§26)
  * — this used to be a fixed 6-key union matched against the legacy
  * `Product.category` 3-value enum. Category is now the one live
  * classification relationship (`Product.categoryId` → `AdminCategory.id`),
@@ -50,25 +50,14 @@ export type ProductFilters = {
    * phase does not add a dedicated Collection landing page.
    */
   collectionProductIds: string[] | null;
-  /**
-   * §25/§26 — set when arriving via `/products?brand=<slug>` (a Brand
-   * resolver → Product Catalog flow, same shape as Category/Collection
-   * above). This module has no store access, so the caller resolves the
-   * Brand's id via `useBrandContent()` and passes it in here; `null` means
-   * no brand filter is active. There is still no dedicated `/brand/:slug`
-   * page — this is the same existing Product Listing page every other
-   * destination resolves to.
-   */
-  brandId: string | null;
 };
 
-export const EMPTY_FILTERS: ProductFilters = { search: "", categories: [], collectionProductIds: null, brandId: null };
+export const EMPTY_FILTERS: ProductFilters = { search: "", categories: [], collectionProductIds: null };
 
 export function hasActiveFilters(filters: ProductFilters): boolean {
   return (
     filters.search.trim() !== "" ||
     filters.categories.length > 0 ||
-    filters.brandId != null ||
     filters.collectionProductIds != null
   );
 }
@@ -82,7 +71,6 @@ export function filterProducts(products: Product[], filters: ProductFilters, fac
       if (!matchesCategory) return false;
     }
     if (filters.collectionProductIds && !filters.collectionProductIds.includes(product.id)) return false;
-    if (filters.brandId != null && product.brandId !== filters.brandId) return false;
     return true;
   });
 }
@@ -100,8 +88,8 @@ export const DEFAULT_SORT: SortValue = "recommended";
 export const SORT_OPTIONS: { value: SortValue; label: string }[] = [
   { value: "recommended", label: "แนะนำ" },
   { value: "bestselling", label: "สินค้าขายดี" },
-  { value: "price-asc", label: "ราคาต่ำ → สูง" },
-  { value: "price-desc", label: "ราคาสูง → ต่ำ" },
+  { value: "price-asc", label: "ราคาต่ำไปสูง" },
+  { value: "price-desc", label: "ราคาสูงไปต่ำ" },
   { value: "rating", label: "คะแนนสูง" },
 ];
 

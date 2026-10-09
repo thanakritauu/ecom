@@ -1,4 +1,5 @@
-import { createMemo, createSignal, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onMount, Show } from "solid-js";
+import { mediaImage } from "~/lib/media";
 import { useNavigate } from "@solidjs/router";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
@@ -12,6 +13,8 @@ import { Skeleton } from "~/components/admin/Skeleton";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { AdminBulkActionBar } from "~/components/admin/AdminBulkActionBar";
 import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
+import { ExportMenu } from "~/components/admin/ExportMenu";
+import type { ExportColumn } from "~/lib/adminExport";
 import { LandingPageStatusSummary } from "~/components/admin/content/LandingPageStatusSummary";
 import { LandingPageRowActionsMenu } from "~/components/admin/content/LandingPageRowActionsMenu";
 import { LandingPageQuickView } from "~/components/admin/content/LandingPageQuickView";
@@ -21,32 +24,28 @@ import { formatMarketingDate } from "~/lib/adminMarketing";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
 import { findNavigationReferences, describeNavigationReference, type NavigationItem } from "~/lib/adminNavigation";
-import { useAdminBanners } from "~/lib/adminBannerStore";
-import { useAdminCampaigns } from "~/lib/adminCampaignStore";
 import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
 
 const SORT_OPTIONS = [
   { value: "updated-desc", label: "แก้ไขล่าสุด" },
-  { value: "name-asc", label: "ชื่อ A→Z" },
-  { value: "name-desc", label: "ชื่อ Z→A" },
-  { value: "start-asc", label: "วันที่เริ่ม เก่า→ใหม่" },
+  { value: "name-asc", label: "ชื่อหน้า A-Z" },
+  { value: "name-desc", label: "ชื่อหน้า Z-A" },
+  { value: "start-asc", label: "วันเริ่ม เก่าไปใหม่" },
   { value: "end-asc", label: "วันสิ้นสุด ใกล้ที่สุด" },
 ];
 
 /**
- * หน้าโปรโมชั่น Architecture & หน้าโปรโมชั่น Migration — was
+ * หน้าแคมเปญ Architecture & หน้าแคมเปญ Migration — was
  * `routes/admin/content/promotion-pages/index.tsx`, same `useAdminContent()`
  * data (the `LandingPage` alias of `PromotionPage`, see `adminContent.ts`),
- * only the route path/labels moved to the generic "หน้าโปรโมชั่น" vocabulary.
+ * only the route path/labels moved to the generic "หน้าแคมเปญ" vocabulary.
  * List/Search/Filter/Sort/Pagination/Bulk/QuickView, same
  * `DataTable`+`FilterBar`+`AdminBulkActionBar` shell every other Admin list
  * module already uses.
  */
 export default function AdminLandingPagesListPage() {
   const store = useAdminContent();
-  const bannerStore = useAdminBanners();
-  const campaignStore = useAdminCampaigns();
   const navigation = useAdminNavigation();
   const navigate = useNavigate();
 
@@ -54,7 +53,7 @@ export default function AdminLandingPagesListPage() {
   const [statusFilter, setStatusFilterRaw] = createSignal<"all" | LandingPageStatus>("all");
   const [sort, setSortRaw] = createSignal("updated-desc");
   const [page, setPage] = createSignal(1);
-  const [pageSize, setPageSizeRaw] = createSignal(10);
+  const [pageSize, setPageSizeRaw] = createSignal(20);
   const [listStatus, setListStatus] = createSignal<AsyncStatus>("loading");
   const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
   const [quickViewId, setQuickViewId] = createSignal<string | null>(null);
@@ -154,8 +153,6 @@ export default function AdminLandingPagesListPage() {
     return [
       ...new Set(
         findLandingPageReferences(p.id, {
-          banners: bannerStore.banners(),
-          campaigns: campaignStore.campaigns(),
           allPages: store.pages(),
         }),
       ),
@@ -164,7 +161,7 @@ export default function AdminLandingPagesListPage() {
 
   const [blockedHomepageDelete, setBlockedHomepageDelete] = createSignal(false);
 
-  /** §44 — the Homepage can never be deleted (checked first); then §6/§19's dependency guard — a หน้าโปรโมชั่น a NavigationItem points at must never be deleted out from under it. Both block *before* the Banners/Campaigns/other-Promotion-Pages reference warning below, which still allows deleting through. */
+  /** §44 — the Homepage can never be deleted (checked first); then §6/§19's dependency guard — a หน้าแคมเปญ a NavigationItem points at must never be deleted out from under it. Both block *before* the other-Promotion-Pages reference warning below, which still allows deleting through. */
   const requestDelete = (p: LandingPage) => {
     if (p.isHomepage) {
       setBlockedHomepageDelete(true);
@@ -192,7 +189,7 @@ export default function AdminLandingPagesListPage() {
       const errs = validatePublishRequirements(p);
       if (errs.length > 0) {
         setConfirmToggle(null);
-        pushToast(`ไม่สามารถเผยแพร่ "${p.name}" ได้: ${errs[0]}`, "error");
+        pushToast(`เผยแพร่ "${p.name}" ไม่ได้ ${errs[0]}`, "error");
         return;
       }
     }
@@ -200,7 +197,7 @@ export default function AdminLandingPagesListPage() {
     await store.setStatus(p.id, p.status === "published" ? "unpublished" : "published");
     setActionLoading(false);
     setConfirmToggle(null);
-    pushToast(p.status === "published" ? "ยกเลิกการเผยแพร่แล้ว" : "เผยแพร่หน้าแล้ว", "success");
+    pushToast(p.status === "published" ? "ยกเลิกการเผยแพร่หน้าแล้ว" : "เผยแพร่หน้าแล้ว", "success");
   };
 
   const handleDuplicate = async (p: LandingPage) => {
@@ -216,7 +213,7 @@ export default function AdminLandingPagesListPage() {
     setActionLoading(false);
     setConfirmBulkDelete(false);
     clearSelection();
-    pushToast(`ลบหน้าโปรโมชั่น ${ids.length} รายการเรียบร้อยแล้ว`, "error");
+    pushToast(`ลบหน้าแคมเปญ ${ids.length} รายการเรียบร้อยแล้ว`, "error");
   };
 
   const bulkSetStatus = async (targetStatus: "published" | "unpublished") => {
@@ -227,11 +224,21 @@ export default function AdminLandingPagesListPage() {
     await Promise.all(ok.map((p) => store.setStatus(p.id, targetStatus)));
     clearSelection();
     if (blocked.length > 0) {
-      pushToast(`เผยแพร่ไม่สำเร็จ ${blocked.length} รายการ (ข้อมูลไม่ครบ) — สำเร็จ ${ok.length} รายการ`, "warning");
+      pushToast(`เผยแพร่สำเร็จ ${ok.length} รายการ และเผยแพร่ไม่ได้ ${blocked.length} รายการเพราะข้อมูลไม่ครบ`, "warning");
     } else {
       pushToast(targetStatus === "published" ? `เผยแพร่ ${ok.length} รายการแล้ว` : `ยกเลิกการเผยแพร่ ${ok.length} รายการแล้ว`, "success");
     }
   };
+
+  const exportColumns: ExportColumn<LandingPage>[] = [
+    { header: "ชื่อหน้า", value: (p) => p.name },
+    { header: "ลิงก์หน้าร้าน", value: (p) => promotionPageHref(p) },
+    { header: "สถานะ", value: (p) => LANDING_PAGE_STATUS_META[p.status].label },
+    { header: "จำนวนสินค้า", value: (p) => productCountLabel(p) },
+    { header: "วันเริ่ม", value: (p) => (p.startDate ? formatMarketingDate(p.startDate) : "-") },
+    { header: "วันสิ้นสุด", value: (p) => (p.endDate ? formatMarketingDate(p.endDate) : "-") },
+    { header: "แก้ไขล่าสุด", value: (p) => p.updatedAt },
+  ];
 
   const columns: DataTableColumn<LandingPage>[] = [
     {
@@ -252,34 +259,28 @@ export default function AdminLandingPagesListPage() {
       ),
     },
     {
-      key: "banner",
-      label: "",
-      render: (row) => (
-        <div class="flex size-11 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
-          <Show when={row.banners.desktop} fallback={<ImageIcon class="size-4" />}>
-            <img src={row.banners.desktop} alt="" class="size-full object-cover" />
-          </Show>
-        </div>
-      ),
-    },
-    {
       key: "name",
-      label: "Page Title",
+      label: "หน้า",
       render: (row) => (
-        <div class="flex items-center gap-2">
-          <p class="font-medium text-ink">{row.name}</p>
-          <Show when={row.isHomepage}>
-            <span class="shrink-0 rounded-pill bg-surface-pink px-2 py-0.5 text-xs font-medium text-brand-pink">★ Homepage</span>
-          </Show>
+        <div class="flex min-w-0 items-center gap-3">
+          <PageThumb page={row} class="size-11" />
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <p class="truncate text-sm font-medium text-ink">{row.name}</p>
+              <Show when={row.isHomepage}>
+                <StatusBadge tone="info">หน้าแรก</StatusBadge>
+              </Show>
+            </div>
+            <p class="truncate text-xs text-ink-gray">{promotionPageHref(row)}</p>
+          </div>
         </div>
       ),
     },
-    { key: "slug", label: "URL หน้าร้าน", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{promotionPageHref(row)}</span> },
-    { key: "products", label: "จำนวนสินค้า", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.products.length}</span> },
-    { key: "start", label: "Start Date", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.startDate ? formatMarketingDate(row.startDate) : "—"}</span> },
-    { key: "end", label: "End Date", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.endDate ? formatMarketingDate(row.endDate) : "—"}</span> },
-    { key: "status", label: "Status", render: (row) => <StatusBadge tone={LANDING_PAGE_STATUS_META[row.status].tone}>{LANDING_PAGE_STATUS_META[row.status].label}</StatusBadge> },
-    { key: "updated", label: "Updated", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.updatedAt}</span> },
+    { key: "products", label: "จำนวนสินค้า", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{productCountLabel(row)}</span> },
+    { key: "start", label: "วันเริ่ม", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.startDate ? formatMarketingDate(row.startDate) : "-"}</span> },
+    { key: "end", label: "วันสิ้นสุด", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.endDate ? formatMarketingDate(row.endDate) : "-"}</span> },
+    { key: "status", label: "สถานะ", render: (row) => <StatusBadge tone={LANDING_PAGE_STATUS_META[row.status].tone}>{LANDING_PAGE_STATUS_META[row.status].label}</StatusBadge> },
+    { key: "updated", label: "แก้ไขล่าสุด", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.updatedAt}</span> },
     {
       key: "actions",
       label: "",
@@ -300,14 +301,15 @@ export default function AdminLandingPagesListPage() {
 
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
-      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "หน้าโปรโมชั่น" }]} />
+      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "หน้าแคมเปญ" }]} />
       <PageHeader
-        title="หน้าโปรโมชั่น"
-        description="จัดการหน้าโปรโมชั่น สำหรับ Shopping / Merchandising / Content Experience"
+        title="หน้าแคมเปญ"
+        description="จัดการหน้าแรกและหน้าแคมเปญที่ลูกค้าเห็นบนหน้าร้าน"
         actions={
           <div class="flex flex-wrap items-center gap-2">
+            <ExportMenu filenameBase="promotion-pages-report" columns={exportColumns} rows={sorted()} />
             <Button href="/admin/promotion-pages/new" variant="primary">
-              <PlusIcon class="size-4" /> เพิ่มหน้าโปรโมชั่น
+              <PlusIcon class="size-4" /> เพิ่มหน้าแคมเปญ
             </Button>
           </div>
         }
@@ -321,19 +323,12 @@ export default function AdminLandingPagesListPage() {
         onFilterChange={() => {}}
         sort={{ value: sort(), options: SORT_OPTIONS, onChange: setSort }}
       />
-      <Show when={hasActiveFilters()}>
-        <div>
-          <Button type="button" variant="outline" size="sm" onClick={clearFilters}>
-            ล้างตัวกรอง
-          </Button>
-        </div>
-      </Show>
 
       <Show when={listStatus() !== "loading"} fallback={<ListSkeleton />}>
         <Show
           when={listStatus() === "success"}
           fallback={
-            <EmptyState tone="error" icon={<RefreshIcon />} title="ไม่สามารถโหลดรายการหน้าโปรโมชั่นได้" description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง" actionLabel="ลองอีกครั้ง" onAction={loadList} class="bg-surface-card shadow-card" />
+            <EmptyState tone="error" icon={<RefreshIcon />} title="ไม่สามารถโหลดรายการหน้าแคมเปญได้" description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง" actionLabel="ลองอีกครั้ง" onAction={loadList} class="bg-surface-card shadow-card" />
           }
         >
           <Show
@@ -341,9 +336,9 @@ export default function AdminLandingPagesListPage() {
             fallback={
               <EmptyState
                 icon={<ContentIcon />}
-                title={hasActiveFilters() ? "ไม่พบหน้าที่ตรงกับการค้นหา" : "ยังไม่มีหน้าโปรโมชั่น"}
-                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "สร้างหน้าแรกของคุณเพื่อเริ่มต้น"}
-                actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "เพิ่มหน้าโปรโมชั่น"}
+                title={hasActiveFilters() ? "ไม่พบหน้าแคมเปญที่ตรงกับการค้นหา" : "ยังไม่มีหน้าแคมเปญ"}
+                description={hasActiveFilters() ? undefined : "เริ่มเพิ่มหน้าแคมเปญแรกของคุณ"}
+                actionLabel={hasActiveFilters() ? "ล้างการค้นหา" : "+ เพิ่มหน้าแคมเปญ"}
                 onAction={hasActiveFilters() ? clearFilters : () => navigate("/admin/promotion-pages/new")}
                 class="bg-surface-card shadow-card"
               />
@@ -360,7 +355,7 @@ export default function AdminLandingPagesListPage() {
               getRowKey={(row) => row.id}
               onRowClick={(row) => setQuickViewId(row.id)}
               renderMobileCard={(row) => (
-                <div class="flex gap-3 rounded-card bg-surface-card p-4 shadow-card">
+                <div class="flex gap-3 rounded-card bg-surface-card p-3 shadow-card">
                   <input
                     type="checkbox"
                     aria-label={`เลือก ${row.name}`}
@@ -369,27 +364,30 @@ export default function AdminLandingPagesListPage() {
                     onChange={() => toggleSelect(row.id)}
                     class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
                   />
-                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-2 text-left">
-                    <div class="flex items-start gap-3">
-                      <div class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
-                        <Show when={row.banners.desktop} fallback={<ImageIcon class="size-4" />}>
-                          <img src={row.banners.desktop} alt="" class="size-full object-cover" />
+                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 gap-3 text-left">
+                    <PageThumb page={row} class="size-16" />
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-sm font-medium text-ink">{row.name}</p>
+                      <p class="truncate text-xs text-ink-gray">{promotionPageHref(row)}</p>
+                      <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <StatusBadge tone={LANDING_PAGE_STATUS_META[row.status].tone}>{LANDING_PAGE_STATUS_META[row.status].label}</StatusBadge>
+                        <Show when={row.isHomepage}>
+                          <StatusBadge tone="info">หน้าแรก</StatusBadge>
                         </Show>
                       </div>
-                      <div class="min-w-0 flex-1">
-                        <div class="flex items-start justify-between gap-2">
-                          <p class="truncate font-semibold text-ink">
-                            {row.name}
-                            <Show when={row.isHomepage}> ★</Show>
-                          </p>
-                          <StatusBadge tone={LANDING_PAGE_STATUS_META[row.status].tone}>{LANDING_PAGE_STATUS_META[row.status].label}</StatusBadge>
-                        </div>
-                        <p class="text-sm text-ink-gray">{promotionPageHref(row)}</p>
-                      </div>
+                      <p class="mt-1 text-xs text-ink-placeholder">แก้ไขล่าสุด {row.updatedAt}</p>
                     </div>
-                    <p class="text-xs text-ink-gray">{row.products.length} สินค้า · แก้ไขล่าสุด {row.updatedAt}</p>
-                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>
                   </button>
+                  <LandingPageRowActionsMenu
+                    id={row.id}
+                    name={row.name}
+                    isPublished={row.status === "published"}
+                    hideDelete={row.isHomepage}
+                    onTogglePublish={() => requestToggle(row)}
+                    onDuplicate={() => handleDuplicate(row)}
+                    onDelete={() => requestDelete(row)}
+                    triggerClass="flex size-9 shrink-0 items-center justify-center self-start rounded-pill text-ink-gray hover:bg-surface-pink"
+                  />
                 </div>
               )}
             />
@@ -426,13 +424,13 @@ export default function AdminLandingPagesListPage() {
       <ConfirmDialog
         open={confirmDelete() !== null}
         onOpenChange={(open) => !open && setConfirmDelete(null)}
-        title="ลบหน้าโปรโมชั่น?"
+        title="ลบหน้าแคมเปญ?"
         description={
           deleteReferences().length > 0
-            ? `คุณต้องการลบ "${confirmDelete()?.name ?? ""}" หรือไม่? หน้านี้ถูกอ้างอิงอยู่โดย ${deleteReferences().join(", ")} การกระทำนี้ไม่สามารถย้อนกลับได้`
+            ? `คุณต้องการลบ "${confirmDelete()?.name ?? ""}" หรือไม่? ปุ่มใน ${deleteReferences().join(", ")} ที่ลิงก์มาหน้านี้จะใช้ไม่ได้ การกระทำนี้ไม่สามารถย้อนกลับได้`
             : `คุณต้องการลบ "${confirmDelete()?.name ?? ""}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`
         }
-        confirmLabel="ลบ"
+        confirmLabel="ลบหน้าแคมเปญ"
         tone="danger"
         loading={actionLoading()}
         onConfirm={confirmDeleteAction}
@@ -442,7 +440,7 @@ export default function AdminLandingPagesListPage() {
         open={confirmToggle() !== null}
         onOpenChange={(open) => !open && setConfirmToggle(null)}
         title={confirmToggle()?.status === "published" ? "ยกเลิกการเผยแพร่หน้านี้?" : "เผยแพร่หน้านี้?"}
-        description={`"${confirmToggle()?.name ?? ""}"`}
+        description={confirmToggle()?.status === "published" ? `"${confirmToggle()?.name ?? ""}" จะถูกซ่อนจากหน้าร้าน` : `"${confirmToggle()?.name ?? ""}" จะแสดงบนหน้าร้านตามช่วงเวลาที่ตั้งไว้`}
         confirmLabel={confirmToggle()?.status === "published" ? "ยกเลิกการเผยแพร่" : "เผยแพร่"}
         loading={actionLoading()}
         onConfirm={confirmToggleAction}
@@ -451,9 +449,9 @@ export default function AdminLandingPagesListPage() {
       <ConfirmDialog
         open={confirmBulkDelete()}
         onOpenChange={setConfirmBulkDelete}
-        title="ลบหน้าที่เลือก?"
-        description={`คุณต้องการลบหน้าโปรโมชั่น ${selectedIds().size} รายการที่เลือกหรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-        confirmLabel="ลบ"
+        title="ลบหน้าแคมเปญที่เลือก?"
+        description={`คุณต้องการลบหน้าแคมเปญ ${selectedIds().size} รายการที่เลือกหรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
+        confirmLabel="ลบหน้าแคมเปญ"
         tone="danger"
         loading={actionLoading()}
         onConfirm={confirmBulkDeleteAction}
@@ -462,8 +460,8 @@ export default function AdminLandingPagesListPage() {
       <ConfirmDialog
         open={blockedHomepageDelete()}
         onOpenChange={setBlockedHomepageDelete}
-        title="ไม่สามารถลบ Homepage ได้"
-        description="เว็บไซต์ต้องมี Homepage อยู่เสมอ — กรุณากำหนดหน้าโปรโมชั่นอื่นเป็น Homepage ก่อน (ฟีเจอร์นี้ยังไม่เปิดใช้งานใน Prototype นี้) จึงจะสามารถลบหน้านี้ได้"
+        title="ไม่สามารถลบได้"
+        description="หน้าแรกลบไม่ได้ เพราะเว็บไซต์ต้องมีหน้าแรกเสมอ"
         confirmLabel="เข้าใจแล้ว"
         cancelLabel="ปิด"
         onConfirm={() => setBlockedHomepageDelete(false)}
@@ -473,10 +471,10 @@ export default function AdminLandingPagesListPage() {
         open={blockedDelete() !== null}
         onOpenChange={(open) => !open && setBlockedDelete(null)}
         title="ไม่สามารถลบได้"
-        description={`"${blockedDelete()?.page.name ?? ""}" ถูกใช้งานใน Navigation อยู่ — เมนูที่อ้างอิง: ${blockedDelete()
-          ?.refs.map((r) => `- ${describeNavigationReference(r, navigation.items())}`)
-          .join(" ") ?? ""} กรุณาย้ายหรือแก้ไขเมนูเหล่านี้ในหน้า Navigation ก่อนลบหน้านี้`}
-        confirmLabel="ไปที่ Navigation"
+        description={`หน้าแคมเปญ "${blockedDelete()?.page.name ?? ""}" ถูกใช้งานในเมนู: ${blockedDelete()
+          ?.refs.map((r) => describeNavigationReference(r, navigation.items()))
+          .join(", ") ?? ""} กรุณาแก้ไขเมนูเหล่านี้ก่อนลบหน้านี้`}
+        confirmLabel="ไปที่เมนูนำทาง"
         cancelLabel="ปิด"
         onConfirm={() => {
           setBlockedDelete(null);
@@ -487,20 +485,37 @@ export default function AdminLandingPagesListPage() {
   );
 }
 
+/** Picked products on a flat page; a page built from sections picks its products per section, so there is no single number. */
+function productCountLabel(p: LandingPage): string {
+  return p.sections.length > 0 ? "-" : p.products.length.toLocaleString("th-TH");
+}
+
+function PageThumb(props: { page: LandingPage; class: string }) {
+  return (
+    <div class={`flex shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder ${props.class}`}>
+      <Show when={mediaImage(props.page.banners.desktop)} fallback={<ImageIcon class="size-5" />}>
+        <img src={mediaImage(props.page.banners.desktop)} alt="" class="size-full object-cover" />
+      </Show>
+    </div>
+  );
+}
+
 function ListSkeleton() {
   return (
     <div class="flex flex-col gap-3">
-      {Array.from({ length: 5 }).map(() => (
-        <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
-          <Skeleton class="size-11 shrink-0 rounded-media" />
-          <div class="flex flex-1 flex-col gap-1.5">
-            <Skeleton class="h-4 w-1/3" />
-            <Skeleton class="h-3 w-1/4" />
+      <Skeleton class="h-11 w-full rounded-pill" />
+      <For each={[0, 1, 2, 3, 4, 5]}>
+        {() => (
+          <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
+            <Skeleton class="size-11 shrink-0 rounded-media" />
+            <div class="flex flex-1 flex-col gap-1.5">
+              <Skeleton class="h-4 w-1/2" />
+              <Skeleton class="h-3 w-1/4" />
+            </div>
+            <Skeleton class="h-8 w-16 rounded-pill" />
           </div>
-          <Skeleton class="h-6 w-20 rounded-pill" />
-          <Skeleton class="h-8 w-14 rounded-pill" />
-        </div>
-      ))}
+        )}
+      </For>
     </div>
   );
 }

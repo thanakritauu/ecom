@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { useNavigate, useSearchParams } from "@solidjs/router";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
@@ -18,15 +18,15 @@ import { RefreshIcon, OrdersIcon } from "~/components/admin/icons";
 import { ExportMenu } from "~/components/admin/ExportMenu";
 import type { ExportColumn } from "~/lib/adminExport";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import type { DashboardPeriodKey } from "~/lib/adminDashboard";
+import { PAYMENT_METHODS } from "~/lib/cartSelectors";
+import type { DashboardPeriodKey, DateRange } from "~/lib/adminDashboard";
+import { isWithinRange, resolvePeriodRange } from "~/lib/adminDashboardAnalytics";
 import {
   ORDER_STATUS_META,
   PAYMENT_STATUS_META,
   FULFILLMENT_STATUS_META,
-  RETURN_STATUS_META,
   ORDER_VALUE_BUCKETS,
   canCancelOrder,
-  daysBeforeToday,
   type AdminOrder,
   type OrderStatus,
   type PaymentStatus,
@@ -37,28 +37,14 @@ import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
 
 const SORT_OPTIONS = [
-  { value: "date-desc", label: "วันที่ ใหม่→เก่า" },
-  { value: "date-asc", label: "วันที่ เก่า→ใหม่" },
-  { value: "value-desc", label: "ยอดสั่งซื้อ สูง→ต่ำ" },
-  { value: "value-asc", label: "ยอดสั่งซื้อ ต่ำ→สูง" },
-  { value: "customer-asc", label: "ชื่อลูกค้า A→Z" },
+  { value: "date-desc", label: "วันที่ ใหม่ไปเก่า" },
+  { value: "date-asc", label: "วันที่ เก่าไปใหม่" },
+  { value: "value-desc", label: "ยอดสั่งซื้อ สูงไปต่ำ" },
+  { value: "value-asc", label: "ยอดสั่งซื้อ ต่ำไปสูง" },
+  { value: "customer-asc", label: "ชื่อลูกค้า A-Z" },
 ];
 
-/** Relative to the Orders module's mock today (`ORDERS_TODAY_ISO_DATE`, 2 ต.ค. 2569 — the storefront's newest account order). */
-function withinPeriod(placedAt: string, period: DashboardPeriodKey): boolean {
-  const days = daysBeforeToday(placedAt);
-  if (period === "today") return days === 0;
-  if (period === "7d") return days <= 7;
-  if (period === "30d") return days <= 30;
-  if (period === "month") return placedAt.slice(0, 7) === "2026-10";
-  return true; // custom — no range picker wired to this list yet
-}
-
-const RETURN_FILTER_OPTIONS = [
-  { value: "all", label: "ทุกคำสั่งซื้อ" },
-  { value: "any", label: "มีคำขอคืนสินค้า" },
-  ...Object.entries(RETURN_STATUS_META).map(([value, meta]) => ({ value, label: meta.label })),
-];
+const METHOD_FILTER_OPTIONS = [{ value: "all", label: "ทุกช่องทางชำระเงิน" }, ...PAYMENT_METHODS.map((m) => ({ value: m.id, label: m.label }))];
 
 export default function AdminOrderListPage() {
   const store = useAdminOrders();
@@ -75,11 +61,12 @@ export default function AdminOrderListPage() {
   const [search, setSearchRaw] = createSignal("");
   const [fulfillmentFilter, setFulfillmentFilterRaw] = createSignal<FulfillmentStatus | "all">("all");
   const [valueFilter, setValueFilterRaw] = createSignal("all");
-  const [returnFilter, setReturnFilterRaw] = createSignal("all");
+  const [methodFilter, setMethodFilterRaw] = createSignal("all");
   const [dateFilter, setDateFilter] = createSignal<DashboardPeriodKey>("30d");
+  const [customRange, setCustomRange] = createSignal<DateRange>();
   const [sort, setSortRaw] = createSignal("date-desc");
   const [page, setPage] = createSignal(1);
-  const [pageSize, setPageSizeRaw] = createSignal(10);
+  const [pageSize, setPageSizeRaw] = createSignal(20);
   const [listStatus, setListStatus] = createSignal<AsyncStatus>("loading");
   const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
   const [quickViewId, setQuickViewId] = createSignal<string | null>(null);
@@ -99,20 +86,20 @@ export default function AdminOrderListPage() {
   const setPaymentFilter = (v: string) => { setSearchParams({ payment: v === "all" ? undefined : v }); resetPage(); };
   const setFulfillmentFilter = (v: string) => { setFulfillmentFilterRaw(v as FulfillmentStatus | "all"); resetPage(); };
   const setValueFilter = (v: string) => { setValueFilterRaw(v); resetPage(); };
-  const setReturnFilter = (v: string) => { setReturnFilterRaw(v); resetPage(); };
-  const setDateFilterAndReset = (v: DashboardPeriodKey) => { setDateFilter(v); resetPage(); };
+  const setMethodFilter = (v: string) => { setMethodFilterRaw(v); resetPage(); };
+  const setDateFilterAndReset = (v: DashboardPeriodKey, range?: DateRange) => { setDateFilter(v); if (range) setCustomRange(range); resetPage(); };
   const setSort = (v: string) => { setSortRaw(v); resetPage(); };
   const setPageSize = (v: number) => { setPageSizeRaw(v); resetPage(); };
 
   const hasActiveFilters = () =>
-    search().trim() !== "" || statusFilter() !== "all" || paymentFilter() !== "all" || fulfillmentFilter() !== "all" || valueFilter() !== "all" || returnFilter() !== "all";
+    search().trim() !== "" || statusFilter() !== "all" || paymentFilter() !== "all" || fulfillmentFilter() !== "all" || valueFilter() !== "all" || methodFilter() !== "all";
 
   const clearFilters = () => {
     setSearchRaw("");
     setSearchParams({ status: undefined, payment: undefined });
     setFulfillmentFilterRaw("all");
     setValueFilterRaw("all");
-    setReturnFilterRaw("all");
+    setMethodFilterRaw("all");
     resetPage();
   };
 
@@ -127,8 +114,8 @@ export default function AdminOrderListPage() {
     const payment = paymentFilter();
     const fulfillment = fulfillmentFilter();
     const valueBucket = valueFilter();
-    const returns = returnFilter();
-    const period = dateFilter();
+    const method = methodFilter();
+    const range = resolvePeriodRange(dateFilter(), customRange());
     const q = search().trim().toLowerCase();
     const bucket = ORDER_VALUE_BUCKETS.find((b) => b.value === valueBucket);
 
@@ -137,9 +124,8 @@ export default function AdminOrderListPage() {
       if (payment !== "all" && order.paymentStatus !== payment) return false;
       if (fulfillment !== "all" && order.fulfillmentStatus !== fulfillment) return false;
       if (bucket && (order.totals.grandTotal < bucket.min || order.totals.grandTotal >= bucket.max)) return false;
-      if (returns === "any" && !order.returnRequest) return false;
-      if (returns !== "all" && returns !== "any" && order.returnRequest?.status !== returns) return false;
-      if (!withinPeriod(order.placedAt, period)) return false;
+      if (method !== "all" && order.payment.methodId !== method) return false;
+      if (!isWithinRange(order, range)) return false;
       if (q) {
         const haystack = `${order.orderNumber} ${order.customer.name} ${order.customer.email} ${order.customer.phone} ${order.shipping.trackingNumber ?? ""} ${order.items
           .map((i) => `${i.sku} ${i.name}`)
@@ -167,20 +153,20 @@ export default function AdminOrderListPage() {
   });
 
   const orderExportColumns: ExportColumn<AdminOrder>[] = [
-    { header: "Order Number", value: (o) => o.orderNumber },
-    { header: "Customer Name", value: (o) => o.customer.name },
-    { header: "Date", value: (o) => o.createdAt },
-    { header: "Items", value: (o) => o.items.length },
-    { header: "Subtotal", value: (o) => o.totals.subtotal },
-    { header: "Coupon", value: (o) => (o.totals.couponDiscount > 0 ? `${o.totals.couponCode ?? ""} -${o.totals.couponDiscount}` : "") },
+    { header: "เลขที่คำสั่งซื้อ", value: (o) => o.orderNumber },
+    { header: "ลูกค้า", value: (o) => o.customer.name },
+    { header: "วันที่สั่งซื้อ", value: (o) => o.createdAt },
+    { header: "จำนวนรายการ", value: (o) => o.items.length },
+    { header: "ยอดรวมสินค้า", value: (o) => o.totals.subtotal },
+    { header: "คูปอง", value: (o) => (o.totals.couponDiscount > 0 ? `${o.totals.couponCode ?? ""} -${o.totals.couponDiscount}` : "") },
     { header: "Charmiss Coin", value: (o) => (o.totals.coinDiscount > 0 ? `${o.totals.coinsRedeemed} คอยน์ -${o.totals.coinDiscount}` : "") },
-    { header: "Total", value: (o) => o.totals.grandTotal },
-    { header: "Payment Method", value: (o) => o.payment.method },
-    { header: "DHL Tracking", value: (o) => o.shipping.trackingNumber ?? "" },
-    { header: "Order Status", value: (o) => ORDER_STATUS_META[o.orderStatus].label },
-    { header: "Payment Status", value: (o) => PAYMENT_STATUS_META[o.paymentStatus].label },
-    { header: "Fulfillment Status", value: (o) => FULFILLMENT_STATUS_META[o.fulfillmentStatus].label },
-    { header: "Return", value: (o) => (o.returnRequest ? RETURN_STATUS_META[o.returnRequest.status].label : "") },
+    { header: "ค่าจัดส่ง", value: (o) => o.totals.shippingFee },
+    { header: "ยอดชำระ", value: (o) => o.totals.grandTotal },
+    { header: "ช่องทางชำระเงิน", value: (o) => o.payment.method },
+    { header: "เลขพัสดุ DHL", value: (o) => o.shipping.trackingNumber ?? "" },
+    { header: "สถานะคำสั่งซื้อ", value: (o) => ORDER_STATUS_META[o.orderStatus].label },
+    { header: "การชำระเงิน", value: (o) => PAYMENT_STATUS_META[o.paymentStatus].label },
+    { header: "การจัดส่ง", value: (o) => FULFILLMENT_STATUS_META[o.fulfillmentStatus].label },
   ];
 
   const totalPages = createMemo(() => Math.max(1, Math.ceil(sorted().length / pageSize())));
@@ -248,7 +234,7 @@ export default function AdminOrderListPage() {
     },
     {
       key: "order",
-      label: "Order",
+      label: "คำสั่งซื้อ",
       render: (row) => (
         <div>
           <p class="font-medium text-ink">{row.orderNumber}</p>
@@ -258,7 +244,7 @@ export default function AdminOrderListPage() {
     },
     {
       key: "customer",
-      label: "Customer",
+      label: "ลูกค้า",
       render: (row) => (
         <div class="min-w-0">
           <p class="truncate text-ink">{row.customer.name}</p>
@@ -266,17 +252,17 @@ export default function AdminOrderListPage() {
         </div>
       ),
     },
-    { key: "items", label: "Items", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.items.length} รายการ</span> },
-    { key: "total", label: "Total", align: "right", render: (row) => <span class="font-medium text-ink">{formatAdminCurrency(row.totals.grandTotal)}</span> },
+    { key: "items", label: "สินค้า", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.items.length} รายการ</span> },
+    { key: "total", label: "ยอดชำระ", align: "right", render: (row) => <span class="font-medium text-ink">{formatAdminCurrency(row.totals.grandTotal)}</span> },
     {
       key: "payment",
-      label: "Payment",
+      label: "การชำระเงิน",
       hideBelowXl: true,
       render: (row) => <StatusBadge tone={PAYMENT_STATUS_META[row.paymentStatus].tone}>{PAYMENT_STATUS_META[row.paymentStatus].label}</StatusBadge>,
     },
     {
       key: "shipping",
-      label: "Shipping",
+      label: "การจัดส่ง",
       hideBelowXl: true,
       render: (row) => (
         <StatusBadge tone={FULFILLMENT_STATUS_META[row.fulfillmentStatus].tone}>{FULFILLMENT_STATUS_META[row.fulfillmentStatus].label}</StatusBadge>
@@ -284,32 +270,8 @@ export default function AdminOrderListPage() {
     },
     {
       key: "status",
-      label: "Order Status",
-      render: (row) => (
-        <div class="flex flex-col items-start gap-1">
-          <StatusBadge tone={ORDER_STATUS_META[row.orderStatus].tone}>{ORDER_STATUS_META[row.orderStatus].label}</StatusBadge>
-          <Show when={row.returnRequest}>
-            {(r) => <StatusBadge tone={RETURN_STATUS_META[r().status].tone}>{RETURN_STATUS_META[r().status].label}</StatusBadge>}
-          </Show>
-        </div>
-      ),
-    },
-    {
-      key: "action",
-      label: "",
-      align: "right",
-      render: (row) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/admin/orders/${row.id}`);
-          }}
-          class="rounded-pill border border-border px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-pink/40"
-        >
-          ดู
-        </button>
-      ),
+      label: "สถานะ",
+      render: (row) => <StatusBadge tone={ORDER_STATUS_META[row.orderStatus].tone}>{ORDER_STATUS_META[row.orderStatus].label}</StatusBadge>,
     },
   ];
 
@@ -342,10 +304,10 @@ export default function AdminOrderListPage() {
                 options: [{ value: "all", label: "ทุกสถานะการจัดส่ง" }, ...Object.entries(FULFILLMENT_STATUS_META).map(([value, meta]) => ({ value, label: meta.label }))],
               },
               {
-                id: "return",
-                label: "การคืนสินค้า",
-                value: returnFilter(),
-                options: RETURN_FILTER_OPTIONS,
+                id: "method",
+                label: "ช่องทางชำระเงิน",
+                value: methodFilter(),
+                options: METHOD_FILTER_OPTIONS,
               },
               {
                 id: "value",
@@ -358,12 +320,12 @@ export default function AdminOrderListPage() {
               if (id === "payment") setPaymentFilter(value);
               if (id === "fulfillment") setFulfillmentFilter(value);
               if (id === "value") setValueFilter(value);
-              if (id === "return") setReturnFilter(value);
+              if (id === "method") setMethodFilter(value);
             }}
             sort={{ value: sort(), options: SORT_OPTIONS, onChange: setSort }}
           />
         </div>
-        <DateRangeSelector value={dateFilter()} onChange={setDateFilterAndReset} />
+        <DateRangeSelector value={dateFilter()} range={customRange()} onChange={setDateFilterAndReset} />
       </div>
 
       <Show when={listStatus() !== "loading"} fallback={<ListSkeleton />}>
@@ -386,9 +348,9 @@ export default function AdminOrderListPage() {
             fallback={
               <EmptyState
                 icon={<OrdersIcon />}
-                title="ไม่พบคำสั่งซื้อ"
-                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : undefined}
-                actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : undefined}
+                title={hasActiveFilters() ? "ไม่พบคำสั่งซื้อที่ตรงกับการค้นหา" : "ยังไม่มีคำสั่งซื้อในช่วงเวลานี้"}
+                description={hasActiveFilters() ? undefined : "ลองเลือกช่วงเวลาอื่น"}
+                actionLabel={hasActiveFilters() ? "ล้างการค้นหา" : undefined}
                 onAction={hasActiveFilters() ? clearFilters : undefined}
                 class="bg-surface-card shadow-card"
               />
@@ -411,7 +373,7 @@ export default function AdminOrderListPage() {
               getRowKey={(row) => row.id}
               onRowClick={(row) => setQuickViewId(row.id)}
               renderMobileCard={(row) => (
-                <div class="flex gap-3 rounded-card bg-surface-card p-4 shadow-card">
+                <div class="flex gap-3 rounded-card bg-surface-card p-3 shadow-card">
                   <input
                     type="checkbox"
                     aria-label={`เลือก ${row.orderNumber}`}
@@ -420,28 +382,22 @@ export default function AdminOrderListPage() {
                     onChange={() => toggleSelect(row.id)}
                     class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
                   />
-                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-3 text-left">
+                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-2 text-left">
                     <div class="flex items-start justify-between gap-2">
                       <div class="min-w-0">
-                        <p class="truncate font-semibold text-ink">{row.orderNumber}</p>
+                        <p class="truncate text-sm font-medium text-ink">{row.orderNumber}</p>
                         <p class="truncate text-xs text-ink-gray">{row.createdAt}</p>
                       </div>
-                      <p class="shrink-0 font-semibold text-ink">{formatAdminCurrency(row.totals.grandTotal)}</p>
+                      <p class="shrink-0 text-sm font-semibold text-ink">{formatAdminCurrency(row.totals.grandTotal)}</p>
                     </div>
                     <p class="truncate text-sm text-ink-gray">
-                      {row.customer.name} · {row.items.length} รายการ
+                      {row.customer.name} สั่ง {row.items.length} รายการ
                     </p>
                     <div class="flex flex-wrap items-center gap-1.5">
                       <StatusBadge tone={ORDER_STATUS_META[row.orderStatus].tone}>{ORDER_STATUS_META[row.orderStatus].label}</StatusBadge>
                       <StatusBadge tone={PAYMENT_STATUS_META[row.paymentStatus].tone}>{PAYMENT_STATUS_META[row.paymentStatus].label}</StatusBadge>
                       <StatusBadge tone={FULFILLMENT_STATUS_META[row.fulfillmentStatus].tone}>{FULFILLMENT_STATUS_META[row.fulfillmentStatus].label}</StatusBadge>
-                      <Show when={row.returnRequest}>
-                        {(r) => <StatusBadge tone={RETURN_STATUS_META[r().status].tone}>{RETURN_STATUS_META[r().status].label}</StatusBadge>}
-                      </Show>
                     </div>
-                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">
-                      ดูรายละเอียด
-                    </span>
                   </button>
                 </div>
               )}
@@ -489,16 +445,19 @@ export default function AdminOrderListPage() {
 function ListSkeleton() {
   return (
     <div class="flex flex-col gap-3">
-      {Array.from({ length: 6 }).map(() => (
-        <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
-          <div class="flex flex-1 flex-col gap-1.5">
-            <Skeleton class="h-4 w-1/3" />
-            <Skeleton class="h-3 w-1/4" />
+      <Skeleton class="h-11 w-full rounded-pill" />
+      <For each={[0, 1, 2, 3, 4, 5]}>
+        {() => (
+          <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
+            <Skeleton class="size-11 shrink-0 rounded-media" />
+            <div class="flex flex-1 flex-col gap-1.5">
+              <Skeleton class="h-4 w-1/2" />
+              <Skeleton class="h-3 w-1/4" />
+            </div>
+            <Skeleton class="h-8 w-16 rounded-pill" />
           </div>
-          <Skeleton class="h-6 w-20 rounded-pill" />
-          <Skeleton class="h-8 w-14 rounded-pill" />
-        </div>
-      ))}
+        )}
+      </For>
     </div>
   );
 }

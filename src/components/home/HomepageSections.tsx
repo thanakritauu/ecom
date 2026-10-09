@@ -11,9 +11,10 @@ import { useStorefrontDestinationLookups } from "~/lib/storefrontDestinationLook
 import { useProductCatalog } from "~/lib/productCatalog";
 import { useCollectionContent } from "~/lib/collectionContent";
 import { useCategoryContent } from "~/lib/categoryContent";
-import { useCampaignContent } from "~/lib/campaignContent";
 import { resolveHomepageDestinationHref, type HomepageSection, type HomepageProductSource, type HomepageDestination } from "~/lib/adminHomepage";
 import { ResponsiveBanner } from "~/components/shared/ResponsiveBanner";
+import { ResponsiveMedia } from "~/components/shared/MediaView";
+import { EmptyState } from "~/components/shared/EmptyState";
 
 /** Architecture Cleanup & Source of Truth — filters the *live* Product Store list instead of pointing at a separately-curated array per source; membership itself is still the same seed-id-derived signal `~/lib/products`'s `isBestSeller`/etc. always used. */
 function productsForSource(source: Exclude<HomepageProductSource, "manual" | "collection" | "category">, products: Product[]): Product[] {
@@ -42,9 +43,20 @@ export function HomepageSections(props: {
   productRows?: number;
   /** Home only — product rows swipe sideways on mobile/tablet; everywhere else they're a 2-column grid. */
   swipe?: boolean;
+  /**
+   * Home only — a product section with no products hides entirely (an empty merchandising rail on Home reads as broken).
+   * Landing Pages and Admin previews keep the section and show the shared empty state instead.
+   */
+  hideEmptyProductSections?: boolean;
 }) {
   const visible = () => props.sections.filter((s) => s.enabled && s.type !== "hero");
-  return <For each={visible()}>{(section) => <HomepageSectionBlock section={section} productRows={props.productRows} swipe={props.swipe} />}</For>;
+  return (
+    <For each={visible()}>
+      {(section) => (
+        <HomepageSectionBlock section={section} productRows={props.productRows} swipe={props.swipe} hideEmptyProductSections={props.hideEmptyProductSections} />
+      )}
+    </For>
+  );
 }
 
 function useDestinationHref(destination: HomepageDestination) {
@@ -91,12 +103,10 @@ export function useSectionProducts(section: HomepageSection) {
   };
 }
 
-function HomepageSectionBlock(props: { section: HomepageSection; productRows?: number; swipe?: boolean }) {
+function HomepageSectionBlock(props: { section: HomepageSection; productRows?: number; swipe?: boolean; hideEmptyProductSections?: boolean }) {
   switch (props.section.type) {
     case "product":
-      return <ProductSectionBlock section={props.section} productRows={props.productRows} swipe={props.swipe} />;
-    case "campaign":
-      return <CampaignSectionBlock section={props.section} swipe={props.swipe} />;
+      return <ProductSectionBlock section={props.section} productRows={props.productRows} swipe={props.swipe} hideEmpty={props.hideEmptyProductSections} />;
     case "promotion_banner":
       return <PromotionBannerBlock section={props.section} />;
     case "content":
@@ -117,7 +127,7 @@ function HomepageSectionBlock(props: { section: HomepageSection; productRows?: n
  * Collection showcase) keeps the existing `ProductRail` — grid on tablet/
  * desktop, horizontal swipeable rail on mobile, per §11.
  */
-function ProductSectionBlock(props: { section: HomepageSection; productRows?: number; swipe?: boolean }) {
+function ProductSectionBlock(props: { section: HomepageSection; productRows?: number; swipe?: boolean; hideEmpty?: boolean }) {
   const products = useSectionProducts(props.section);
   const gridProducts = () => (props.productRows ? products().slice(0, props.productRows * 5) : products());
   const href = () => useDestinationHref(props.section.cta.destination);
@@ -126,104 +136,37 @@ function ProductSectionBlock(props: { section: HomepageSection; productRows?: nu
   const emptyMessage = () => {
     if (props.section.productSource === "collection") return "ยังไม่มีสินค้าในคอลเลกชันนี้";
     if (props.section.productSource === "category") return "ยังไม่มีสินค้าในหมวดหมู่นี้";
-    return "ยังไม่ได้เลือกสินค้า";
+    return "ยังไม่มีสินค้าในส่วนนี้";
   };
 
   return (
-    <section class="py-6 sm:py-8 lg:py-10">
-      <Container width="wide" class="flex flex-col gap-3 sm:gap-4">
-        {/* Figma 124:6380 — title 32px Bold, centered (24 / 28px below lg, still centered) */}
-        <div class="flex flex-col items-center gap-1 text-center">
-          <Show when={props.section.eyebrow}>
-            <p class="text-xs font-semibold uppercase tracking-wide text-brand-pink sm:text-sm">{props.section.eyebrow}</p>
-          </Show>
-          <h2 class="text-2xl font-bold leading-[normal] text-ink sm:text-[28px] lg:text-[32px]">{props.section.title || props.section.name}</h2>
-          <Show when={props.section.description}>
-            <p class="text-ink-gray">{props.section.description}</p>
-          </Show>
-        </div>
-        <Show when={products().length > 0} fallback={<p class="py-10 text-center text-ink-gray">{emptyMessage()}</p>}>
-          <Show
-            when={isGrid()}
-            fallback={<ProductRail products={products()} columns={5} rows={props.productRows} swipe={props.swipe} flashSale={flashSale()} />}
-          >
-            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 xl:grid-cols-5 xl:gap-6">
-              <For each={gridProducts()}>{(product) => <ProductCard product={product} />}</For>
-            </div>
-          </Show>
-        </Show>
-        <Show when={href() && props.section.cta.label}>
-          <Button href={href()!} variant="outline" class="mx-auto">
-            {props.section.cta.label}
-          </Button>
-        </Show>
-      </Container>
-    </section>
-  );
-}
-
-function BannerPicture(props: { banners: HomepageSection["banners"]; alt: string; class?: string }) {
-  return (
-    <Show when={props.banners.desktop || props.banners.tablet || props.banners.mobile}>
-      <picture>
-        <Show when={props.banners.mobile}>{(src) => <source media="(max-width: 767px)" srcset={src()} />}</Show>
-        <Show when={props.banners.tablet}>{(src) => <source media="(max-width: 1023px)" srcset={src()} />}</Show>
-        <img src={props.banners.desktop || props.banners.tablet || props.banners.mobile} alt={props.alt} class={`w-full object-cover ${props.class ?? ""}`} />
-      </picture>
-    </Show>
-  );
-}
-
-/**
- * §10.6 "Campaign Integration" — when `campaignId` is set, every displayed
- * field (banner/title/description/CTA/products) is derived live from that
- * standalone Campaign record instead of this section's own inline fields,
- * which stay in the data but go unused while linked. A campaign that's
- * been unpublished/deleted/scheduled-but-not-started since this section was
- * linked to it makes the whole section render nothing — never stale
- * leftover content.
- */
-function CampaignSectionBlock(props: { section: HomepageSection; swipe?: boolean }) {
-  const campaignCtx = useCampaignContent();
-  const isLinked = () => props.section.campaignId !== "";
-  const linkedCampaign = () => {
-    if (!isLinked()) return undefined;
-    const found = campaignCtx.getVisibleById(props.section.campaignId);
-    if (!found && import.meta.env.DEV) {
-      console.warn(`[LandingPage] Section "${props.section.name}" references a missing/unpublished Campaign "${props.section.campaignId}"`);
-    }
-    return found;
-  };
-
-  const banners = () => linkedCampaign()?.banners ?? props.section.banners;
-  const title = () => linkedCampaign()?.title ?? props.section.title;
-  const description = () => linkedCampaign()?.description ?? props.section.description;
-  const ctaLabel = () => linkedCampaign()?.cta.label ?? props.section.cta.label;
-  const href = () => useDestinationHref(linkedCampaign()?.cta.destination ?? props.section.cta.destination);
-  const catalog = useProductCatalog();
-  const inlineProducts = useSectionProducts(props.section);
-  const products = () => (linkedCampaign() ? resolveProductRefs(linkedCampaign()!.products, catalog) : inlineProducts());
-
-  return (
-    <Show when={!isLinked() || linkedCampaign()}>
-      <section class="py-6 sm:py-8 lg:py-16">
-        <Container width="wide" class="flex flex-col gap-6">
-          <div class="overflow-hidden rounded-card bg-surface-pink/40">
-            <ResponsiveBanner banners={banners()} alt={title()} />
-            <div class="flex flex-col items-center gap-3 px-4 py-8 text-center">
-              <h2 class="text-[22px] font-bold text-ink sm:text-2xl lg:text-[28px]">{title() || props.section.name}</h2>
-              <Show when={description()}>
-                <p class="max-w-xl text-ink-gray">{description()}</p>
-              </Show>
-              <Show when={href() && ctaLabel()}>
-                <Button href={href()!} variant="primary">
-                  {ctaLabel()}
-                </Button>
-              </Show>
-            </div>
+    <Show when={products().length > 0 || !props.hideEmpty}>
+      <section class="py-6 sm:py-8 lg:py-10">
+        <Container width="wide" class="flex flex-col gap-3 sm:gap-4">
+          {/* Figma 124:6380 — title 32px Bold, centered (24 / 28px below lg, still centered) */}
+          <div class="flex flex-col items-center gap-1 text-center">
+            <Show when={props.section.eyebrow}>
+              <p class="text-xs font-semibold uppercase tracking-wide text-brand-pink sm:text-sm">{props.section.eyebrow}</p>
+            </Show>
+            <h2 class="text-2xl font-bold leading-[normal] text-ink sm:text-[28px] lg:text-[32px]">{props.section.title || props.section.name}</h2>
+            <Show when={props.section.description}>
+              <p class="text-ink-gray">{props.section.description}</p>
+            </Show>
           </div>
-          <Show when={products().length > 0}>
-            <ProductRail products={products()} columns={5} swipe={props.swipe} />
+          <Show when={products().length > 0} fallback={<EmptyState size="compact" title={emptyMessage()} description="กลับมาดูใหม่เร็วๆ นี้" />}>
+            <Show
+              when={isGrid()}
+              fallback={<ProductRail products={products()} columns={5} rows={props.productRows} swipe={props.swipe} flashSale={flashSale()} />}
+            >
+              <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 xl:grid-cols-5 xl:gap-6">
+                <For each={gridProducts()}>{(product) => <ProductCard product={product} />}</For>
+              </div>
+            </Show>
+          </Show>
+          <Show when={href() && props.section.cta.label}>
+            <Button href={href()!} variant="outline" class="mx-auto">
+              {props.section.cta.label}
+            </Button>
           </Show>
         </Container>
       </section>
@@ -231,20 +174,27 @@ function CampaignSectionBlock(props: { section: HomepageSection; swipe?: boolean
   );
 }
 
+function BannerPicture(props: { banners: HomepageSection["banners"]; alt: string; class?: string }) {
+  return (
+    <ResponsiveMedia media={props.banners} alt={props.alt} objectFit="cover" class={`w-full ${props.class ?? ""}`} />
+  );
+}
+
 function PromotionBannerBlock(props: { section: HomepageSection }) {
   const href = () => useDestinationHref(props.section.cta.destination);
   const hasBanner = () => props.section.banners.desktop || props.section.banners.tablet || props.section.banners.mobile;
 
+  // No banner image: no section at all (an empty padded band would leave a blank gap in the page).
   return (
-    <section class="py-6 sm:py-8 lg:py-10">
-      <Container width="wide">
-        <Show when={hasBanner()} fallback={null}>
+    <Show when={hasBanner()}>
+      <section class="py-6 sm:py-8 lg:py-10">
+        <Container width="wide">
           <A href={href() ?? "#"} class="block overflow-hidden rounded-card transition-opacity duration-150 hover:opacity-90">
             <ResponsiveBanner banners={props.section.banners} alt={props.section.title || props.section.name} />
           </A>
-        </Show>
-      </Container>
-    </section>
+        </Container>
+      </section>
+    </Show>
   );
 }
 

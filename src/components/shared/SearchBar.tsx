@@ -4,7 +4,8 @@ import { useProductCatalog } from "~/lib/productCatalog";
 import { useCategoryContent } from "~/lib/categoryContent";
 import { highlightSegments, matchesSearch, searchProducts } from "~/lib/productSearch";
 import type { Product } from "~/lib/types";
-import { CloseIcon } from "./icons";
+import { CloseIcon, SearchIcon } from "./icons";
+import { EmptyState } from "./EmptyState";
 
 const MAX_PRODUCTS = 8;
 const MAX_CATEGORIES = 3;
@@ -185,10 +186,7 @@ export function SearchBar(props: {
           <Show
             when={suggestions().length > 0}
             fallback={
-              <div class="flex flex-col items-center gap-1 px-4 py-8 text-center">
-                <p class="text-sm font-medium text-ink">ไม่พบสินค้าที่ตรงกับ “{trimmed()}”</p>
-                <p class="text-xs text-ink-gray">ลองค้นหาด้วยชื่อสินค้าหรือคำอื่น</p>
-              </div>
+              <EmptyState size="compact" icon={SearchIcon} title={`ไม่พบสินค้าที่ตรงกับ "${trimmed()}"`} description="ลองค้นหาด้วยชื่อสินค้าหรือคำอื่น" />
             }
           >
             <ul id={listboxId} role="listbox" aria-label="ผลการค้นหา" class="flex-1 overflow-y-auto py-2">

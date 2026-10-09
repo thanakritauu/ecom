@@ -1,5 +1,6 @@
 import type { PromotionPageProductRef } from "./adminContent";
 import { upgradeSeedBanners } from "./seedBanners";
+import { isVideoMedia, mediaErrors, mediaSrc, normalizeMedia, normalizeMediaSet, type MediaValue } from "./media";
 
 /**
  * Landing Page Admin Management — moved out of `adminHomepage.ts` (which
@@ -16,16 +17,20 @@ import { upgradeSeedBanners } from "./seedBanners";
  * per surface.
  */
 
-export type HomepageSectionType = "hero" | "promotion_banner" | "product" | "campaign" | "content" | "cta";
+export type HomepageSectionType = "hero" | "promotion_banner" | "product" | "content" | "cta";
 
 export const HOMEPAGE_SECTION_TYPE_META: Record<HomepageSectionType, { label: string }> = {
-  hero: { label: "Hero Banner" },
-  promotion_banner: { label: "Promotion Banner" },
-  product: { label: "Product Section" },
-  campaign: { label: "Campaign" },
-  content: { label: "Content" },
-  cta: { label: "CTA" },
+  hero: { label: "แบนเนอร์สไลด์" },
+  promotion_banner: { label: "แบนเนอร์โปรโมชั่น" },
+  product: { label: "รายการสินค้า" },
+  content: { label: "รูปพร้อมข้อความ" },
+  cta: { label: "ปุ่มชวนคลิก" },
 };
+
+/** Section types removed from the model (e.g. the old "campaign" section) can still sit in `localStorage`; page normalizers drop any section whose type isn't in this list. */
+export function isHomepageSectionType(type: unknown): type is HomepageSectionType {
+  return typeof type === "string" && Object.prototype.hasOwnProperty.call(HOMEPAGE_SECTION_TYPE_META, type);
+}
 
 /**
  * Product Section — Product Source Rule (Promotion Page / Homepage
@@ -42,20 +47,21 @@ export const HOMEPAGE_SECTION_TYPE_META: Record<HomepageSectionType, { label: st
 export type HomepageProductSource = "manual" | "best_seller" | "flash_sale" | "new_arrival" | "trending" | "featured" | "collection" | "category";
 
 export const HOMEPAGE_PRODUCT_SOURCE_META: Record<HomepageProductSource, { label: string }> = {
-  manual: { label: "เลือกสินค้าเอง (เดิม — ย้ายไปใช้ Collection แทน)" },
-  best_seller: { label: "สินค้าขายดี (Best Seller)" },
+  manual: { label: "เลือกสินค้าเอง (แบบเดิม)" },
+  best_seller: { label: "สินค้าขายดี" },
   flash_sale: { label: "Flash Sale" },
-  new_arrival: { label: "สินค้ามาใหม่ (New Arrival)" },
-  trending: { label: "กำลังฮิต (Trending)" },
-  featured: { label: "คอลเลกชันแนะนำ (Featured)" },
-  collection: { label: "Product Collection" },
-  category: { label: "หมวดหมู่สินค้า (Category)" },
+  new_arrival: { label: "สินค้ามาใหม่" },
+  trending: { label: "สินค้ากำลังฮิต" },
+  featured: { label: "สินค้าแนะนำ" },
+  collection: { label: "กลุ่มสินค้าพิเศษ" },
+  category: { label: "หมวดหมู่สินค้า" },
 };
 
+/** Each crop is an image (plain string, the original shape) or a video (`MediaItem`), see `~/lib/media`. */
 export type HomepageBanners = {
-  desktop: string;
-  tablet: string;
-  mobile: string;
+  desktop: MediaValue;
+  tablet: MediaValue;
+  mobile: MediaValue;
 };
 
 /**
@@ -87,9 +93,25 @@ export type HeroAsset = {
    * exactly as before — one Desktop image at every breakpoint — rather than
    * breaking or requiring a data migration.
    */
-  tabletSource?: string;
-  mobileSource?: string;
+  tabletSource?: MediaValue;
+  mobileSource?: MediaValue;
+  /** `"video"` only: required cover image (see `~/lib/media` `MediaItem.poster`). */
+  poster?: string;
+  /** `"video"` only: admin toggle "วิดีโอนี้มีเสียง"; storefront shows a mute/unmute button. */
+  hasAudio?: boolean;
 };
+
+/** The Desktop slot of an image/video hero asset as one `MediaValue` (YouTube assets have none). */
+export function heroAssetDesktopMedia(asset: HeroAsset): MediaValue {
+  if (asset.type === "video") return { type: "video", src: asset.source, poster: asset.poster ?? "", hasAudio: !!asset.hasAudio };
+  return asset.type === "image" ? asset.source : "";
+}
+
+/** Writes a `MediaValue` back into an asset's Desktop slot (type follows the file). */
+export function withHeroAssetDesktopMedia(asset: HeroAsset, media: MediaValue): HeroAsset {
+  if (isVideoMedia(media)) return { ...asset, type: "video", source: media.src, poster: media.poster ?? "", hasAudio: !!media.hasAudio };
+  return { ...asset, type: "image", source: mediaSrc(media), poster: undefined, hasAudio: undefined };
+}
 
 export const HERO_ASSET_TYPE_META: Record<HeroAssetType, { label: string }> = {
   image: { label: "รูปภาพ" },
@@ -142,35 +164,38 @@ export function getYoutubeEmbedUrl(url: string): string | null {
 /** An incomplete asset (no file/URL yet, or an invalid YouTube URL) must never be allowed to save — called from `validatePublishRequirements` for every "hero" section. */
 export function validateHeroAssets(assets: HeroAsset[]): string[] {
   const errors: string[] = [];
-  if (assets.length > MAX_HERO_ASSETS) errors.push(`Hero Banner รองรับสูงสุด ${MAX_HERO_ASSETS} รายการ`);
+  if (assets.length > MAX_HERO_ASSETS) errors.push(`แบนเนอร์สไลด์ใส่ได้สูงสุด ${MAX_HERO_ASSETS} รายการ`);
   assets.forEach((asset, i) => {
-    if (!asset.source.trim()) errors.push(`Hero Banner รายการที่ ${i + 1}: ยังไม่ได้เพิ่มไฟล์หรือลิงก์`);
-    else if (asset.type === "youtube" && !isValidYoutubeUrl(asset.source)) errors.push(`Hero Banner รายการที่ ${i + 1}: ลิงก์ YouTube ไม่ถูกต้อง`);
+    if (!asset.source.trim()) errors.push(`แบนเนอร์สไลด์ที่ ${i + 1} ยังไม่มีไฟล์หรือลิงก์`);
+    else if (asset.type === "youtube" && !isValidYoutubeUrl(asset.source)) errors.push(`แบนเนอร์สไลด์ที่ ${i + 1} ลิงก์ YouTube ไม่ถูกต้อง`);
+    else if (asset.type === "video" && !asset.poster) errors.push(`แบนเนอร์สไลด์ที่ ${i + 1} เป็นวิดีโอ กรุณาใส่ภาพปกวิดีโอ`);
+    if (asset.type !== "youtube") {
+      errors.push(...mediaErrors(asset.tabletSource, `แบนเนอร์สไลด์ที่ ${i + 1} ขนาดแท็บเล็ต`));
+      errors.push(...mediaErrors(asset.mobileSource, `แบนเนอร์สไลด์ที่ ${i + 1} ขนาดมือถือ`));
+    }
   });
   return errors;
 }
 
 /**
  * One destination shape reused by every CTA/click-through in this system
- * (Hero, Promotion Banner, Campaign, Content, CTA) instead of a separate
+ * (Hero, Promotion Banner, Content, CTA) instead of a separate
  * "type this URL yourself" field per section. `landingPage`/`product`/
  * `category`/`collection` store only the *id*; the actual href is always
  * derived at render time (`resolveHomepageDestinationHref`) — slug/id is the
  * one source of truth, never duplicated into a second URL field.
  *
  * This discriminated union IS the project's single "Destination" source of
- * truth (Category/Landing Page/Collection/Campaign/Product), reused verbatim
- * by `adminBanners.ts` and `adminCampaigns.ts` CTAs, not a second parallel
+ * truth (Category/Landing Page/Collection/Product), not a second parallel
  * type. `category`/`collection` resolve to the *existing* `/products`
  * listing page filtered by query string (`categoryListHref`/
  * `collectionListHref` below) — no dedicated Category/Collection landing
- * page. `campaign` has no variant here yet — extending the union later
- * (one case here, one in the resolver, one option in `DestinationSelector`)
- * is what "ready to connect in the future" means for this architecture.
+ * page. Any other stored `type` (e.g. an old "brand"/"campaign" target)
+ * falls through to `{ type: "none" }` in `normalizeHomepageDestination`.
  *
  * Landing Page Architecture & Promotion Page Migration — this used to be
  * `{ type: "promotion"; promotionPageId: string }`. Every already-serialized
- * Banner/Campaign/Homepage-section CTA in `localStorage` still has that
+ * Banner/Homepage-section CTA in `localStorage` still has that
  * exact shape — `normalizeHomepageDestination` below transparently upgrades
  * it to `landingPage` the moment it's read, so nothing needed a data
  * migration and no destination silently broke.
@@ -213,14 +238,12 @@ export type HomepageSection = {
   contentLayout: HomepageContentLayout;
   /** "product" only — ignored for every other type. */
   productSource: HomepageProductSource;
-  /** "product" (when `productSource === "manual"`) and "campaign" (always manual) — same shape `PromotionPageProductPicker` already edits, reused as-is. */
+  /** "product" (when `productSource === "manual"`) — same shape `PromotionPageProductPicker` already edits, reused as-is. */
   products: PromotionPageProductRef[];
   /** "product" only, when `productSource === "collection"` — id into `~/lib/adminCollections`'s `ProductCollection[]`. Resolved live at render time, never copied in. */
   collectionId: string;
   /** "product" only, when `productSource === "category"` — id into `~/lib/adminCategories`'s `AdminCategory[]`. Resolved live at render time by filtering the Product Catalog on `categoryId`, never copied in — Category stays classification-only, never a page builder (§6). */
   categoryId: string;
-  /** "campaign" only, optional — id into `~/lib/adminCampaigns`'s `Campaign[]`. When set, Banner/Title/Description/CTA/Products are all derived live from that Campaign record instead of this section's own inline fields. */
-  campaignId: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -267,24 +290,21 @@ export function normalizeHomepageDestination(d: Partial<HomepageDestination> | L
 export function normalizeHomepageSection(s: Partial<HomepageSection> & { id: string }): HomepageSection {
   return {
     id: s.id,
-    type: s.type ?? "content",
+    type: isHomepageSectionType(s.type) ? s.type : "content",
     name: s.name ?? "",
     enabled: s.enabled ?? true,
     eyebrow: s.eyebrow ?? "",
     title: s.title ?? "",
     description: s.description ?? "",
-    banners: upgradeSeedBanners({
-      desktop: s.banners?.desktop ?? "",
-      tablet: s.banners?.tablet ?? "",
-      mobile: s.banners?.mobile ?? "",
-    }),
+    banners: upgradeSeedBanners(normalizeMediaSet(s.banners)),
     assets: Array.isArray(s.assets)
       ? s.assets.slice(0, MAX_HERO_ASSETS).map((a) => ({
           id: a.id ?? genHeroAssetId(),
           type: a.type ?? "image",
           source: a.source ?? "",
-          tabletSource: a.tabletSource || undefined,
-          mobileSource: a.mobileSource || undefined,
+          tabletSource: normalizeMedia(a.tabletSource) || undefined,
+          mobileSource: normalizeMedia(a.mobileSource) || undefined,
+          ...(a.type === "video" ? { poster: typeof a.poster === "string" ? a.poster : "", hasAudio: !!a.hasAudio } : {}),
         }))
       : [],
     cta: {
@@ -298,7 +318,6 @@ export function normalizeHomepageSection(s: Partial<HomepageSection> & { id: str
       : [],
     collectionId: s.collectionId ?? "",
     categoryId: s.categoryId ?? "",
-    campaignId: s.campaignId ?? "",
     createdAt: s.createdAt ?? "",
     updatedAt: s.updatedAt ?? "",
   };

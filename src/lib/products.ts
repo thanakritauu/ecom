@@ -623,7 +623,9 @@ export const isBestSeller = (p: Pick<Product, "id">): boolean => p.id.startsWith
 export const isNewArrival = (p: Pick<Product, "id">): boolean => p.id.startsWith("new-");
 export const isTrending = (p: Pick<Product, "id">): boolean => p.id.startsWith("trend-");
 export const isFeatured = (p: Pick<Product, "id">): boolean => p.id.startsWith("feature-");
-export const isFlashSale = (p: Pick<Product, "flashSaleEndsAt">): boolean => !!p.flashSaleEndsAt;
+/** In the flash sale now: a daily round never runs out; a fixed end time drops the product once it has passed. */
+export const isFlashSale = (p: { flashSaleEndsAt?: number; flashSaleDaily?: boolean }): boolean =>
+  !!p.flashSaleEndsAt && (!!p.flashSaleDaily || p.flashSaleEndsAt > Date.now());
 
 /**
  * Discount badge % — always derived from the two real prices

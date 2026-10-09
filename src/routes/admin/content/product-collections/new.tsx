@@ -12,7 +12,7 @@ export default function AdminProductCollectionNewPage() {
 
   const handleSubmit = async (values: ProductCollectionFormValues) => {
     const created = await store.add(values);
-    pushToast(`สร้าง Collection "${created.name}" เรียบร้อยแล้ว`, "success");
+    pushToast("บันทึกกลุ่มสินค้าพิเศษเรียบร้อยแล้ว", "success");
     navigate(`/admin/content/product-collections/${created.id}`);
   };
 
@@ -21,13 +21,13 @@ export default function AdminProductCollectionNewPage() {
       <Breadcrumb
         items={[
           { label: "แดชบอร์ด", href: "/admin" },
-          { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
-          { label: "Product Collections", href: "/admin/content/product-collections" },
-          { label: "สร้างใหม่" },
+          { label: "สินค้า", href: "/admin/products" },
+          { label: "กลุ่มสินค้าพิเศษ", href: "/admin/content/product-collections" },
+          { label: "เพิ่มกลุ่มสินค้าพิเศษ" },
         ]}
       />
-      <PageHeader title="สร้าง Collection" description="กำหนดชื่อ, คำอธิบาย, สถานะ และสินค้าที่จะอยู่ใน Collection นี้" />
-      <ProductCollectionForm mode="create" onSubmit={handleSubmit} onCancel={() => navigate("/admin/content/product-collections")} />
+      <PageHeader title="เพิ่มกลุ่มสินค้าพิเศษ" description="ตั้งชื่อกลุ่มและเลือกสินค้าที่จะอยู่ในกลุ่มนี้" />
+      <ProductCollectionForm submitLabel="บันทึกกลุ่มสินค้าพิเศษ" onSubmit={handleSubmit} onCancel={() => navigate("/admin/content/product-collections")} />
     </div>
   );
 }

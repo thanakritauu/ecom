@@ -15,7 +15,7 @@ export function AdminFormPreviewLayout(props: { form: JSX.Element; preview: JSX.
       <div class="flex min-w-0 flex-col gap-6">{props.form}</div>
       <div class="flex flex-col gap-3 xl:sticky xl:top-6">
         <p class="shrink-0 text-xs font-semibold uppercase tracking-wide text-ink-placeholder">
-          {props.previewLabel ?? "ตัวอย่างการแสดงผลจริง (Live Preview)"}
+          {props.previewLabel ?? "ตัวอย่างบนหน้าร้าน"}
         </p>
         <div class="overflow-hidden rounded-card bg-surface-card shadow-card">{props.preview}</div>
       </div>

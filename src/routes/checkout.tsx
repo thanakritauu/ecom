@@ -4,15 +4,16 @@ import { Header } from "~/components/shared/Header";
 import { Footer } from "~/components/shared/Footer";
 import { Container } from "~/components/shared/Container";
 import { Button } from "~/components/shared/Button";
+import { EmptyState } from "~/components/shared/EmptyState";
+import { CartIcon } from "~/components/shared/icons";
 import { useCart } from "~/lib/cart";
 import { useAuth } from "~/lib/auth";
 import {
   resolveCartLines,
   computeCartTotal,
   computeCheckoutTotals,
-  resolveGiftPromotion,
   computeCoinsEarned,
-  computeShippingFee,
+  couponUsageBlock,
   maxRedeemableCoins,
   MOCK_COIN_BALANCE,
   type Coupon,
@@ -21,6 +22,7 @@ import { createAddressBook, createLocalAddressRepository, type AddressMockState 
 import { createMockOrderRepository, createOrderHistory } from "~/lib/orderHistory";
 import { resolveTier, yearlySpend } from "~/lib/membership";
 import { useProductCatalog } from "~/lib/productCatalog";
+import { useCartPromotions } from "~/lib/storefrontPromotions";
 import { formatTHB } from "~/components/shared/PriceDisplay";
 import { AddressSection } from "~/components/checkout/AddressSection";
 import { DeliverySection } from "~/components/checkout/DeliverySection";
@@ -29,6 +31,7 @@ import { createCheckoutPayment, type PaidResult } from "~/components/checkout/ch
 import { generateOrderNumber } from "~/lib/orderNumber";
 import { CheckoutOrderSummary } from "~/components/checkout/CheckoutOrderSummary";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
+import { focusFirstInvalid } from "~/lib/validators";
 
 /**
  * Figma node 146:8484. Reuses the exact same shared cart state and pricing
@@ -42,10 +45,8 @@ export default function CheckoutPage() {
   const catalog = useProductCatalog();
   const resolvedLines = createMemo(() => resolveCartLines(cart.lines(), catalog.products()));
   const subtotal = createMemo(() => computeCartTotal(resolvedLines()));
-  const gift = createMemo(() => resolveGiftPromotion(subtotal(), catalog.products()));
-  const hasUnavailableItem = createMemo(() =>
-    resolvedLines().some(({ product }) => product.stockLeft !== undefined && product.stockLeft <= 0),
-  );
+  const promos = useCartPromotions(resolvedLines);
+  const hasUnavailableItem = createMemo(() => resolvedLines().some(({ product }) => product.stockLeft !== undefined && product.stockLeft <= 0));
 
   // Phase 04 — saved addresses come through the address book (repository
   // layer), never mock data directly. Mock state: signed-in member = has a
@@ -72,8 +73,13 @@ export default function CheckoutPage() {
   const billingCandidates = () => addressBook.addresses().filter((a) => a.id !== selectedAddressId());
   const billingAddressId = () =>
     billingSameAsShipping() ? selectedAddressId() : billingCandidates().some((a) => a.id === pickedBillingId()) ? pickedBillingId() : undefined;
-  const [coupon, setCoupon] = createSignal<Coupon>();
+  const [pickedCoupon, setCoupon] = createSignal<Coupon>();
   const [coinsPicked, setCoinsPicked] = createSignal(0);
+
+  // The open (unsaved) address forms' "validate as if submitted" checks — the pay button runs them too.
+  let validateShippingForm: (() => boolean) | undefined;
+  let validateBillingForm: (() => boolean) | undefined;
+  let formColumn: HTMLDivElement | undefined;
 
   const [fieldErrors, setFieldErrors] = createSignal<Record<string, string>>({});
   const [submitError, setSubmitError] = createSignal<string>();
@@ -82,6 +88,17 @@ export default function CheckoutPage() {
   // One-page checkout: address → billing → delivery → payment method, then
   // Beam's payment page (new window) takes the money — see `createCheckoutPayment`.
   const [pendingOrderNumber, setPendingOrderNumber] = createSignal("");
+
+  // The shopper's member tier (this year's paid spend, same as `/account/points`) sets the coin multiplier.
+  const orderHistory = createOrderHistory(() => createMockOrderRepository());
+  // Coupon "จำกัดต่อลูกค้า": the signed-in shopper's own non-cancelled orders that used the code (a guest has no history to count).
+  const couponUsesByShopper = (code: string) =>
+    auth.isAuthenticated() ? orderHistory.orders().filter((o) => o.status !== "cancelled" && o.payment.couponCode?.toUpperCase() === code.toUpperCase()).length : 0;
+  // A picked coupon stops counting the moment its usage limit is reached (e.g. order history loaded after it was picked).
+  const coupon = () => {
+    const c = pickedCoupon();
+    return c && !couponUsageBlock(c, couponUsesByShopper(c.code)) ? c : undefined;
+  };
 
   // Coins the order can take — the coupon/cart can change after coins were picked, so the pick is capped (not reset).
   const maxCoins = createMemo(() =>
@@ -93,10 +110,9 @@ export default function CheckoutPage() {
   );
   const coinsRedeemed = () => Math.min(coinsPicked(), maxCoins());
   const totals = createMemo(() =>
-    computeCheckoutTotals({ subtotal: subtotal(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: computeShippingFee(subtotal()) }),
+    computeCheckoutTotals({ subtotal: subtotal(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: promos.shippingFee() }),
   );
-  // The shopper's member tier (this year's paid spend, same as `/account/points`) sets the coin multiplier.
-  const orderHistory = createOrderHistory(() => createMockOrderRepository());
+
   const tier = () => resolveTier(yearlySpend(orderHistory.orders())).current;
   // Same condition that gates the two-column form/summary — nothing to pay
   // for once the cart's empty or the order already went through, so the
@@ -105,19 +121,31 @@ export default function CheckoutPage() {
 
   const validate = (): boolean => {
     const errors: Record<string, string> = {};
+    // An open form shows every empty/invalid field's own error (both forms at once); the line under it
+    // only says what's left — fix the fields, or save a complete form first.
     if (shippingFormOpen()) {
-      errors.address = selectedAddressId()
-        ? "กรุณากด “บันทึกการแก้ไข” หรือ “ยกเลิก” ในฟอร์มที่อยู่จัดส่งก่อน"
-        : "กรุณากรอกที่อยู่จัดส่งให้ครบ แล้วกด “ใช้ที่อยู่นี้”";
+      const complete = validateShippingForm?.() ?? false;
+      errors.address = !complete
+        ? "กรุณากรอกที่อยู่จัดส่งให้ครบตามช่องที่แจ้งไว้"
+        : selectedAddressId()
+          ? 'กรุณากด "บันทึกการแก้ไข" หรือ "ยกเลิก" ในฟอร์มที่อยู่จัดส่งก่อน'
+          : 'กรุณากด "ใช้ที่อยู่นี้" เพื่อบันทึกที่อยู่จัดส่ง';
     } else if (!selectedAddressId()) errors.address = "กรุณาเพิ่มที่อยู่จัดส่ง";
     if (!billingSameAsShipping()) {
-      if (billingFormOpen()) errors.billing = "กรุณากรอกที่อยู่ออกใบกำกับภาษีให้ครบ แล้วกดบันทึก หรือเลือก “ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง”";
-      else if (!billingAddressId()) errors.billing = "กรุณาเลือกหรือเพิ่มที่อยู่ออกใบกำกับภาษี";
+      if (billingFormOpen()) {
+        const complete = validateBillingForm?.() ?? false;
+        errors.billing = complete
+          ? 'กรุณากดบันทึกที่อยู่ออกใบกำกับภาษี หรือเลือก "ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง"'
+          : "กรุณากรอกที่อยู่ออกใบกำกับภาษีให้ครบตามช่องที่แจ้งไว้";
+      } else if (!billingAddressId()) errors.billing = "กรุณาเลือกหรือเพิ่มที่อยู่ออกใบกำกับภาษี";
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
-      const scrollTargetId = errors.address ? "shipping-address-heading" : "billing-address-heading";
-      document.getElementById(scrollTargetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      // First invalid field (shipping before billing); a complete-but-unsaved form → its section heading.
+      if (!focusFirstInvalid(formColumn)) {
+        const scrollTargetId = errors.address ? "shipping-address-heading" : "billing-address-heading";
+        document.getElementById(scrollTargetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
       return false;
     }
     return true;
@@ -188,7 +216,7 @@ export default function CheckoutPage() {
           >
             <Show when={resolvedLines().length > 0} fallback={<EmptyCheckout />}>
               <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
-                <div class="flex flex-1 flex-col gap-6 rounded-card bg-white p-4 lg:p-6">
+                <div ref={formColumn} class="flex min-w-0 flex-1 flex-col gap-6 rounded-card bg-white p-4 lg:p-6">
                   <Show when={addressBook.ready()} fallback={<AddressSkeleton />}>
                     <AddressSection
                       headingId="shipping-address-heading"
@@ -204,7 +232,11 @@ export default function CheckoutPage() {
                       onSave={(address, opts) => addressBook.save(address, opts)}
                       onSetDefault={addressBook.setDefault}
                       showDefaultOption
-                      onFormOpenChange={setShippingFormOpen}
+                      onFormOpenChange={(open) => {
+                        setShippingFormOpen(open);
+                        if (!open) setFieldErrors(({ address, ...rest }) => rest);
+                      }}
+                      onRegisterValidate={(fn) => (validateShippingForm = fn)}
                       error={fieldErrors().address}
                     />
 
@@ -228,24 +260,28 @@ export default function CheckoutPage() {
                         </label>
                         <Show when={!billingSameAsShipping()}>
                           <div class="mt-2">
-                          <AddressSection
-                            embedded
-                            headingId="billing-address-heading"
-                            title="เลือกที่อยู่ออกใบกำกับภาษี"
-                            emptyTitle="เพิ่มที่อยู่ออกใบกำกับภาษี"
-                            newAddressLabel="ที่อยู่ออกใบกำกับภาษี"
-                            companyAllowed
-                            kind="billing"
-                            addresses={billingCandidates()}
-                            selectedId={billingAddressId()}
-                            onSelect={(id) => {
-                              setPickedBillingId(id);
-                              setFieldErrors(({ billing, ...rest }) => rest);
-                            }}
-                            onSave={(address) => addressBook.save(address)}
-                            onFormOpenChange={setBillingFormOpen}
-                            error={fieldErrors().billing}
-                          />
+                            <AddressSection
+                              embedded
+                              headingId="billing-address-heading"
+                              title="เลือกที่อยู่ออกใบกำกับภาษี"
+                              emptyTitle="เพิ่มที่อยู่ออกใบกำกับภาษี"
+                              newAddressLabel="ที่อยู่ออกใบกำกับภาษี"
+                              companyAllowed
+                              kind="billing"
+                              addresses={billingCandidates()}
+                              selectedId={billingAddressId()}
+                              onSelect={(id) => {
+                                setPickedBillingId(id);
+                                setFieldErrors(({ billing, ...rest }) => rest);
+                              }}
+                              onSave={(address) => addressBook.save(address)}
+                              onFormOpenChange={(open) => {
+                                setBillingFormOpen(open);
+                                if (!open) setFieldErrors(({ billing, ...rest }) => rest);
+                              }}
+                              onRegisterValidate={(fn) => (validateBillingForm = fn)}
+                              error={fieldErrors().billing}
+                            />
                           </div>
                         </Show>
                       </section>
@@ -277,11 +313,12 @@ export default function CheckoutPage() {
 
                 <CheckoutOrderSummary
                   lines={resolvedLines()}
-                  gift={gift()?.unlocked ? gift() : undefined}
+                  gifts={promos.giftLines()}
                   totals={totals()}
                   coupon={coupon()}
                   onApplyCoupon={setCoupon}
                   onRemoveCoupon={() => setCoupon(undefined)}
+                  couponUsesByShopper={couponUsesByShopper}
                   coinsRedeemed={coinsRedeemed()}
                   maxCoins={maxCoins()}
                   onApplyCoins={setCoinsPicked}
@@ -325,11 +362,13 @@ function AddressSkeleton() {
 
 function EmptyCheckout() {
   return (
-    <div class="flex flex-col items-center justify-center gap-4 rounded-card bg-white py-20 text-center">
-      <p class="text-lg text-ink-gray">ไม่มีสินค้าในตะกร้า</p>
-      <Button href="/" variant="primary">
-        เลือกซื้อสินค้า
-      </Button>
+    <div class="rounded-card bg-white py-6">
+      <EmptyState
+        icon={CartIcon}
+        title="ไม่มีสินค้าในตะกร้า"
+        description="เพิ่มสินค้าลงตะกร้าก่อน แล้วกลับมาชำระเงินได้เลย"
+        action={{ label: "เลือกซื้อสินค้า", href: "/products" }}
+      />
     </div>
   );
 }

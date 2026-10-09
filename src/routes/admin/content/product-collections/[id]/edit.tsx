@@ -19,7 +19,7 @@ export default function AdminProductCollectionEditPage() {
     const current = collection();
     if (!current) return;
     await store.update(current.id, values);
-    pushToast("บันทึกการเปลี่ยนแปลงแล้ว", "success");
+    pushToast("บันทึกกลุ่มสินค้าพิเศษเรียบร้อยแล้ว", "success");
     navigate(`/admin/content/product-collections/${current.id}`);
   };
 
@@ -28,8 +28,8 @@ export default function AdminProductCollectionEditPage() {
       when={collection()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "Product Collections", href: "/admin/content/product-collections" }]} />
-          <EmptyState icon={<LayersIcon />} title="ไม่พบ Collection นี้" description="Collection นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/content/product-collections")} class="bg-surface-card shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สินค้า", href: "/admin/products" }, { label: "กลุ่มสินค้าพิเศษ", href: "/admin/content/product-collections" }]} />
+          <EmptyState icon={<LayersIcon />} title="ไม่พบกลุ่มสินค้าพิเศษนี้" description="กลุ่มสินค้าพิเศษนี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ากลุ่มสินค้าพิเศษ" onAction={() => navigate("/admin/content/product-collections")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -38,14 +38,14 @@ export default function AdminProductCollectionEditPage() {
           <Breadcrumb
             items={[
               { label: "แดชบอร์ด", href: "/admin" },
-              { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
-              { label: "Product Collections", href: "/admin/content/product-collections" },
-              { label: current().name },
+              { label: "สินค้า", href: "/admin/products" },
+              { label: "กลุ่มสินค้าพิเศษ", href: "/admin/content/product-collections" },
+              { label: current().name, href: `/admin/content/product-collections/${current().id}` },
               { label: "แก้ไข" },
             ]}
           />
-          <PageHeader title={`แก้ไข: ${current().name}`} description="แก้ไขข้อมูล Collection และบันทึกการเปลี่ยนแปลง" />
-          <ProductCollectionForm mode="edit" initial={current()} onSubmit={handleSubmit} onCancel={() => navigate(`/admin/content/product-collections/${current().id}`)} />
+          <PageHeader title={`แก้ไข: ${current().name}`} description="แก้ไขข้อมูลกลุ่มสินค้าพิเศษและบันทึกการเปลี่ยนแปลง" />
+          <ProductCollectionForm submitLabel="บันทึกการเปลี่ยนแปลง" initial={current()} onSubmit={handleSubmit} onCancel={() => navigate(`/admin/content/product-collections/${current().id}`)} />
         </div>
       )}
     </Show>

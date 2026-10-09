@@ -7,8 +7,8 @@ const STORAGE_KEY = "charmiss:admin:catalog:categories:v2"; // v2 = คุชช
 
 /**
  * Falls back to the same seed baseline `adminCategoryStore.tsx` starts from
- * — same reasoning as `collectionContent.tsx`/`campaignContent.tsx`: other
- * admin-authored content (a Homepage/Banner/Campaign "category" destination)
+ * — same reasoning as `collectionContent.tsx`: other
+ * admin-authored content (a Homepage/Promotion Page "category" destination)
  * can reference a seeded Category's id before any admin has ever opened the
  * Categories module once. Used as BOTH the `onMount` fallback and the
  * `createSignal`'s initial value (the bug those two other providers had

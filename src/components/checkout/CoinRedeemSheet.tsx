@@ -9,7 +9,7 @@ import coinMark from "~/assets/icons/charmiss-coin.png";
 /**
  * "ใช้คอยน์" — pick how many Charmiss Coins this order uses (shared `SheetModal`, same as the
  * coupon picker). Steps of `COIN_REDEMPTION_STEP`; the cap is `maxRedeemableCoins` (balance,
- * `MAX_COIN_REDEMPTION`, products-after-coupon). "ใช้คอยน์" applies the typed amount; once coins
+ * `MAX_COIN_REDEMPTION`, products-after-coupon). "ยืนยันการใช้คอยน์" applies the typed amount; once coins
  * are in use the footer also offers "ยกเลิกใช้คอยน์".
  */
 export function CoinRedeemSheet(props: {
@@ -44,7 +44,7 @@ export function CoinRedeemSheet(props: {
   };
 
   const apply = () => {
-    if (error()) return;
+    if (error()) return document.getElementById("coin-redeem-amount")?.focus(); // the message is already under the input
     props.onApply(coins());
     props.onOpenChange(false);
     pushToast("ใช้คอยน์แล้ว", "success", `${coins().toLocaleString("th-TH")} คอยน์ ลด ${formatTHB(discount())}`);
@@ -64,8 +64,8 @@ export function CoinRedeemSheet(props: {
       description={<span class="whitespace-nowrap">ทุก {Math.round(1 / COIN_TO_BAHT_RATE)} คอยน์ = ส่วนลด ฿1</span>}
       footer={
         <>
-          <Button type="submit" form="coin-redeem-form" variant="primary" size="lg" class="w-full" disabled={!!error() || props.max === 0}>
-            ใช้คอยน์
+          <Button type="submit" form="coin-redeem-form" variant="primary" size="lg" class="w-full" disabled={props.max === 0}>
+            ยืนยันการใช้คอยน์
           </Button>
           <Show when={props.applied > 0}>
             <Button type="button" variant="outline" size="lg" class="w-full" onClick={remove}>

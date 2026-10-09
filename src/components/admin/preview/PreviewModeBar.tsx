@@ -12,12 +12,12 @@ export function PreviewModeBar(props: { label?: string }) {
     <div class="sticky top-0 z-[100] flex min-h-11 items-center justify-between gap-3 bg-ink px-4 text-sm text-white">
       <span class="flex items-center gap-2 truncate">
         <EyeIcon class="size-4 shrink-0" />
-        โหมดดูตัวอย่าง (Admin Preview){props.label ? ` — ${props.label}` : ""}
+        ตัวอย่างหน้าเว็บ{props.label ? ` ${props.label}` : ""}
       </span>
       <button
         type="button"
         onClick={() => window.close()}
-        class="flex shrink-0 items-center gap-1.5 rounded-pill bg-white/10 px-3 py-1.5 text-xs font-medium hover:bg-white/20"
+        class="flex shrink-0 items-center gap-1.5 rounded-pill bg-white/10 px-3 py-1.5 text-xs font-medium lg:hover:bg-white/20"
       >
         <CloseXIcon class="size-3" /> ปิดแท็บนี้
       </button>

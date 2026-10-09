@@ -7,10 +7,10 @@ import { useAdminCollections } from "./adminCollectionStore";
  * Global Frontend Navigation Architecture — the Admin-side composition of
  * `resolveHomepageDestinationHref`'s `lookups` parameter. Every Admin
  * preview/detail page that resolves a `HomepageDestination` (Banner Quick
- * View, Banner/Campaign detail pages, the Banners list's "ปลายทาง" column)
+ * View, Promotion Page detail pages)
  * should call this instead of hand-building `{ landingPageSlug, productSlug,
  * ... }` inline — one composition, reused everywhere, so adding a future
- * destination kind (e.g. `campaign`) only ever means editing this one
+ * destination kind only ever means editing this one
  * function plus the resolver switch, never each call site individually.
  * `contentStore` (`useAdminContent()`) is the same `PromotionPage`
  * implementation `LandingPage` is aliased to — see `adminContent.ts`.

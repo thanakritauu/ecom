@@ -12,7 +12,6 @@ import { ProductListingGrid } from "~/components/products/ProductListingGrid";
 import { useProductCatalog } from "~/lib/productCatalog";
 import { useCollectionContent } from "~/lib/collectionContent";
 import { useCategoryContent } from "~/lib/categoryContent";
-import { useBrandContent } from "~/lib/brandContent";
 import {
   buildCategoryFacets,
   EMPTY_FILTERS,
@@ -43,7 +42,6 @@ const isCategoryKey = (v: string, facets: CategoryFacet[]): v is CategoryFacetKe
 function filtersFromParams(
   params: Record<string, string | string[] | undefined>,
   resolveCollectionProductIds: (id: string) => string[] | null,
-  resolveBrandId: (slug: string) => string | null,
   facets: CategoryFacet[],
 ): ProductFilters {
   const categoriesRaw = params.category;
@@ -51,12 +49,10 @@ function filtersFromParams(
     isCategoryKey(v, facets),
   );
   const collectionParam = typeof params.collection === "string" ? params.collection : undefined;
-  const brandParam = typeof params.brand === "string" ? params.brand : undefined;
   return {
     search: typeof params.search === "string" ? params.search : "",
     categories,
     collectionProductIds: collectionParam ? resolveCollectionProductIds(collectionParam) : null,
-    brandId: brandParam ? resolveBrandId(brandParam) : null,
   };
 }
 
@@ -72,7 +68,6 @@ export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const collections = useCollectionContent();
   const categories = useCategoryContent();
-  const brands = useBrandContent();
   const catalog = useProductCatalog();
   const products = catalog.products;
 
@@ -96,12 +91,8 @@ export default function ProductsPage() {
     typeof searchParams.collection === "string" ? searchParams.collection : undefined,
   );
 
-  /** §25/§26 — `?brand=<slug>` resolves through the real Brand store, same "arrival context, not a live sidebar control" shape as Collection above; `brandSlug` is only kept to write the same slug back into the URL (the applied filter itself stores the resolved id). */
-  const resolveBrandId = (slug: string): string | null => brands.getBySlug(slug)?.id ?? null;
-  const [brandSlug, setBrandSlug] = createSignal<string | undefined>(typeof searchParams.brand === "string" ? searchParams.brand : undefined);
-
   const [appliedFilters, setAppliedFilters] = createSignal<ProductFilters>(
-    filtersFromParams(searchParams, resolveCollectionProductIds, resolveBrandId, facets()),
+    filtersFromParams(searchParams, resolveCollectionProductIds, facets()),
   );
   const [draftFilters, setDraftFilters] = createSignal<ProductFilters>(appliedFilters());
   const [sort, setSort] = createSignal<SortValue>(parseSortValue(searchParams.sort));
@@ -132,7 +123,7 @@ export default function ProductsPage() {
 
   // Keep the URL in sync with applied state — real navigation (refresh, back/forward, share link) all work.
   createEffect(
-    on([appliedFilters, sort, view, collectionId, brandSlug], ([filters, sortValue, viewValue, collection, brand]) => {
+    on([appliedFilters, sort, view, collectionId], ([filters, sortValue, viewValue, collection]) => {
       setSearchParams(
         {
           category: filters.categories.length ? filters.categories.join(",") : undefined,
@@ -143,7 +134,8 @@ export default function ProductsPage() {
           sort: sortValue === DEFAULT_SORT ? undefined : sortValue,
           view: viewValue === "grid" ? undefined : viewValue,
           collection: collection ?? undefined,
-          brand: brand ?? undefined,
+          // Retired brand filter (the store sells only Charmiss) — cleared from old shared links too.
+          brand: undefined,
         },
         { replace: true },
       );
@@ -200,7 +192,6 @@ export default function ProductsPage() {
   const resetFilters = () => {
     applyInstant(EMPTY_FILTERS);
     setCollectionId(undefined);
-    setBrandSlug(undefined);
     setMobileFilterOpen(false);
   };
 
@@ -220,7 +211,7 @@ export default function ProductsPage() {
             when={appliedFilters().search.trim()}
             fallback={<ListingHeading title="สินค้าทั้งหมด" description="รวมทุกผลิตภัณฑ์ความงามจาก Charmiss ไว้ในที่เดียว เลือกช้อปได้ตามใจ" />}
           >
-            {(q) => <ListingHeading title={`ผลการค้นหา “${q()}”`} description={`พบสินค้า ${filteredSorted().length} รายการ`} />}
+            {(q) => <ListingHeading title={`ผลการค้นหา "${q()}"`} description={`พบสินค้า ${filteredSorted().length} รายการ`} />}
           </Show>
           <ProductListingToolbar
             hideTitle
@@ -262,6 +253,7 @@ export default function ProductsPage() {
                 onLoadMore={loadMore}
                 onRetry={runListingLoad}
                 onClearFilters={resetFilters}
+                searchQuery={appliedFilters().search}
               />
             </div>
           </div>

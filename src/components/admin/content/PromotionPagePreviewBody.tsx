@@ -6,6 +6,7 @@ import { ResponsiveBanner } from "~/components/shared/ResponsiveBanner";
 import { extractYoutubeVideoId, type HomepageSection } from "~/lib/pageSections";
 import type { PromotionPageBanners, PromotionPageProductRef } from "~/lib/adminContent";
 import { useProductCatalog } from "~/lib/productCatalog";
+import { WarningTriangleIcon } from "~/components/admin/icons";
 
 /**
  * Storefront sync — `PromotionPageView.tsx` renders a page one of two ways,
@@ -57,8 +58,8 @@ export function PromotionPagePreviewBody(props: {
             when={!invalidVideo()}
             fallback={
               <div class="flex aspect-video w-full flex-col items-center justify-center gap-1 bg-ink/80 px-4 text-center text-white">
-                <span class="text-2xl leading-none">▶</span>
-                <span class="text-sm font-medium">ลิงก์ YouTube ไม่ถูกต้อง — หน้าร้านจะแสดงแบนเนอร์แทน</span>
+                <WarningTriangleIcon class="size-6" />
+                <span class="text-sm font-medium">ลิงก์ YouTube ไม่ถูกต้อง หน้าร้านจะแสดงแบนเนอร์แทน</span>
               </div>
             }
           >
@@ -83,13 +84,13 @@ export function PromotionPagePreviewBody(props: {
         )}
       </Show>
 
-      <div class="flex flex-col gap-3 bg-white px-3 pb-6 pt-6 sm:gap-4">
+      <div class="flex flex-col gap-3 bg-surface-card px-3 pb-6 pt-6 sm:gap-4">
         <Show
           when={listingSection()}
           keyed
           fallback={
             <>
-              <ListingHeading title={props.title || props.name || "Title"} description={props.description} />
+              <ListingHeading title={props.title || props.name || "หัวข้อ"} description={props.description} />
               <ProductCollectionListing products={flatProducts()} />
             </>
           }

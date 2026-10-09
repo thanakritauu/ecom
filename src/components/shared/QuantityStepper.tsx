@@ -7,9 +7,10 @@
  * skins, and a future screen needing a quantity control should reach for
  * this with a new `tone` rather than writing another stepper.
  *
- * The number is always 14px (`text-sm`) in both tones and at every size —
- * the same size as the "เพิ่มลงตะกร้า" label (see AddToCartButton's
- * purchase-control text standard).
+ * The number is 14px (`text-sm`) in both tones and at every size, the
+ * same size as the "เพิ่มลงตะกร้า" label (see AddToCartButton's
+ * purchase-control text standard). Exception: `large` (PDP main buy row
+ * only) makes it 18px to match the "ซื้อเลย" button there.
  */
 export function QuantityStepper(props: {
   value: number;
@@ -19,6 +20,8 @@ export function QuantityStepper(props: {
   tone?: "pink" | "outline";
   /** Pink tone only: 40px tall below `sm` (52px from `sm`) — for tight one-row bars like the PDP sticky bar. */
   compactOnMobile?: boolean;
+  /** PDP main buy row only: 18px number, same as the "ซื้อเลย" button beside it. */
+  large?: boolean;
 }) {
   const tone = () => props.tone ?? "pink";
   const clamp = (n: number) => Math.max(1, props.max !== undefined ? Math.min(n, props.max) : n);
@@ -86,8 +89,13 @@ export function QuantityStepper(props: {
         <MinusIcon class="size-3.5" />
       </button>
       <span
-        class="text-center text-sm font-semibold"
-        classList={{ "min-w-9": !props.compactOnMobile, "min-w-6 sm:min-w-9": !!props.compactOnMobile }}
+        class="text-center font-semibold"
+        classList={{
+          "text-sm": !props.large,
+          "text-lg": !!props.large,
+          "min-w-9": !props.compactOnMobile,
+          "min-w-6 sm:min-w-9": !!props.compactOnMobile,
+        }}
         aria-live="polite"
         aria-atomic="true"
       >

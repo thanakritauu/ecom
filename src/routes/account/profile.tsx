@@ -4,10 +4,9 @@ import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { useAuth } from "~/lib/auth";
 import { pushToast } from "~/lib/toast";
-import { PHONE_PATTERN } from "~/lib/validators";
+import { EMAIL_PATTERN, focusFirstInvalid, PHONE_PATTERN } from "~/lib/validators";
 import type { User } from "~/lib/types";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENDERS: { value: NonNullable<User["gender"]>; label: string }[] = [
   { value: "female", label: "หญิง" },
   { value: "male", label: "ชาย" },
@@ -55,7 +54,7 @@ function ProfileForm(props: { user: User }) {
         return EMAIL_PATTERN.test(v(key)) ? undefined : "รูปแบบอีเมลไม่ถูกต้อง เช่น name@example.com";
       case "phone":
         if (!v(key)) return "กรุณากรอกเบอร์โทรศัพท์";
-        return PHONE_PATTERN.test(v(key)) ? undefined : "เบอร์โทรต้องเป็นตัวเลข 9–10 หลัก ขึ้นต้นด้วย 0 เช่น 081-234-5678";
+        return PHONE_PATTERN.test(v(key)) ? undefined : "เบอร์โทรต้องเป็นตัวเลข 9-10 หลัก ขึ้นต้นด้วย 0 เช่น 081-234-5678";
     }
   };
   const shownError = (key: FieldKey) => (submitted() || touched()[key] ? errorFor(key) : undefined);
@@ -64,9 +63,9 @@ function ProfileForm(props: { user: User }) {
   const submit = async (e: SubmitEvent) => {
     e.preventDefault();
     setSubmitted(true);
-    const invalid = (["firstName", "email", "phone"] as FieldKey[]).find((k) => errorFor(k));
-    if (invalid) {
-      document.getElementById(fieldId(invalid))?.focus();
+    // Every invalid field now shows its error at once; jump to the first.
+    if ((["firstName", "email", "phone"] as FieldKey[]).some((k) => errorFor(k))) {
+      focusFirstInvalid(e.currentTarget as HTMLFormElement);
       return;
     }
     setSaving(true);

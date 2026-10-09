@@ -2,8 +2,8 @@ import { createContext, createSignal, onMount, useContext, type JSX } from "soli
 import { isServer } from "solid-js/web";
 import { allProducts, flashSaleRoundEndsAt, getDiscountPercent } from "./products";
 import type { Product, ProductVariant } from "./types";
+import { normalizeMedia, type MediaValue } from "./media";
 import { buildMockCategories } from "./adminCategories";
-import { buildMockBrands } from "./adminBrands";
 import categoryBrow from "~/assets/images/category/category-brow.png";
 import categoryCheek from "~/assets/images/category/category-cheek.png";
 import categoryEye from "~/assets/images/category/category-eye.png";
@@ -48,7 +48,7 @@ export type AdminVariant = {
 /**
  * Admin-only overlay on top of the customer-facing `Product` (lib/types.ts).
  * Defined as an intersection here rather than adding these fields to
- * `Product` itself — nothing about SKU/brand/status/variants-with-stock is
+ * `Product` itself — nothing about SKU/status/variants-with-stock is
  * needed by the storefront, so the shared type stays exactly as the
  * customer side already relies on it (PART 24's own warning: don't risk the
  * Customer Frontend for an Admin-only concern).
@@ -63,31 +63,26 @@ export type AdminProduct = Product & {
    */
   flashSaleDaily?: boolean;
   /**
-   * Admin Master Data Foundation — `categoryId`/`brandId` are the *real*
-   * relationship into `~/lib/adminCategories`/`~/lib/adminBrands` (empty
-   * string = unassigned), the one a Category/Brand's own product count is
-   * derived from (see `~/lib/masterDataRelations`'s `productsInCategory`/
-   * `productsInBrand`, used by the Category/Brand List/Detail/QuickView
-   * pages — Category/Brand carry no product list of their own; Architecture
-   * Cleanup & Source of Truth). `category`/`brand` (below and on `Product`
-   * itself) are kept as plain derived strings — `category` because the
-   * storefront's `/products?category=` facet filter (Global Frontend
-   * Navigation Architecture) matches against that literal 3-value union
-   * directly, not a Category id, and `brand` because it's already displayed
-   * in a dozen places as free text. `ProductForm` keeps both in sync
-   * whenever `categoryId`/`brandId` change — nothing reads `category`/
-   * `brand` as its own independently-edited field anymore.
+   * Admin Master Data Foundation — `categoryId` is the *real* relationship
+   * into `~/lib/adminCategories` (empty string = unassigned), the one a
+   * Category's own product count is derived from (see
+   * `~/lib/masterDataRelations`'s `productsInCategory`, used by the Category
+   * List/Detail/QuickView pages — Category carries no product list of its
+   * own; Architecture Cleanup & Source of Truth). `category` (on `Product`
+   * itself) is kept as a plain derived string because the storefront's
+   * `/products?category=` facet filter (Global Frontend Navigation
+   * Architecture) matches against that literal union directly, not a
+   * Category id. `ProductForm` keeps it in sync whenever `categoryId`
+   * changes. There is no brand field: the store sells only Charmiss.
    */
   categoryId: string;
-  brandId: string;
-  brand: string;
   status: AdminProductStatus;
   lowStockThreshold: number;
   updatedAt: string;
   adminVariants: AdminVariant[];
 };
 
-/** Same "low stock" line the storefront cart draws ("เหลือ X ชิ้นสุดท้าย" at ≤ 5, CartItemRow.tsx) — the default every product starts from. */
+/** Default for `lowStockThreshold`: the storefront cart shows "เหลือ X ชิ้นสุดท้าย" once stock is at or below the product's own threshold (CartItemRow.tsx). */
 export const LOW_STOCK_THRESHOLD = 5;
 
 /** The storefront's own low-stock wording (CartItemRow.tsx), reused wherever Admin shows a low-stock count. */
@@ -95,6 +90,15 @@ export const lowStockLabel = (left: number) => `เหลือ ${left} ชิ�
 
 /** Category slugs the storefront actually reads (`Product["category"]`) — a Category with any other slug saves `categoryId` only. */
 export const STOREFRONT_CATEGORY_SLUGS: NonNullable<Product["category"]>[] = ["cushion", "lip", "cheek", "eye", "skincare", "suncare-bodycare"];
+
+/** The product's own low-stock line, falling back to the default for products saved without one. */
+export function lowStockThresholdOf(product: Partial<Pick<AdminProduct, "lowStockThreshold">>): number {
+  const t = product.lowStockThreshold;
+  return typeof t === "number" && Number.isFinite(t) && t >= 0 ? t : LOW_STOCK_THRESHOLD;
+}
+
+/** Only these reach the storefront: drafts and products switched off stay in Admin. */
+export const isProductOnSale = (product: Pick<AdminProduct, "status">) => product.status === "active";
 
 export function getStockStatus(product: Pick<AdminProduct, "stockLeft" | "lowStockThreshold">): StockStatus {
   const left = product.stockLeft ?? 0;
@@ -116,9 +120,9 @@ export function stockStatusLabel(product: Pick<AdminProduct, "stockLeft" | "lowS
 }
 
 export const ADMIN_PRODUCT_STATUS_META: Record<AdminProductStatus, { label: string; tone: "success" | "info" | "neutral" }> = {
-  active: { label: "Active", tone: "success" },
-  draft: { label: "Draft", tone: "info" },
-  disabled: { label: "Disabled", tone: "neutral" },
+  active: { label: "เปิดขาย", tone: "success" },
+  draft: { label: "แบบร่าง", tone: "info" },
+  disabled: { label: "ปิดการขาย", tone: "neutral" },
 };
 
 const TODAY_LABEL = "17 ก.ย. 2569";
@@ -153,16 +157,6 @@ const FALLBACK_CATEGORIES = ["eye", "cheek", "lip"] as const;
 const CATEGORY_SLUG_TO_ID: Record<string, string> = Object.fromEntries(buildMockCategories().map((c) => [c.slug, c.id]));
 
 /**
- * Same "core line" vs "Sanrio collab line" split `adminBrandStore.tsx`'s own
- * `buildProductSeedsByBrand()` already classifies these same products by —
- * reused here so a product's backfilled `brandId` and the Brand module's own
- * (separately curated) product list agree on which line each SKU belongs to.
- */
-const BRAND_SEEDS = buildMockBrands();
-const CORE_BRAND_ID = BRAND_SEEDS.find((b) => b.slug === "charmiss")?.id ?? "";
-const COLLAB_BRAND_ID = BRAND_SEEDS.find((b) => b.slug === "charmiss-x-sanrio")?.id ?? "";
-
-/**
  * Architecture Cleanup & Source of Truth — exported (was private) so
  * `productCatalog.tsx` (the storefront's read-only mirror, same pattern as
  * `categoryContent.tsx`/`collectionContent.tsx`/etc.) can seed itself from
@@ -170,8 +164,17 @@ const COLLAB_BRAND_ID = BRAND_SEEDS.find((b) => b.slug === "charmiss-x-sanrio")?
  * independent product dataset. Pure and deterministic — safe to call from
  * both provider trees.
  */
+/**
+ * Seed stock for catalog products that never set `stockLeft`: the storefront
+ * reads a missing value as "in stock with no limit" while Admin would count it
+ * as 0, so every seed product gets a real number (v12).
+ */
+const SEED_STOCK_ROTATION = [40, 25, 60, 15, 32, 50, 18, 22, 45, 30];
+const seedStockOf = (product: Product, i: number) => product.stockLeft ?? SEED_STOCK_ROTATION[i % SEED_STOCK_ROTATION.length];
+
 export function buildAdminProductBaseline(): AdminProduct[] {
-  return allProducts.map((product, i) => {
+  return allProducts.map((catalogProduct, i) => {
+    const product: Product = { ...catalogProduct, stockLeft: seedStockOf(catalogProduct, i) };
     const sku = `CHM${String(i + 1).padStart(3, "0")}`;
     // Most of this catalog never sets `category` (only bestSellerProducts
     // does) — fine for the storefront, which never filters by it for those
@@ -186,8 +189,6 @@ export function buildAdminProductBaseline(): AdminProduct[] {
       category,
       categoryId: CATEGORY_SLUG_TO_ID[category] ?? "",
       sku,
-      brand: "Charmiss",
-      brandId: (product.name.includes("Sanrio") ? COLLAB_BRAND_ID : CORE_BRAND_ID) || "",
       status: "active",
       lowStockThreshold: LOW_STOCK_THRESHOLD,
       updatedAt: TODAY_LABEL,
@@ -271,22 +272,25 @@ function flashSaleFields(input: Pick<ProductFormValues, "flashSaleEndsAt" | "fla
     : { flashSaleEndsAt: input.flashSaleEndsAt, flashSaleDaily: undefined };
 }
 
-export function normalizeAdminProduct(p: AdminProduct): AdminProduct {
+export function normalizeAdminProduct(stored: AdminProduct): AdminProduct {
+  // Products saved while the (now removed) Brand module existed still carry `brand`/`brandId` — dropped on read so they're never written back.
+  const { brand: _brand, brandId: _brandId, ...p } = stored as AdminProduct & { brand?: unknown; brandId?: unknown };
   return {
     ...p,
     // Same root-cause guard as `adminVariants` below — a product persisted
-    // before `categoryId`/`brandId` existed loads back with them `undefined`.
+    // before `categoryId` existed loads back with it `undefined`.
     categoryId: p.categoryId ?? "",
-    brandId: p.brandId ?? "",
+    status: p.status === "draft" || p.status === "disabled" ? p.status : "active",
+    lowStockThreshold: lowStockThresholdOf(p),
     adminVariants: Array.isArray(p.adminVariants) ? p.adminVariants.map(normalizeVariant) : [],
+    // Gallery items that may be videos (`~/lib/media`); absent on every product saved before video existed.
+    media: Array.isArray(p.media) ? p.media.map(normalizeMedia) : undefined,
   };
 }
 
 export type ProductFormValues = {
   name: string;
   sku: string;
-  brand: string;
-  brandId: string;
   category?: Product["category"];
   categoryId: string;
   description?: string;
@@ -298,6 +302,8 @@ export type ProductFormValues = {
   images: string[];
   /** CMS + Frontend Final Refinement §8 — explicit "รูปหลัก" pin; falls back to `images[0]` when unset. */
   mainImage?: string;
+  /** Gallery in order, images and videos (`~/lib/media`). `images` is always its still-image twin (video = poster). */
+  media?: MediaValue[];
   adminVariants: AdminVariant[];
   /** REAL-TIME LIVE PREVIEW SYSTEM §4/§8 — epoch ms; unset/undefined = no Flash Sale. */
   flashSaleEndsAt?: number;
@@ -319,10 +325,17 @@ type AdminProductContextValue = {
   deleteProduct: (id: string) => Promise<void>;
   duplicateProduct: (id: string) => Promise<AdminProduct>;
   setStatus: (id: string, status: AdminProductStatus) => Promise<void>;
+  /** Stock edit from the Inventory page: product stock plus, optionally, each option's stock (by variant id). Keeps `variants[].soldOut` in step. */
+  updateStock: (id: string, stockLeft: number, variantStock?: Record<string, number>) => Promise<AdminProduct>;
+  /** Partial write for pages that own one slice of a product (e.g. the Flash Sale page: `flashSaleEndsAt`/`flashSaleDaily`/`stockTotal`). */
+  patchProduct: (id: string, patch: Partial<Omit<AdminProduct, "id">>) => Promise<AdminProduct>;
 };
 
 const AdminProductContext = createContext<AdminProductContextValue>();
-const STORAGE_KEY = "charmiss:admin:products";
+export const PRODUCTS_STORAGE_KEY = "charmiss:admin:products";
+const STORAGE_KEY = PRODUCTS_STORAGE_KEY;
+/** Fired after every save so storefront readers in the same tab (`productCatalog.tsx`) refresh; other tabs get the `storage` event. */
+export const PRODUCTS_CHANGED_EVENT = "charmiss:products-changed";
 /**
  * Seed-data version of what's persisted under `STORAGE_KEY`. Bumped when the
  * seed catalog gains values a returning browser's stored copy can't have —
@@ -341,7 +354,7 @@ const STORAGE_KEY = "charmiss:admin:products";
  * purpose stays as Admin left it.
  */
 const SEED_VERSION_KEY = "charmiss:admin:products:seed-version";
-const SEED_VERSION = 11;
+const SEED_VERSION = 12;
 let nextId = 1000;
 
 function persist(products: AdminProduct[]) {
@@ -352,6 +365,7 @@ function persist(products: AdminProduct[]) {
   } catch {
     // storage can be unavailable (private mode / quota) — state just stays in-memory for this tab.
   }
+  window.dispatchEvent(new Event(PRODUCTS_CHANGED_EVENT));
 }
 
 const SEED_BACKFILL_FIELDS = ["compareAtPrice", "rating", "soldCount"] as const;
@@ -368,10 +382,13 @@ const SEED_REMOVED_FIELDS: Record<string, readonly (keyof AdminProduct)[]> = { "
  */
 function migrateSeedFields(list: AdminProduct[], fromVersion: number): AdminProduct[] {
   const seedById = new Map(allProducts.map((p) => [p.id, p]));
+  const seedIndex = new Map(allProducts.map((p, i) => [p.id, i]));
   return list.map((p) => {
     const seed = seedById.get(p.id);
     if (!seed) return p;
     const next = { ...p };
+    // v12 — seed products saved without a stock number get the seed's (see `SEED_STOCK_ROTATION`).
+    if (fromVersion < 12 && next.stockLeft === undefined) next.stockLeft = seedStockOf(seed, seedIndex.get(p.id) ?? 0);
     if (fromVersion < 2) {
       for (const key of SEED_BACKFILL_FIELDS) {
         if (next[key] === undefined && seed[key] !== undefined) next[key] = seed[key];
@@ -513,6 +530,7 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
       image: input.images[0] ?? "",
       images: input.images,
       mainImage: input.mainImage,
+      media: input.media,
       price: input.price,
       compareAtPrice: input.compareAtPrice,
       discountPercent: getDiscountPercent(input),
@@ -522,8 +540,6 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
       categoryId: input.categoryId,
       description: input.description,
       sku: input.sku,
-      brand: input.brand,
-      brandId: input.brandId,
       status: input.status,
       lowStockThreshold: input.lowStockThreshold,
       updatedAt: TODAY_LABEL,
@@ -549,8 +565,6 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
           ...p,
           name: input.name,
           sku: input.sku,
-          brand: input.brand,
-          brandId: input.brandId,
           category: input.category ?? storefrontCategoryOf(input.categoryId),
           categoryId: input.categoryId,
           description: input.description,
@@ -565,6 +579,7 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
           images: input.images,
           image: input.images[0] ?? p.image,
           mainImage: input.mainImage,
+          media: input.media,
           adminVariants: input.adminVariants,
           variants: deriveStorefrontVariants(input.adminVariants, p.variants),
           ...flashSaleFields(input),
@@ -607,9 +622,47 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
     mutate((list) => list.map((p) => (p.id === id ? { ...p, status, updatedAt: TODAY_LABEL } : p)));
   };
 
+  const updateStock: AdminProductContextValue["updateStock"] = async (id, stockLeft, variantStock) => {
+    await simulateDelay();
+    let updated: AdminProduct | undefined;
+    mutate((list) =>
+      list.map((p) => {
+        if (p.id !== id) return p;
+        const adminVariants = variantStock
+          ? p.adminVariants.map((v) => (variantStock[v.id] === undefined ? v : { ...v, stock: variantStock[v.id] }))
+          : p.adminVariants;
+        updated = {
+          ...p,
+          stockLeft,
+          stockTotal: Math.max(p.stockTotal ?? 0, stockLeft),
+          adminVariants,
+          variants: adminVariants.length > 0 ? deriveStorefrontVariants(adminVariants, p.variants) : p.variants,
+          updatedAt: TODAY_LABEL,
+        };
+        return updated;
+      }),
+    );
+    if (!updated) throw new Error("NOT_FOUND");
+    return updated;
+  };
+
+  const patchProduct: AdminProductContextValue["patchProduct"] = async (id, patch) => {
+    await simulateDelay();
+    let updated: AdminProduct | undefined;
+    mutate((list) =>
+      list.map((p) => {
+        if (p.id !== id) return p;
+        updated = { ...p, ...patch, id: p.id, updatedAt: TODAY_LABEL };
+        return updated;
+      }),
+    );
+    if (!updated) throw new Error("NOT_FOUND");
+    return updated;
+  };
+
   return (
     <AdminProductContext.Provider
-      value={{ products, getById, addProduct, updateProduct, deleteProduct, duplicateProduct, setStatus }}
+      value={{ products, getById, addProduct, updateProduct, deleteProduct, duplicateProduct, setStatus, updateStock, patchProduct }}
     >
       {props.children}
     </AdminProductContext.Provider>

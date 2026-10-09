@@ -9,15 +9,15 @@ import { useAdminCustomers } from "~/lib/adminCustomerStore";
  * same rows as the shopper's own order detail (ส่วนลดคูปอง / ส่วนลด
  * Charmiss Coin as separate lines, DHL ฿60 below ฿990 of products), so the
  * three Admin screens can't drift from each other or from the storefront.
- * Coins earned is display-only (no loyalty backend), computed with the
+ * Coins earned is display-only, computed with the
  * shared `computeCoinsEarned` on the amount paid for merchandise × the
  * customer's tier multiplier (their current Customer record).
  */
-export function OrderTotalsBreakdown(props: { order: Pick<AdminOrder, "totals" | "orderStatus" | "paymentStatus" | "customerId">; showCoinsEarned?: boolean }) {
+export function OrderTotalsBreakdown(props: { order: Pick<AdminOrder, "totals" | "orderStatus" | "customerId">; showCoinsEarned?: boolean }) {
   const customers = useAdminCustomers();
   const t = () => props.order.totals;
   const coinsEarned = () => computeCoinsEarned(t().grandTotal - t().shippingFee, customers.getById(props.order.customerId)?.tier ?? "glow");
-  const showCoins = () => props.showCoinsEarned !== false && props.order.orderStatus !== "cancelled" && props.order.paymentStatus !== "refunded" && coinsEarned() > 0;
+  const showCoins = () => props.showCoinsEarned !== false && props.order.orderStatus !== "cancelled" && props.order.orderStatus !== "pending_payment" && coinsEarned() > 0;
 
   return (
     <div class="flex flex-col gap-1.5 text-sm">

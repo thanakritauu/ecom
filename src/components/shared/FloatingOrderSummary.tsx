@@ -51,16 +51,16 @@ export function FloatingOrderSummary(props: {
       </Show>
 
       <div class="mx-auto flex max-w-container-wide flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between md:gap-4 lg:px-[150px]">
-        {/* LEFT — condensed summary, always inline on one line via "·" separators; segments only appear when the caller actually has that data */}
-        <p class="min-w-0 flex-1 text-left text-sm text-ink-gray">
-          {props.itemCount} รายการ
+        {/* LEFT — condensed summary, one wrapping row, segments spaced by gap-x; segments only appear when the caller actually has that data */}
+        <p class="flex min-w-0 flex-1 flex-wrap gap-x-3 text-left text-sm text-ink-gray">
+          <span>{props.itemCount} รายการ</span>
           <Show when={props.discount !== undefined && props.discount > 0}>
-            {" "}
-            · <span class="text-success">ส่วนลด -{formatTHB(props.discount ?? 0)}</span>
+            <span class="text-success">ส่วนลด -{formatTHB(props.discount ?? 0)}</span>
           </Show>
           <Show when={props.shippingFee !== undefined}>
-            {" "}
-            · ค่าจัดส่ง <span classList={{ "text-success": props.shippingFee === 0 }}>{shippingLabel()}</span>
+            <span>
+              ค่าจัดส่ง <span classList={{ "text-success": props.shippingFee === 0 }}>{shippingLabel()}</span>
+            </span>
           </Show>
         </p>
 

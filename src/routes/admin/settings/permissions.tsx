@@ -8,7 +8,7 @@ import { pushToast } from "~/lib/toast";
 
 const PERMISSIONS = [
   "ดูแดชบอร์ด",
-  "จัดการสินค้า / หมวดหมู่ / แบรนด์",
+  "จัดการสินค้า / หมวดหมู่",
   "จัดการคำสั่งซื้อ",
   "จัดการลูกค้า",
   "จัดการการตลาด / โปรโมชั่น",
@@ -23,7 +23,7 @@ let nextId = 100;
 
 const INITIAL_ROLES: RoleColumn[] = [
   { id: "1", name: "Super Admin", granted: new Set(PERMISSIONS) },
-  { id: "2", name: "ผู้จัดการสินค้า", granted: new Set(["ดูแดชบอร์ด", "จัดการสินค้า / หมวดหมู่ / แบรนด์", "จัดการคลังสินค้า"]) },
+  { id: "2", name: "ผู้จัดการสินค้า", granted: new Set(["ดูแดชบอร์ด", "จัดการสินค้า / หมวดหมู่", "จัดการคลังสินค้า"]) },
   { id: "3", name: "การตลาด", granted: new Set(["ดูแดชบอร์ด", "จัดการการตลาด / โปรโมชั่น", "จัดการเนื้อหาหน้าเว็บ"]) },
   { id: "4", name: "ดูอย่างเดียว", granted: new Set(["ดูแดชบอร์ด"]) },
 ];
@@ -42,6 +42,7 @@ export default function AdminSettingsPermissionsPage() {
   const addRole = () => {
     const name = `บทบาทใหม่ ${nextId}`;
     setRoles((list) => [...list, { id: String(nextId++), name, granted: new Set() }]);
+    pushToast(`เพิ่ม "${name}" แล้ว ตั้งชื่อและเลือกสิทธิ์ในตารางได้เลย`, "success");
   };
 
   const renameRole = (id: string, name: string) => {
@@ -64,7 +65,7 @@ export default function AdminSettingsPermissionsPage() {
     if (!target) return;
     setRoles((list) => list.filter((r) => r.id !== target.id));
     setConfirmDeleteRole(null);
-    pushToast(`ลบบทบาท "${target.name}" แล้ว`, "error");
+    pushToast(`ลบ "${target.name}" เรียบร้อยแล้ว`, "error");
   };
 
   return (
@@ -72,11 +73,13 @@ export default function AdminSettingsPermissionsPage() {
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "ตั้งค่า", href: "/admin/settings" }, { label: "สิทธิ์การใช้งาน" }]} />
       <PageHeader
         title="สิทธิ์การใช้งาน"
-        description="กำหนดว่าแต่ละบทบาทเข้าถึงส่วนใดของ Charmiss CMS ได้บ้าง"
+        description="กำหนดว่าแต่ละบทบาทเข้าถึงส่วนใดของหลังบ้านได้บ้าง"
         actions={
-          <Button variant="primary" onClick={addRole}>
-            <PlusIcon class="size-4" /> เพิ่มบทบาท
-          </Button>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button variant="primary" onClick={addRole}>
+              <PlusIcon class="size-4" /> เพิ่มบทบาท
+            </Button>
+          </div>
         }
       />
 
@@ -84,7 +87,7 @@ export default function AdminSettingsPermissionsPage() {
         <table class="w-full min-w-[640px] border-collapse text-sm">
           <thead>
             <tr class="border-b border-border">
-              <th class="sticky left-0 bg-surface-card px-4 py-3 text-left font-semibold text-ink">สิทธิ์การใช้งาน</th>
+              <th class="sticky left-0 bg-surface-card px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-placeholder">สิทธิ์การใช้งาน</th>
               <For each={roles()}>
                 {(role) => (
                   <th class="px-4 py-3 text-center font-semibold text-ink">
@@ -92,15 +95,16 @@ export default function AdminSettingsPermissionsPage() {
                       <input
                         value={role.name}
                         onInput={(e) => renameRole(role.id, e.currentTarget.value)}
-                        class="w-32 rounded-card border border-border bg-surface-card px-2 py-1 text-center text-sm font-semibold text-ink outline-none focus:border-brand-pink"
+                        aria-label="ชื่อบทบาท"
+                        class="h-11 w-36 rounded-card border border-border bg-surface-card px-3 text-center text-sm font-semibold text-ink outline-none focus:border-brand-pink"
                       />
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteRole(role)}
                         aria-label={`ลบบทบาท ${role.name}`}
-                        class="flex size-6 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-danger-soft hover:text-danger-strong"
+                        class="flex size-9 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-danger-soft hover:text-danger-strong"
                       >
-                        <CloseXIcon class="size-3" />
+                        <CloseXIcon class="size-4" />
                       </button>
                     </div>
                   </th>
@@ -136,9 +140,9 @@ export default function AdminSettingsPermissionsPage() {
       <ConfirmDialog
         open={confirmDeleteRole() !== null}
         onOpenChange={(open) => !open && setConfirmDeleteRole(null)}
-        title="ลบบทบาทนี้?"
-        description={`คุณต้องการลบบทบาท "${confirmDeleteRole()?.name ?? ""}" หรือไม่?`}
-        confirmLabel="ลบ"
+        title="ลบบทบาท?"
+        description={`คุณต้องการลบ "${confirmDeleteRole()?.name ?? ""}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
+        confirmLabel="ลบบทบาท"
         tone="danger"
         onConfirm={handleDeleteRole}
       />

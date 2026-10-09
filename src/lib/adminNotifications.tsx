@@ -8,9 +8,12 @@ export type AdminNotification = {
   /** epoch ms — frozen at first generation (see `buildMockNotifications`), not recomputed on every load. */
   createdAt: number;
   read: boolean;
+  /** Admin page the item opens when clicked. */
+  href?: string;
 };
 
-const STORAGE_KEY = "charmiss:admin:notifications";
+/** v2: seeds point at real orders/pages and no longer mention cut features (review moderation). v3: the Campaigns module is gone, so the "campaign ending" seed points at a หน้าแคมเปญ instead. */
+const STORAGE_KEY = "charmiss:admin:notifications:v3";
 
 /**
  * Fixed string-literal ids and offsets from a single `Date.now()` capture —
@@ -24,9 +27,18 @@ function buildMockNotifications(): AdminNotification[] {
     {
       id: "notif-001",
       title: "มีคำสั่งซื้อใหม่",
-      description: "คำสั่งซื้อ ORD-2026-1035 รอชำระเงิน",
+      description: "คำสั่งซื้อ ORD-2026-1035 รอลูกค้าชำระเงิน",
       createdAt: now - 12 * 60 * 1000,
       read: false,
+      href: "/admin/orders/ORD-2026-1035",
+    },
+    {
+      id: "notif-005",
+      title: "ชำระเงินไม่สำเร็จ",
+      description: "บัตรของคำสั่งซื้อ ORD-2026-1034 ถูกปฏิเสธ ลูกค้ายังชำระใหม่ได้ภายใน 24 ชั่วโมง",
+      createdAt: now - 45 * 60 * 1000,
+      read: false,
+      href: "/admin/orders/ORD-2026-1034",
     },
     {
       id: "notif-002",
@@ -34,20 +46,15 @@ function buildMockNotifications(): AdminNotification[] {
       description: "Charmiss x Sanrio Blooming Heart Lip Gloss เหลือน้อยกว่า 10 ชิ้น",
       createdAt: now - 3 * 60 * 60 * 1000,
       read: false,
+      href: "/admin/inventory",
     },
     {
       id: "notif-003",
-      title: "แคมเปญกำลังจะสิ้นสุด",
-      description: "แคมเปญ Charmiss Glow Week จะสิ้นสุดในอีก 2 วัน",
+      title: "หน้าแคมเปญกำลังจะสิ้นสุด",
+      description: "หน้าแคมเปญ Charmiss x Sanrio Collection จะสิ้นสุดวันที่ 31 ต.ค. 2569",
       createdAt: now - 26 * 60 * 60 * 1000,
       read: true,
-    },
-    {
-      id: "notif-004",
-      title: "มีรีวิวใหม่รอตรวจสอบ",
-      description: "ลูกค้าให้รีวิว 5 ดาวกับ Charmiss Charming Iconic Glow Cushion",
-      createdAt: now - 3 * 24 * 60 * 60 * 1000,
-      read: true,
+      href: "/admin/promotion-pages/promo-page-003",
     },
   ];
 }
@@ -59,6 +66,7 @@ function normalizeNotification(n: Partial<AdminNotification>): AdminNotification
     description: n.description ?? "",
     createdAt: typeof n.createdAt === "number" ? n.createdAt : Date.now(),
     read: n.read ?? false,
+    href: typeof n.href === "string" ? n.href : undefined,
   };
 }
 
@@ -93,8 +101,8 @@ type AdminNotificationContextValue = {
 const AdminNotificationContext = createContext<AdminNotificationContextValue>();
 
 /**
- * Mock-only notification state (spec PART 12/13) — no real backend, just a
- * frontend signal persisted to localStorage so read/unread survives refresh.
+ * Notification state with no backend: a signal persisted to localStorage so
+ * read/unread survives refresh.
  * Same SSR-safe pattern as every other admin store: deterministic baseline on
  * server + first client render, real localStorage read deferred to onMount.
  */

@@ -3,6 +3,8 @@ import type { Product } from "~/lib/types";
 import { ProductCard } from "../shared/ProductCard";
 import { ProductCardSkeleton } from "./ProductCardSkeleton";
 import { Button } from "../shared/Button";
+import { EmptyState } from "../shared/EmptyState";
+import { SearchIcon, CartIcon } from "../shared/icons";
 import type { ListingView } from "./ProductListingToolbar";
 
 export function ProductListingGrid(props: {
@@ -26,6 +28,10 @@ export function ProductListingGrid(props: {
   fullWidth?: boolean;
   /** Flash Sale cards (countdown + stock bar) — the Flash Sale menu page only. */
   flashSale?: boolean;
+  /** The typed search, when the listing is search results — the empty state then talks about the search, not filters. */
+  searchQuery?: string;
+  /** Empty state title for a fixed product set (a category, a Promotion page) — defaults to a generic one. */
+  emptyTitle?: string;
 }) {
   /**
    * User-test feedback (Global Responsive pass) — Tablet must stay at 2
@@ -61,14 +67,38 @@ export function ProductListingGrid(props: {
             <Show
               when={props.products.length > 0}
               fallback={
-                <div class="flex w-full flex-col items-center gap-4 py-20 text-center">
-                  <p class="text-ink-gray">ไม่พบสินค้าที่ตรงกับตัวกรอง</p>
-                  <Show when={props.hasActiveFilters}>
-                    <Button type="button" variant="outline" onClick={props.onClearFilters}>
-                      ล้างตัวกรอง
-                    </Button>
-                  </Show>
-                </div>
+                <Show
+                  when={props.searchQuery?.trim()}
+                  fallback={
+                    <Show
+                      when={props.hasActiveFilters}
+                      fallback={
+                        <EmptyState
+                          icon={CartIcon}
+                          title={props.emptyTitle ?? "ยังไม่มีสินค้าในหน้านี้"}
+                          description="ระหว่างนี้เลือกดูสินค้าอื่นของ Charmiss ได้เลย"
+                          action={{ label: "ดูสินค้าทั้งหมด", href: "/products" }}
+                        />
+                      }
+                    >
+                      <EmptyState
+                        icon={SearchIcon}
+                        title="ไม่พบสินค้าที่ตรงกับตัวกรอง"
+                        description="ลองเลือกตัวกรองอื่น หรือล้างตัวกรองเพื่อดูสินค้าทั้งหมด"
+                        action={{ label: "ล้างตัวกรอง", onClick: props.onClearFilters, variant: "outline" }}
+                      />
+                    </Show>
+                  }
+                >
+                  {(q) => (
+                    <EmptyState
+                      icon={SearchIcon}
+                      title={`ไม่พบสินค้าที่ตรงกับ "${q()}"`}
+                      description="ลองค้นหาด้วยชื่อสินค้าหรือคำอื่น"
+                      action={{ label: "ดูสินค้าทั้งหมด", onClick: props.onClearFilters, variant: "outline" }}
+                    />
+                  )}
+                </Show>
               }
             >
               <div class={`w-full ${gridClass()}`}>

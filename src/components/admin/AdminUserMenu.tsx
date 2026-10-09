@@ -38,22 +38,15 @@ export function AdminUserMenu() {
         <span class="flex size-8 shrink-0 items-center justify-center rounded-pill bg-brand-pink text-sm font-semibold text-white">
           {initialOf(admin.admin()?.name)}
         </span>
-        <span class="hidden lg:inline">{admin.admin()?.name ?? "Admin"}</span>
+        <span class="hidden lg:inline">{admin.admin()?.name ?? "ผู้ดูแลระบบ"}</span>
         <ChevronDownIcon class="hidden size-3.5 shrink-0 text-ink-gray lg:block" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content class="z-50 w-60 rounded-card border border-border bg-surface-card p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
           <div class="flex flex-col gap-0.5 border-b border-border px-3 pb-3 pt-1">
-            <p class="text-sm font-semibold text-ink">{admin.admin()?.name ?? "Admin"}</p>
+            <p class="text-sm font-semibold text-ink">{admin.admin()?.name ?? "ผู้ดูแลระบบ"}</p>
             <p class="truncate text-xs text-ink-gray">{admin.admin()?.email}</p>
           </div>
-          <DropdownMenu.Item
-            as="a"
-            href="/admin/settings"
-            class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
-          >
-            โปรไฟล์
-          </DropdownMenu.Item>
           <DropdownMenu.Item
             as="a"
             href="/admin/settings"

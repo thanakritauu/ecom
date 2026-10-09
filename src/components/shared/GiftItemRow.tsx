@@ -1,15 +1,16 @@
-import type { GiftPromotionState } from "~/lib/cartSelectors";
+import type { GiftLine } from "~/lib/promotionEngine";
 import { formatTHB } from "./PriceDisplay";
 import { GiftIcon } from "./icons";
 
 /**
- * The unlocked free gift as a cart line — same image/text sizing as
- * `CartItemRow` (drawer vs. page), but read-only: no stepper, no remove,
- * since the gift follows the subtotal rather than being a `CartLine`.
+ * An unlocked free gift as a cart line, one per unlocked tier of every
+ * active gift promo. Same image/text sizing as `CartItemRow` (drawer vs.
+ * page), but read-only: no stepper, no remove, since gifts follow the cart
+ * rather than being `CartLine`s.
  */
-export function GiftItemRow(props: { gift: GiftPromotionState; variant?: "drawer" | "page" }) {
+export function GiftItemRow(props: { gift: GiftLine; variant?: "drawer" | "page" }) {
   const layout = () => props.variant ?? "drawer";
-  const { product } = props.gift;
+  const product = () => props.gift.product;
 
   return (
     <li
@@ -20,7 +21,7 @@ export function GiftItemRow(props: { gift: GiftPromotionState; variant?: "drawer
         class="shrink-0 overflow-hidden rounded-media border border-surface-gray"
         classList={{ "size-20": layout() === "drawer", "size-24": layout() === "page" }}
       >
-        <img src={product.image} alt={product.name} class="size-full object-cover" />
+        <img src={product().image} alt={product().name} class="size-full object-cover" />
       </div>
 
       <div class="flex min-w-0 flex-1 flex-col justify-between gap-1">
@@ -28,12 +29,12 @@ export function GiftItemRow(props: { gift: GiftPromotionState; variant?: "drawer
           <GiftIcon class="size-3.5" /> ของแถมฟรี
         </span>
         <p class="line-clamp-2 font-medium leading-[1.75] text-ink" classList={{ "text-sm": layout() === "drawer", "text-base": layout() === "page" }}>
-          {product.name}
+          {product().name}
         </p>
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <div class="flex items-baseline gap-3">
             <span class="text-base font-bold text-system-red">ฟรี</span>
-            <span class="text-ink-gray line-through">{formatTHB(product.compareAtPrice ?? product.price)}</span>
+            <span class="text-ink-gray line-through">{formatTHB(product().compareAtPrice ?? product().price)}</span>
           </div>
           <span class="text-sm text-ink-gray">x{props.gift.qty}</span>
         </div>

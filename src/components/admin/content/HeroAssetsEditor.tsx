@@ -1,39 +1,33 @@
 import { createSignal, For, Show } from "solid-js";
 import { ChevronIcon } from "~/components/shared/ChevronIcon";
-import { CloseXIcon, ImageIcon } from "~/components/admin/icons";
+import { CloseXIcon } from "~/components/admin/icons";
 import { TextField } from "~/components/shared/TextField";
+import { MediaUploader, VideoOptionsFields } from "~/components/admin/MediaUploader";
 import {
   HERO_ASSET_TYPE_META,
   MAX_HERO_ASSETS,
   emptyHeroAsset,
+  heroAssetDesktopMedia,
   isValidYoutubeUrl,
   extractYoutubeVideoId,
+  withHeroAssetDesktopMedia,
   type HeroAsset,
-  type HeroAssetType,
 } from "~/lib/pageSections";
 import { BANNER_DEVICE_SPECS } from "~/lib/adminBanners";
-
-/** Which field of an image asset a file pick writes to — Desktop is `source`; Tablet/Mobile are the optional storefront crops (`HeroBanner.tsx` falls back to `source` when empty). */
-type ImageSlot = "source" | "tabletSource" | "mobileSource";
+import { asVideo, mediaAccept, prepareMediaFile, revokeMedia, VIDEO_RULE_HINT } from "~/lib/media";
 
 /**
- * Hero Banner — Multi-Asset Support. Same native-file-browser + Object URL
- * convention as `ProductImageUploader.tsx`/`BannerUploader.tsx` (no mock
- * upload backend), generalized to a mixed list of up to `MAX_HERO_ASSETS`
- * image/video/YouTube items with add/remove/reorder — the multi-item pattern
- * `ProductImageUploader` already established, extended with a per-item type
- * instead of a flat `string[]`.
- *
- * Storefront sync — an image asset now also takes its own Tablet (1024×768,
- * 4:3) and Mobile (750×1000, 3:4) crops, the same three sizes the live hero
- * slides ship with; the thumbnail itself is the Desktop 3:1 crop.
+ * Hero Banner — Multi-Asset Support. A mixed list of up to `MAX_HERO_ASSETS`
+ * slides with add/remove/reorder. An image/video slide has three crops
+ * (Desktop 3:1, Tablet 4:3, Mobile 3:4), each its own `MediaUploader` that
+ * takes an image or an MP4 video; Tablet/Mobile are optional and fall back
+ * to Desktop on the storefront (`HeroBanner.tsx`). The slide's `type`
+ * follows its Desktop file. YouTube slides keep their URL field.
  */
 export function HeroAssetsEditor(props: { assets: HeroAsset[]; onChange: (assets: HeroAsset[]) => void }) {
-  const [pendingUrls, setPendingUrls] = createSignal<Set<string>>(new Set());
-  const [replaceIndex, setReplaceIndex] = createSignal<number | null>(null);
-  const [replaceSlot, setReplaceSlot] = createSignal<ImageSlot>("source");
-  let imageInputRef: HTMLInputElement | undefined;
-  let videoInputRef: HTMLInputElement | undefined;
+  const [addError, setAddError] = createSignal<string>();
+  const [cropErrors, setCropErrors] = createSignal<Record<string, string | undefined>>({});
+  let addInputRef: HTMLInputElement | undefined;
 
   const atLimit = () => props.assets.length >= MAX_HERO_ASSETS;
 
@@ -46,9 +40,17 @@ export function HeroAssetsEditor(props: { assets: HeroAsset[]; onChange: (assets
     props.onChange(props.assets.map((a, i) => (i === index ? { ...a, ...next } : a)));
   };
 
+  const replaceAt = (index: number, asset: HeroAsset) => {
+    props.onChange(props.assets.map((a, i) => (i === index ? asset : a)));
+  };
+
   const removeAt = (index: number) => {
     const asset = props.assets[index];
-    if (asset?.source?.startsWith("blob:")) URL.revokeObjectURL(asset.source);
+    if (asset && asset.type !== "youtube") {
+      revokeMedia(heroAssetDesktopMedia(asset));
+      revokeMedia(asset.tabletSource);
+      revokeMedia(asset.mobileSource);
+    }
     props.onChange(props.assets.filter((_, i) => i !== index));
   };
 
@@ -60,188 +62,192 @@ export function HeroAssetsEditor(props: { assets: HeroAsset[]; onChange: (assets
     props.onChange(next);
   };
 
-  const settle = (url: string) => {
-    setTimeout(() => {
-      setPendingUrls((set) => {
-        const next = new Set(set);
-        next.delete(url);
-        return next;
-      });
-    }, 600);
+  const openAddPicker = () => {
+    if (atLimit()) return;
+    addInputRef!.value = "";
+    addInputRef!.click();
   };
 
-  const openFilePicker = (type: "image" | "video", index: number | null, slot: ImageSlot = "source") => {
-    if (index === null && atLimit()) return;
-    setReplaceIndex(index);
-    setReplaceSlot(type === "image" ? slot : "source");
-    const ref = type === "image" ? imageInputRef : videoInputRef;
-    ref!.value = "";
-    ref!.click();
-  };
-
-  const handleFileSelected = (type: "image" | "video") => (e: Event) => {
+  const onAddPicked = async (e: Event) => {
     const file = (e.currentTarget as HTMLInputElement).files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    const index = replaceIndex();
-    if (index !== null) {
-      const slot = replaceSlot();
-      const oldUrl = props.assets[index]?.[slot];
-      patchAt(index, slot === "source" ? { type, source: url } : { [slot]: url });
-      if (oldUrl?.startsWith("blob:")) URL.revokeObjectURL(oldUrl);
-    } else {
-      addAsset({ ...emptyHeroAsset(type), source: url });
+    setAddError(undefined);
+    const result = await prepareMediaFile(file, { allowVideo: true });
+    if (!result.ok) {
+      setAddError(result.error);
+      return;
     }
-    setPendingUrls((set) => new Set([...set, url]));
-    settle(url);
+    addAsset(withHeroAssetDesktopMedia(emptyHeroAsset("image"), result.value));
   };
 
   const addYoutube = () => addAsset(emptyHeroAsset("youtube"));
 
-  const thumbClass =
-    "group relative aspect-[3/1] w-60 shrink-0 overflow-hidden rounded-media border border-border bg-surface-gray/40 sm:w-72";
+  const setCropError = (key: string, message: string | undefined) => setCropErrors((prev) => ({ ...prev, [key]: message }));
+
+  const addButtonClass =
+    "rounded-card border border-dashed border-border px-3 py-2 text-sm font-medium text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:text-ink-gray";
+  const overlayButtonClass = "flex size-6 items-center justify-center rounded-pill bg-ink/70 text-xs text-white";
 
   return (
     <div class="flex flex-col gap-3">
-      <input ref={imageInputRef} type="file" accept="image/*" class="hidden" onChange={handleFileSelected("image")} />
-      <input ref={videoInputRef} type="file" accept="video/*" class="hidden" onChange={handleFileSelected("video")} />
+      <input ref={addInputRef} type="file" accept={mediaAccept(true)} class="hidden" onChange={onAddPicked} />
 
-      <div class="flex flex-wrap gap-3">
+      <div class="flex flex-wrap gap-4">
         <For each={props.assets}>
           {(asset, i) => {
             const youtubeId = () => (asset.type === "youtube" ? extractYoutubeVideoId(asset.source) : null);
             const youtubeError = () => asset.type === "youtube" && asset.source.trim() !== "" && !youtubeId();
+            const desktopMedia = () => heroAssetDesktopMedia(asset);
+            const tabletKey = () => `${asset.id}-tablet`;
+            const mobileKey = () => `${asset.id}-mobile`;
+
+            /** Badge, remove-slide ×, and reorder arrows drawn over the Desktop tile. */
+            const overlay = () => (
+              <>
+                <span class="pointer-events-none absolute left-1.5 top-1.5 z-10 rounded-pill bg-ink/70 px-2 py-0.5 text-[10px] font-medium text-white">
+                  {i() + 1}/{MAX_HERO_ASSETS} {HERO_ASSET_TYPE_META[asset.type].label}
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeAt(i());
+                  }}
+                  aria-label="ลบรายการนี้"
+                  class="absolute right-1.5 top-1.5 z-10 flex size-6 items-center justify-center rounded-pill bg-ink/70 text-white"
+                >
+                  <CloseXIcon class="size-2.5" />
+                </button>
+                <div class="absolute bottom-1 left-1 z-10 flex gap-1">
+                  <Show when={i() > 0}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        move(i(), -1);
+                      }}
+                      aria-label="ย้ายไปทางซ้าย"
+                      class={overlayButtonClass}
+                    >
+                      <ChevronIcon direction="left" class="size-4" />
+                    </button>
+                  </Show>
+                  <Show when={i() < props.assets.length - 1}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        move(i(), 1);
+                      }}
+                      aria-label="ย้ายไปทางขวา"
+                      class={overlayButtonClass}
+                    >
+                      <ChevronIcon direction="right" class="size-4" />
+                    </button>
+                  </Show>
+                </div>
+              </>
+            );
+
             return (
-              <div class="flex flex-col gap-1.5">
-                <div class={thumbClass}>
-                  <span class="absolute left-1.5 top-1.5 z-10 rounded-pill bg-ink/70 px-2 py-0.5 text-[10px] font-medium text-white">
-                    {i() + 1}/{MAX_HERO_ASSETS} · {HERO_ASSET_TYPE_META[asset.type].label}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeAt(i());
-                    }}
-                    aria-label="ลบ Asset"
-                    class="absolute right-1.5 top-1.5 z-10 flex size-6 items-center justify-center rounded-pill bg-ink/70 text-white"
-                  >
-                    <CloseXIcon class="size-2.5" />
-                  </button>
-
-                  <Show when={asset.type === "image"}>
-                    <Show
-                      when={asset.source}
-                      fallback={
-                        <button type="button" onClick={() => openFilePicker("image", i())} class="flex size-full flex-col items-center justify-center gap-1 text-ink-gray hover:text-brand-pink">
-                          <ImageIcon class="size-5" />
-                          <span class="text-xs">เลือกรูปภาพ</span>
-                        </button>
-                      }
-                    >
-                      <button type="button" onClick={() => openFilePicker("image", i())} aria-label="เปลี่ยนรูปภาพ" class="block size-full">
-                        <img src={asset.source} alt="" class="size-full object-cover" classList={{ "opacity-40": pendingUrls().has(asset.source) }} />
-                      </button>
-                    </Show>
-                  </Show>
-
-                  <Show when={asset.type === "video"}>
-                    <Show
-                      when={asset.source}
-                      fallback={
-                        <button type="button" onClick={() => openFilePicker("video", i())} class="flex size-full flex-col items-center justify-center gap-1 text-ink-gray hover:text-brand-pink">
-                          <span class="text-lg leading-none">▶</span>
-                          <span class="text-xs">เลือกวิดีโอ</span>
-                        </button>
-                      }
-                    >
-                      <button type="button" onClick={() => openFilePicker("video", i())} aria-label="เปลี่ยนวิดีโอ" class="relative block size-full">
-                        <video src={asset.source} class="size-full object-cover" classList={{ "opacity-40": pendingUrls().has(asset.source) }} muted />
-                        <span class="pointer-events-none absolute inset-0 flex items-center justify-center text-2xl text-white drop-shadow">▶</span>
-                      </button>
-                    </Show>
-                  </Show>
-
-                  <Show when={asset.type === "youtube"}>
+              <div class="flex w-60 flex-col gap-2 sm:w-72">
+                <Show
+                  when={asset.type === "youtube"}
+                  fallback={
+                    <>
+                      <MediaUploader
+                        value={desktopMedia()}
+                        onChange={(media) => replaceAt(i(), withHeroAssetDesktopMedia(asset, media))}
+                        aspectClass="aspect-[3/1]"
+                        hideHints
+                        hideRemove
+                        showVideoBadge={false}
+                        showVideoOptions={false}
+                        emptyLabel="เลือกรูปหรือวิดีโอ"
+                        overlay={overlay()}
+                      />
+                      <Show when={asVideo(desktopMedia())}>
+                        {(video) => (
+                          <VideoOptionsFields
+                            title={`วิดีโอ ${BANNER_DEVICE_SPECS.desktop.label}`}
+                            value={video()}
+                            onChange={(media) => replaceAt(i(), withHeroAssetDesktopMedia(asset, media))}
+                            posterAspectClass="aspect-[3/1]"
+                          />
+                        )}
+                      </Show>
+                      <div class="flex items-end gap-2">
+                        <MediaUploader
+                          compact
+                          label={`${BANNER_DEVICE_SPECS.tablet.label} ${BANNER_DEVICE_SPECS.tablet.size}`}
+                          ariaLabel={`เลือกไฟล์ ${BANNER_DEVICE_SPECS.tablet.label}`}
+                          value={asset.tabletSource ?? ""}
+                          onChange={(media) => patchAt(i(), { tabletSource: media || undefined })}
+                          aspectClass="aspect-[4/3]"
+                          boxClass="w-24"
+                          onError={(message) => setCropError(tabletKey(), message)}
+                        />
+                        <MediaUploader
+                          compact
+                          label={`${BANNER_DEVICE_SPECS.mobile.label} ${BANNER_DEVICE_SPECS.mobile.size}`}
+                          ariaLabel={`เลือกไฟล์ ${BANNER_DEVICE_SPECS.mobile.label}`}
+                          value={asset.mobileSource ?? ""}
+                          onChange={(media) => patchAt(i(), { mobileSource: media || undefined })}
+                          aspectClass="aspect-[3/4]"
+                          boxClass="w-[54px]"
+                          onError={(message) => setCropError(mobileKey(), message)}
+                        />
+                      </div>
+                      <For each={[cropErrors()[tabletKey()], cropErrors()[mobileKey()]].filter(Boolean)}>
+                        {(message) => (
+                          <p class="text-xs text-system-red" role="alert">
+                            {message}
+                          </p>
+                        )}
+                      </For>
+                      <Show when={asVideo(asset.tabletSource)}>
+                        {(video) => (
+                          <VideoOptionsFields
+                            title={`วิดีโอ ${BANNER_DEVICE_SPECS.tablet.label}`}
+                            value={video()}
+                            onChange={(media) => patchAt(i(), { tabletSource: media })}
+                            posterAspectClass="aspect-[4/3]"
+                          />
+                        )}
+                      </Show>
+                      <Show when={asVideo(asset.mobileSource)}>
+                        {(video) => (
+                          <VideoOptionsFields
+                            title={`วิดีโอ ${BANNER_DEVICE_SPECS.mobile.label}`}
+                            value={video()}
+                            onChange={(media) => patchAt(i(), { mobileSource: media })}
+                            posterAspectClass="aspect-[3/4]"
+                          />
+                        )}
+                      </Show>
+                    </>
+                  }
+                >
+                  <div class="group relative aspect-[3/1] w-full shrink-0 overflow-hidden rounded-media border border-border bg-surface-gray/60">
                     <Show
                       when={youtubeId()}
                       fallback={
                         <div class="flex size-full flex-col items-center justify-center gap-1 px-2 text-center text-ink-gray">
-                          <span class="text-lg leading-none">▶</span>
                           <span class="text-xs">วางลิงก์ YouTube ด้านล่าง</span>
                         </div>
                       }
                     >
-                      {(id) => (
-                        <img src={`https://img.youtube.com/vi/${id()}/mqdefault.jpg`} alt="" class="size-full object-cover" />
-                      )}
+                      {(id) => <img src={`https://img.youtube.com/vi/${id()}/mqdefault.jpg`} alt="" class="size-full object-cover" />}
                     </Show>
-                  </Show>
-
-                  <Show when={pendingUrls().has(asset.source)}>
-                    <div class="absolute inset-0 flex items-center justify-center bg-ink/10" aria-hidden="true">
-                      <span class="loading loading-spinner loading-sm text-white" />
-                    </div>
-                  </Show>
-
-                  <div class="absolute bottom-1 left-1 z-10 flex gap-1">
-                    <Show when={i() > 0}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          move(i(), -1);
-                        }}
-                        aria-label="ย้ายไปทางซ้าย"
-                        class="flex size-6 items-center justify-center rounded-pill bg-ink/70 text-xs text-white"
-                      >
-                        <ChevronIcon direction="left" class="size-4" />
-                      </button>
-                    </Show>
-                    <Show when={i() < props.assets.length - 1}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          move(i(), 1);
-                        }}
-                        aria-label="ย้ายไปทางขวา"
-                        class="flex size-6 items-center justify-center rounded-pill bg-ink/70 text-xs text-white"
-                      >
-                        <ChevronIcon direction="right" class="size-4" />
-                      </button>
-                    </Show>
+                    {overlay()}
                   </div>
-                </div>
-
-                <Show when={asset.type === "youtube"}>
                   <TextField
                     label="ลิงก์ YouTube"
                     placeholder="https://www.youtube.com/watch?v=..."
                     value={asset.source}
                     onInput={(e) => patchAt(i(), { source: e.currentTarget.value })}
                     error={youtubeError() ? "ลิงก์ YouTube ไม่ถูกต้อง" : undefined}
-                    class="w-60 sm:w-72"
                   />
-                </Show>
-
-                <Show when={asset.type === "image"}>
-                  <div class="flex items-end gap-2">
-                    <CropSlot
-                      label={`${BANNER_DEVICE_SPECS.tablet.label} ${BANNER_DEVICE_SPECS.tablet.size}`}
-                      src={asset.tabletSource}
-                      class="aspect-[4/3] w-24"
-                      onPick={() => openFilePicker("image", i(), "tabletSource")}
-                      onClear={() => patchAt(i(), { tabletSource: undefined })}
-                    />
-                    <CropSlot
-                      label={`${BANNER_DEVICE_SPECS.mobile.label} ${BANNER_DEVICE_SPECS.mobile.size}`}
-                      src={asset.mobileSource}
-                      class="aspect-[3/4] w-[54px]"
-                      onPick={() => openFilePicker("image", i(), "mobileSource")}
-                      onClear={() => patchAt(i(), { mobileSource: undefined })}
-                    />
-                  </div>
                 </Show>
               </div>
             );
@@ -250,62 +256,24 @@ export function HeroAssetsEditor(props: { assets: HeroAsset[]; onChange: (assets
       </div>
 
       <div class="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={atLimit()}
-          onClick={() => openFilePicker("image", null)}
-          class="rounded-card border border-dashed border-border px-3 py-2 text-sm font-medium text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:text-ink-gray"
-        >
-          + เพิ่มรูปภาพ
+        <button type="button" disabled={atLimit()} onClick={openAddPicker} class={addButtonClass}>
+          + เพิ่มรูปภาพหรือวิดีโอ
         </button>
-        <button
-          type="button"
-          disabled={atLimit()}
-          onClick={() => openFilePicker("video", null)}
-          class="rounded-card border border-dashed border-border px-3 py-2 text-sm font-medium text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:text-ink-gray"
-        >
-          + เพิ่มวิดีโอ
-        </button>
-        <button
-          type="button"
-          disabled={atLimit()}
-          onClick={addYoutube}
-          class="rounded-card border border-dashed border-border px-3 py-2 text-sm font-medium text-ink-gray transition-colors duration-150 hover:border-brand-pink hover:text-brand-pink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:text-ink-gray"
-        >
+        <button type="button" disabled={atLimit()} onClick={addYoutube} class={addButtonClass}>
           + เพิ่ม YouTube
         </button>
       </div>
+      <Show when={addError()}>
+        <p class="text-xs text-system-red" role="alert">
+          {addError()}
+        </p>
+      </Show>
 
       <p class="text-xs text-ink-gray">
-        {props.assets.length}/{MAX_HERO_ASSETS} รายการ — รองรับรูปภาพ วิดีโอ และ YouTube สูงสุด {MAX_HERO_ASSETS} รายการ · รูปภาพแนะนำ Desktop {BANNER_DEVICE_SPECS.desktop.size} (3:1),
-        Tablet {BANNER_DEVICE_SPECS.tablet.size} (4:3), Mobile {BANNER_DEVICE_SPECS.mobile.size} (3:4) — ถ้าไม่ใส่ Tablet/Mobile จะใช้รูป Desktop แทน
+        ใส่แล้ว {props.assets.length}/{MAX_HERO_ASSETS} รายการ ขนาดรูปแนะนำ เดสก์ท็อป {BANNER_DEVICE_SPECS.desktop.size} (3:1), แท็บเล็ต {BANNER_DEVICE_SPECS.tablet.size} (4:3),
+        มือถือ {BANNER_DEVICE_SPECS.mobile.size} (3:4) ถ้าไม่ใส่ขนาดแท็บเล็ตหรือมือถือ ระบบจะใช้ไฟล์เดสก์ท็อปแทน
       </p>
-    </div>
-  );
-}
-
-/** One optional Tablet/Mobile crop for an image asset — click to pick/replace, × to clear back to the Desktop fallback. */
-function CropSlot(props: { label: string; src?: string; class: string; onPick: () => void; onClear: () => void }) {
-  return (
-    <div class="flex flex-col gap-1">
-      <span class="text-[10px] leading-tight text-ink-gray">{props.label}</span>
-      <div class={`relative shrink-0 overflow-hidden rounded-media border border-border bg-surface-gray/40 ${props.class}`}>
-        <button type="button" onClick={props.onPick} aria-label={`เลือกรูป ${props.label}`} class="flex size-full items-center justify-center text-ink-gray hover:text-brand-pink">
-          <Show when={props.src} fallback={<ImageIcon class="size-4" />}>
-            <img src={props.src} alt="" class="size-full object-cover" />
-          </Show>
-        </button>
-        <Show when={props.src}>
-          <button
-            type="button"
-            onClick={props.onClear}
-            aria-label={`ลบรูป ${props.label}`}
-            class="absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded-pill bg-ink/70 text-white"
-          >
-            <CloseXIcon class="size-2" />
-          </button>
-        </Show>
-      </div>
+      <p class="text-xs text-ink-gray">{VIDEO_RULE_HINT}</p>
     </div>
   );
 }
@@ -314,5 +282,6 @@ function CropSlot(props: { label: string; src?: string; class: string; onPick: (
 export function isCompleteHeroAsset(asset: HeroAsset): boolean {
   if (!asset.source.trim()) return false;
   if (asset.type === "youtube") return isValidYoutubeUrl(asset.source);
+  if (asset.type === "video") return !!asset.poster;
   return true;
 }

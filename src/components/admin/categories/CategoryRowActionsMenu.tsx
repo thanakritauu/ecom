@@ -37,14 +37,14 @@ export function CategoryRowActionsMenu(props: {
             onSelect={() => navigate(`${basePath}/${props.id}/edit`)}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
           >
-            แก้ไข
+            แก้ไขหมวดหมู่
           </DropdownMenu.Item>
           <DropdownMenu.Separator class="my-1 h-px bg-border" />
           <DropdownMenu.Item
             onSelect={props.onDelete}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm font-medium text-system-red outline-none transition-colors duration-150 hover:bg-danger-soft data-[highlighted]:bg-danger-soft"
           >
-            ลบ
+            ลบหมวดหมู่
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

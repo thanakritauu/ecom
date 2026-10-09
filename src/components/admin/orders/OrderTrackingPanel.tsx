@@ -1,7 +1,7 @@
 import { createSignal, For, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
-import { ChevronDownIcon } from "~/components/admin/icons";
+import { ChevronDownIcon, PlusIcon } from "~/components/admin/icons";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { getCarrierTrackingUrl } from "~/lib/carriers";
 import { formatEventTime, getTrackingHistory, TRACKING_STEPS } from "~/lib/orderTracking";
@@ -28,8 +28,8 @@ const stepTitle = (status: EventStatus) => TRACKING_STEPS.find((s) => s.status =
 /**
  * Order Detail's "ติดตามการจัดส่ง" — DHL only (the storefront's single
  * carrier, ฿0). Tracking number + the storefront's 6-step timeline + the
- * full scan list, plus two mock-only controls that write to the local
- * Admin store: กรอกเลขพัสดุ and เพิ่มเหตุการณ์ (no DHL API exists).
+ * full scan list, plus two controls that write to the Admin order store:
+ * กรอกเลขพัสดุ and เพิ่มเหตุการณ์การจัดส่ง.
  */
 export function OrderTrackingPanel(props: { order: AdminOrder }) {
   const store = useAdminOrders();
@@ -55,7 +55,7 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
     setSavingNumber(true);
     try {
       await store.setTrackingNumber(o().id, value);
-      pushToast("บันทึกเลขพัสดุแล้ว", "success");
+      pushToast("บันทึกเลขพัสดุเรียบร้อยแล้ว", "success");
       setEditingNumber(false);
     } catch {
       pushToast("บันทึกเลขพัสดุไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
@@ -91,10 +91,10 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
     setSavingEvent(true);
     try {
       await store.addTrackingEvent(o().id, { status: eventStatus(), description: eventDescription(), location: eventLocation() });
-      pushToast("เพิ่มเหตุการณ์การจัดส่งแล้ว", "success");
+      pushToast("บันทึกเหตุการณ์การจัดส่งเรียบร้อยแล้ว", "success");
       setAddingEvent(false);
     } catch {
-      pushToast("เพิ่มเหตุการณ์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
+      pushToast("บันทึกเหตุการณ์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
     } finally {
       setSavingEvent(false);
     }
@@ -107,7 +107,7 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
       <div class="flex flex-col gap-3 rounded-card border border-border p-3 text-sm">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <p class="font-medium text-ink">
-            {o().shipping.courier} · {o().shipping.method} · {o().totals.shippingFee > 0 ? `ค่าจัดส่ง ${formatAdminCurrency(o().totals.shippingFee)}` : "ค่าจัดส่งฟรี"}
+            {o().shipping.courier} {o().shipping.method} {o().totals.shippingFee > 0 ? `ค่าจัดส่ง ${formatAdminCurrency(o().totals.shippingFee)}` : "ค่าจัดส่งฟรี"}
           </p>
           <StatusBadge tone={FULFILLMENT_STATUS_META[o().fulfillmentStatus].tone}>{FULFILLMENT_STATUS_META[o().fulfillmentStatus].label}</StatusBadge>
         </div>
@@ -118,11 +118,11 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
             <div class="flex flex-wrap items-center justify-between gap-2">
               <p class="text-ink-gray">
                 เลขพัสดุ:{" "}
-                <Show when={o().shipping.trackingNumber} fallback={<span class="text-ink-placeholder">ยังไม่มี (กรอกเมื่อส่งมอบพัสดุให้ DHL)</span>}>
+                <Show when={o().shipping.trackingNumber} fallback={<span class="text-ink-placeholder">ยังไม่มี กรอกเมื่อส่งมอบพัสดุให้ DHL</span>}>
                   {(n) => (
                     <a href={getCarrierTrackingUrl(o().shipping.carrier, n())} target="_blank" rel="noopener noreferrer" class="font-semibold tracking-wide text-ink underline">
                       {n()}
-                      <span class="sr-only">(เปิดหน้าติดตามพัสดุของ DHL ในแท็บใหม่)</span>
+                      <span class="sr-only">เปิดหน้าติดตามพัสดุของ DHL ในแท็บใหม่</span>
                     </a>
                   )}
                 </Show>
@@ -154,7 +154,7 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
                 ยกเลิก
               </Button>
               <Button type="submit" loading={savingNumber()}>
-                บันทึก
+                บันทึกเลขพัสดุ
               </Button>
             </div>
           </form>
@@ -165,7 +165,7 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
 
       <Show when={history().length > 0}>
         <div class="flex flex-col gap-2 border-t border-border pt-3">
-          <p class="text-sm font-medium text-ink">ประวัติการขนส่งทั้งหมด ({history().length})</p>
+          <p class="text-sm font-medium text-ink">ประวัติการขนส่งทั้งหมด {history().length} รายการ</p>
           <ul class="flex flex-col gap-2.5">
             <For each={history()}>
               {(event) => (
@@ -175,7 +175,7 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
                     <span class="block text-ink">{event.description ?? stepTitle(event.status)}</span>
                     <span class="block text-xs text-ink-gray">
                       {stepTitle(event.status)}
-                      {event.location ? ` · ${event.location}` : ""}
+                      {event.location ? ` ${event.location}` : ""}
                     </span>
                   </span>
                 </li>
@@ -190,7 +190,7 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
           when={addingEvent()}
           fallback={
             <Button type="button" variant="outline" class="self-start" onClick={startAddEvent}>
-              เพิ่มเหตุการณ์
+              <PlusIcon class="size-4" /> เพิ่มเหตุการณ์การจัดส่ง
             </Button>
           }
         >
@@ -217,7 +217,7 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
                 {eventError()}
               </p>
             </Show>
-            <p class="text-xs text-ink-gray">บันทึกด้วยเวลาปัจจุบัน — สถานะคำสั่งซื้อจะเลื่อนตามขั้นตอนนี้อัตโนมัติ</p>
+            <p class="text-xs text-ink-gray">บันทึกด้วยเวลาปัจจุบัน และสถานะคำสั่งซื้อจะเลื่อนตามขั้นตอนนี้อัตโนมัติ</p>
             <div class="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setAddingEvent(false)} disabled={savingEvent()}>
                 ยกเลิก

@@ -17,7 +17,7 @@ export function OutOfScopePage(props: { pageName: string; identifier?: string })
       <Container width="wide" class="flex min-h-[50vh] flex-col items-center justify-center gap-4 py-20 text-center">
         <h1 class="text-2xl font-bold text-ink">{props.pageName}</h1>
         <p class="text-ink-gray">
-          {props.identifier ? `(${props.identifier}) — ` : ""}ยังไม่ได้พัฒนาในสโคปนี้ (Home page)
+          {props.identifier ? `(${props.identifier}) ` : ""}ยังไม่ได้พัฒนาในสโคปนี้ (Home page)
         </p>
         <A href="/" class="text-brand-pink underline">
           กลับหน้าหลัก

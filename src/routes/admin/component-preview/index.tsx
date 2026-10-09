@@ -15,7 +15,6 @@ import { useAdminProducts } from "~/lib/adminProductStore";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
 import { formatCouponDiscount, formatMarketingDate } from "~/lib/adminMarketing";
 import { useAdminContent } from "~/lib/adminContentStore";
-import { useAdminBanners } from "~/lib/adminBannerStore";
 import { useAdminCollections } from "~/lib/adminCollectionStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
@@ -39,7 +38,6 @@ export default function AdminComponentPreviewPage() {
   const productStore = useAdminProducts();
   const marketing = useAdminMarketing();
   const contentStore = useAdminContent();
-  const bannerStore = useAdminBanners();
   const collectionStore = useAdminCollections();
   const categoryStore = useAdminCategories();
   const navigation = useAdminNavigation();
@@ -81,21 +79,18 @@ export default function AdminComponentPreviewPage() {
     return s ? { ...s, enabled: true } : undefined;
   });
 
-  // Banner (Promotion Banner section) — real uploaded Banner images + real destination, reshaped into a promotion_banner-type HomepageSection (the baseline homepage section of this type ships with no image).
+  // Banner (Promotion Banner section) — a real Promotion Page's uploaded banners + a link to that page, reshaped into a promotion_banner-type HomepageSection (the baseline homepage section of this type ships with no image).
   const bannerSection = createMemo<HomepageSection | undefined>(() => {
     const base = homepageSection("promotion_banner");
-    const source = bannerStore.banners().find((b) => b.banners.desktop || b.banners.tablet || b.banners.mobile);
+    const source = contentStore.pages().find((p) => !p.isHomepage && (p.banners.desktop || p.banners.tablet || p.banners.mobile));
     if (!base || !source) return undefined;
-    return { ...base, enabled: true, banners: source.banners, cta: { label: "", destination: source.destination } };
+    return { ...base, enabled: true, banners: source.banners, cta: { label: "", destination: { type: "landingPage", landingPageId: source.id } } };
   });
-
-  // Campaign — the Homepage's own real "campaign" section already ships with real title/description/products inline (campaignId unlinked), so no reshaping is needed at all.
-  const campaignSection = createMemo(() => homepageSection("campaign"));
 
   // Product Section — the Homepage's own real "featured" product section, already enabled.
   const productSection = createMemo(() => homepageSection("product"));
 
-  // Collection — a real Product Collection's id/name/description, reshaped into a product-type HomepageSection with productSource "collection" (no such section exists in the baseline homepage today).
+  // Collection — a real Product Collection's id/name, reshaped into a product-type HomepageSection with productSource "collection" (no such section exists in the baseline homepage today).
   const collectionSection = createMemo<HomepageSection | undefined>(() => {
     const collection = collectionStore.collections()[0];
     if (!collection) return undefined;
@@ -104,9 +99,9 @@ export default function AdminComponentPreviewPage() {
       type: "product",
       name: collection.name,
       enabled: true,
-      eyebrow: "คอลเลกชัน",
+      eyebrow: "",
       title: collection.name,
-      description: collection.description,
+      description: "",
       banners: emptyBanners(),
       assets: [],
       cta: emptyCta(),
@@ -115,7 +110,6 @@ export default function AdminComponentPreviewPage() {
       products: [],
       collectionId: collection.id,
       categoryId: "",
-      campaignId: "",
       createdAt: collection.createdAt,
       updatedAt: collection.updatedAt,
     };
@@ -127,36 +121,38 @@ export default function AdminComponentPreviewPage() {
     return s ? { ...s, enabled: true } : undefined;
   });
 
+  const ctaSection = createMemo<HomepageSection | undefined>(() => {
+    const s = homepageSection("cta");
+    return s ? { ...s, enabled: true } : undefined;
+  });
+
   // Navigation / Mobile Navigation — identical filtered tree + identical MobileNavRow renderer the Navigation module's own Fixed Preview uses (see /admin/navigation).
   const navTree = createMemo(() => filterVisibleNavigationTree(buildNavigationTree(navigation.items(), navigationLookups)));
 
   return (
     <div class="flex flex-col gap-6">
-      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "Preview คอมโพเนนต์" }]} />
-      <PageHeader
-        title="Preview คอมโพเนนต์"
-        description="ตัวอย่างการแสดงผลของทุก Component จริงจากหน้าร้าน — ใช้ Component เดียวกันกับที่ลูกค้าเห็นจริง ไม่ใช่หน้าตาจำลอง ข้อมูลที่ใช้คือข้อมูลจริงที่มีอยู่แล้วในระบบ (ไม่มีการสร้างข้อมูลปลอมขึ้นมาใหม่)"
-      />
+      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "ตัวอย่างส่วนประกอบหน้าร้าน" }]} />
+      <PageHeader title="ตัวอย่างส่วนประกอบหน้าร้าน" description="ดูหน้าตาส่วนต่างๆ ของหน้าร้านจากข้อมูลจริงในระบบ" />
 
-      <Gallery title="Product Card" description="สถานะปกติ — ยังไม่มีส่วนลด/แฟลชเซล">
+      <Gallery title="การ์ดสินค้า" description="สินค้าราคาปกติ ไม่มีส่วนลดหรือ Flash Sale">
         <Show when={normalProduct()} fallback={<EmptyNote />}>
           {(p) => <div class="max-w-[260px]"><ProductCard product={p()} /></div>}
         </Show>
       </Gallery>
 
-      <Gallery title="Product Card + Discount / Product Image / Product Variant" description="สินค้าที่มีส่วนลด พร้อมตัวเลือกสี (Variant) หลายรายการ — ภาพสินค้าและตัวเลือกสีเป็นส่วนหนึ่งของ Product Card เดียวกันนี้ (Frontend ไม่มี Component แยกสำหรับภาพ/ตัวเลือกสีโดยเฉพาะ)">
+      <Gallery title="การ์ดสินค้าที่มีส่วนลด" description="สินค้าที่มีส่วนลดและมีตัวเลือกสีหลายแบบ">
         <Show when={discountProduct()} fallback={<EmptyNote />}>
           {(p) => <div class="max-w-[260px]"><ProductCard product={p()} /></div>}
         </Show>
       </Gallery>
 
-      <Gallery title="Product Card แบบ Flash Sale" description="การ์ด Flash Sale — แถบนับถอยหลังบนรูป + แถบสต๊อก &quot;เหลืออีก X ชิ้น&quot; แสดงเฉพาะใน Section Flash Sale หน้าแรก และเมนู Flash Sale เท่านั้น (หน้าอื่นแสดงเป็นการ์ดปกติ)">
+      <Gallery title="การ์ดสินค้า Flash Sale" description="มีนับถอยหลังบนรูปและแถบสต๊อก แสดงแบบนี้เฉพาะส่วน Flash Sale หน้าแรกและหน้า Flash Sale">
         <Show when={flashSaleProduct()} fallback={<EmptyNote />}>
           {(p) => <div class="max-w-[260px]"><ProductCard product={p()} flashSale /></div>}
         </Show>
       </Gallery>
 
-      <Gallery title="Discount Badge / Price / Rating" description="แยกเฉพาะส่วนป้ายส่วนลด ราคา และคะแนนรีวิว จากสินค้าจริงรายการเดียวกัน">
+      <Gallery title="ป้ายส่วนลด ราคา และคะแนนรีวิว" description="จากสินค้าที่มีส่วนลดรายการเดียวกับด้านบน">
         <Show when={discountProduct()} fallback={<EmptyNote />}>
           {(p) => (
             <div class="flex flex-wrap items-center gap-6">
@@ -168,16 +164,18 @@ export default function AdminComponentPreviewPage() {
         </Show>
       </Gallery>
 
-      <Gallery title="CTA Button" description="ทุก Variant ของปุ่มที่ใช้ทั้ง Admin และหน้าร้าน">
-        <div class="flex flex-wrap items-center gap-3 rounded-media bg-ink p-4">
-          <Button variant="primary">Primary</Button>
-          <Button variant="outline">Outline</Button>
-          <Button variant="ghost">Ghost</Button>
-          <Button variant="white">White</Button>
+      <Gallery title="ปุ่ม" description="ปุ่มหลักและปุ่มรองใช้บนพื้นขาว ส่วนปุ่มสำหรับพื้นสีใช้บนแบนเนอร์ของหน้าร้าน">
+        <div class="flex flex-wrap items-center gap-3">
+          <Button variant="primary">ปุ่มหลัก</Button>
+          <Button variant="outline">ปุ่มรอง</Button>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 rounded-media bg-brand-purple p-4">
+          <Button variant="white">ปุ่มบนพื้นสี</Button>
+          <Button variant="ghost">ปุ่มโปร่งบนพื้นสี</Button>
         </div>
       </Gallery>
 
-      <Gallery title="Coupon" description="คูปองจริงจากโมดูลการตลาด (Marketing → คูปอง) แปลงข้อมูลให้ตรงกับรูปแบบที่ Component ต้องการ (ปุ่ม “เก็บเลย” ใน Preview นี้ไม่มีผลต่อกระเป๋าคูปองจริงของลูกค้า)">
+      <Gallery title="คูปอง" description="คูปองจากเมนูคูปอง การกดเก็บในหน้านี้ไม่มีผลกับลูกค้า">
         <Show when={previewCoupon()} fallback={<EmptyNote />}>
           {(coupon) => (
             <div class="max-w-md overflow-hidden rounded-media border border-border">
@@ -186,7 +184,7 @@ export default function AdminComponentPreviewPage() {
                 collected={couponCollected()}
                 onCollect={async () => {
                   setCouponCollected(true);
-                  pushToast("นี่คือ Preview — ไม่มีการเก็บคูปองจริง", "success");
+                  pushToast("นี่เป็นตัวอย่าง ระบบไม่ได้เก็บคูปองจริง", "info");
                 }}
               />
             </div>
@@ -194,47 +192,43 @@ export default function AdminComponentPreviewPage() {
         </Show>
       </Gallery>
 
-      <Gallery title="Banner" description="Section ประเภท Promotion Banner — ใช้ภาพและปลายทางจริงจากโมดูลแบนเนอร์ (Content → แบนเนอร์)">
-        <Show when={bannerSection()} fallback={<EmptyNote text="ยังไม่มี Banner ที่อัปโหลดรูปไว้ในระบบ" />}>
+      <Gallery title="แบนเนอร์โปรโมชั่น" description="ใช้แบนเนอร์จากหน้าแคมเปญแรกที่มีรูป และลิงก์ไปที่หน้านั้น">
+        <Show when={bannerSection()} fallback={<EmptyNote text="ยังไม่มีหน้าแคมเปญที่อัปโหลดแบนเนอร์ไว้" />}>
           {(section) => <SectionFrame><HomepageSections sections={[section()]} /></SectionFrame>}
         </Show>
       </Gallery>
 
-      <Gallery title="Hero Banner" description="Section ประเภท Hero จากหน้าแรกจริง (แสดงผลไม่ว่าสถานะ enabled ปัจจุบันจะเป็นเท่าใด เช่นเดียวกับ Full Page Preview ของหน้าโปรโมชั่น)">
+      <Gallery title="แบนเนอร์สไลด์" description="สไลด์แรกจากส่วนแบนเนอร์สไลด์ของหน้าแรก แสดงแม้ส่วนนั้นยังไม่ได้เปิด">
         <Show when={heroSection()} fallback={<EmptyNote />}>
           {(section) => <SectionFrame><AdminHeroSlide section={section()} /></SectionFrame>}
         </Show>
       </Gallery>
 
-      <Gallery title="Collection" description="Product Section ที่ดึงสินค้าจากคอลเลกชันจริง (Content → คอลเลกชันสินค้า)">
-        <Show when={collectionSection()} fallback={<EmptyNote text="ยังไม่มีคอลเลกชันสินค้าในระบบ" />}>
+      <Gallery title="รายการสินค้าจากกลุ่มสินค้าพิเศษ" description="ส่วนรายการสินค้าที่ดึงสินค้าจากกลุ่มแรกในเมนูกลุ่มสินค้าพิเศษ">
+        <Show when={collectionSection()} fallback={<EmptyNote text="ยังไม่มีกลุ่มสินค้าพิเศษในระบบ" />}>
           {(section) => <SectionFrame><HomepageSections sections={[section()]} /></SectionFrame>}
         </Show>
       </Gallery>
 
-      <Gallery title="Campaign" description="Section ประเภท Campaign จากหน้าแรกจริง">
-        <Show when={campaignSection()} fallback={<EmptyNote />}>
-          {(section) => <SectionFrame><HomepageSections sections={[section()]} /></SectionFrame>}
-        </Show>
-      </Gallery>
-
-      <Gallery title="Product Section" description="Section สินค้าจริงจากหน้าแรก (แหล่งที่มา: สินค้าแนะนำ/Featured)">
+      <Gallery title="รายการสินค้า" description="ส่วนรายการสินค้าจากหน้าแรก">
         <Show when={productSection()} fallback={<EmptyNote />}>
           {(section) => <SectionFrame><HomepageSections sections={[section()]} /></SectionFrame>}
         </Show>
       </Gallery>
 
-      <Gallery title="Content Section" description="Section เนื้อหาอิสระจากหน้าแรกจริง (แสดงผลไม่ว่าสถานะ enabled ปัจจุบันจะเป็นเท่าใด)">
+      <Gallery title="รูปพร้อมข้อความ" description="ส่วนรูปพร้อมข้อความจากหน้าแรก แสดงแม้ส่วนนั้นยังไม่ได้เปิด">
         <Show when={contentSection()} fallback={<EmptyNote />}>
           {(section) => <SectionFrame><HomepageSections sections={[section()]} /></SectionFrame>}
         </Show>
       </Gallery>
 
-      <Gallery title="CTA Section" description="ยังไม่มี Section ประเภท CTA ที่ตั้งค่าไว้ในหน้าแรกขณะนี้ — เมื่อมีการสร้าง Section ประเภทนี้ในหน้าแรก ตัวอย่างจะแสดงที่นี่โดยอัตโนมัติ (ไม่สร้างข้อมูลจำลองขึ้นมาแทน)">
-        <EmptyNote text="ยังไม่มี CTA Section ในหน้าแรก" />
+      <Gallery title="ปุ่มชวนคลิก" description="ส่วนปุ่มชวนคลิกจากหน้าแรก">
+        <Show when={ctaSection()} fallback={<EmptyNote text="หน้าแรกยังไม่มีส่วนปุ่มชวนคลิก" />}>
+          {(section) => <SectionFrame><HomepageSections sections={[section()]} /></SectionFrame>}
+        </Show>
       </Gallery>
 
-      <Gallery title="Navigation / Mobile Navigation" description="รายการเดียวกับที่ใช้ใน “จัดการเมนู” — filter visible + target พร้อมใช้งานเหมือนกันทุกประการ, ใช้ MobileNavRow ตัวจริงจาก MobileMenu.tsx">
+      <Gallery title="เมนูบนมือถือ" description="เมนูที่แสดงอยู่และมีปลายทางพร้อมใช้งาน ตามที่ตั้งไว้ในหน้าจัดการเมนู">
         <Show when={navTree().length > 0} fallback={<EmptyNote />}>
           <div class="max-h-64 max-w-sm overflow-y-auto rounded-media border border-border bg-surface-card p-2">
             <nav aria-label="เมนูหลัก (ตัวอย่าง)" class="flex flex-col gap-1">
@@ -244,7 +238,7 @@ export default function AdminComponentPreviewPage() {
         </Show>
       </Gallery>
 
-      <Gallery title="Promotion Strip" description="แถบสีม่วง + แถบสีชมพู ตัวจริงจาก Header (แถบสีชมพูแสดงเฉพาะจอกว้าง lg ขึ้นไป เช่นเดียวกับหน้าร้านจริง)">
+      <Gallery title="แถบประกาศด้านบน" description="แถบสีม่วงและแถบสีชมพู แถบสีชมพูแสดงเฉพาะหน้าจอเดสก์ท็อป">
         <SectionFrame>
           <PromoStrip />
           <UtilityBar />
@@ -273,5 +267,5 @@ function SectionFrame(props: { children: JSX.Element }) {
 }
 
 function EmptyNote(props: { text?: string }) {
-  return <p class="text-sm text-ink-gray">{props.text ?? "ยังไม่มีข้อมูลจริงให้แสดงตัวอย่างในขณะนี้"}</p>;
+  return <p class="text-sm text-ink-gray">{props.text ?? "ยังไม่มีข้อมูลให้แสดงตัวอย่าง"}</p>;
 }

@@ -4,7 +4,7 @@ import type { User } from "./types";
 import { MOCK_USER } from "./accountData";
 import { createDialogOpenState } from "./focusRestore";
 import { lookupCrmMember, type SignInIdentity } from "./crm";
-import { recordMemberProfile, recordMemberSignIn } from "./memberRegistry";
+import { findMemberCustomerCode, recordMemberProfile, recordMemberSignIn } from "./memberRegistry";
 
 /** What sign-in found: an existing Charmiss Club (CRM) member whose coins were carried over, or a brand-new member. */
 export type SignInResult = {
@@ -90,6 +90,11 @@ function accountKeyFor(identity: SignInIdentity, crmMemberId: string | undefined
   return identity.method === "phone" ? `phone:${identity.value.replace(/\D/g, "")}` : `${identity.method}:${identity.value.trim().toLowerCase()}`;
 }
 
+/** The member's formal customer code ("CM-000002") — the number on their Admin Customer record, the same on every sign-in. */
+function memberCodeFor(member: { crmMemberId?: string; phone: string; email: string }): string | undefined {
+  return findMemberCustomerCode(member);
+}
+
 function readInitial(): User | null {
   if (isServer) return null;
   try {
@@ -97,7 +102,8 @@ function readInitial(): User | null {
     if (!raw) return null;
     // "1" = a session from before sign-in carried member details — the original mock persona.
     const session: Partial<StoredSession> = raw === "1" ? {} : (JSON.parse(raw) as StoredSession);
-    return { ...MOCK_USER, ...session, ...readProfile(session.accountKey) };
+    const u: User = { ...MOCK_USER, ...session, ...readProfile(session.accountKey) };
+    return { ...u, memberCode: memberCodeFor({ crmMemberId: session.crmMemberId, phone: u.phone, email: u.email }) };
   } catch {
     return null;
   }
@@ -142,7 +148,7 @@ export function AuthProvider(props: { children: JSX.Element }) {
     recordMemberSignIn(identity, crm, session);
     // What this member saved before (on this browser) wins over the CRM copy.
     const saved = isServer ? {} : readProfile(session.accountKey);
-    const signedIn: User = { ...MOCK_USER, ...session, ...saved };
+    const signedIn: User = { ...MOCK_USER, ...session, ...saved, memberCode: memberCodeFor(session) };
     setUser(signedIn);
     if (!isServer) {
       try {

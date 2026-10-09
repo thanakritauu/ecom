@@ -4,13 +4,13 @@ import {
   type MarketingStatus,
   type Promotion,
   type Coupon,
-  type FlashSale,
-  type Bundle,
   buildMockPromotions,
   buildMockCoupons,
-  buildMockFlashSales,
-  buildMockBundles,
+  normalizePromotions,
+  normalizeCoupons,
+  MARKETING_SEED_VERSION,
 } from "./adminMarketing";
+import { COUPONS_STORAGE_KEY, MARKETING_CHANGED_EVENT, PROMOTIONS_STORAGE_KEY } from "./storefrontPromotions";
 
 const TODAY_LABEL = "17 ก.ย. 2569";
 let nextId = 1000;
@@ -28,29 +28,17 @@ export type EntityCrud<T extends WithId> = {
 };
 
 /**
- * One generic CRUD factory reused for all four Marketing entities instead of
- * writing the same add/update/delete/duplicate/setStatus + localStorage
- * plumbing four times — the exact `adminProductStore.tsx`/`adminOrderStore.tsx`
- * SSR-safe pattern (pure baseline on server + first client render, real
- * `localStorage` read deferred to `onMount`), just parameterized by entity
- * prefix/baseline/storage key. Called once per entity inside the Provider
- * below, so each call still creates its own independent signal.
+ * One generic CRUD factory for promotions and coupons, SSR-safe like
+ * `adminProductStore` (seeds on the server and first client render, the
+ * stored copy read on mount). A stored copy from an older seed version
+ * drops its seed records (id number < 1000) for the new ones and keeps what
+ * Admin created, passed through `normalize` so old shapes read correctly.
+ * Every save tells the storefront (same tab: `MARKETING_CHANGED_EVENT`,
+ * other tabs: the `storage` event) so the cart and coupons update live.
  */
-/**
- * Seed-data version of what's persisted under each entity's storage key —
- * same idea as `adminProductStore`'s `SEED_VERSION`. v2: seeds synced to the
- * storefront (฿590 gift promo + ฿990 free shipping, the SAVE100/SAVE50/SAVE20
- * coupons with placement flags, the flash-1…12 rail at storefront prices,
- * re-priced bundles) and stable position-based seed ids. A stored copy from
- * an older version drops its seed records (id number < 1000) for the new
- * ones and keeps everything Admin created itself. v3: the three storefront
- * coupons' real expiry dates, all shown on Home + Checkout.
- */
-const SEED_VERSION = 3;
-
 const idNumber = (id: string) => Number(id.match(/-(\d+)$/)?.[1] ?? 0);
 
-function createEntityStore<T extends WithId>(storageKey: string, baseline: () => T[], idPrefix: string): EntityCrud<T> {
+function createEntityStore<T extends WithId>(storageKey: string, baseline: () => T[], idPrefix: string, normalize: (list: T[]) => T[]): EntityCrud<T> {
   const versionKey = `${storageKey}:seed-version`;
   const [items, setItems] = createSignal<T[]>(baseline());
 
@@ -58,8 +46,8 @@ function createEntityStore<T extends WithId>(storageKey: string, baseline: () =>
     try {
       const raw = localStorage.getItem(storageKey);
       if (!raw) return;
-      let stored = JSON.parse(raw) as T[];
-      if (Number(localStorage.getItem(versionKey) ?? 1) < SEED_VERSION) {
+      let stored = normalize(JSON.parse(raw) as T[]);
+      if (Number(localStorage.getItem(versionKey) ?? 1) < MARKETING_SEED_VERSION) {
         stored = [...stored.filter((item) => idNumber(item.id) >= 1000), ...baseline()];
         persist(stored);
       }
@@ -67,7 +55,7 @@ function createEntityStore<T extends WithId>(storageKey: string, baseline: () =>
       nextId = Math.max(nextId, ...stored.map((item) => idNumber(item.id) + 1));
       setItems(stored);
     } catch {
-      // storage unavailable — stays in-memory for this tab.
+      // storage unavailable: stays in memory for this tab.
     }
   });
 
@@ -75,7 +63,8 @@ function createEntityStore<T extends WithId>(storageKey: string, baseline: () =>
     if (isServer) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify(list));
-      localStorage.setItem(versionKey, String(SEED_VERSION));
+      localStorage.setItem(versionKey, String(MARKETING_SEED_VERSION));
+      window.dispatchEvent(new Event(MARKETING_CHANGED_EVENT));
     } catch {}
   }
 
@@ -118,11 +107,12 @@ function createEntityStore<T extends WithId>(storageKey: string, baseline: () =>
     mutate((list) => list.filter((item) => item.id !== id));
   };
 
+  // A copy starts switched off so it never runs on the storefront before Admin has edited it.
   const duplicate: EntityCrud<T>["duplicate"] = async (id) => {
     await simulateDelay();
     const source = getById(id);
     if (!source) throw new Error("NOT_FOUND");
-    const copy: T = { ...source, id: `${idPrefix}-${nextId++}`, status: "draft", createdAt: TODAY_LABEL, updatedAt: TODAY_LABEL };
+    const copy: T = { ...source, id: `${idPrefix}-${nextId++}`, status: "disabled", createdAt: TODAY_LABEL, updatedAt: TODAY_LABEL };
     if ("name" in copy) (copy as unknown as { name: string }).name = `${(source as unknown as { name: string }).name} (สำเนา)`;
     if ("code" in copy) (copy as unknown as { code: string }).code = `${(source as unknown as { code: string }).code}-COPY`;
     mutate((list) => [copy, ...list]);
@@ -140,18 +130,23 @@ function createEntityStore<T extends WithId>(storageKey: string, baseline: () =>
 type AdminMarketingContextValue = {
   promotions: EntityCrud<Promotion>;
   coupons: EntityCrud<Coupon>;
-  flashSales: EntityCrud<FlashSale>;
-  bundles: EntityCrud<Bundle>;
 };
 
 const AdminMarketingContext = createContext<AdminMarketingContextValue>();
 
 export function AdminMarketingProvider(props: { children: JSX.Element }) {
+  // Flash sale now lives on the products themselves and bundles are gone; drop their old stored copies.
+  onMount(() => {
+    try {
+      for (const key of ["charmiss:admin:marketing:flashsales", "charmiss:admin:marketing:bundles"]) {
+        localStorage.removeItem(key);
+        localStorage.removeItem(`${key}:seed-version`);
+      }
+    } catch {}
+  });
   const value: AdminMarketingContextValue = {
-    promotions: createEntityStore("charmiss:admin:marketing:promotions", buildMockPromotions, "promo"),
-    coupons: createEntityStore("charmiss:admin:marketing:coupons", buildMockCoupons, "coupon"),
-    flashSales: createEntityStore("charmiss:admin:marketing:flashsales", buildMockFlashSales, "flash"),
-    bundles: createEntityStore("charmiss:admin:marketing:bundles", buildMockBundles, "bundle"),
+    promotions: createEntityStore(PROMOTIONS_STORAGE_KEY, buildMockPromotions, "promo", normalizePromotions),
+    coupons: createEntityStore(COUPONS_STORAGE_KEY, buildMockCoupons, "coupon", normalizeCoupons),
   };
   return <AdminMarketingContext.Provider value={value}>{props.children}</AdminMarketingContext.Provider>;
 }

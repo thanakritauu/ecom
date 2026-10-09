@@ -56,7 +56,7 @@ export function Pagination(props: {
           <button type="button" onClick={() => props.onPageChange(1)} class="flex size-9 items-center justify-center rounded-pill text-sm text-ink-gray hover:bg-surface-pink">
             1
           </button>
-          <span class="px-1 text-ink-placeholder">…</span>
+          <span class="px-1 text-ink-placeholder">...</span>
         </Show>
 
         <For each={pageNumbers()}>
@@ -75,7 +75,7 @@ export function Pagination(props: {
         </For>
 
         <Show when={pageNumbers()[pageNumbers().length - 1] < props.totalPages}>
-          <span class="px-1 text-ink-placeholder">…</span>
+          <span class="px-1 text-ink-placeholder">...</span>
           <button
             type="button"
             onClick={() => props.onPageChange(props.totalPages)}

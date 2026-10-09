@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
@@ -12,9 +12,12 @@ import { Skeleton } from "~/components/admin/Skeleton";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { AdminBulkActionBar } from "~/components/admin/AdminBulkActionBar";
 import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
+import { ExportMenu } from "~/components/admin/ExportMenu";
+import type { ExportColumn } from "~/lib/adminExport";
+import { useAdminProducts } from "~/lib/adminProductStore";
 import { CollectionRowActionsMenu } from "~/components/admin/content/CollectionRowActionsMenu";
 import { CollectionQuickView } from "~/components/admin/content/CollectionQuickView";
-import { RefreshIcon, LayersIcon, PlusIcon } from "~/components/admin/icons";
+import { RefreshIcon, LayersIcon, PlusIcon, ImageIcon } from "~/components/admin/icons";
 import { COLLECTION_STATUS_META, type ProductCollection, type CollectionStatus } from "~/lib/adminCollections";
 import { useAdminCollections } from "~/lib/adminCollectionStore";
 import { useAdminContent } from "~/lib/adminContentStore";
@@ -26,8 +29,8 @@ import type { AsyncStatus } from "~/lib/types";
 
 const SORT_OPTIONS = [
   { value: "updated-desc", label: "แก้ไขล่าสุด" },
-  { value: "name-asc", label: "ชื่อ A→Z" },
-  { value: "name-desc", label: "ชื่อ Z→A" },
+  { value: "name-asc", label: "ชื่อกลุ่มสินค้าพิเศษ A-Z" },
+  { value: "name-desc", label: "ชื่อกลุ่มสินค้าพิเศษ Z-A" },
 ];
 
 const STATUS_FILTER_OPTIONS: SelectFilterConfig = {
@@ -35,10 +38,9 @@ const STATUS_FILTER_OPTIONS: SelectFilterConfig = {
   label: "สถานะ",
   value: "all",
   options: [
-    { value: "all", label: "สถานะทั้งหมด" },
+    { value: "all", label: "ทุกสถานะ" },
     { value: "active", label: COLLECTION_STATUS_META.active.label },
     { value: "inactive", label: COLLECTION_STATUS_META.inactive.label },
-    { value: "draft", label: COLLECTION_STATUS_META.draft.label },
   ],
 };
 
@@ -47,18 +49,20 @@ export default function AdminProductCollectionsListPage() {
   const store = useAdminCollections();
   const contentStore = useAdminContent();
   const navigation = useAdminNavigation();
+  const productStore = useAdminProducts();
   const navigate = useNavigate();
 
   const [search, setSearchRaw] = createSignal("");
   const [statusFilter, setStatusFilterRaw] = createSignal<"all" | CollectionStatus>("all");
   const [sort, setSortRaw] = createSignal("updated-desc");
   const [page, setPage] = createSignal(1);
-  const [pageSize, setPageSizeRaw] = createSignal(10);
+  const [pageSize, setPageSizeRaw] = createSignal(20);
   const [listStatus, setListStatus] = createSignal<AsyncStatus>("loading");
   const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
   const [quickViewId, setQuickViewId] = createSignal<string | null>(null);
   const [confirmDelete, setConfirmDelete] = createSignal<ProductCollection | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = createSignal(false);
+  const [confirmToggle, setConfirmToggle] = createSignal<ProductCollection | null>(null);
   type CollectionDependencies = { navRefs: NavigationItem[]; pageRefs: PromotionPageSectionReference[] };
   const [blockedDelete, setBlockedDelete] = createSignal<{ collection: ProductCollection; deps: CollectionDependencies } | null>(null);
   const [actionLoading, setActionLoading] = createSignal(false);
@@ -165,11 +169,45 @@ export default function AdminProductCollectionsListPage() {
     setConfirmBulkDelete(false);
     clearSelection();
     if (blocked.length > 0) {
-      pushToast(`ลบไม่สำเร็จ ${blocked.length} รายการ (มีการใช้งานอยู่) — ลบสำเร็จ ${ok.length} รายการ`, "warning");
+      pushToast(`ลบสำเร็จ ${ok.length} รายการ และลบไม่ได้ ${blocked.length} รายการเพราะยังมีการใช้งานอยู่`, "warning");
     } else {
-      pushToast(`ลบ Collection ${ok.length} รายการเรียบร้อยแล้ว`, "error");
+      pushToast(`ลบกลุ่มสินค้าพิเศษ ${ok.length} รายการเรียบร้อยแล้ว`, "error");
     }
   };
+
+  const confirmToggleAction = async () => {
+    const c = confirmToggle();
+    if (!c) return;
+    setActionLoading(true);
+    try {
+      await store.setStatus(c.id, c.status === "active" ? "inactive" : "active");
+      pushToast(c.status === "active" ? "ปิดใช้งานกลุ่มสินค้าพิเศษแล้ว" : "เปิดใช้งานกลุ่มสินค้าพิเศษแล้ว", "success");
+      setConfirmToggle(null);
+    } catch {
+      pushToast("เปลี่ยนสถานะไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const bulkSetStatus = async (status: CollectionStatus) => {
+    const ids = [...selectedIds()];
+    await Promise.all(ids.map((id) => store.setStatus(id, status)));
+    clearSelection();
+    pushToast(status === "active" ? `เปิดใช้งาน ${ids.length} รายการแล้ว` : `ปิดใช้งาน ${ids.length} รายการแล้ว`, "success");
+  };
+
+  const thumbOf = (c: ProductCollection) => {
+    const first = c.products[0];
+    return first ? productStore.getById(first.productId)?.image : undefined;
+  };
+
+  const exportColumns: ExportColumn<ProductCollection>[] = [
+    { header: "ชื่อกลุ่มสินค้าพิเศษ", value: (c) => c.name },
+    { header: "จำนวนสินค้า", value: (c) => c.products.length },
+    { header: "สถานะ", value: (c) => COLLECTION_STATUS_META[c.status].label },
+    { header: "แก้ไขล่าสุด", value: (c) => c.updatedAt },
+  ];
 
   const columns: DataTableColumn<ProductCollection>[] = [
     {
@@ -189,35 +227,50 @@ export default function AdminProductCollectionsListPage() {
         />
       ),
     },
-    { key: "name", label: "Collection Name", render: (row) => <p class="font-medium text-ink">{row.name}</p> },
-    { key: "products", label: "จำนวนสินค้า", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.products.length} สินค้า</span> },
-    { key: "status", label: "Status", render: (row) => <StatusBadge tone={COLLECTION_STATUS_META[row.status].tone}>{COLLECTION_STATUS_META[row.status].label}</StatusBadge> },
-    { key: "updated", label: "Updated", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.updatedAt}</span> },
+    {
+      key: "name",
+      label: "กลุ่มสินค้าพิเศษ",
+      render: (row) => (
+        <div class="flex min-w-0 items-center gap-3">
+          <Thumb src={thumbOf(row)} class="size-11" />
+          <div class="min-w-0">
+            <p class="truncate text-sm font-medium text-ink">{row.name}</p>
+            <p class="truncate text-xs text-ink-gray">{row.id}</p>
+          </div>
+        </div>
+      ),
+    },
+    { key: "products", label: "จำนวนสินค้า", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{row.products.length.toLocaleString("th-TH")}</span> },
+    { key: "status", label: "สถานะ", render: (row) => <StatusBadge tone={COLLECTION_STATUS_META[row.status].tone}>{COLLECTION_STATUS_META[row.status].label}</StatusBadge> },
+    { key: "updated", label: "แก้ไขล่าสุด", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.updatedAt}</span> },
     {
       key: "actions",
       label: "",
       align: "right",
-      render: (row) => <CollectionRowActionsMenu id={row.id} name={row.name} onDelete={() => requestDelete(row)} />,
+      render: (row) => (
+        <CollectionRowActionsMenu id={row.id} name={row.name} isActive={row.status === "active"} onToggleStatus={() => setConfirmToggle(row)} onDelete={() => requestDelete(row)} />
+      ),
     },
   ];
 
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
-      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "Product Collections" }]} />
+      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สินค้า", href: "/admin/products" }, { label: "กลุ่มสินค้าพิเศษ" }]} />
       <PageHeader
-        title="Product Collections"
-        description="จัดการกลุ่มสินค้าสำหรับใช้งานใน Homepage และ Campaign"
+        title="กลุ่มสินค้าพิเศษ"
+        description="เลือกสินค้าเองเพื่อใช้ในหน้าแคมเปญ เมนู และหน้าแรก"
         actions={
           <div class="flex flex-wrap items-center gap-2">
+            <ExportMenu filenameBase="collections-report" columns={exportColumns} rows={sorted()} />
             <Button href="/admin/content/product-collections/new" variant="primary">
-              <PlusIcon class="size-4" /> สร้าง Collection
+              <PlusIcon class="size-4" /> เพิ่มกลุ่มสินค้าพิเศษ
             </Button>
           </div>
         }
       />
 
       <FilterBar
-        search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาชื่อ Collection, ID..." }}
+        search={{ value: search(), onInput: setSearch, placeholder: "ค้นหาชื่อกลุ่มสินค้าพิเศษ, ID..." }}
         filters={[{ ...STATUS_FILTER_OPTIONS, value: statusFilter() }]}
         onFilterChange={handleFilterChange}
         sort={{ value: sort(), options: SORT_OPTIONS, onChange: setSort }}
@@ -227,7 +280,7 @@ export default function AdminProductCollectionsListPage() {
         <Show
           when={listStatus() === "success"}
           fallback={
-            <EmptyState tone="error" icon={<RefreshIcon />} title="ไม่สามารถโหลดรายการ Collections ได้" description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง" actionLabel="ลองอีกครั้ง" onAction={loadList} class="bg-surface-card shadow-card" />
+            <EmptyState tone="error" icon={<RefreshIcon />} title="ไม่สามารถโหลดรายการกลุ่มสินค้าพิเศษได้" description="เกิดข้อผิดพลาดชั่วคราว ลองโหลดข้อมูลอีกครั้ง" actionLabel="ลองอีกครั้ง" onAction={loadList} class="bg-surface-card shadow-card" />
           }
         >
           <Show
@@ -235,9 +288,9 @@ export default function AdminProductCollectionsListPage() {
             fallback={
               <EmptyState
                 icon={<LayersIcon />}
-                title={hasActiveFilters() ? "ไม่พบ Collection ที่ตรงกับการค้นหา" : "ยังไม่มี Collection"}
-                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "สร้าง Collection แรกของคุณเพื่อเริ่มต้น"}
-                actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "สร้าง Collection"}
+                title={hasActiveFilters() ? "ไม่พบกลุ่มสินค้าพิเศษที่ตรงกับการค้นหา" : "ยังไม่มีกลุ่มสินค้าพิเศษ"}
+                description={hasActiveFilters() ? undefined : "เริ่มเพิ่มกลุ่มสินค้าพิเศษแรกของคุณ"}
+                actionLabel={hasActiveFilters() ? "ล้างการค้นหา" : "+ เพิ่มกลุ่มสินค้าพิเศษ"}
                 onAction={hasActiveFilters() ? clearFilters : () => navigate("/admin/content/product-collections/new")}
                 class="bg-surface-card shadow-card"
               />
@@ -254,7 +307,7 @@ export default function AdminProductCollectionsListPage() {
               getRowKey={(row) => row.id}
               onRowClick={(row) => setQuickViewId(row.id)}
               renderMobileCard={(row) => (
-                <div class="flex gap-3 rounded-card bg-surface-card p-4 shadow-card">
+                <div class="flex gap-3 rounded-card bg-surface-card p-3 shadow-card">
                   <input
                     type="checkbox"
                     aria-label={`เลือก ${row.name}`}
@@ -263,14 +316,25 @@ export default function AdminProductCollectionsListPage() {
                     onChange={() => toggleSelect(row.id)}
                     class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
                   />
-                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-2 text-left">
-                    <div class="flex items-start justify-between gap-2">
-                      <p class="truncate font-semibold text-ink">{row.name}</p>
-                      <StatusBadge tone={COLLECTION_STATUS_META[row.status].tone}>{COLLECTION_STATUS_META[row.status].label}</StatusBadge>
+                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 gap-3 text-left">
+                    <Thumb src={thumbOf(row)} class="size-16" />
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-sm font-medium text-ink">{row.name}</p>
+                      <p class="truncate text-xs text-ink-gray">{row.products.length.toLocaleString("th-TH")} สินค้า</p>
+                      <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <StatusBadge tone={COLLECTION_STATUS_META[row.status].tone}>{COLLECTION_STATUS_META[row.status].label}</StatusBadge>
+                      </div>
+                      <p class="mt-1 text-xs text-ink-placeholder">แก้ไขล่าสุด {row.updatedAt}</p>
                     </div>
-                    <p class="text-xs text-ink-gray">{row.products.length} สินค้า · แก้ไขล่าสุด {row.updatedAt}</p>
-                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>
                   </button>
+                  <CollectionRowActionsMenu
+                    id={row.id}
+                    name={row.name}
+                    isActive={row.status === "active"}
+                    onToggleStatus={() => setConfirmToggle(row)}
+                    onDelete={() => requestDelete(row)}
+                    triggerClass="flex size-9 shrink-0 items-center justify-center self-start rounded-pill text-ink-gray hover:bg-surface-pink"
+                  />
                 </div>
               )}
             />
@@ -283,7 +347,11 @@ export default function AdminProductCollectionsListPage() {
       <AdminBulkActionBar
         count={selectedIds().size}
         onClear={clearSelection}
-        actions={[{ label: "ลบ", tone: "danger", onClick: () => setConfirmBulkDelete(true) }]}
+        actions={[
+          { label: "เปิดใช้งาน", onClick: () => bulkSetStatus("active") },
+          { label: "ปิดใช้งาน", onClick: () => bulkSetStatus("inactive") },
+          { label: "ลบ", tone: "danger", onClick: () => setConfirmBulkDelete(true) },
+        ]}
       />
 
       <QuickViewDrawer
@@ -302,9 +370,9 @@ export default function AdminProductCollectionsListPage() {
       <ConfirmDialog
         open={confirmDelete() !== null}
         onOpenChange={(open) => !open && setConfirmDelete(null)}
-        title="ลบ Collection?"
+        title="ลบกลุ่มสินค้าพิเศษ?"
         description={`คุณต้องการลบ "${confirmDelete()?.name ?? ""}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-        confirmLabel="ลบ"
+        confirmLabel="ลบกลุ่มสินค้าพิเศษ"
         tone="danger"
         loading={actionLoading()}
         onConfirm={confirmDeleteAction}
@@ -313,9 +381,9 @@ export default function AdminProductCollectionsListPage() {
       <ConfirmDialog
         open={confirmBulkDelete()}
         onOpenChange={setConfirmBulkDelete}
-        title="ลบ Collection ที่เลือก?"
-        description={`คุณต้องการลบ Collection ${selectedIds().size} รายการที่เลือกหรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-        confirmLabel="ลบ"
+        title="ลบกลุ่มสินค้าพิเศษที่เลือก?"
+        description={`คุณต้องการลบกลุ่มสินค้าพิเศษ ${selectedIds().size} รายการที่เลือกหรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
+        confirmLabel="ลบกลุ่มสินค้าพิเศษ"
         tone="danger"
         loading={actionLoading()}
         onConfirm={confirmBulkDeleteAction}
@@ -329,14 +397,34 @@ export default function AdminProductCollectionsListPage() {
           const b = blockedDelete();
           if (!b) return "";
           const parts: string[] = [];
-          if (b.deps.navRefs.length > 0) parts.push(`ถูกใช้งานใน Navigation: ${b.deps.navRefs.map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
-          if (b.deps.pageRefs.length > 0) parts.push(`ถูกใช้งานใน Promotion Page: ${b.deps.pageRefs.map((r) => (r.isHomepage ? "Homepage" : r.pageName)).join(", ")}`);
-          return `"${b.collection.name}" — ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบ Collection นี้`;
+          if (b.deps.navRefs.length > 0) parts.push(`ถูกใช้งานในเมนู: ${b.deps.navRefs.map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
+          if (b.deps.pageRefs.length > 0) parts.push(`ถูกใช้งานในหน้า: ${b.deps.pageRefs.map((r) => (r.isHomepage ? "หน้าแรก" : r.pageName)).join(", ")}`);
+          return `กลุ่มสินค้าพิเศษ "${b.collection.name}" ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบกลุ่มสินค้าพิเศษนี้`;
         })()}
         confirmLabel="เข้าใจแล้ว"
         cancelLabel="ปิด"
         onConfirm={() => setBlockedDelete(null)}
       />
+
+      <ConfirmDialog
+        open={confirmToggle() !== null}
+        onOpenChange={(open) => !open && setConfirmToggle(null)}
+        title={confirmToggle()?.status === "active" ? "ปิดใช้งานกลุ่มสินค้าพิเศษนี้?" : "เปิดใช้งานกลุ่มสินค้าพิเศษนี้?"}
+        description={confirmToggle()?.status === "active" ? `"${confirmToggle()?.name ?? ""}" จะไม่แสดงสินค้าในส่วนที่ใช้กลุ่มสินค้าพิเศษนี้บนหน้าร้าน` : `"${confirmToggle()?.name ?? ""}" จะกลับมาแสดงสินค้าบนหน้าร้าน`}
+        confirmLabel={confirmToggle()?.status === "active" ? "ปิดใช้งาน" : "เปิดใช้งาน"}
+        loading={actionLoading()}
+        onConfirm={confirmToggleAction}
+      />
+    </div>
+  );
+}
+
+function Thumb(props: { src?: string; class: string }) {
+  return (
+    <div class={`flex shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder ${props.class}`}>
+      <Show when={props.src} fallback={<ImageIcon class="size-5" />}>
+        <img src={props.src} alt="" class="size-full object-cover" />
+      </Show>
     </div>
   );
 }
@@ -344,17 +432,19 @@ export default function AdminProductCollectionsListPage() {
 function ListSkeleton() {
   return (
     <div class="flex flex-col gap-3">
-      {Array.from({ length: 5 }).map(() => (
-        <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
-          <Skeleton class="size-11 shrink-0 rounded-media" />
-          <div class="flex flex-1 flex-col gap-1.5">
-            <Skeleton class="h-4 w-1/3" />
-            <Skeleton class="h-3 w-1/4" />
+      <Skeleton class="h-11 w-full rounded-pill" />
+      <For each={[0, 1, 2, 3, 4, 5]}>
+        {() => (
+          <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
+            <Skeleton class="size-11 shrink-0 rounded-media" />
+            <div class="flex flex-1 flex-col gap-1.5">
+              <Skeleton class="h-4 w-1/2" />
+              <Skeleton class="h-3 w-1/4" />
+            </div>
+            <Skeleton class="h-8 w-16 rounded-pill" />
           </div>
-          <Skeleton class="h-6 w-20 rounded-pill" />
-          <Skeleton class="h-8 w-14 rounded-pill" />
-        </div>
-      ))}
+        )}
+      </For>
     </div>
   );
 }

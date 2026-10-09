@@ -3,6 +3,7 @@ import { isServer } from "solid-js/web";
 import {
   type ProductCollection,
   type ProductCollectionFormValues,
+  type CollectionStatus,
   buildMockProductCollections,
   normalizeProductCollection,
 } from "./adminCollections";
@@ -17,6 +18,7 @@ type AdminCollectionContextValue = {
   add: (input: ProductCollectionFormValues) => Promise<ProductCollection>;
   update: (id: string, input: ProductCollectionFormValues) => Promise<ProductCollection>;
   remove: (id: string) => Promise<void>;
+  setStatus: (id: string, status: CollectionStatus) => Promise<void>;
 };
 
 const AdminCollectionContext = createContext<AdminCollectionContextValue>();
@@ -87,7 +89,12 @@ export function AdminCollectionProvider(props: { children: JSX.Element }) {
     mutate((list) => list.filter((c) => c.id !== id));
   };
 
-  return <AdminCollectionContext.Provider value={{ collections, getById, add, update, remove }}>{props.children}</AdminCollectionContext.Provider>;
+  const setStatus: AdminCollectionContextValue["setStatus"] = async (id, status) => {
+    await simulateDelay();
+    mutate((list) => list.map((c) => (c.id === id ? { ...c, status, updatedAt: TODAY_LABEL } : c)));
+  };
+
+  return <AdminCollectionContext.Provider value={{ collections, getById, add, update, remove, setStatus }}>{props.children}</AdminCollectionContext.Provider>;
 }
 
 export function useAdminCollections() {

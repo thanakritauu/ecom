@@ -6,13 +6,7 @@ import { CloseXIcon } from "~/components/admin/icons";
 import { IconImageUploader } from "~/components/admin/IconImageUploader";
 import type { PromotionStripContent } from "~/lib/adminNotificationBar";
 
-/**
- * §03/§07 — edits ONE fixed strip's content only (Icon/Text/Link) — no
- * Order, no create/delete, since there are always exactly two strips
- * (`variant` says which). The purple strip's on/off Toggle lives on the
- * page itself, not in here, since "enable/disable" and "edit content" are
- * different actions.
- */
+/** Edits one top bar (icon, text, link). The purple bar's on/off lives on the page. */
 export function NotificationItemFormDrawer(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,12 +30,12 @@ export function NotificationItemFormDrawer(props: {
     setErrors({});
   });
 
-  const title = () => (props.variant === "purple" ? "แก้ไขแถบสีม่วง" : "แก้ไขแถบสีชมพูอ่อน");
+  const title = () => (props.variant === "purple" ? "แก้ไขแถบสีม่วง" : "แก้ไขแถบสีชมพู");
 
   const validate = () => {
     const next: Record<string, string> = {};
     if (!text().trim()) next.text = "กรุณากรอกข้อความ";
-    if (linkLabel().trim() && !linkUrl().trim()) next.linkUrl = "กรุณากรอก URL ปลายทางของลิงก์";
+    if (linkLabel().trim() && !linkUrl().trim()) next.linkUrl = "กรุณากรอกลิงก์ปลายทาง";
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -64,7 +58,7 @@ export function NotificationItemFormDrawer(props: {
         <div class="fixed inset-y-0 right-0 z-50 flex w-full sm:w-[480px]">
           <Dialog.Content class="flex size-full flex-col overflow-hidden bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-drawer-in data-[closed]:animate-drawer-out">
             <div class="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
-              <Dialog.Title class="text-lg font-semibold text-ink">{title()}</Dialog.Title>
+              <Dialog.Title class="text-base font-semibold text-ink">{title()}</Dialog.Title>
               <Dialog.CloseButton
                 aria-label="ปิด"
                 class="flex size-11 shrink-0 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-surface-pink"
@@ -74,10 +68,11 @@ export function NotificationItemFormDrawer(props: {
             </div>
 
             <form onSubmit={handleSubmit} class="flex flex-1 flex-col overflow-hidden">
-              <div class="flex flex-1 flex-col gap-5 overflow-y-auto p-5">
+              <div class="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
                 <div class="flex flex-col gap-1.5">
-                  <span class="text-sm font-medium text-ink">ไอคอน (ไม่บังคับ)</span>
+                  <span class="text-sm font-medium text-ink">ไอคอน</span>
                   <IconImageUploader value={icon()} onChange={setIcon} disabled={props.saving} />
+                  <span class="text-xs text-ink-gray">ไม่ใส่ก็ได้ แถบจะแสดงเฉพาะข้อความ</span>
                 </div>
 
                 <label class="flex flex-col gap-1.5">
@@ -87,7 +82,7 @@ export function NotificationItemFormDrawer(props: {
                   <textarea
                     value={text()}
                     disabled={props.saving}
-                    placeholder="เช่น Charmiss MEGA SALE ลดสูงสุด 70%"
+                    placeholder="เช่น ลดสูงสุด 70% รับคูปองลดเพิ่ม 25%"
                     onInput={(e) => setText(e.currentTarget.value)}
                     rows={3}
                     class={`rounded-card border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray ${
@@ -100,16 +95,16 @@ export function NotificationItemFormDrawer(props: {
                 </label>
 
                 <TextField
-                  label="ข้อความลิงก์ (ไม่บังคับ)"
+                  label="ข้อความลิงก์"
                   value={linkLabel()}
                   onInput={(e) => setLinkLabel(e.currentTarget.value)}
-                  placeholder="เช่น ช็อปเลย!"
+                  placeholder="เช่น ช็อปเลย"
                   disabled={props.saving}
                 />
 
                 <Show when={linkLabel().trim()}>
                   <TextField
-                    label="URL ปลายทาง"
+                    label="ลิงก์ปลายทาง"
                     required
                     value={linkUrl()}
                     onInput={(e) => setLinkUrl(e.currentTarget.value)}
@@ -125,7 +120,7 @@ export function NotificationItemFormDrawer(props: {
                   ยกเลิก
                 </Button>
                 <Button type="submit" variant="primary" class="flex-1" loading={props.saving}>
-                  บันทึก
+                  {props.saving ? "กำลังบันทึก..." : "บันทึกแถบประกาศ"}
                 </Button>
               </div>
             </form>

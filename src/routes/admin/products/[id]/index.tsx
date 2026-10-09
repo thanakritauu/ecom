@@ -20,14 +20,11 @@ import {
   type AdminProductStatus,
 } from "~/lib/adminProductStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
-import { useAdminBrands } from "~/lib/adminBrandStore";
 import { useAdminCollections } from "~/lib/adminCollectionStore";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
 import { findNavigationReferences, describeNavigationReference } from "~/lib/adminNavigation";
 import { collectionsContainingProduct, findProductReferencesInPromotionPages } from "~/lib/masterDataRelations";
-import { STOCK_STATUS_META as INVENTORY_STOCK_STATUS_META, getAvailableStock, inventoryStatusLabel } from "~/lib/adminInventoryStock";
-import { useAdminInventoryStock } from "~/lib/adminInventoryStockStore";
 import { pushToast } from "~/lib/toast";
 import { useAdminTiktokClips } from "~/lib/adminTiktokClips";
 import { ReviewStars } from "~/components/admin/reviews/ReviewStars";
@@ -47,16 +44,13 @@ export default function AdminProductDetailPage() {
   const params = useParams<{ id: string }>();
   const store = useAdminProducts();
   const categoryStore = useAdminCategories();
-  const brandStore = useAdminBrands();
   const collectionStore = useAdminCollections();
   const contentStore = useAdminContent();
   const navigation = useAdminNavigation();
-  const inventoryStore = useAdminInventoryStock();
   const tiktokClips = useAdminTiktokClips();
   const navigate = useNavigate();
 
   const product = createMemo(() => store.getById(params.id));
-  const inventoryStock = createMemo(() => inventoryStore.getByProductId(params.id));
 
   const [confirmDelete, setConfirmDelete] = createSignal(false);
   const [confirmToggle, setConfirmToggle] = createSignal(false);
@@ -92,7 +86,7 @@ export default function AdminProductDetailPage() {
   const confirmToggleAction = async () => {
     const current = product();
     if (!current) return;
-    const nextStatus: AdminProductStatus = current.status === "disabled" ? "active" : "disabled";
+    const nextStatus: AdminProductStatus = current.status === "active" ? "disabled" : "active";
     setActionLoading(true);
     await store.setStatus(current.id, nextStatus);
     setActionLoading(false);
@@ -166,16 +160,16 @@ export default function AdminProductDetailPage() {
 
             <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div class="flex flex-col gap-6 lg:col-span-2">
-                <div class="flex flex-col gap-2 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-                  <h2 class="text-base font-semibold text-ink">รูปภาพสินค้า (Product Gallery)</h2>
+                <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+                  <h2 class="text-base font-semibold text-ink">รูปภาพสินค้า</h2>
                   <div class="flex gap-3 overflow-x-auto">
                     <For each={galleryImages()}>{(src) => <img src={src} alt="" class="size-40 shrink-0 rounded-media object-cover" />}</For>
                   </div>
                 </div>
 
                 <Show when={p().adminVariants.length > 0}>
-                  <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-                    <h2 class="text-base font-semibold text-ink">ตัวเลือกสินค้า (Variants)</h2>
+                  <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+                    <h2 class="text-base font-semibold text-ink">ตัวเลือกสินค้า</h2>
                     <ProductVariantImages
                       variants={p().adminVariants}
                       selectedId={selectedVariantId()}
@@ -187,7 +181,7 @@ export default function AdminProductDetailPage() {
                         variant's own `images`, never the Gallery. */}
                     <div class="border-t border-border pt-4">
                       <h3 class="mb-2 text-sm font-semibold text-ink">
-                        รูปภาพของตัวเลือกนี้ (Variant Images){selectedVariant() ? ` — ${selectedVariant()!.label}` : ""}
+                        รูปตัวเลือก{selectedVariant() ? ` ${selectedVariant()!.label}` : ""}
                       </h3>
                       <Show
                         when={(selectedVariant()?.images?.length ?? 0) > 0}
@@ -201,7 +195,7 @@ export default function AdminProductDetailPage() {
                   </div>
                 </Show>
 
-                <div class="flex flex-col gap-2 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+                <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">คำอธิบายสินค้า</h2>
                   <p class="text-sm text-ink-gray">{p().description ?? "ยังไม่มีคำอธิบายสินค้า"}</p>
                 </div>
@@ -216,7 +210,7 @@ export default function AdminProductDetailPage() {
                   </div>
                   <Show
                     when={tiktokClips.clipsForProduct(p().id).length > 0}
-                    fallback={<p class="text-sm text-ink-gray">ยังไม่มีคลิปที่ผูกกับสินค้านี้ — PDP จะแสดงคลิปอื่นของแบรนด์แทน</p>}
+                    fallback={<p class="text-sm text-ink-gray">ยังไม่มีคลิปของสินค้านี้ หน้าสินค้าจะแสดงคลิปอื่นของ Charmiss แทน</p>}
                   >
                     <div class="flex gap-3 overflow-x-auto">
                       <For each={tiktokClips.clipsForProduct(p().id)}>
@@ -298,7 +292,7 @@ export default function AdminProductDetailPage() {
                     </div>
                   </Show>
                   <dl class="flex flex-col gap-1.5 text-sm">
-                    <Row label="จำนวนรีวิว (แสดงบนหน้าร้าน)" value={p().reviewCount !== undefined ? String(p().reviewCount) : "-"} />
+                    <Row label="จำนวนรีวิวบนการ์ด" value={p().reviewCount !== undefined ? String(p().reviewCount) : "-"} />
                     <Row label="รีวิวในระบบ" value={String(p().reviews?.length ?? 0)} />
                     <Row label="ขายแล้ว" value={p().soldCount !== undefined ? `${p().soldCount} ชิ้น` : "-"} />
                   </dl>
@@ -310,42 +304,23 @@ export default function AdminProductDetailPage() {
                   <StatusBadge tone={STOCK_STATUS_META[displayStockStatus()].tone} class="w-fit">
                     {stockStatusLabel({ stockLeft: displayStock(), lowStockThreshold: p().lowStockThreshold })}
                   </StatusBadge>
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="ใกล้หมดเมื่อเหลือ" value={`${p().lowStockThreshold} ชิ้น`} />
+                  </dl>
                 </div>
-
-                {/* Inventory (Phase 06) — read-only Inventory System snapshot, additive to the Product-owned "สต๊อกสินค้า" card above (never replaces it, never a place to edit stock — §4 of the phase spec). */}
-                <Show when={inventoryStock()}>
-                  {(stock) => (
-                    <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-                      <div class="flex items-center justify-between gap-2">
-                        <h2 class="text-base font-semibold text-ink">คลังสินค้า (Inventory System)</h2>
-                        <StatusBadge tone={INVENTORY_STOCK_STATUS_META[stock().status].tone}>{inventoryStatusLabel(stock())}</StatusBadge>
-                      </div>
-                      <dl class="flex flex-col gap-1.5 text-sm">
-                        <Row label="Available" value={String(getAvailableStock(stock()))} />
-                        <Row label="Reserved" value={String(stock().reserved)} />
-                        <Row label="On Hand" value={String(stock().onHand)} />
-                        <Row label="Source" value={stock().source} />
-                        <Row label="Last Sync" value={stock().syncedAt} />
-                      </dl>
-                      <Button variant="outline" size="sm" href={`/admin/inventory/items/${stock().id}`}>
-                        ดูรายละเอียดคลังสินค้า
-                      </Button>
-                    </div>
-                  )}
-                </Show>
 
                 <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">สถานะ</h2>
                   <StatusBadge tone={ADMIN_PRODUCT_STATUS_META[p().status].tone} class="w-fit">
                     {ADMIN_PRODUCT_STATUS_META[p().status].label}
                   </StatusBadge>
+                  <p class="text-xs text-ink-gray">{p().status === "active" ? "แสดงบนหน้าร้านและลูกค้าสั่งซื้อได้" : "ไม่แสดงบนหน้าร้าน"}</p>
                 </div>
 
-                <div class="flex flex-col gap-2 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+                <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">ข้อมูลสินค้า</h2>
                   <dl class="flex flex-col gap-1.5 text-sm">
                     <Row label="SKU" value={p().sku} />
-                    <Row label="แบรนด์" value={brandStore.getById(p().brandId)?.name ?? p().brand ?? "-"} />
                     <Row label="หมวดหมู่" value={categoryStore.getById(p().categoryId)?.name ?? LEGACY_CATEGORY_LABELS[p().category ?? ""] ?? "-"} />
                     <Row label="แก้ไขล่าสุด" value={p().updatedAt} />
                   </dl>
@@ -356,9 +331,9 @@ export default function AdminProductDetailPage() {
             <ConfirmDialog
               open={confirmToggle()}
               onOpenChange={setConfirmToggle}
-              title={p().status === "disabled" ? "เปิดการขายสินค้านี้?" : "ปิดการขายสินค้านี้?"}
-              description={`"${p().name}" จะ${p().status === "disabled" ? "กลับมาแสดงในร้านค้า" : "ถูกซ่อนจากร้านค้า"}`}
-              confirmLabel={p().status === "disabled" ? "เปิดการขาย" : "ปิดการขาย"}
+              title={p().status === "active" ? "ปิดการขายสินค้านี้?" : "เปิดการขายสินค้านี้?"}
+              description={`"${p().name}" จะ${p().status === "active" ? "ถูกซ่อนจากหน้าร้านทุกหน้า" : "แสดงบนหน้าร้านและลูกค้าสั่งซื้อได้"}`}
+              confirmLabel={p().status === "active" ? "ปิดการขาย" : "เปิดการขาย"}
               loading={actionLoading()}
               onConfirm={confirmToggleAction}
             />
@@ -380,10 +355,10 @@ export default function AdminProductDetailPage() {
               title="ไม่สามารถลบได้"
               description={(() => {
                 const parts: string[] = [];
-                if (collectionRefs().length > 0) parts.push(`ถูกใช้งานใน Collection: ${collectionRefs().map((c) => c.name).join(", ")}`);
-                if (navigationRefs().length > 0) parts.push(`ถูกใช้งานใน Navigation: ${navigationRefs().map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
-                if (pageRefs().length > 0) parts.push(`ถูกใช้งานใน Promotion Page: ${pageRefs().map((r) => (r.isHomepage ? "Homepage" : r.pageName)).join(", ")}`);
-                return `"${p().name}" — ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบสินค้านี้`;
+                if (collectionRefs().length > 0) parts.push(`ถูกใช้งานในกลุ่มสินค้าพิเศษ: ${collectionRefs().map((c) => c.name).join(", ")}`);
+                if (navigationRefs().length > 0) parts.push(`ถูกใช้งานในเมนู: ${navigationRefs().map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
+                if (pageRefs().length > 0) parts.push(`ถูกใช้งานในหน้าแคมเปญ: ${pageRefs().map((r) => (r.isHomepage ? "หน้าแรก" : r.pageName)).join(", ")}`);
+                return `สินค้า "${p().name}" ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบสินค้านี้`;
               })()}
               confirmLabel="เข้าใจแล้ว"
               cancelLabel="ปิด"

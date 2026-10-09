@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
@@ -14,7 +14,7 @@ import { AdminBulkActionBar } from "~/components/admin/AdminBulkActionBar";
 import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
 import { CategoryRowActionsMenu } from "~/components/admin/categories/CategoryRowActionsMenu";
 import { CategoryQuickView } from "~/components/admin/categories/CategoryQuickView";
-import { RefreshIcon, CatalogIcon, PlusIcon, ImageIcon } from "~/components/admin/icons";
+import { RefreshIcon, CatalogIcon, PlusIcon } from "~/components/admin/icons";
 import { CATEGORY_STATUS_META, type AdminCategory, type CategoryStatus } from "~/lib/adminCategories";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { useAdminProducts } from "~/lib/adminProductStore";
@@ -23,11 +23,13 @@ import { productsInCategory, findCategoryReferencesInPromotionPages, type Promot
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
 import { findNavigationReferences, describeNavigationReference, type NavigationItem } from "~/lib/adminNavigation";
 import { pushToast } from "~/lib/toast";
+import { ExportMenu } from "~/components/admin/ExportMenu";
+import type { ExportColumn } from "~/lib/adminExport";
 import type { AsyncStatus } from "~/lib/types";
 
 const SORT_OPTIONS = [
-  { value: "name-asc", label: "ชื่อ A→Z" },
-  { value: "name-desc", label: "ชื่อ Z→A" },
+  { value: "name-asc", label: "ชื่อหมวดหมู่ A-Z" },
+  { value: "name-desc", label: "ชื่อหมวดหมู่ Z-A" },
   { value: "updated-desc", label: "แก้ไขล่าสุด" },
 ];
 
@@ -36,7 +38,7 @@ const STATUS_FILTER_OPTIONS: SelectFilterConfig = {
   label: "สถานะ",
   value: "all",
   options: [
-    { value: "all", label: "สถานะทั้งหมด" },
+    { value: "all", label: "ทุกสถานะ" },
     { value: "active", label: CATEGORY_STATUS_META.active.label },
     { value: "inactive", label: CATEGORY_STATUS_META.inactive.label },
   ],
@@ -55,7 +57,7 @@ export default function AdminCategoriesListPage() {
   const [statusFilter, setStatusFilterRaw] = createSignal<"all" | CategoryStatus>("all");
   const [sort, setSortRaw] = createSignal("name-asc");
   const [page, setPage] = createSignal(1);
-  const [pageSize, setPageSizeRaw] = createSignal(10);
+  const [pageSize, setPageSizeRaw] = createSignal(20);
   const [listStatus, setListStatus] = createSignal<AsyncStatus>("loading");
   const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
   const [quickViewId, setQuickViewId] = createSignal<string | null>(null);
@@ -186,11 +188,19 @@ export default function AdminCategoriesListPage() {
     setConfirmBulkDelete(false);
     clearSelection();
     if (blocked.length > 0) {
-      pushToast(`ลบไม่สำเร็จ ${blocked.length} รายการ (มีการใช้งานอยู่) — ลบสำเร็จ ${ok.length} รายการ`, "warning");
+      pushToast(`ลบสำเร็จ ${ok.length} รายการ และลบไม่ได้ ${blocked.length} รายการเพราะยังมีการใช้งานอยู่`, "warning");
     } else {
       pushToast(`ลบหมวดหมู่ ${ok.length} รายการเรียบร้อยแล้ว`, "error");
     }
   };
+
+  const exportColumns: ExportColumn<AdminCategory>[] = [
+    { header: "ชื่อหมวดหมู่", value: (row) => row.name },
+    { header: "Slug", value: (row) => row.slug },
+    { header: "จำนวนสินค้า", value: (row) => categoryProductCount(row.id) },
+    { header: "สถานะ", value: (row) => CATEGORY_STATUS_META[row.status].label },
+    { header: "แก้ไขล่าสุด", value: (row) => row.updatedAt },
+  ];
 
   const columns: DataTableColumn<AdminCategory>[] = [
     {
@@ -214,22 +224,15 @@ export default function AdminCategoriesListPage() {
       key: "name",
       label: "หมวดหมู่",
       render: (row) => (
-        <div class="flex items-center gap-3">
-          <div class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
-            <Show when={row.image} fallback={<ImageIcon class="size-4" />}>
-              <img src={row.image} alt="" class="size-full object-cover" />
-            </Show>
-          </div>
-          <div class="min-w-0">
-            <p class="truncate font-medium text-ink">{row.name}</p>
-            <p class="truncate text-xs text-ink-gray">/{row.slug}</p>
-          </div>
+        <div class="min-w-0">
+          <p class="truncate text-sm font-medium text-ink">{row.name}</p>
+          <p class="truncate text-xs text-ink-gray">/{row.slug}</p>
         </div>
       ),
     },
     { key: "products", label: "จำนวนสินค้า", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink-gray">{categoryProductCount(row.id)} สินค้า</span> },
-    { key: "status", label: "Status", render: (row) => <StatusBadge tone={CATEGORY_STATUS_META[row.status].tone}>{CATEGORY_STATUS_META[row.status].label}</StatusBadge> },
-    { key: "updated", label: "Updated", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.updatedAt}</span> },
+    { key: "status", label: "สถานะ", render: (row) => <StatusBadge tone={CATEGORY_STATUS_META[row.status].tone}>{CATEGORY_STATUS_META[row.status].label}</StatusBadge> },
+    { key: "updated", label: "แก้ไขล่าสุด", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.updatedAt}</span> },
     {
       key: "actions",
       label: "",
@@ -245,9 +248,12 @@ export default function AdminCategoriesListPage() {
         title="หมวดหมู่สินค้า"
         description="จัดการหมวดหมู่สินค้าที่ใช้แสดงในหน้าร้านและตัวกรองสินค้า"
         actions={
-          <Button href="/admin/categories/new" variant="primary">
-            <PlusIcon class="size-4" /> สร้างหมวดหมู่
-          </Button>
+          <div class="flex flex-wrap items-center gap-2">
+            <ExportMenu filenameBase="categories-report" columns={exportColumns} rows={sorted()} />
+            <Button href="/admin/categories/new" variant="primary">
+              <PlusIcon class="size-4" /> เพิ่มหมวดหมู่
+            </Button>
+          </div>
         }
       />
 
@@ -271,8 +277,8 @@ export default function AdminCategoriesListPage() {
               <EmptyState
                 icon={<CatalogIcon />}
                 title={hasActiveFilters() ? "ไม่พบหมวดหมู่ที่ตรงกับการค้นหา" : "ยังไม่มีหมวดหมู่"}
-                description={hasActiveFilters() ? "ลองเปลี่ยนคำค้นหาหรือตัวกรอง" : "สร้างหมวดหมู่แรกของคุณเพื่อเริ่มต้น"}
-                actionLabel={hasActiveFilters() ? "ล้างตัวกรอง" : "สร้างหมวดหมู่"}
+                description={hasActiveFilters() ? undefined : "เริ่มเพิ่มหมวดหมู่แรกของคุณ"}
+                actionLabel={hasActiveFilters() ? "ล้างการค้นหา" : "+ เพิ่มหมวดหมู่"}
                 onAction={hasActiveFilters() ? clearFilters : () => navigate("/admin/categories/new")}
                 class="bg-surface-card shadow-card"
               />
@@ -289,7 +295,7 @@ export default function AdminCategoriesListPage() {
               getRowKey={(row) => row.id}
               onRowClick={(row) => setQuickViewId(row.id)}
               renderMobileCard={(row) => (
-                <div class="flex gap-3 rounded-card bg-surface-card p-4 shadow-card">
+                <div class="flex gap-3 rounded-card bg-surface-card p-3 shadow-card">
                   <input
                     type="checkbox"
                     aria-label={`เลือก ${row.name}`}
@@ -298,23 +304,15 @@ export default function AdminCategoriesListPage() {
                     onChange={() => toggleSelect(row.id)}
                     class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
                   />
-                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col gap-2 text-left">
-                    <div class="flex items-start gap-3">
-                      <div class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
-                        <Show when={row.image} fallback={<ImageIcon class="size-4" />}>
-                          <img src={row.image} alt="" class="size-full object-cover" />
-                        </Show>
-                      </div>
-                      <div class="min-w-0 flex-1">
-                        <div class="flex items-start justify-between gap-2">
-                          <p class="truncate font-semibold text-ink">{row.name}</p>
-                          <StatusBadge tone={CATEGORY_STATUS_META[row.status].tone}>{CATEGORY_STATUS_META[row.status].label}</StatusBadge>
-                        </div>
-                        <p class="truncate text-xs text-ink-gray">/{row.slug} · {categoryProductCount(row.id)} สินค้า</p>
-                      </div>
+                  <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col text-left">
+                    <p class="truncate text-sm font-medium text-ink">{row.name}</p>
+                    <p class="truncate text-xs text-ink-gray">/{row.slug}</p>
+                    <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <StatusBadge tone={CATEGORY_STATUS_META[row.status].tone}>{CATEGORY_STATUS_META[row.status].label}</StatusBadge>
                     </div>
-                    <span class="flex min-h-11 items-center justify-center rounded-pill border border-border text-sm font-medium text-ink">ดูรายละเอียด</span>
+                    <p class="mt-1 text-xs text-ink-placeholder">{categoryProductCount(row.id).toLocaleString("th-TH")} สินค้า แก้ไขล่าสุด {row.updatedAt}</p>
                   </button>
+                  <CategoryRowActionsMenu id={row.id} name={row.name} onDelete={() => requestDelete(row)} triggerClass="flex size-9 shrink-0 items-center justify-center self-start rounded-pill text-ink-gray hover:bg-surface-pink" />
                 </div>
               )}
             />
@@ -352,7 +350,7 @@ export default function AdminCategoriesListPage() {
         onOpenChange={(open) => !open && setConfirmDelete(null)}
         title="ลบหมวดหมู่?"
         description={`คุณต้องการลบ "${confirmDelete()?.name ?? ""}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-        confirmLabel="ลบ"
+        confirmLabel="ลบหมวดหมู่"
         tone="danger"
         loading={actionLoading()}
         onConfirm={confirmDeleteAction}
@@ -363,7 +361,7 @@ export default function AdminCategoriesListPage() {
         onOpenChange={setConfirmBulkDelete}
         title="ลบหมวดหมู่ที่เลือก?"
         description={`คุณต้องการลบหมวดหมู่ ${selectedIds().size} รายการที่เลือกหรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-        confirmLabel="ลบ"
+        confirmLabel="ลบหมวดหมู่"
         tone="danger"
         loading={actionLoading()}
         onConfirm={confirmBulkDeleteAction}
@@ -378,9 +376,9 @@ export default function AdminCategoriesListPage() {
           if (!b) return "";
           const parts: string[] = [];
           if (b.deps.productCount > 0) parts.push(`มีสินค้า ${b.deps.productCount} รายการที่ใช้หมวดหมู่นี้`);
-          if (b.deps.navRefs.length > 0) parts.push(`ถูกใช้งานใน Navigation: ${b.deps.navRefs.map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
-          if (b.deps.pageRefs.length > 0) parts.push(`ถูกใช้งานใน Promotion Page: ${b.deps.pageRefs.map((r) => (r.isHomepage ? "Homepage" : r.pageName)).join(", ")}`);
-          return `"${b.category.name}" — ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบหมวดหมู่นี้`;
+          if (b.deps.navRefs.length > 0) parts.push(`ถูกใช้งานในเมนู: ${b.deps.navRefs.map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
+          if (b.deps.pageRefs.length > 0) parts.push(`ถูกใช้งานในหน้าแคมเปญ: ${b.deps.pageRefs.map((r) => (r.isHomepage ? "หน้าแรก" : r.pageName)).join(", ")}`);
+          return `"${b.category.name}" ${parts.join(" และ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบหมวดหมู่นี้`;
         })()}
         confirmLabel="เข้าใจแล้ว"
         cancelLabel="ปิด"
@@ -393,17 +391,19 @@ export default function AdminCategoriesListPage() {
 function ListSkeleton() {
   return (
     <div class="flex flex-col gap-3">
-      {Array.from({ length: 5 }).map(() => (
-        <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
-          <Skeleton class="size-11 shrink-0 rounded-media" />
-          <div class="flex flex-1 flex-col gap-1.5">
-            <Skeleton class="h-4 w-1/3" />
-            <Skeleton class="h-3 w-1/4" />
+      <Skeleton class="h-11 w-full rounded-pill" />
+      <For each={[0, 1, 2, 3, 4, 5]}>
+        {() => (
+          <div class="flex items-center gap-3 rounded-card bg-surface-card p-3 shadow-card">
+            <Skeleton class="size-11 shrink-0 rounded-media" />
+            <div class="flex flex-1 flex-col gap-1.5">
+              <Skeleton class="h-4 w-1/2" />
+              <Skeleton class="h-3 w-1/4" />
+            </div>
+            <Skeleton class="h-8 w-16 rounded-pill" />
           </div>
-          <Skeleton class="h-6 w-20 rounded-pill" />
-          <Skeleton class="h-8 w-14 rounded-pill" />
-        </div>
-      ))}
+        )}
+      </For>
     </div>
   );
 }

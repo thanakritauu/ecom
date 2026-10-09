@@ -2,31 +2,25 @@ import { createResource, createSignal, For, Index, onMount, Show, type JSX } fro
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
-import { ChevronDownIcon } from "~/components/admin/icons";
+import { ChevronDownIcon, PlusIcon } from "~/components/admin/icons";
+import { Toggle } from "~/components/admin/Toggle";
 import {
-  CUSTOMER_STATUS_META,
   GENDER_LABEL,
   isValidEmail,
   type Customer,
   type CustomerAddress,
   type CustomerFormValues,
   type CustomerGender,
-  type CustomerStatus,
 } from "~/lib/adminCustomers";
 import { isBangkok, THAI_PROVINCES } from "~/lib/checkoutData";
 import { districtsOf, loadThaiAddressData, postalCodesOf, stripAreaPrefix, subDistrictsOf } from "~/lib/thaiAddress";
-
-const STATUS_OPTIONS: { value: CustomerStatus; label: string }[] = (Object.keys(CUSTOMER_STATUS_META) as CustomerStatus[]).map((value) => ({
-  value,
-  label: CUSTOMER_STATUS_META[value].label,
-}));
 
 const GENDER_OPTIONS: { value: CustomerGender; label: string }[] = (Object.keys(GENDER_LABEL) as CustomerGender[]).map((value) => ({ value, label: GENDER_LABEL[value] }));
 
 let draftAddressId = 0;
 const emptyAddress = (kind?: "billing"): CustomerAddress => ({
   id: `addr-admin-${Date.now()}-${draftAddressId++}`,
-  label: kind === "billing" ? "ที่อยู่ออกใบเสร็จรับเงิน" : "",
+  label: kind === "billing" ? "ที่อยู่ออกใบกำกับภาษี" : "",
   recipientName: "",
   phone: "",
   addressLine: "",
@@ -38,15 +32,15 @@ const emptyAddress = (kind?: "billing"): CustomerAddress => ({
 });
 
 /**
- * One Create/Edit form shared by `/new` and `/:id/edit` — same shape as
- * `CategoryForm`/`BrandForm`. Profile fields mirror the storefront's
- * "ข้อมูลส่วนตัว" page (birth date + gender, same labels); the address book
- * mirrors `/account/address` (shipping addresses + ที่อยู่ออกใบเสร็จ, which may
+ * The customer edit form (customers are created by storefront sign-ups,
+ * never in Admin). Profile fields mirror the storefront's "ข้อมูลส่วนตัว"
+ * page (birth date + gender, same labels); the address book mirrors
+ * `/account/address` (shipping addresses + ที่อยู่ออกใบกำกับภาษี, which may
  * be a company and never holds the default).
  */
 export function CustomerForm(props: {
   initial?: Customer;
-  mode: "create" | "edit";
+  submitLabel: string;
   isEmailTaken: (email: string) => boolean;
   isPhoneTaken: (phone: string) => boolean;
   onSubmit: (values: CustomerFormValues) => Promise<void>;
@@ -74,7 +68,6 @@ export function CustomerForm(props: {
     setAddresses((list) => list.map((a, i) => (i === index ? { ...a, ...patch } : patch.isDefault ? { ...a, isDefault: false } : a)));
   const removeAddress = (index: number) => setAddresses((list) => list.filter((_, i) => i !== index));
   const addAddress = (kind?: "billing") => setAddresses((list) => [...list, emptyAddress(kind)]);
-  const [status, setStatus] = createSignal<CustomerStatus>(props.initial?.status ?? "active");
 
   const [errors, setErrors] = createSignal<Record<string, string>>({});
   const [saving, setSaving] = createSignal(false);
@@ -87,7 +80,7 @@ export function CustomerForm(props: {
 
     const cleanEmail = email().trim();
     if (!cleanEmail) next.email = "กรุณากรอกอีเมล";
-    else if (!isValidEmail(cleanEmail)) next.email = "รูปแบบอีเมลไม่ถูกต้อง";
+    else if (!isValidEmail(cleanEmail)) next.email = "กรุณากรอกอีเมลที่ถูกต้อง";
     else if (props.isEmailTaken(cleanEmail)) next.email = "อีเมลนี้ถูกใช้งานแล้ว";
 
     const cleanPhone = phone().trim();
@@ -120,13 +113,12 @@ export function CustomerForm(props: {
       lastName: lastName().trim(),
       email: email().trim(),
       phone: phone().trim(),
-      status: status(),
       birthDate: birthDate() || undefined,
       gender: gender() || undefined,
       addresses: withDefault(
         addresses().map((a) => ({
           ...a,
-          label: a.label.trim() || (a.kind === "billing" ? "ที่อยู่ออกใบเสร็จรับเงิน" : "ที่อยู่"),
+          label: a.label.trim() || (a.kind === "billing" ? "ที่อยู่ออกใบกำกับภาษี" : "ที่อยู่"),
           recipientName: a.recipientName.trim(),
           phone: a.phone.trim(),
           addressLine: a.addressLine.trim(),
@@ -144,7 +136,7 @@ export function CustomerForm(props: {
     try {
       await props.onSubmit(values);
     } catch {
-      setSubmitError("บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      setSubmitError("บันทึกลูกค้าไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     } finally {
       setSaving(false);
     }
@@ -152,12 +144,12 @@ export function CustomerForm(props: {
 
   return (
     <form onSubmit={handleSubmit} class="flex flex-col gap-6">
-      <Section title="ข้อมูลลูกค้า">
+      <Section title="ข้อมูลส่วนตัว">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
             label="ชื่อ"
             required
-            placeholder="Thanakrit"
+            placeholder="สมหญิง"
             value={firstName()}
             onInput={(e) => setFirstName(e.currentTarget.value)}
             error={errors().firstName}
@@ -166,7 +158,7 @@ export function CustomerForm(props: {
           <TextField
             label="นามสกุล"
             required
-            placeholder="P."
+            placeholder="ใจดี"
             value={lastName()}
             onInput={(e) => setLastName(e.currentTarget.value)}
             error={errors().lastName}
@@ -185,7 +177,7 @@ export function CustomerForm(props: {
           <TextField
             label="เบอร์โทรศัพท์"
             required
-            placeholder="089-111-2222"
+            placeholder="081-234-5678"
             value={phone()}
             onInput={(e) => setPhone(e.currentTarget.value)}
             error={errors().phone}
@@ -193,30 +185,14 @@ export function CustomerForm(props: {
           />
           <TextField label="วันเกิด" type="date" value={birthDate()} onInput={(e) => setBirthDate(e.currentTarget.value)} disabled={saving()} />
           <SelectField label="เพศ" value={gender()} disabled={saving()} onChange={(v) => setGender(v as CustomerGender | "")}>
-            <option value="">ยังไม่ระบุข้อมูล</option>
+            <option value="">ไม่ระบุ</option>
             <For each={GENDER_OPTIONS}>{(opt) => <option value={opt.value}>{opt.label}</option>}</For>
           </SelectField>
-          <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium text-ink">สถานะ</span>
-            <div class="relative">
-              <select
-                value={status()}
-                disabled={saving()}
-                onChange={(e) => setStatus(e.currentTarget.value as CustomerStatus)}
-                class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-              >
-                {STATUS_OPTIONS.map((opt) => (
-                  <option value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-              <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
-            </div>
-          </label>
         </div>
       </Section>
 
       <Section title="สมุดที่อยู่">
-        <Show when={addresses().length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่มีที่อยู่ — ลูกค้าเพิ่มเองได้ที่หน้าร้าน (บัญชีของฉัน › ที่อยู่) หรือเพิ่มที่นี่</p>}>
+        <Show when={addresses().length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่มีที่อยู่ ลูกค้าเพิ่มเองได้ในหน้าบัญชีของฉัน หรือเพิ่มที่นี่</p>}>
           <div class="flex flex-col gap-4">
             <Index each={addresses()}>
               {(a, i) => {
@@ -236,13 +212,13 @@ export function CustomerForm(props: {
                 return (
                   <div class="flex flex-col gap-4 rounded-card border border-border p-4">
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                      <p class="text-sm font-semibold text-ink">{billing() ? "ที่อยู่ออกใบเสร็จรับเงิน" : "ที่อยู่จัดส่ง"}</p>
+                      <p class="text-sm font-semibold text-ink">{billing() ? "ที่อยู่ออกใบกำกับภาษี" : "ที่อยู่จัดส่ง"}</p>
                       <Button type="button" variant="outline" size="sm" onClick={() => removeAddress(i)} disabled={saving()}>
                         ลบที่อยู่
                       </Button>
                     </div>
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <TextField label="ชื่อที่อยู่" placeholder={billing() ? "ที่อยู่ออกใบเสร็จรับเงิน" : "บ้าน, ที่ทำงาน"} value={a().label} onInput={(e) => patchAddress(i, { label: e.currentTarget.value })} disabled={saving()} />
+                      <TextField label="ชื่อที่อยู่" placeholder={billing() ? "ที่อยู่ออกใบกำกับภาษี" : "บ้าน, ที่ทำงาน"} value={a().label} onInput={(e) => patchAddress(i, { label: e.currentTarget.value })} disabled={saving()} />
                       <SelectField
                         label="ประเภท"
                         value={billing() ? "billing" : "shipping"}
@@ -250,7 +226,7 @@ export function CustomerForm(props: {
                         onChange={(v) => patchAddress(i, v === "billing" ? { kind: "billing", isDefault: false } : { kind: undefined })}
                       >
                         <option value="shipping">ที่อยู่จัดส่ง</option>
-                        <option value="billing">ที่อยู่ออกใบเสร็จรับเงิน</option>
+                        <option value="billing">ที่อยู่ออกใบกำกับภาษี</option>
                       </SelectField>
                       <TextField
                         label={billing() ? "ชื่อ หรือชื่อบริษัท" : "ชื่อผู้รับ"}
@@ -263,7 +239,7 @@ export function CustomerForm(props: {
                       <TextField label="เบอร์โทรศัพท์" required placeholder="081-234-5678" value={a().phone} onInput={(e) => patchAddress(i, { phone: e.currentTarget.value })} error={err("phone")} disabled={saving()} />
                       <div class="sm:col-span-2">
                         <TextField
-                          label="ที่อยู่ (บ้านเลขที่ อาคาร ซอย ถนน)"
+                          label="บ้านเลขที่ อาคาร ซอย ถนน"
                           required
                           placeholder="88/12 ซอยสุขุมวิท 31"
                           value={a().addressLine}
@@ -291,23 +267,24 @@ export function CustomerForm(props: {
                         disabled={saving() || !a().province || !geo()}
                         onChange={(v) => patchAddress(i, { district: v, subDistrict: "", postalCode: "" })}
                       >
-                        <option value="">{!a().province ? "—" : geo.loading ? "…" : bkk() ? "เลือกเขต" : "เลือกอำเภอ"}</option>
+                        <option value="">{!a().province ? "-" : geo.loading ? "กำลังโหลด" : bkk() ? "เลือกเขต" : "เลือกอำเภอ"}</option>
                         <For each={districtOptions()}>{(d) => <option value={d} selected={d === a().district}>{d}</option>}</For>
                       </SelectField>
                       <SelectField label={bkk() ? "แขวง" : "ตำบล"} required value={a().subDistrict} error={err("subDistrict")} disabled={saving() || !a().district} onChange={pickSubDistrict}>
-                        <option value="">{!a().district ? "—" : bkk() ? "เลือกแขวง" : "เลือกตำบล"}</option>
+                        <option value="">{!a().district ? "-" : bkk() ? "เลือกแขวง" : "เลือกตำบล"}</option>
                         <For each={subDistrictOptions()}>{(d) => <option value={d} selected={d === a().subDistrict}>{d}</option>}</For>
                       </SelectField>
                       <SelectField label="รหัสไปรษณีย์" required value={a().postalCode} error={err("postalCode")} disabled={saving() || !a().district} onChange={(v) => patchAddress(i, { postalCode: v })}>
-                        <option value="">{!a().district ? "—" : "เลือกรหัสไปรษณีย์"}</option>
+                        <option value="">{!a().district ? "-" : "เลือกรหัสไปรษณีย์"}</option>
                         <For each={postalOptions()}>{(c) => <option value={c} selected={c === a().postalCode}>{c}</option>}</For>
                       </SelectField>
                     </div>
                     <Show when={!billing()}>
-                      <label class="flex items-center gap-2 text-sm text-ink">
-                        <input type="checkbox" checked={!!a().isDefault} disabled={saving()} onChange={(e) => patchAddress(i, { isDefault: e.currentTarget.checked })} class="size-4 rounded accent-brand-pink" />
-                        ตั้งเป็นที่อยู่จัดส่งหลัก
-                      </label>
+                      <div class="flex flex-col gap-1.5">
+                        <span class="text-sm font-medium text-ink">ที่อยู่จัดส่งหลัก</span>
+                        <Toggle checked={!!a().isDefault} disabled={saving()} onChange={(v) => patchAddress(i, { isDefault: v })} onLabel="เป็นที่อยู่หลัก" offLabel="ไม่ใช่ที่อยู่หลัก" />
+                        <span class="text-xs text-ink-gray">หน้าชำระเงินจะเลือกที่อยู่นี้ให้ก่อน</span>
+                      </div>
                     </Show>
                   </div>
                 );
@@ -317,10 +294,10 @@ export function CustomerForm(props: {
         </Show>
         <div class="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={() => addAddress()} disabled={saving()}>
-            เพิ่มที่อยู่จัดส่ง
+            <PlusIcon class="size-4" /> เพิ่มที่อยู่จัดส่ง
           </Button>
           <Button type="button" variant="outline" onClick={() => addAddress("billing")} disabled={saving()}>
-            เพิ่มที่อยู่ออกใบเสร็จ
+            <PlusIcon class="size-4" /> เพิ่มที่อยู่ออกใบกำกับภาษี
           </Button>
         </div>
       </Section>
@@ -332,12 +309,12 @@ export function CustomerForm(props: {
       </Show>
 
       <AdminFloatingBar>
-        <div class="flex w-full flex-wrap justify-end gap-3">
+        <div class="flex w-full justify-end gap-3">
           <Button type="button" variant="outline" onClick={props.onCancel} disabled={saving()}>
             ยกเลิก
           </Button>
           <Button type="submit" variant="primary" loading={saving()}>
-            {props.mode === "create" ? "สร้างลูกค้า" : "บันทึกการเปลี่ยนแปลง"}
+            {saving() ? "กำลังบันทึก..." : props.submitLabel}
           </Button>
         </div>
       </AdminFloatingBar>
@@ -353,7 +330,7 @@ function withDefault(list: CustomerAddress[]): CustomerAddress[] {
   return list.map((a) => (a === shipping[0] ? { ...a, isDefault: true } : a));
 }
 
-/** Same native-select styling as the Status field. */
+/** Native select in the admin select style (DSL 6). */
 function SelectField(props: { label: string; value: string; required?: boolean; error?: string; disabled?: boolean; onChange: (value: string) => void; children: JSX.Element }) {
   return (
     <label class="flex flex-col gap-1.5">

@@ -20,7 +20,8 @@ import { CartIcon } from "./icons";
  * Purchase-control text standard: the label is 14px (`text-sm`) at every
  * size and breakpoint, and every QuantityStepper number uses the same 14px
  * — one size for "จำนวน" and "เพิ่มลงตะกร้า" everywhere. Tight spots get
- * less padding, never smaller (or bigger) text.
+ * less padding, never smaller (or bigger) text. Exception: `large` (PDP
+ * main buy row only) makes the label 18px to match the "ซื้อเลย" button.
  */
 export function AddToCartButton(
   props: {
@@ -29,10 +30,12 @@ export function AddToCartButton(
     /** Replaces the label only for a transient state (e.g. "ลองอีกครั้ง" after an error). */
     label?: string;
     loading?: boolean;
+    /** PDP main buy row only: 18px label, same as the "ซื้อเลย" button below it. */
+    large?: boolean;
     class?: string;
   } & Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "class">,
 ) {
-  const [local, rest] = splitProps(props, ["size", "outOfStock", "label", "loading", "class", "disabled"]);
+  const [local, rest] = splitProps(props, ["size", "outOfStock", "label", "loading", "large", "class", "disabled"]);
   const size = () => local.size ?? "md";
   const sizeClass = () =>
     ({
@@ -48,7 +51,7 @@ export function AddToCartButton(
       type="button"
       variant="primary"
       {...rest}
-      class={`whitespace-nowrap ${sizeClass()} ${local.class ?? ""}`}
+      class={`whitespace-nowrap ${local.large ? sizeClass().replace("!text-sm", "!text-lg") : sizeClass()} ${local.class ?? ""}`}
       disabled={local.disabled || local.outOfStock}
       loading={local.loading}
     >

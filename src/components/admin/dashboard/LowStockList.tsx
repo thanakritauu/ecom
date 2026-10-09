@@ -1,12 +1,10 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { getLowStockProducts } from "~/lib/adminDashboard";
-import { EmptyState } from "~/components/admin/EmptyState";
 import { StatusBadge } from "~/components/admin/StatusBadge";
-import { InventoryIcon } from "~/components/admin/icons";
 import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
 import { ProductQuickView } from "~/components/admin/products/ProductQuickView";
-import { useAdminProducts } from "~/lib/adminProductStore";
+import { getStockStatus, STOCK_STATUS_META, useAdminProducts } from "~/lib/adminProductStore";
 
 /**
  * PART 11 — same real catalog as Best Sellers, filtered to whatever already
@@ -26,7 +24,7 @@ export function LowStockList() {
   return (
     <Show
       when={lowStockProducts().length > 0}
-      fallback={<EmptyState icon={<InventoryIcon />} title="ไม่มีสินค้าใกล้หมดในตอนนี้" description="สต๊อกทุกรายการอยู่ในระดับปกติ" />}
+      fallback={<p class="text-sm text-ink-gray">ไม่มีสินค้าใกล้หมดในตอนนี้</p>}
     >
       <ul class="flex flex-col gap-1">
         <For each={lowStockProducts()}>
@@ -35,18 +33,16 @@ export function LowStockList() {
               <button
                 type="button"
                 onClick={() => setQuickViewId(entry.product.id)}
-                class="font-normal flex w-full items-center gap-3 rounded-card px-2 py-2.5 text-left transition-colors duration-150 hover:bg-surface-pink/40"
+                class="font-normal flex w-full items-center gap-3 rounded-card px-2 py-2.5 text-left transition-colors duration-150 lg:hover:bg-surface-pink/40"
               >
-                <img src={entry.product.image} alt="" class="size-12 shrink-0 rounded-media object-cover" />
+                <img src={entry.product.image} alt="" class="size-11 shrink-0 rounded-media object-cover" />
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-medium text-ink">{entry.product.name}</p>
                   <p class="text-xs text-ink-gray">{entry.sku}</p>
                 </div>
                 <div class="flex shrink-0 flex-col items-end gap-1">
-                  <p class="text-sm font-semibold text-ink">Stock: {entry.stockLeft}</p>
-                  <StatusBadge tone={entry.status === "out" ? "danger" : "warning"}>
-                    {entry.status === "out" ? "หมดสต๊อก" : "ใกล้หมด"}
-                  </StatusBadge>
+                  <p class="text-sm font-semibold text-ink">เหลือ {entry.stockLeft.toLocaleString("th-TH")} ชิ้น</p>
+                  <StatusBadge tone={STOCK_STATUS_META[getStockStatus(entry.product)].tone}>{STOCK_STATUS_META[getStockStatus(entry.product)].label}</StatusBadge>
                 </div>
               </button>
             </li>
@@ -59,7 +55,11 @@ export function LowStockList() {
         onOpenChange={(open) => !open && setQuickViewId(null)}
         title={quickViewProduct()?.name ?? ""}
         subtitle={quickViewProduct()?.sku}
-        onViewFull={() => navigate(`/admin/products/${quickViewId()}`)}
+        onViewFull={() => {
+          const id = quickViewId();
+          setQuickViewId(null);
+          if (id) navigate(`/admin/products/${id}`);
+        }}
       >
         <Show when={quickViewProduct()}>{(p) => <ProductQuickView product={p()} />}</Show>
       </QuickViewDrawer>

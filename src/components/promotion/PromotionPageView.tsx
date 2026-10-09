@@ -42,7 +42,7 @@ function SectionListing(props: { section: HomepageSection }) {
   return (
     <>
       <ListingHeading title={props.section.title || props.section.name} description={props.section.description} />
-      <ProductCollectionListing products={products()} flashSale={props.section.productSource === "flash_sale"} />
+      <ProductCollectionListing products={products()} flashSale={props.section.productSource === "flash_sale"} emptyTitle="ยังไม่มีสินค้าในหน้านี้" />
     </>
   );
 }
@@ -98,7 +98,7 @@ export function PromotionPageView(props: { page: PromotionPage }) {
                   fallback={
                     <>
                       <ListingHeading title={p().title || p().name} description={p().description} />
-                      <ProductCollectionListing products={products()} />
+                      <ProductCollectionListing products={products()} emptyTitle="ยังไม่มีสินค้าในโปรโมชันนี้" />
                     </>
                   }
                 >

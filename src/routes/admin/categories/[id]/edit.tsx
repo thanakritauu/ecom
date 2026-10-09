@@ -19,7 +19,7 @@ export default function AdminCategoryEditPage() {
     const current = category();
     if (!current) return;
     await store.update(current.id, values);
-    pushToast("บันทึกการเปลี่ยนแปลงแล้ว", "success");
+    pushToast("บันทึกหมวดหมู่เรียบร้อยแล้ว", "success");
     navigate(`/admin/categories/${current.id}`);
   };
 
@@ -29,7 +29,7 @@ export default function AdminCategoryEditPage() {
       fallback={
         <div class="flex flex-col gap-6">
           <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สินค้า", href: "/admin/products" }, { label: "หมวดหมู่", href: "/admin/categories" }]} />
-          <EmptyState icon={<CatalogIcon />} title="ไม่พบหมวดหมู่นี้" description="หมวดหมู่นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/categories")} class="bg-surface-card shadow-card" />
+          <EmptyState icon={<CatalogIcon />} title="ไม่พบหมวดหมู่นี้" description="หมวดหมู่นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าหมวดหมู่" onAction={() => navigate("/admin/categories")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -40,7 +40,7 @@ export default function AdminCategoryEditPage() {
               { label: "แดชบอร์ด", href: "/admin" },
               { label: "สินค้า", href: "/admin/products" },
               { label: "หมวดหมู่", href: "/admin/categories" },
-              { label: current().name },
+              { label: current().name, href: `/admin/categories/${current().id}` },
               { label: "แก้ไข" },
             ]}
           />

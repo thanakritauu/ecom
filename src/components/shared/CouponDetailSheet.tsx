@@ -18,7 +18,7 @@ function expiryText(expiresAt: string) {
  * Coupon details + usage conditions, opened by tapping a `CouponCard`. The
  * conditions mirror how Checkout actually prices an order (`computeTotals`):
  * one coupon per order, discount taken off the product subtotal (shipping
- * untouched), min spend checked against that subtotal, and Charmiss Coin
+ * untouched, a % coupon capped by its max), min spend checked against that subtotal, and Charmiss Coin
  * redemption stacks on top. `ticket` is the same coupon ticket the shopper
  * tapped (picture only) shown as the header; `action` is the card's own
  * collect/use button.
@@ -39,15 +39,20 @@ export function CouponDetailSheet(props: { open: boolean; onOpenChange: (open: b
     }
   };
 
-  const conditions = () => [
-    `ส่วนลด ${baht(props.coupon.discount)} เมื่อยอดสินค้าครบ ${baht(props.coupon.minSpend)} ขึ้นไป`,
-    "คำนวณจากยอดสินค้า ไม่รวมค่าจัดส่ง",
-    "ใช้ได้กับสินค้าทุกรายการ",
-    "ใช้ได้ 1 คูปองต่อคำสั่งซื้อ ใช้ร่วมกับคูปองอื่นไม่ได้",
-    "ใช้ได้ 1 ครั้งต่อบัญชี",
-    "ใช้ร่วมกับส่วนลดจาก Charmiss Coin ได้",
-    "เลือกคูปองหรือกรอกโค้ดได้ที่หน้าชำระเงิน",
-  ];
+  const conditions = () => {
+    const c = props.coupon;
+    const what = c.discountType === "percent" ? `ส่วนลด ${c.discount}% ของยอดสินค้า${c.maxDiscount ? ` สูงสุด ${baht(c.maxDiscount)}` : ""}` : `ส่วนลด ${baht(c.discount)}`;
+    const list = [
+      c.minSpend > 0 ? `${what} เมื่อยอดสินค้าครบ ${baht(c.minSpend)} ขึ้นไป` : `${what} ไม่มียอดซื้อขั้นต่ำ`,
+      "คำนวณจากยอดสินค้า ไม่รวมค่าจัดส่ง",
+      "ใช้ได้กับสินค้าทุกรายการ",
+      "ใช้ได้ 1 คูปองต่อคำสั่งซื้อ ใช้ร่วมกับคูปองอื่นไม่ได้",
+    ];
+    if (c.perCustomerLimit) list.push(`ใช้ได้ ${c.perCustomerLimit.toLocaleString("th-TH")} ครั้งต่อบัญชี`);
+    if (c.usageLimit) list.push(`จำนวนจำกัด ${c.usageLimit.toLocaleString("th-TH")} สิทธิ์ เมื่อครบแล้วจะใช้ไม่ได้`);
+    list.push("ใช้ร่วมกับส่วนลดจาก Charmiss Coin ได้", "เลือกคูปองหรือกรอกโค้ดได้ที่หน้าชำระเงิน");
+    return list;
+  };
 
   return (
     <SheetModal nested open={props.open} onOpenChange={props.onOpenChange} height="auto" title="รายละเอียดคูปอง" footer={props.action}>
@@ -80,7 +85,13 @@ export function CouponDetailSheet(props: { open: boolean; onOpenChange: (open: b
             </button>
           </span>
         </Row>
-        <Row label="ยอดซื้อขั้นต่ำ">{baht(props.coupon.minSpend)}</Row>
+        <Show when={props.coupon.discountType === "percent" && props.coupon.maxDiscount}>
+          {(cap) => <Row label="ลดสูงสุด">{baht(cap())}</Row>}
+        </Show>
+        <Row label="ยอดซื้อขั้นต่ำ">{props.coupon.minSpend > 0 ? baht(props.coupon.minSpend) : "ไม่มีขั้นต่ำ"}</Row>
+        <Show when={props.coupon.usageLimit}>
+          {(limit) => <Row label="สิทธิ์คงเหลือ">{`${Math.max(0, limit() - props.coupon.usedCount).toLocaleString("th-TH")} สิทธิ์`}</Row>}
+        </Show>
         <Row label="ใช้ได้ถึง">{expiryText(props.coupon.expiresAt)}</Row>
       </dl>
 

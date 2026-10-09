@@ -17,7 +17,7 @@ export function KpiCard(props: {
         <p class="text-sm font-medium text-ink-gray">{props.label}</p>
         <div class="flex size-9 shrink-0 items-center justify-center rounded-pill bg-surface-pink text-brand-pink">{props.icon}</div>
       </div>
-      <p class="text-2xl font-bold text-ink sm:text-[28px]">{props.value}</p>
+      <p class="text-2xl font-bold text-ink">{props.value}</p>
       <Show when={props.changePercent !== undefined}>
         <div class="flex flex-wrap items-center gap-1.5 text-xs">
           <span class={`inline-flex items-center gap-0.5 font-semibold ${isPositive() ? "text-success" : "text-system-red"}`}>

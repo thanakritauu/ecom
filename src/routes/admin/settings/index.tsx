@@ -19,29 +19,23 @@ export default function AdminSettingsPage() {
   return (
     <div class="flex flex-col gap-6">
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "ตั้งค่า" }]} />
-      <PageHeader title="ตั้งค่า" description="ตั้งค่าทั่วไปสำหรับ Charmiss CMS" />
+      <PageHeader title="ตั้งค่า" description="ตั้งค่าการแสดงผล ผู้ดูแลระบบ และสิทธิ์การใช้งานหลังบ้าน" />
 
-      <div class="flex flex-col gap-2 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-        <h2 class="text-base font-semibold text-ink">ธีมการแสดงผล (Theme)</h2>
-        <p class="text-sm text-ink-gray">
-          ปรับโหมดการแสดงผลของ Charmiss CMS เท่านั้น — ไม่มีผลกับหน้าเว็บฝั่งลูกค้า
-        </p>
-        <div class="mt-2">
-          <Toggle
-            checked={ui.themeMode() === "dark"}
-            onChange={(checked) => ui.setThemeMode(checked ? "dark" : "light")}
-            onLabel="โหมดมืด (Dark)"
-            offLabel="โหมดสว่าง (Light)"
-          />
-        </div>
+      <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+        <h2 class="text-base font-semibold text-ink">ธีมการแสดงผล</h2>
+        <label class="flex flex-col gap-1.5">
+          <span class="text-sm font-medium text-ink">โหมดมืด</span>
+          <Toggle checked={ui.themeMode() === "dark"} onChange={(checked) => ui.setThemeMode(checked ? "dark" : "light")} onLabel="เปิด" offLabel="ปิด" />
+          <span class="text-xs text-ink-gray">มีผลเฉพาะหลังบ้าน ไม่มีผลกับหน้าร้าน</span>
+        </label>
       </div>
 
       {/* UI Prototype mockup only (no store/persistence behind either page) —
           see each page's own doc comment. */}
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <A
           href="/admin/settings/admins"
-          class="flex items-center gap-3 rounded-card border border-border bg-surface-card p-4 shadow-card transition-colors duration-150 hover:border-brand-pink hover:bg-surface-pink/40"
+          class="flex items-center gap-3 rounded-card border border-border bg-surface-card p-4 shadow-card transition-colors duration-150 lg:hover:border-brand-pink lg:hover:bg-surface-pink/40"
         >
           <span class="flex size-11 shrink-0 items-center justify-center rounded-pill bg-surface-pink text-brand-pink">
             <ShieldUserIcon class="size-5" />
@@ -53,7 +47,7 @@ export default function AdminSettingsPage() {
         </A>
         <A
           href="/admin/settings/permissions"
-          class="flex items-center gap-3 rounded-card border border-border bg-surface-card p-4 shadow-card transition-colors duration-150 hover:border-brand-pink hover:bg-surface-pink/40"
+          class="flex items-center gap-3 rounded-card border border-border bg-surface-card p-4 shadow-card transition-colors duration-150 lg:hover:border-brand-pink lg:hover:bg-surface-pink/40"
         >
           <span class="flex size-11 shrink-0 items-center justify-center rounded-pill bg-surface-pink text-brand-pink">
             <KeyIcon class="size-5" />

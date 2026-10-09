@@ -30,6 +30,7 @@ export default function AdminProductCollectionDetailPage() {
 
   const [confirmDelete, setConfirmDelete] = createSignal(false);
   const [blockedDelete, setBlockedDelete] = createSignal(false);
+  const [confirmToggle, setConfirmToggle] = createSignal(false);
   const [actionLoading, setActionLoading] = createSignal(false);
 
   /** §20/§45 dependency guard — a Collection must never be deleted while a NavigationItem still targets it or a Promotion Page/Homepage Section still sources from it. */
@@ -57,13 +58,28 @@ export default function AdminProductCollectionDetailPage() {
     navigate("/admin/content/product-collections");
   };
 
+  const confirmToggleAction = async () => {
+    const current = collection();
+    if (!current) return;
+    setActionLoading(true);
+    try {
+      await store.setStatus(current.id, current.status === "active" ? "inactive" : "active");
+      pushToast(current.status === "active" ? "ปิดใช้งานกลุ่มสินค้าพิเศษแล้ว" : "เปิดใช้งานกลุ่มสินค้าพิเศษแล้ว", "success");
+      setConfirmToggle(false);
+    } catch {
+      pushToast("เปลี่ยนสถานะไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   return (
     <Show
       when={collection()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "Product Collections", href: "/admin/content/product-collections" }]} />
-          <EmptyState icon={<LayersIcon />} title="ไม่พบ Collection นี้" description="Collection นี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ารายการ" onAction={() => navigate("/admin/content/product-collections")} class="bg-surface-card shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "สินค้า", href: "/admin/products" }, { label: "กลุ่มสินค้าพิเศษ", href: "/admin/content/product-collections" }]} />
+          <EmptyState icon={<LayersIcon />} title="ไม่พบกลุ่มสินค้าพิเศษนี้" description="กลุ่มสินค้าพิเศษนี้อาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้ากลุ่มสินค้าพิเศษ" onAction={() => navigate("/admin/content/product-collections")} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -76,8 +92,8 @@ export default function AdminProductCollectionDetailPage() {
             <Breadcrumb
               items={[
                 { label: "แดชบอร์ด", href: "/admin" },
-                { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" },
-                { label: "Product Collections", href: "/admin/content/product-collections" },
+                { label: "สินค้า", href: "/admin/products" },
+                { label: "กลุ่มสินค้าพิเศษ", href: "/admin/content/product-collections" },
                 { label: c().name },
               ]}
             />
@@ -86,13 +102,14 @@ export default function AdminProductCollectionDetailPage() {
               description={c().id}
               actions={
                 <div class="flex items-center gap-2">
-                  <StatusBadge tone={COLLECTION_STATUS_META[c().status].tone}>{COLLECTION_STATUS_META[c().status].label}</StatusBadge>
                   <Button variant="primary" href={`/admin/content/product-collections/${c().id}/edit`}>
-                    แก้ไข
+                    แก้ไขกลุ่มสินค้าพิเศษ
                   </Button>
                   <CollectionRowActionsMenu
                     id={c().id}
                     name={c().name}
+                    isActive={c().status === "active"}
+                    onToggleStatus={() => setConfirmToggle(true)}
                     hideView
                     onDelete={requestDelete}
                     triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
@@ -103,7 +120,7 @@ export default function AdminProductCollectionDetailPage() {
 
             <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div class="flex flex-col gap-6 lg:col-span-2">
-                <Section title="สินค้าใน Collection">
+                <Section title="สินค้าในกลุ่มสินค้าพิเศษ">
                   <Show when={products().length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่ได้เลือกสินค้า</p>}>
                     <div class="flex flex-col gap-3">
                       <For each={products()}>
@@ -114,8 +131,8 @@ export default function AdminProductCollectionDetailPage() {
                             <div class="min-w-0 flex-1">
                               <p class="truncate text-sm font-medium text-ink">{product!.name}</p>
                               <p class="text-xs text-ink-gray">
-                                {product!.sku} · {formatAdminCurrency(product!.price)}
-                                <Show when={ref.variantIds.length > 0}> · {ref.variantIds.length} ตัวเลือก</Show>
+                                {product!.sku} ราคา {formatAdminCurrency(product!.price)}
+                                <Show when={ref.variantIds.length > 0}> เลือกไว้ {ref.variantIds.length} ตัวเลือก</Show>
                               </p>
                             </div>
                           </div>
@@ -133,13 +150,18 @@ export default function AdminProductCollectionDetailPage() {
                   </StatusBadge>
                 </Section>
 
-                <Section title="คำอธิบาย">
-                  <p class="text-sm text-ink-gray">{c().description || "—"}</p>
+                <Section title="ใช้งานอยู่ที่">
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="หน้า" value={pageRefs().length > 0 ? [...new Set(pageRefs().map((r) => (r.isHomepage ? "หน้าแรก" : r.pageName)))].join(", ") : "-"} />
+                    <Row label="เมนู" value={navigationRefs().length > 0 ? navigationRefs().map((r) => r.label).join(", ") : "-"} />
+                  </dl>
                 </Section>
 
                 <Section title="ข้อมูลเพิ่มเติม">
-                  <Row label="สร้างเมื่อ" value={c().createdAt} />
-                  <Row label="แก้ไขล่าสุด" value={c().updatedAt} />
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="สร้างเมื่อ" value={c().createdAt || "-"} />
+                    <Row label="แก้ไขล่าสุด" value={c().updatedAt || "-"} />
+                  </dl>
                 </Section>
               </div>
             </div>
@@ -147,9 +169,9 @@ export default function AdminProductCollectionDetailPage() {
             <ConfirmDialog
               open={confirmDelete()}
               onOpenChange={setConfirmDelete}
-              title="ลบ Collection?"
+              title="ลบกลุ่มสินค้าพิเศษ?"
               description={`คุณต้องการลบ "${c().name}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
-              confirmLabel="ลบ"
+              confirmLabel="ลบกลุ่มสินค้าพิเศษ"
               tone="danger"
               loading={actionLoading()}
               onConfirm={confirmDeleteAction}
@@ -161,13 +183,23 @@ export default function AdminProductCollectionDetailPage() {
               title="ไม่สามารถลบได้"
               description={(() => {
                 const parts: string[] = [];
-                if (navigationRefs().length > 0) parts.push(`ถูกใช้งานใน Navigation: ${navigationRefs().map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
-                if (pageRefs().length > 0) parts.push(`ถูกใช้งานใน Promotion Page: ${pageRefs().map((r) => (r.isHomepage ? "Homepage" : r.pageName)).join(", ")}`);
-                return `"${c().name}" — ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบ Collection นี้`;
+                if (navigationRefs().length > 0) parts.push(`ถูกใช้งานในเมนู: ${navigationRefs().map((r) => describeNavigationReference(r, navigation.items())).join(", ")}`);
+                if (pageRefs().length > 0) parts.push(`ถูกใช้งานในหน้า: ${pageRefs().map((r) => (r.isHomepage ? "หน้าแรก" : r.pageName)).join(", ")}`);
+                return `กลุ่มสินค้าพิเศษ "${c().name}" ${parts.join(" / ")} กรุณาย้ายหรือแก้ไขข้อมูลที่เกี่ยวข้องก่อนลบกลุ่มสินค้าพิเศษนี้`;
               })()}
               confirmLabel="เข้าใจแล้ว"
               cancelLabel="ปิด"
               onConfirm={() => setBlockedDelete(false)}
+            />
+
+            <ConfirmDialog
+              open={confirmToggle()}
+              onOpenChange={setConfirmToggle}
+              title={c().status === "active" ? "ปิดใช้งานกลุ่มสินค้าพิเศษนี้?" : "เปิดใช้งานกลุ่มสินค้าพิเศษนี้?"}
+              description={c().status === "active" ? `"${c().name}" จะไม่แสดงสินค้าในส่วนที่ใช้กลุ่มสินค้าพิเศษนี้บนหน้าร้าน` : `"${c().name}" จะกลับมาแสดงสินค้าบนหน้าร้าน`}
+              confirmLabel={c().status === "active" ? "ปิดใช้งาน" : "เปิดใช้งาน"}
+              loading={actionLoading()}
+              onConfirm={confirmToggleAction}
             />
           </div>
         );
@@ -187,9 +219,9 @@ function Section(props: { title: string; children: import("solid-js").JSX.Elemen
 
 function Row(props: { label: string; value: string }) {
   return (
-    <div class="flex items-center justify-between gap-3 text-sm">
-      <dt class="text-ink-gray">{props.label}</dt>
-      <dd class="font-medium text-ink">{props.value}</dd>
+    <div class="flex items-center justify-between gap-3">
+      <dt class="shrink-0 text-ink-gray">{props.label}</dt>
+      <dd class="text-right font-medium text-ink">{props.value}</dd>
     </div>
   );
 }

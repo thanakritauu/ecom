@@ -4,17 +4,16 @@ import { useNavigate } from "@solidjs/router";
 import { MoreIcon } from "~/components/admin/icons";
 
 /**
- * The View/Edit/Duplicate/Enable-Disable/Delete menu — same action set
- * `ProductRowActionsMenu` already established for Product Management, made
- * generic here so Promotion/Coupon/Flash Sale/Bundle all share one
- * implementation instead of four near-identical copies. `basePath` is the
- * entity's list route (e.g. `/admin/marketing/promotions`); `isDisabled`
- * drives the Enable/Disable label the same way Product's own toggle does.
+ * The View/Edit/Duplicate/On-Off/Delete menu (same set as
+ * `ProductRowActionsMenu`), shared by Promotions and Coupons. `basePath` is
+ * the entity's list route; `entity` is its Thai noun for the item labels
+ * ("แก้ไขคูปอง"); `isDisabled` drives the on/off label.
  */
 export function MarketingRowActionsMenu(props: {
   id: string;
   name: string;
   basePath: string;
+  entity: string;
   isDisabled: boolean;
   onDuplicate: () => void;
   onToggleStatus: () => void;
@@ -47,13 +46,13 @@ export function MarketingRowActionsMenu(props: {
             onSelect={() => navigate(`${props.basePath}/${props.id}/edit`)}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
           >
-            แก้ไข
+            แก้ไข{props.entity}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={props.onDuplicate}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
           >
-            ทำสำเนา
+            ทำสำเนา{props.entity}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={props.onToggleStatus}
@@ -66,7 +65,7 @@ export function MarketingRowActionsMenu(props: {
             onSelect={props.onDelete}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm font-medium text-system-red outline-none transition-colors duration-150 hover:bg-danger-soft data-[highlighted]:bg-danger-soft"
           >
-            ลบ
+            ลบ{props.entity}
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

@@ -8,7 +8,7 @@ const STORAGE_KEY = "charmiss:admin:content:collections";
 /**
  * Falls back to the same seed baseline `adminCollectionStore.tsx` starts
  * from — critical here (unlike, say, Promotion Pages' nav) because *other*
- * admin-authored content (a Homepage "product" section, a Campaign) can
+ * admin-authored content (a Homepage "product" section) can
  * reference a seeded Collection's id before any admin has ever actually
  * opened/saved that Collection once. Without this fallback, a fresh browser
  * would resolve that reference to nothing even though the Collection

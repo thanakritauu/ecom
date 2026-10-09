@@ -1,6 +1,6 @@
 import { createContext, createMemo, createSignal, onMount, useContext, type Accessor, type JSX } from "solid-js";
 import { isServer } from "solid-js/web";
-import { buildMockNavigationItems, normalizeNavigationItem, type NavigationItem } from "./adminNavigation";
+import { buildMockNavigationItems, NAV_LATE_SEEDS_KEY, normalizeNavigationItem, withLateNavigationSeeds, type NavigationItem } from "./adminNavigation";
 import { buildNavigationTree, filterVisibleNavigationTree, type ResolvedNavigationItem } from "./navigationResolver";
 import { useLandingPages } from "./promotionPages";
 import { useCategoryContent } from "./categoryContent";
@@ -8,7 +8,7 @@ import { useCollectionContent } from "./collectionContent";
 import { useProductCatalog } from "./productCatalog";
 
 /** Same key `adminNavigationStore.tsx` (Admin's source of truth) persists to — read-only here, never written from the customer side. */
-const STORAGE_KEY = "charmiss:admin:navigation:v6"; // v6 = Figma 132:2352 menu + คุชชั่น / ลิป / แก้ม / ตาและคิ้ว / ดูแลผิว / กันแดดและบอดี้แคร์
+const STORAGE_KEY = "charmiss:admin:navigation:v7"; // v7 = menu artwork back as image icons (v6 = Figma 132:2352 menu + categories)
 
 /** Same "fallback to the real baseline, used as both the SSR value and the empty-storage fallback" fix already applied to every other `*Content.tsx` provider — a fresh browser that never opened Admin still sees the real seeded menu, not an empty flash. */
 function fallbackItems(): NavigationItem[] {
@@ -20,7 +20,9 @@ function readStoredItems(): NavigationItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return fallbackItems();
-    return (JSON.parse(raw) as NavigationItem[]).map(normalizeNavigationItem);
+    const list = (JSON.parse(raw) as NavigationItem[]).map(normalizeNavigationItem);
+    // Admin hasn't been opened since the คูปอง menu was added: show it the way Admin will save it.
+    return localStorage.getItem(NAV_LATE_SEEDS_KEY) ? list : withLateNavigationSeeds(list);
   } catch {
     return fallbackItems();
   }

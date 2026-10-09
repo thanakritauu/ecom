@@ -13,15 +13,10 @@ import {
   SettingsIcon,
   ProductBoxIcon,
   CategoryGridIcon,
-  BrandBadgeIcon,
   PromotionTagIcon,
   CouponTicketIcon,
   FlashBoltIcon,
-  BundleBoxIcon,
-  MemberBadgeIcon,
   PointsCoinIcon,
-  MissionFlagIcon,
-  RewardGiftIcon,
   PagesPanelIcon,
   ImageIcon,
   CampaignFlagIcon,
@@ -52,12 +47,9 @@ export type AdminNavGroup = {
 };
 
 /**
- * Mirrors PART 5/6 of the Admin Shell spec. Groups with more than one real
- * module (Inventory, Marketing, Loyalty, Content, Settings) get one enabled
- * "overview" item today plus disabled preview rows for the sub-pages later
- * phases will build — so every group has exactly one real destination now,
- * and the full future IA is already visible instead of appearing all at once
- * in a later phase.
+ * Single source for the desktop sidebar, collapsed rail and mobile drawer.
+ * Only menus whose data the storefront actually uses are listed; cut
+ * features (bundles, loyalty missions/rewards/members, banners) have no entry.
  */
 export const adminNavGroups: AdminNavGroup[] = [
   {
@@ -72,7 +64,8 @@ export const adminNavGroups: AdminNavGroup[] = [
     items: [
       { label: "สินค้า", href: "/admin/products", icon: ProductBoxIcon },
       { label: "หมวดหมู่", href: "/admin/categories", icon: CategoryGridIcon },
-      { label: "แบรนด์", href: "/admin/brands", icon: BrandBadgeIcon },
+      // Product Collections, renamed and moved here from Content: a hand-picked product list reused by Campaign pages, menus and Home.
+      { label: "กลุ่มสินค้าพิเศษ", href: "/admin/content/product-collections", icon: FolderIcon },
     ],
   },
   {
@@ -92,11 +85,9 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "การตลาด",
     icon: MarketingIcon,
     items: [
-      { label: "ภาพรวมการตลาด", href: "/admin/marketing", end: true },
       { label: "โปรโมชั่น", href: "/admin/marketing/promotions", icon: PromotionTagIcon },
       { label: "คูปอง", href: "/admin/marketing/coupons", icon: CouponTicketIcon },
       { label: "แฟลชเซล", href: "/admin/marketing/flash-sale", icon: FlashBoltIcon },
-      { label: "บันเดิล", href: "/admin/marketing/bundles", icon: BundleBoxIcon },
     ],
   },
   {
@@ -108,16 +99,12 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "จัดการเนื้อหา",
     icon: ContentIcon,
     items: [
-      { label: "หน้าโปรโมชั่น", href: "/admin/promotion-pages", icon: PagesPanelIcon },
-      { label: "แบนเนอร์", href: "/admin/content/banners", icon: ImageIcon },
-      { label: "แคมเปญ", href: "/admin/content/campaigns", icon: CampaignFlagIcon },
-      { label: "คอลเลกชันสินค้า", href: "/admin/content/product-collections", icon: FolderIcon },
-      // CMS Final Admin UX Refinement §02/§18 — "Notification" is no longer
-      // its own top-level sidebar group; it lives here, under "จัดการเนื้อหา",
-      // renamed to "โปรโมชั่นแถบ" (internal route/model name unchanged).
-      { label: "โปรโมชั่นแถบ", href: "/admin/notifications", icon: BellIcon },
-      // Read-only mirror of the storefront Footer (no Footer CMS yet).
-      { label: "Footer", href: "/admin/content/footer", icon: LayersIcon },
+      // Promotion Pages, shown as "หน้าแคมเปญ" since the old Campaign module was folded into them. Route/model names unchanged.
+      { label: "หน้าแคมเปญ", href: "/admin/promotion-pages", icon: PagesPanelIcon },
+      // The storefront's top bars (PromoStrip + UtilityBar). Internal route/model name unchanged.
+      { label: "แถบประกาศด้านบน", href: "/admin/notifications", icon: BellIcon },
+      { label: "ส่วนท้ายเว็บไซต์", href: "/admin/content/footer", icon: LayersIcon },
+      { label: "Popup", href: "/admin/content/popup", icon: CampaignFlagIcon },
     ],
   },
   {
@@ -146,19 +133,17 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "คลังสินค้า",
     icon: InventoryIcon,
     items: [
-      { label: "จัดการคลังสินค้า", href: "/admin/inventory" },
+      { label: "สต๊อกสินค้า", href: "/admin/inventory" },
     ],
   },
   {
+    // Missions, rewards and the separate members list were cut (the
+    // storefront has none of them). One page shows the tiers + coin rules;
+    // members live in Customers.
     id: "loyalty",
-    label: "สะสมคอยน์",
+    label: "สมาชิก",
     icon: LoyaltyIcon,
-    items: [
-      { label: "สะสมคอยน์", href: "/admin/loyalty", end: true, icon: PointsCoinIcon },
-      { label: "สมาชิก", href: "/admin/loyalty/members", icon: MemberBadgeIcon },
-      { label: "ภารกิจ", href: "/admin/loyalty/missions", icon: MissionFlagIcon },
-      { label: "ของรางวัล", href: "/admin/loyalty/rewards", icon: RewardGiftIcon },
-    ],
+    items: [{ label: "Charmiss Club", href: "/admin/loyalty", icon: PointsCoinIcon }],
   },
   {
     id: "settings",

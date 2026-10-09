@@ -109,7 +109,7 @@ export function PromotionPageProductPicker(props: { selected: PromotionPageProdu
                   <div class="min-w-0 flex-1">
                     <p class="truncate text-sm font-medium text-ink">{product.name}</p>
                     <p class="text-xs text-ink-gray">
-                      {product.sku} · {formatAdminCurrency(product.price)} · สต๊อก {product.stockLeft ?? 0}
+                      {product.sku} ราคา {formatAdminCurrency(product.price)} สต๊อก {product.stockLeft ?? 0}
                     </p>
                   </div>
                 </button>
@@ -160,23 +160,23 @@ export function PromotionPageProductPicker(props: { selected: PromotionPageProdu
                         <Show when={product()}>
                           {(p) => (
                             <p class="text-xs text-ink-gray">
-                              {p().sku} · {formatAdminCurrency(p().price)} · สต๊อก {p().stockLeft ?? 0}
+                              {p().sku} ราคา {formatAdminCurrency(p().price)} สต๊อก {p().stockLeft ?? 0}
                             </p>
                           )}
                         </Show>
                       </div>
                       <div class="flex shrink-0 items-center gap-1">
                         <Show when={index() > 0}>
-                          <button type="button" onClick={() => move(index(), -1)} aria-label="ย้ายขึ้น" class="flex size-7 items-center justify-center rounded-pill text-ink-gray hover:bg-surface-gray">
+                          <button type="button" onClick={() => move(index(), -1)} aria-label="ย้ายขึ้น" class="flex size-9 items-center justify-center rounded-pill text-ink-gray hover:bg-surface-pink">
                             <ChevronDownIcon class="size-4 rotate-180" />
                           </button>
                         </Show>
                         <Show when={index() < props.selected.length - 1}>
-                          <button type="button" onClick={() => move(index(), 1)} aria-label="ย้ายลง" class="flex size-7 items-center justify-center rounded-pill text-ink-gray hover:bg-surface-gray">
+                          <button type="button" onClick={() => move(index(), 1)} aria-label="ย้ายลง" class="flex size-9 items-center justify-center rounded-pill text-ink-gray hover:bg-surface-pink">
                             <ChevronDownIcon class="size-4" />
                           </button>
                         </Show>
-                        <button type="button" onClick={() => removeAt(index())} aria-label={`นำ ${product()?.name ?? ""} ออก`} class="flex size-7 items-center justify-center rounded-pill text-ink-gray hover:bg-danger-soft hover:text-danger-strong">
+                        <button type="button" onClick={() => removeAt(index())} aria-label={`นำ ${product()?.name ?? ""} ออก`} class="flex size-9 items-center justify-center rounded-pill text-ink-gray hover:bg-danger-soft hover:text-danger-strong">
                           <CloseXIcon class="size-3" />
                         </button>
                       </div>

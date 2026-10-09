@@ -1,84 +1,61 @@
-import { createSignal, For, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
 import { Container } from "./Container";
 import { Accordion } from "./Accordion";
 import { Button } from "./Button";
 import logo from "~/assets/icons/logo-charmiss-footer.svg";
+import iconLine from "~/assets/icons/social-line-white.svg";
 import iconInstagram from "~/assets/icons/social-instagram.svg";
 import iconTiktok from "~/assets/icons/social-tiktok.svg";
 import iconFacebook from "~/assets/icons/social-facebook.svg";
 import iconYoutube from "~/assets/icons/social-youtube.svg";
+import { CONTACT } from "~/lib/siteInfo";
+import { footerPhoneHref, useStorefrontFooter, type FooterContent, type FooterLink, type FooterSocialPlatform } from "~/lib/siteFooter";
 
-// `href` on every link so none of them fall back to a dead `href="#"` — the
-// order-tracking and ช้อปปิ้ง links point at real storefront pages (the
-// Account order history, `/products`, the `/promotion/:slug` landing pages);
-// help/about/legal/social have no page yet and route to the catch-all's
-// out-of-scope screen instead of going nowhere.
-const footerColumns = [
-  {
-    id: "help",
-    title: "ช่วยเหลือ",
-    links: [
-      { label: "ติดตามคำสั่งซื้อ", href: "/account" },
-      { label: "วิธีสั่งซื้อ", href: "/help/how-to-order" },
-      { label: "การจัดส่ง", href: "/help/shipping" },
-      { label: "คำถามที่พบบ่อย", href: "/help/faq" },
-    ],
-  },
-  {
-    id: "shop",
-    title: "ช้อปปิ้ง",
-    links: [
-      { label: "สินค้าทั้งหมด", href: "/products" },
-      { label: "กำลังฮิต", href: "/promotion/trending" },
-      { label: "มาใหม่", href: "/promotion/new-arrivals" },
-      { label: "โปรโมชัน", href: "/promotion/promotions" },
-    ],
-  },
-  {
-    id: "about",
-    title: "เกี่ยวกับ Charmiss",
-    links: [
-      { label: "ติดต่อเรา", href: "/about/contact" },
-      { label: "เกี่ยวกับเรา", href: "/about" },
-      { label: "นโยบายคืนสินค้า", href: "/about/return-policy" },
-      { label: "ร่วมงานกับเรา", href: "/about/careers" },
-    ],
-  },
-];
+// Content comes from `~/lib/siteFooter` (Admin: /admin/content/footer), seed =
+// the original hardcoded footer. External links (http) open in a new tab.
 
-// Built once, at module scope, and passed as a stable reference — Accordion's
-// <For each={props.items}> re-reads the `items` prop getter; an inline
-// `.map()` there re-creates JSX on every read and breaks hydration (this bit
-// us for real in ReviewsSection's carousel slides — see the note there).
-const footerAccordionItems = footerColumns.map((col) => ({
-  id: col.id,
-  trigger: col.title,
-  content: (
-    <div class="flex flex-col gap-3">
-      <For each={col.links}>
-        {(link) => (
-          <a href={link.href} class="text-sm text-white/90 hover:underline">
-            {link.label}
-          </a>
-        )}
-      </For>
-    </div>
-  ),
-}));
+const SOCIAL_ICONS: Record<FooterSocialPlatform, { icon: string; label: string }> = {
+  line: { icon: iconLine, label: `LINE Official Account ${CONTACT.lineId}` },
+  instagram: { icon: iconInstagram, label: "Instagram" },
+  tiktok: { icon: iconTiktok, label: "TikTok" },
+  facebook: { icon: iconFacebook, label: "Facebook" },
+  youtube: { icon: iconYoutube, label: "YouTube" },
+};
 
-// href is a placeholder route, not the real external profile URL — nobody
-// has supplied the actual Instagram/TikTok/Facebook/YouTube links yet, and
-// pointing these at a guessed real-looking external URL would be worse than
-// routing to the same out-of-scope screen everything else here uses. Swap
-// in the real profile URLs (as plain external `<a>`s) once they're provided.
-const socialLinks = [
-  { icon: iconInstagram, label: "Instagram", href: "/social/instagram" },
-  { icon: iconTiktok, label: "TikTok", href: "/social/tiktok" },
-  { icon: iconFacebook, label: "Facebook", href: "/social/facebook" },
-  { icon: iconYoutube, label: "YouTube", href: "/social/youtube" },
-];
+const isExternal = (href: string) => /^https?:\/\//.test(href);
+
+function FooterLinkItem(props: { link: FooterLink; class: string }) {
+  return (
+    <a
+      href={props.link.href || undefined}
+      target={isExternal(props.link.href) ? "_blank" : undefined}
+      rel={isExternal(props.link.href) ? "noopener noreferrer" : undefined}
+      class={props.class}
+    >
+      {props.link.label}
+    </a>
+  );
+}
 
 export function Footer() {
+  const footer = useStorefrontFooter();
+  // Rebuilt only when the saved footer changes. `content` is a getter so the
+  // link list is created when the panel actually renders (after a tap), never
+  // eagerly during hydration, where stray JSX would shift hydration keys.
+  const accordionItems = createMemo(() =>
+    footer().columns.map((col) => ({
+      id: col.id,
+      trigger: col.title,
+      get content() {
+        return (
+          <div class="flex flex-col gap-3">
+            <For each={col.links}>{(link) => <FooterLinkItem link={link} class="text-sm text-white/90 hover:underline" />}</For>
+          </div>
+        );
+      },
+    })),
+  );
+
   return (
     <footer class="flex flex-col gap-6 bg-brand-pink pt-12 text-white">
       <Container width="wide" class="flex flex-col gap-8">
@@ -90,22 +67,16 @@ export function Footer() {
                 width while height stays pinned at h-8 — that mismatch was
                 distorting the logo's aspect ratio on every breakpoint. */}
             <img src={logo} alt="Charmiss" class="h-8 w-auto self-start" />
-            <ContactDetails />
+            <ContactDetails footer={footer()} />
           </div>
 
           {/* Desktop sitemap: plain columns */}
           <div class="hidden lg:flex lg:gap-16">
-            <For each={footerColumns}>
+            <For each={footer().columns}>
               {(col) => (
                 <div class="flex w-40 shrink-0 flex-col gap-4">
                   <p class="font-medium text-white">{col.title}</p>
-                  <For each={col.links}>
-                    {(link) => (
-                      <a href={link.href} class="text-sm text-white/90 hover:underline">
-                        {link.label}
-                      </a>
-                    )}
-                  </For>
+                  <For each={col.links}>{(link) => <FooterLinkItem link={link} class="text-sm text-white/90 hover:underline" />}</For>
                 </div>
               )}
             </For>
@@ -114,7 +85,7 @@ export function Footer() {
           {/* Mobile sitemap: accordion, keeps the footer scannable instead of one long stack */}
           <div class="lg:hidden">
             <Accordion
-              items={footerAccordionItems}
+              items={accordionItems()}
               itemClass="!bg-white/10 !border-b-0 !p-4"
               triggerClass="text-white"
               contentClass="text-white/90"
@@ -126,14 +97,9 @@ export function Footer() {
         </div>
 
         <div class="flex flex-col items-center gap-2 border-t border-white/30 pb-6 pt-6 text-sm sm:flex-row sm:justify-between">
-          <p>© 2026 Charmiss. All Rights Reserved.</p>
+          <p>{footer().copyright}</p>
           <div class="flex gap-6">
-            <a href="/legal/terms" class="hover:underline">
-              เงื่อนไขการใช้งาน
-            </a>
-            <a href="/legal/privacy" class="hover:underline">
-              นโยบายความเป็นส่วนตัว
-            </a>
+            <For each={footer().legalLinks}>{(link) => <FooterLinkItem link={link} class="hover:underline" />}</For>
           </div>
         </div>
       </Container>
@@ -149,22 +115,38 @@ export function Footer() {
   );
 }
 
-function ContactDetails() {
+function ContactDetails(props: { footer: FooterContent }) {
+  const contact = () => props.footer.contact;
+  const social = () => props.footer.social.filter((s) => s.enabled && s.href.trim());
   return (
     <div class="flex flex-col gap-4 text-sm text-white/90">
-      <p>188/49 โครงการ DRAGON TOWN อาคาร C14 ถนนจรัสเมือง แขวงวังใหม่ เขตปทุมวัน กรุงเทพมหานคร 10330</p>
-      <p>(+66) 61 172 7257</p>
-      <p>hello@charmiss.co</p>
-      <p>จันทร์ - ศุกร์: 09:00 - 18:00 น.</p>
-      <div class="flex items-center gap-4">
-        <For each={socialLinks}>
-          {(social) => (
-            <a href={social.href} aria-label={social.label} class="-m-1 flex size-8 items-center justify-center">
-              <img src={social.icon} alt="" class="size-6" />
-            </a>
-          )}
-        </For>
-      </div>
+      <Show when={contact().address}>
+        <p class="whitespace-pre-line">{contact().address}</p>
+      </Show>
+      <Show when={contact().phoneLabel}>
+        <a href={footerPhoneHref(contact().phoneLabel)} class="self-start hover:underline">
+          {contact().phoneLabel}
+        </a>
+      </Show>
+      <Show when={contact().email}>
+        <a href={`mailto:${contact().email}`} class="self-start hover:underline">
+          {contact().email}
+        </a>
+      </Show>
+      <Show when={contact().hours}>
+        <p>{contact().hours}</p>
+      </Show>
+      <Show when={social().length > 0}>
+        <div class="flex items-center gap-4">
+          <For each={social()}>
+            {(s) => (
+              <a href={s.href} target="_blank" rel="noopener noreferrer" aria-label={SOCIAL_ICONS[s.platform].label} class="-m-1 flex size-8 items-center justify-center">
+                <img src={SOCIAL_ICONS[s.platform].icon} alt="" class="size-6" />
+              </a>
+            )}
+          </For>
+        </div>
+      </Show>
     </div>
   );
 }

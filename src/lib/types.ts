@@ -1,4 +1,5 @@
 import type { Address } from "./checkoutData";
+import type { MediaValue } from "./media";
 
 export type ProductVariant = {
   id: string;
@@ -43,7 +44,7 @@ export type Product = {
   flashSaleEndsAt?: number; // epoch ms, only set when the card should show the countdown ribbon
   variants?: ProductVariant[];
   /**
-   * Product / Category / Brand / Collection Source-of-Truth Cleanup —
+   * Product / Category / Collection Source-of-Truth Cleanup —
    * legacy 3-value classification, superseded by `categoryId` below. Kept on
    * the type (never actively read for classification anymore) only so
    * pre-existing records/order history/etc. that still carry it don't lose
@@ -61,8 +62,6 @@ export type Product = {
    * Store/Product Catalog actually serve.
    */
   categoryId?: string;
-  /** Same idea as `categoryId`, for Brand (`~/lib/adminBrands`'s `AdminBrand[]`) — nullable/optional since Brand is not required on a Product. */
-  brandId?: string;
   /** 0-5. Omit to hide the rating row entirely (e.g. a SKU with no reviews yet). */
   rating?: number;
   soldCount?: number;
@@ -80,6 +79,14 @@ export type Product = {
    * signal, just an explicit override on top of the same fallback chain.
    */
   mainImage?: string;
+  /**
+   * Gallery with videos: same order as `images`, each entry an image (string)
+   * or a video `MediaItem` (`~/lib/media`). `images` stays the still-image
+   * list (a video's entry there is its poster), so every card, cart line and
+   * list keeps reading `images`/`image` and never gets a video. Only the PDP
+   * gallery reads this. Absent = images only.
+   */
+  media?: MediaValue[];
   description?: string;
   reviewCount?: number;
   /** Counts for [5★, 4★, 3★, 2★, 1★], in that order. */
@@ -106,6 +113,8 @@ export type User = {
   gender?: "female" | "male" | "unspecified";
   /** "crm" = moved over from the Charmiss Club CRM (coins carried over); "new" = signed up on the website. */
   memberSource?: "crm" | "new";
+  /** Member number on the Charmiss Club card: the formal customer code ("CM-000002") from the Admin Customer record. */
+  memberCode?: string;
 };
 
 /**

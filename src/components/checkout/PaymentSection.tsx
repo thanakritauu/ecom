@@ -69,8 +69,9 @@ export function PaymentSection(props: {
           />
         }
       >
-        {/* Phones: one full-width row per method. From `sm`: 2×2 tiles, still icons + name on one row. */}
-        <div role="radiogroup" aria-labelledby="payment-method-heading" class="grid grid-cols-1 gap-2 sm:auto-rows-fr sm:grid-cols-2 sm:gap-3">
+        {/* Phones and desktop (the form column sits beside the wider order summary): one full-width row per method.
+            Tablet, where the form is full width: 2x2 tiles, still icons + name on one row. */}
+        <div role="radiogroup" aria-labelledby="payment-method-heading" class="grid grid-cols-1 gap-2 sm:auto-rows-fr sm:grid-cols-2 sm:gap-3 lg:grid-cols-1">
           <For each={PAYMENT_METHODS}>
             {(m) => (
               <button
@@ -106,7 +107,7 @@ export function PaymentSection(props: {
           when={p.waiting()}
           fallback={
             <p class="rounded-card bg-surface-gray/60 p-4 text-sm leading-[1.75] text-ink-gray">
-              กด <span class="font-semibold text-ink">“ชำระเงิน”</span> ระบบจะเปิดหน้าชำระเงินของ Beam ในหน้าต่างใหม่ เพื่อ{methodHint()} {formatTHB(props.amount)}
+              กด <span class="font-semibold text-ink">"ชำระเงิน"</span> ระบบจะเปิดหน้าชำระเงินของ Beam ในหน้าต่างใหม่ เพื่อ{methodHint()} {formatTHB(props.amount)}
             </p>
           }
         >
@@ -158,7 +159,7 @@ function FailedPanel(props: { reason: PaymentFailureReason; methodLabel: string;
       <h3 class="text-xl font-bold leading-[1.75] text-system-red">ไม่สามารถชำระเงินได้</h3>
       <p class="font-semibold text-ink">{msg().title}</p>
       <p class="max-w-sm text-sm leading-[1.75] text-ink-gray">{msg().body}</p>
-      <p class="text-xs leading-[1.75] text-ink-gray">ช่องทาง: {props.methodLabel} · ยังไม่มีการตัดเงินจากรายการนี้</p>
+      <p class="text-xs leading-[1.75] text-ink-gray">ชำระผ่าน {props.methodLabel} ระบบยังไม่ได้ตัดเงินจากรายการนี้</p>
       <div class="mt-2 flex w-full max-w-sm flex-col gap-2">
         <Button type="button" variant="primary" size="lg" class="w-full" onClick={props.onRetry}>
           ลองอีกครั้ง
@@ -186,11 +187,8 @@ function PayLaterAlert() {
         <div class="flex min-w-0 flex-1 flex-col gap-0.5 text-sm leading-[1.75]">
           <p class="text-base font-bold text-system-red">คำสั่งซื้อของคุณรอการชำระเงิน</p>
           <p class="text-ink">
-            ระบบบันทึกคำสั่งซื้อไว้แล้ว สถานะ “รอชำระเงิน” ชำระได้ที่{" "}
-            <span class="font-semibold">
-              <span class="whitespace-nowrap">โปรไฟล์ ›</span> <span class="whitespace-nowrap">ประวัติการซื้อ ›</span>{" "}
-              <span class="whitespace-nowrap">แท็บ “รอชำระเงิน”</span>
-            </span>
+            ระบบบันทึกคำสั่งซื้อไว้แล้ว ชำระได้ที่เมนู<span class="font-semibold">โปรไฟล์</span> หัวข้อ<span class="font-semibold">ประวัติการซื้อ</span>{" "}
+            ในแท็บ<span class="font-semibold">รอชำระเงิน</span>
           </p>
         </div>
       </div>
@@ -250,7 +248,7 @@ function WaitingPanel(props: { windowClosed: boolean; onReopen: () => void; onCa
   return (
     <div class="flex flex-col items-center gap-3 rounded-card border border-surface-gray px-4 py-6 text-center" role="status" aria-live="polite">
       <span class="loading loading-spinner loading-lg text-brand-pink" aria-hidden="true" />
-      <p class="font-semibold leading-[1.75] text-ink">กำลังรอการชำระเงินที่หน้าต่าง Beam…</p>
+      <p class="font-semibold leading-[1.75] text-ink">กำลังรอการชำระเงินที่หน้าต่าง Beam...</p>
       <p class="max-w-sm text-sm leading-[1.75] text-ink-gray">
         <Show when={props.windowClosed} fallback="ชำระเงินให้เสร็จในหน้าต่างที่เปิดขึ้น แล้วหน้านี้จะอัปเดตเอง">
           หน้าต่าง Beam ถูกปิดไปแล้ว หากยังไม่ได้ชำระ กดเปิดหน้าชำระเงินอีกครั้ง

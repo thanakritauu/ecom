@@ -1,7 +1,5 @@
 import { createSignal, Show } from "solid-js";
 import { CloseXIcon, PlusIcon, WarningTriangleIcon } from "./icons";
-import { NavIcon } from "~/components/shared/NavIcon";
-import { isImageIconSrc } from "~/lib/promotionNavIcons";
 
 const RECOMMENDED_SIZE = 64;
 const RATIO_TOLERANCE = 0.05;
@@ -14,11 +12,6 @@ const RATIO_TOLERANCE = 0.05;
  * dismissable warning (not a hard block — this is a prototype, no real
  * server-side resize exists), Replace (click the thumbnail again) and
  * Remove.
- *
- * Storefront sync — `value` may also be a preset artwork key ("glow",
- * "flashsale", ... from `PROMOTION_NAV_ICON_OPTIONS`) rather than an image
- * URL; the thumbnail renders through the same `NavIcon` the storefront uses,
- * never as a broken `<img src="glow">`, and Remove just clears the key.
  */
 export function IconImageUploader(props: { value: string; onChange: (url: string) => void; disabled?: boolean }) {
   const [warning, setWarning] = createSignal<string>();
@@ -35,9 +28,9 @@ export function IconImageUploader(props: { value: string; onChange: (url: string
       const { naturalWidth: w, naturalHeight: h } = img;
       const ratio = w / h;
       const messages: string[] = [];
-      if (Math.abs(ratio - 1) > RATIO_TOLERANCE) messages.push(`อัตราส่วนภาพคือ ${w}×${h}px ไม่ใช่ 1:1`);
-      if (w < RECOMMENDED_SIZE || h < RECOMMENDED_SIZE) messages.push(`ขนาดภาพเล็กกว่าที่แนะนำ (${RECOMMENDED_SIZE}×${RECOMMENDED_SIZE}px)`);
-      setWarning(messages.length > 0 ? messages.join(" · ") : undefined);
+      if (Math.abs(ratio - 1) > RATIO_TOLERANCE) messages.push(`ภาพขนาด ${w}x${h}px ไม่ใช่สี่เหลี่ยมจัตุรัส`);
+      if (w < RECOMMENDED_SIZE || h < RECOMMENDED_SIZE) messages.push(`ภาพเล็กกว่า ${RECOMMENDED_SIZE}x${RECOMMENDED_SIZE}px ที่แนะนำ`);
+      setWarning(messages.length > 0 ? messages.join(" และ") : undefined);
     };
     img.src = url;
   };
@@ -79,9 +72,7 @@ export function IconImageUploader(props: { value: string; onChange: (url: string
         >
           <div class="group relative size-16 shrink-0 overflow-hidden rounded-media border border-border">
             <button type="button" onClick={openPicker} aria-label="เปลี่ยนไอคอน" disabled={props.disabled} class="flex size-full items-center justify-center">
-              <Show when={isImageIconSrc(props.value)} fallback={<NavIcon icon={props.value} class="size-8" />}>
-                <img src={props.value} alt="" class="size-full object-cover" />
-              </Show>
+              <img src={props.value} alt="" class="size-full object-cover" />
             </button>
             <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-ink/60 py-0.5 text-center text-[9px] font-medium text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100">
               เปลี่ยน
@@ -101,7 +92,7 @@ export function IconImageUploader(props: { value: string; onChange: (url: string
         </Show>
 
         <div class="flex flex-col gap-1 text-xs text-ink-gray">
-          <p>อัตราส่วน 1:1 — แนะนำ {RECOMMENDED_SIZE}×{RECOMMENDED_SIZE}px</p>
+          <p>ภาพสี่เหลี่ยมจัตุรัส ขนาดแนะนำ {RECOMMENDED_SIZE}x{RECOMMENDED_SIZE}px</p>
           <Show when={warning()}>
             <p class="flex items-center gap-1 text-system-yellow">
               <WarningTriangleIcon class="size-3.5 shrink-0" /> {warning()}

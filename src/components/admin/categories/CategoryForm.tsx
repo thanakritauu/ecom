@@ -3,15 +3,14 @@ import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { Toggle } from "~/components/admin/Toggle";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
-import { slugifyCategory, categorySlugRouteWarning, categoryStorefrontHref, type AdminCategory, type CategoryFormValues, type CategoryStatus } from "~/lib/adminCategories";
+import { slugifyCategory, categorySlugRouteWarning, categoryStorefrontHref, STOREFRONT_CATEGORY_ROUTE_SLUGS, type AdminCategory, type CategoryFormValues, type CategoryStatus } from "~/lib/adminCategories";
 
 /**
  * One Create/Edit form shared by `/new` and `/:id/edit` — same "one form,
  * two routes" shape every other Admin form uses. Modeled directly on
  * `ProductCollectionForm` (single save action, no publish workflow) plus the
  * taxonomy fields a Category needs: Slug (auto-derived from Name until the
- * admin edits it directly, same UX as `CampaignForm`'s slug field) and a
- * square thumbnail image. Status is a Toggle (§3) — no Display Order field
+ * admin edits it directly, same UX as the หน้าแคมเปญ form's slug field). Status is a Toggle (§3) — no Display Order field
  * anymore (§5, removed with no replacement).
  */
 export function CategoryForm(props: {
@@ -25,11 +24,6 @@ export function CategoryForm(props: {
   const [slug, setSlugRaw] = createSignal(props.initial?.slug ?? "");
   const [slugTouched, setSlugTouched] = createSignal(!!props.initial);
   const [description, setDescription] = createSignal(props.initial?.description ?? "");
-  // CMS Dashboard & Admin UX Refinement §13 — Category is Product
-  // Classification only, so its Image field has no admin UI anymore; the
-  // value itself is still preserved and resubmitted unchanged (never reset
-  // to "") so legacy mock data with an image doesn't silently lose it.
-  const [image] = createSignal(props.initial?.image ?? "");
   const [status, setStatus] = createSignal<CategoryStatus>(props.initial?.status ?? "active");
 
   const [errors, setErrors] = createSignal<Record<string, string>>({});
@@ -66,7 +60,6 @@ export function CategoryForm(props: {
       name: name().trim(),
       slug: slugifyCategory(slug()),
       description: description().trim(),
-      image: image(),
       status: status(),
     };
 
@@ -75,7 +68,7 @@ export function CategoryForm(props: {
     try {
       await props.onSubmit(values);
     } catch {
-      setSubmitError("บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      setSubmitError("บันทึกหมวดหมู่ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     } finally {
       setSaving(false);
     }
@@ -88,7 +81,7 @@ export function CategoryForm(props: {
           <TextField
             label="ชื่อหมวดหมู่"
             required
-            placeholder="ปาก"
+            placeholder="ลิป"
             value={name()}
             onInput={(e) => handleNameInput(e.currentTarget.value)}
             error={errors().name}
@@ -106,10 +99,11 @@ export function CategoryForm(props: {
           {/* Storefront sync — category pages live at the site root, one static route file per slug. */}
           <div class="flex flex-col gap-1 text-xs sm:col-span-2">
             <p class="text-ink-gray">
-              URL หน้าร้าน: <span class="font-medium text-ink">{categoryStorefrontHref(slugifyCategory(slug()) || "{slug}")}</span>
+              ลิงก์หน้าร้าน <span class="font-medium text-ink">{categoryStorefrontHref(slugifyCategory(slug()) || "slug")}</span>
             </p>
+            <p class="text-ink-gray">หน้าร้านมีหน้าหมวดหมู่สำหรับ Slug เหล่านี้เท่านั้น: {STOREFRONT_CATEGORY_ROUTE_SLUGS.join(", ")}</p>
             <Show when={!errors().slug && categorySlugRouteWarning(slugifyCategory(slug()))}>
-              {(w) => <p class={w().tone === "error" ? "font-medium text-system-red" : "font-medium text-system-yellow"}>⚠ {w().message}</p>}
+              {(w) => <p class={w().tone === "error" ? "font-medium text-system-red" : "font-medium text-system-yellow"}>{w().message}</p>}
             </Show>
           </div>
           <label class="flex flex-col gap-1.5 sm:col-span-2">
@@ -131,10 +125,9 @@ export function CategoryForm(props: {
             <label class="flex flex-col gap-1.5">
               <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
               <Toggle checked={status() === "active"} onChange={(checked) => setStatus(checked ? "active" : "inactive")} disabled={saving()} />
-              <span class="text-xs text-ink-gray">ปิดใช้งาน = ซ่อนจากเมนูหน้าร้าน</span>
+              <span class="text-xs text-ink-gray">ถ้าปิด หมวดหมู่นี้จะไม่แสดงในเมนู การค้นหา และตัวกรองบนหน้าร้าน</span>
             </label>
           </Show>
-          <p class="text-xs text-ink-gray sm:col-span-2">รูปหมวดหมู่: หน้าร้านไม่ได้แสดงรูปหมวดหมู่ในตอนนี้ จึงไม่มีช่องอัปโหลด (รูปเดิมที่มีอยู่จะถูกเก็บไว้)</p>
         </div>
       </Section>
 
@@ -150,7 +143,7 @@ export function CategoryForm(props: {
             ยกเลิก
           </Button>
           <Button type="submit" variant="primary" loading={saving()}>
-            {props.mode === "create" ? "สร้างหมวดหมู่" : "บันทึกการเปลี่ยนแปลง"}
+            {saving() ? "กำลังบันทึก..." : props.mode === "create" ? "บันทึกหมวดหมู่" : "บันทึกการเปลี่ยนแปลง"}
           </Button>
         </div>
       </AdminFloatingBar>

@@ -1,24 +1,37 @@
 import { createSignal, For, Show, type JSX } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import { Container } from "../shared/Container";
+import { EmptyState } from "../shared/EmptyState";
+import { TagIcon } from "../shared/icons";
 import { Button } from "../shared/Button";
 import { CouponCard, couponTicket } from "../shared/CouponCard";
 import { pushToast } from "~/lib/toast";
-import { activeCoupons } from "~/lib/cartSelectors";
+import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
 import glowEllipse from "~/assets/icons/coupon-glow-ellipse.svg";
 import blurShape from "~/assets/images/coupon/blur-shape.png";
 import ticketDeco1 from "~/assets/images/coupon/coupon-ticket-deco-1.svg";
 import ticketDeco2 from "~/assets/images/coupon/coupon-ticket-deco-2.svg";
 import ticketDeco3 from "~/assets/images/coupon/coupon-ticket-deco-3.svg";
 
-/** The real coupon catalog (`AVAILABLE_COUPONS`, expired ones left out) — one ticket per code, the same tickets Checkout's picker lists. */
-const coupons = () => activeCoupons().map(couponTicket);
-
 async function simulateCollect() {
   await new Promise((resolve) => setTimeout(resolve, 350 + Math.random() * 250));
   if (Math.random() < 0.05) throw new Error("COLLECT_FAILED");
 }
 
-export function CouponSection() {
+/**
+ * `page` = the /coupons page (nav menu "คูปอง"): same purple and yellow artwork,
+ * but every live coupon (the ones on Home and the ones offered at Checkout),
+ * an h1, a wrapping grid instead of the sideways rail, and an empty state
+ * instead of hiding the section.
+ */
+export function CouponSection(props: { page?: boolean; /** Extra content under the coupons, on the purple (the page's "วิธีใช้คูปอง" box). */ after?: JSX.Element }) {
+  /** Home: the coupons Admin shows on Home (switched on, inside their dates), one ticket per code, the same ticket Checkout's picker uses. */
+  const { homeCoupons, checkoutCoupons } = useStorefrontPromotions();
+  const coupons = () => {
+    if (!props.page) return homeCoupons().map(couponTicket);
+    const byCode = new Map([...homeCoupons(), ...checkoutCoupons()].map((c) => [c.code, c] as const));
+    return [...byCode.values()].map(couponTicket);
+  };
   const [collected, setCollected] = createSignal<Set<string>>(new Set());
 
   const collect = async (id: string) => {
@@ -53,10 +66,11 @@ export function CouponSection() {
    */
   // Nothing to collect once every code has expired — drop the whole section rather than an empty ticket row.
   return (
-    <Show when={coupons().length > 0}>
+    <Show when={props.page || coupons().length > 0}>
       <section
         aria-labelledby="coupon-heading"
-        class="relative overflow-hidden rounded-t-3xl bg-[#7650ff] pb-11 pt-10 [background-image:linear-gradient(rgba(255,255,255,0.1),rgba(255,255,255,0.1))] sm:rounded-t-[32px] sm:pb-14 sm:pt-[52px] lg:rounded-t-[40px] lg:pb-[72px] lg:pt-[65px]"
+        class="relative overflow-hidden bg-[#7650ff] pb-11 pt-10 [background-image:linear-gradient(rgba(255,255,255,0.1),rgba(255,255,255,0.1))] sm:pb-14 sm:pt-[52px] lg:pb-[72px] lg:pt-[65px]"
+        classList={{ "rounded-t-3xl sm:rounded-t-[32px] lg:rounded-t-[40px]": !props.page }}
       >
         <img
           src={glowEllipse}
@@ -67,9 +81,9 @@ export function CouponSection() {
 
         <Container width="wide" class="flex flex-col items-center gap-4">
           <div class="relative mb-9 flex flex-col items-center text-center sm:mb-[52px] lg:mb-[75px]">
-            <h2 id="coupon-heading" class="text-4xl font-bold leading-[normal] text-white sm:text-[48px] lg:text-[62px]">
+            <Dynamic component={props.page ? "h1" : "h2"} id="coupon-heading" class="text-4xl font-bold leading-[normal] text-white sm:text-[48px] lg:text-[62px]">
               คูปองส่วนลด
-            </h2>
+            </Dynamic>
             <p class="-mt-2 text-[31px] font-bold leading-[normal] text-white sm:-mt-[11px] sm:text-[41px] lg:-mt-[14px] lg:text-[53px]">ลดทั้งเว็บ!</p>
           </div>
 
@@ -91,19 +105,42 @@ export function CouponSection() {
 
           <div class="relative flex w-full flex-col gap-4 lg:max-w-[1140px]">
             {/* Phone/tablet rail gets vertical room so the ticket shadows aren't clipped by its overflow; the three tickets sit in one row from lg. */}
-            <div class="scroll-rail -mb-4 -mt-2 pb-4 !pr-0 pt-2 lg:mx-0 lg:w-full lg:grid lg:grid-cols-3 lg:overflow-visible lg:m-0 lg:!p-0">
-              <For each={coupons()}>
-                {(coupon) => (
-                  <div class="w-[88%] min-w-[330px] max-w-[369px] shrink-0 lg:w-auto lg:min-w-0 lg:max-w-none">
-                    <CouponCard coupon={coupon} collected={collected().has(coupon.id)} onCollect={() => collectOne(coupon.id)} />
+            <Show
+              when={coupons().length > 0}
+              fallback={
+                <div class="rounded-card bg-white p-6">
+                  <EmptyState size="compact" icon={TagIcon} title="ยังไม่มีคูปองในตอนนี้" description="คูปองใหม่จะขึ้นที่หน้านี้ แวะมาดูอีกครั้งนะ" />
+                </div>
+              }
+            >
+              <Show
+                when={props.page}
+                fallback={
+                  <div class="scroll-rail -mb-4 -mt-2 pb-4 !pr-0 pt-2 xl:mx-0 xl:w-full xl:grid xl:grid-cols-3 xl:overflow-visible xl:m-0 xl:!p-0">
+                    <For each={coupons()}>
+                      {(coupon) => (
+                        // Sideways rail until xl: three across only once each ticket gets its full ~350px (narrower squeezes the button).
+                        <div class="w-[88%] min-w-[330px] max-w-[369px] shrink-0 xl:w-auto xl:min-w-0 xl:max-w-none">
+                          <CouponCard coupon={coupon} collected={collected().has(coupon.id)} onCollect={() => collectOne(coupon.id)} />
+                        </div>
+                      )}
+                    </For>
                   </div>
-                )}
-              </For>
-            </div>
+                }
+              >
+                {/* Page: every coupon visible at once; as many columns as fit with each ticket at least 330px wide (1 on phones, up to 3). */}
+                <div class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,330px),1fr))] gap-x-4 gap-y-6">
+                  <For each={coupons()}>
+                    {(coupon) => <CouponCard coupon={coupon} collected={collected().has(coupon.id)} onCollect={() => collectOne(coupon.id)} />}
+                  </For>
+                </div>
+              </Show>
 
-            <Button variant="white" class="w-full !px-8 !py-2 !text-lg !font-medium !leading-[normal] sm:!text-xl sm:!leading-[normal]" onClick={collectAll}>
-              เก็บคูปองทั้งหมด
-            </Button>
+              <Button variant="white" class="w-full !px-8 !py-2 !text-lg !font-medium !leading-[normal] sm:!text-xl sm:!leading-[normal]" onClick={collectAll}>
+                เก็บคูปองทั้งหมด
+              </Button>
+            </Show>
+            {props.after}
           </div>
 
           {/* Floating tickets (Figma 124:6755 – 124:6809) + right light shape (124:6819).

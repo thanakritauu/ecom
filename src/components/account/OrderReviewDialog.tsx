@@ -6,6 +6,7 @@ import starGold from "~/assets/icons/star-gold-4.svg";
 import { Button } from "../shared/Button";
 import { SheetModal } from "../shared/SheetModal";
 import { CloseMark } from "../shared/icons";
+import { FieldError } from "../shared/TextField";
 
 const MAX_REVIEW_CHARS = 500;
 const RATING_LABELS = ["แย่มาก", "ไม่ค่อยดี", "พอใช้", "ดี", "ดีมาก"];
@@ -27,7 +28,7 @@ function acceptFiles(files: File[], current: number): { accepted: ReviewMedia[];
     else if (current + accepted.length >= MAX_MEDIA) errors.add(`เพิ่มรูป/วิดีโอได้สูงสุด ${MAX_MEDIA} ไฟล์ต่อสินค้า`);
     else accepted.push({ name: file.name, type: file.type, url: URL.createObjectURL(file) });
   }
-  return { accepted, error: errors.size ? [...errors].join(" · ") : undefined };
+  return { accepted, error: errors.size ? [...errors].join(" ") : undefined };
 }
 
 /**
@@ -44,6 +45,8 @@ export function OrderReviewDialog(props: { order: Order; open: boolean; onOpenCh
   const [media, setMedia] = createSignal<Record<string, ReviewMedia[]>>({});
   const [mediaErrors, setMediaErrors] = createSignal<Record<string, string | undefined>>({});
   const [saving, setSaving] = createSignal(false);
+  // Set by the first "ส่งรีวิว" press; from then on every unrated item shows its own message (cleared as it gets stars).
+  const [tried, setTried] = createSignal(false);
 
   // Object URLs made in this form that weren't saved — freed when the form resets or unmounts.
   const savedUrls = () => new Set(Object.values(reviewMediaPreviews.get(props.order.id) ?? {}).flatMap((list) => list.map((m) => m.url)));
@@ -82,14 +85,25 @@ export function OrderReviewDialog(props: { order: Order; open: boolean; onOpenCh
         // This session's previews if we have them, else just the saved names (after a reload).
         setMedia(Object.fromEntries(Object.entries(saved).map(([k, r]) => [k, previews[k] ?? r.media ?? []])));
         setMediaErrors({});
+        setTried(false);
       },
     ),
   );
 
   const missing = () => items().filter((item) => !ratings()[orderItemKey(item)]).length;
+  const ratingId = (index: number) => `review-rating-${props.order.id}-${index}`;
 
   const submit = async () => {
-    if (missing() > 0 || saving()) return;
+    if (saving()) return;
+    setTried(true);
+    if (missing() > 0) {
+      // Bring the first unrated item into view and onto its first star.
+      const first = items().findIndex((item) => !ratings()[orderItemKey(item)]);
+      const group = document.getElementById(ratingId(first));
+      group?.scrollIntoView({ behavior: "smooth", block: "center" });
+      group?.querySelector<HTMLButtonElement>('[role="radio"]')?.focus({ preventScroll: true });
+      return;
+    }
     setSaving(true);
     try {
       await saveOrderReviews(
@@ -121,10 +135,10 @@ export function OrderReviewDialog(props: { order: Order; open: boolean; onOpenCh
       description={`คำสั่งซื้อ ${props.order.id}`}
       footer={
         <>
-          <Button type="button" variant="primary" size="lg" class="w-full" loading={saving()} disabled={missing() > 0} onClick={submit}>
+          <Button type="button" variant="primary" size="lg" class="w-full" loading={saving()} onClick={submit}>
             {saving() ? "กำลังส่งรีวิว..." : "ส่งรีวิว"}
           </Button>
-          <Show when={missing() > 0}>
+          <Show when={missing() > 0 && !tried()}>
             <p class="text-center text-xs text-ink-gray">ให้คะแนนสินค้าให้ครบทุกรายการก่อนส่งรีวิว</p>
           </Show>
         </>
@@ -135,6 +149,7 @@ export function OrderReviewDialog(props: { order: Order; open: boolean; onOpenCh
           const key = orderItemKey(item);
           const rating = () => ratings()[key] ?? 0;
           const text = () => texts()[key] ?? "";
+          const ratingError = () => (tried() && rating() === 0 ? "กรุณาให้คะแนนดาว" : undefined);
           return (
             <section class="flex flex-col gap-3" classList={{ "border-t border-surface-gray pt-5": i() > 0 }} aria-label={`รีวิว ${item.name}`}>
               <div class="flex items-center gap-3">
@@ -145,12 +160,20 @@ export function OrderReviewDialog(props: { order: Order; open: boolean; onOpenCh
                 </div>
               </div>
 
-              <div class="flex flex-col gap-1">
+              <div id={ratingId(i())} class="flex flex-col gap-1">
                 <p class="text-sm font-medium text-ink">
                   ให้คะแนนสินค้า <span class="text-system-red">*</span>
                 </p>
                 <div class="flex items-center gap-2">
-                  <div role="radiogroup" aria-label={`คะแนน ${item.name}`} class="-ml-1.5 flex">
+                  <div
+                    role="radiogroup"
+                    aria-label={`คะแนน ${item.name}`}
+                    aria-required="true"
+                    aria-invalid={!!ratingError()}
+                    aria-describedby={ratingError() ? `${ratingId(i())}-error` : undefined}
+                    class="-ml-1.5 flex rounded-pill"
+                    classList={{ "ring-1 ring-inset ring-system-red": !!ratingError() }}
+                  >
                     <For each={[1, 2, 3, 4, 5]}>
                       {(star) => (
                         <button
@@ -171,6 +194,7 @@ export function OrderReviewDialog(props: { order: Order; open: boolean; onOpenCh
                     <span class="text-sm text-ink-gray">{RATING_LABELS[rating() - 1]}</span>
                   </Show>
                 </div>
+                <FieldError id={`${ratingId(i())}-error`} message={ratingError()} />
               </div>
 
               <label class="flex flex-col gap-1.5">
@@ -308,7 +332,7 @@ function ReviewMediaField(props: {
         </p>
       </Show>
       <p class="text-xs text-ink-gray">
-        สูงสุด {MAX_MEDIA} ไฟล์ · รูปไม่เกิน {MAX_IMAGE_MB} MB · วิดีโอไม่เกิน {MAX_VIDEO_MB} MB
+        แนบได้สูงสุด {MAX_MEDIA} ไฟล์ รูปไม่เกิน {MAX_IMAGE_MB} MB และวิดีโอไม่เกิน {MAX_VIDEO_MB} MB
       </p>
     </div>
   );

@@ -1,17 +1,16 @@
-import { createMemo, createSignal, For, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, type JSX } from "solid-js";
 import { Dialog } from "@kobalte/core/dialog";
+import { DropdownMenu } from "@kobalte/core/dropdown-menu";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
 import { Button } from "~/components/shared/Button";
 import { TextField } from "~/components/shared/TextField";
-import { StatusBadge } from "~/components/admin/StatusBadge";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { SearchInput } from "~/components/admin/SearchInput";
 import { SingleImageUploader } from "~/components/admin/SingleImageUploader";
 import { Toggle } from "~/components/admin/Toggle";
-import { ArrowDownIcon, ArrowUpIcon, CloseXIcon, PlusIcon, ReviewsIcon, TrashIcon } from "~/components/admin/icons";
-import { ReviewsTabs } from "~/components/admin/reviews/ReviewsTabs";
+import { ArrowDownIcon, ArrowUpIcon, CloseXIcon, MoreIcon, PlusIcon, ReviewsIcon } from "~/components/admin/icons";
 import { TiktokClipCover } from "~/components/admin/reviews/TiktokClipCover";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { parseTiktokUrl, tiktokClipUrl, useAdminTiktokClips, type AdminTiktokClip } from "~/lib/adminTiktokClips";
@@ -20,8 +19,8 @@ import { pushToast } from "~/lib/toast";
 /**
  * "คลิปรีวิว TikTok" — the clip rail at the top of every PDP (and Home's
  * #CharmissReviews). Order here is the rail's order; a clip linked to a
- * product shows first on that product's PDP, then the rest follow. Seeded
- * from the storefront's `tiktokReviews.ts` (see `adminTiktokClips.ts`).
+ * product shows first on that product's PDP, then the rest follow. The
+ * storefront reads this list live (`storefrontTiktokClips.ts`).
  */
 export default function AdminTiktokClipsPage() {
   const store = useAdminTiktokClips();
@@ -29,6 +28,16 @@ export default function AdminTiktokClipsPage() {
   const productName = (id: string) => productsStore.getById(id)?.name ?? id;
 
   const [editing, setEditing] = createSignal<AdminTiktokClip | "new" | null>(null);
+  // Kept while the drawer animates closed, so its content doesn't vanish mid-animation.
+  const [editorTarget, setEditorTarget] = createSignal<AdminTiktokClip | "new">("new");
+  const [editorKey, setEditorKey] = createSignal(0);
+  createEffect(() => {
+    const target = editing();
+    if (target) {
+      setEditorTarget(target);
+      setEditorKey((k) => k + 1);
+    }
+  });
   const [pendingDelete, setPendingDelete] = createSignal<AdminTiktokClip | null>(null);
   const [deleting, setDeleting] = createSignal(false);
 
@@ -39,68 +48,72 @@ export default function AdminTiktokClipsPage() {
     await store.removeClip(clip.id);
     setDeleting(false);
     setPendingDelete(null);
-    pushToast("ลบคลิปแล้ว", "error");
+    pushToast(`ลบ "${clip.title || "คลิป"}" เรียบร้อยแล้ว`, "error");
   };
 
   return (
     <div class="flex flex-col gap-6">
-      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "รีวิว", href: "/admin/reviews" }, { label: "คลิปรีวิว TikTok" }]} />
+      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "รีวิวสินค้า", href: "/admin/reviews" }, { label: "คลิปรีวิว TikTok" }]} />
       <PageHeader
         title="คลิปรีวิว TikTok"
-        description="คลิปที่แสดงด้านบนสุดของรีวิวในหน้าสินค้า (PDP) และหน้าแรก — คลิปที่ผูกกับสินค้าจะแสดงก่อนในหน้าสินค้านั้น"
+        description="จัดการคลิปที่แสดงในหน้าแรกและเหนือรีวิวในหน้าสินค้า คลิปที่ผูกกับสินค้าจะขึ้นก่อนในหน้าสินค้านั้น"
         actions={
-          <Button variant="primary" onClick={() => setEditing("new")}>
-            <PlusIcon class="size-4" />
-            เพิ่มคลิป
-          </Button>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button variant="primary" onClick={() => setEditing("new")}>
+              <PlusIcon class="size-4" />
+              เพิ่มคลิป
+            </Button>
+          </div>
         }
       />
-      <ReviewsTabs />
 
       <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-        <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-col gap-1">
           <h2 class="text-base font-semibold text-ink">ลำดับคลิป ({store.clips().length})</h2>
-          <StatusBadge tone="warning">Mock — หน้าร้านยังอ่านรายการจาก tiktokReviews.ts</StatusBadge>
+          <p class="text-xs text-ink-gray">หน้าร้านแสดงคลิปตามลำดับนี้ ใช้ปุ่มลูกศรเพื่อเลื่อนขึ้นหรือลง</p>
         </div>
 
         <Show
           when={store.clips().length > 0}
-          fallback={<EmptyState icon={<ReviewsIcon />} title="ยังไม่มีคลิป" description="เพิ่มลิงก์คลิป TikTok เพื่อแสดงในหน้าสินค้า" actionLabel="เพิ่มคลิป" onAction={() => setEditing("new")} />}
+          fallback={<EmptyState icon={<ReviewsIcon />} title="ยังไม่มีคลิป" description="เริ่มเพิ่มคลิปแรกของคุณ" actionLabel="+ เพิ่มคลิป" onAction={() => setEditing("new")} />}
         >
           <ol class="flex flex-col gap-2">
             <For each={store.clips()}>
               {(clip, i) => (
-                <li class="flex flex-col gap-3 rounded-card border border-border bg-white p-3 sm:flex-row sm:items-center" classList={{ "opacity-60": !clip.active }}>
+                <li class="flex flex-col gap-3 rounded-card border border-border bg-surface-card p-3 sm:flex-row sm:items-center" classList={{ "opacity-60": !clip.active }}>
                   <div class="flex min-w-0 flex-1 items-center gap-3">
                     <span class="w-5 shrink-0 text-center text-sm font-semibold text-ink-gray">{i() + 1}</span>
                     <TiktokClipCover clip={clip} />
                     <div class="flex min-w-0 flex-1 flex-col gap-1">
-                      <p class="line-clamp-2 text-sm font-medium text-ink">{clip.title || "(ไม่มีชื่อคลิป)"}</p>
+                      <p class="line-clamp-2 text-sm font-medium text-ink">{clip.title || "-"}</p>
                       <a href={tiktokClipUrl(clip)} target="_blank" rel="noopener noreferrer" class="truncate text-xs text-ink-gray hover:text-brand-pink">
-                        @{clip.author} · {clip.videoId}
+                        @{clip.author} คลิป {clip.videoId}
                       </a>
                       <p class="text-xs text-ink-gray">
-                        <Show when={clip.productIds.length > 0} fallback={<span>ไม่ผูกสินค้า — แสดงหลังคลิปที่ผูกกับสินค้าในทุก PDP และหน้าแรก</span>}>
-                          {/* Mock catalog shows the same real product in several slots — list each name once, with every slot id. */}
-                          ผูกกับ {clip.productIds.length} สินค้า: <span class="text-ink">{[...new Set(clip.productIds.map(productName))].join(", ")}</span> ({clip.productIds.join(", ")})
+                        <Show when={clip.productIds.length > 0} fallback={<span>ไม่ผูกสินค้า แสดงในหน้าแรกและต่อท้ายคลิปของสินค้าในทุกหน้าสินค้า</span>}>
+                          {/* Mock catalog shows the same real product in several slots — list each name once. */}
+                          ผูกกับ {clip.productIds.length} สินค้า: <span class="text-ink">{[...new Set(clip.productIds.map(productName))].join(", ")}</span>
                         </Show>
                       </p>
                     </div>
                   </div>
                   <div class="flex shrink-0 flex-wrap items-center justify-end gap-1">
-                    <Toggle checked={clip.active} onChange={(on) => store.setActive(clip.id, on)} onLabel="แสดง" offLabel="ซ่อน" />
+                    <Toggle
+                      checked={clip.active}
+                      onChange={(on) => {
+                        store.setActive(clip.id, on);
+                        pushToast(on ? "แสดงคลิปแล้ว" : "ซ่อนคลิปแล้ว", "success");
+                      }}
+                      onLabel="แสดง"
+                      offLabel="ไม่แสดง"
+                    />
                     <IconButton label="เลื่อนขึ้น" disabled={i() === 0} onClick={() => store.move(i(), -1)}>
                       <ArrowUpIcon />
                     </IconButton>
                     <IconButton label="เลื่อนลง" disabled={i() === store.clips().length - 1} onClick={() => store.move(i(), 1)}>
                       <ArrowDownIcon />
                     </IconButton>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setEditing(clip)}>
-                      แก้ไข
-                    </Button>
-                    <IconButton label="ลบคลิป" onClick={() => setPendingDelete(clip)}>
-                      <TrashIcon />
-                    </IconButton>
+                    <ClipRowActionsMenu name={clip.title || clip.videoId} onEdit={() => setEditing(clip)} onDelete={() => setPendingDelete(clip)} />
                   </div>
                 </li>
               )}
@@ -109,25 +122,29 @@ export default function AdminTiktokClipsPage() {
         </Show>
       </section>
 
-      <Show when={editing()}>
-        {(target) => (
-          <ClipEditor
-            clip={target() === "new" ? undefined : (target() as AdminTiktokClip)}
-            onClose={() => setEditing(null)}
-            onSave={async (input) => {
-              await store.saveClip(target() === "new" ? null : (target() as AdminTiktokClip).id, input);
-              pushToast(target() === "new" ? "เพิ่มคลิปแล้ว" : "บันทึกคลิปแล้ว", "success");
-              setEditing(null);
-            }}
-          />
-        )}
+      <Show when={editorKey()} keyed>
+        {(_key) => {
+          const target = editorTarget();
+          return (
+            <ClipEditor
+              open={editing() !== null}
+              clip={target === "new" ? undefined : target}
+              onClose={() => setEditing(null)}
+              onSave={async (input) => {
+                await store.saveClip(target === "new" ? null : target.id, input);
+                pushToast("บันทึกคลิปเรียบร้อยแล้ว", "success");
+                setEditing(null);
+              }}
+            />
+          );
+        }}
       </Show>
 
       <ConfirmDialog
         open={pendingDelete() !== null}
         onOpenChange={(open) => !open && setPendingDelete(null)}
-        title="ลบคลิปนี้?"
-        description={`"${pendingDelete()?.title ?? ""}" จะไม่แสดงในหน้าสินค้าและหน้าแรกอีก`}
+        title="ลบคลิป?"
+        description={`คุณต้องการลบ "${pendingDelete()?.title ?? ""}" หรือไม่? คลิปจะหายจากหน้าแรกและหน้าสินค้า การกระทำนี้ไม่สามารถย้อนกลับได้`}
         confirmLabel="ลบคลิป"
         tone="danger"
         loading={deleting()}
@@ -139,6 +156,7 @@ export default function AdminTiktokClipsPage() {
 
 /** Add/edit drawer — same right-side Kobalte drawer shell as QuickViewDrawer, with Save/Cancel instead of "ดูรายละเอียด". */
 function ClipEditor(props: {
+  open: boolean;
   clip?: AdminTiktokClip;
   onClose: () => void;
   onSave: (input: Omit<AdminTiktokClip, "id">) => Promise<void>;
@@ -152,6 +170,7 @@ function ClipEditor(props: {
   const [productSearch, setProductSearch] = createSignal("");
   const [errors, setErrors] = createSignal<Record<string, string>>({});
   const [saving, setSaving] = createSignal(false);
+  const [submitError, setSubmitError] = createSignal<string>();
 
   const parsed = () => parseTiktokUrl(url());
   const matchingProducts = createMemo(() => {
@@ -163,28 +182,29 @@ function ClipEditor(props: {
 
   const submit = async () => {
     const next: Record<string, string> = {};
-    if (!parsed()) next.url = "ลิงก์ต้องอยู่ในรูปแบบ tiktok.com/@ชื่อบัญชี/video/เลขคลิป";
+    if (!parsed()) next.url = "กรุณากรอกลิงก์คลิป TikTok ที่ถูกต้อง";
     if (!title().trim()) next.title = "กรุณากรอกชื่อคลิป";
     setErrors(next);
     if (Object.keys(next).length > 0) return;
     setSaving(true);
+    setSubmitError(undefined);
     try {
       await props.onSave({ ...parsed()!, title: title().trim(), coverUrl: coverUrl() || undefined, productIds: productIds(), active: active() });
     } catch {
-      pushToast("บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง", "error");
+      setSubmitError("บันทึกคลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && !saving() && props.onClose()}>
+    <Dialog open={props.open} onOpenChange={(open) => !open && !saving() && props.onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay class="fixed inset-0 z-40 bg-ink/40 motion-reduce:animate-none data-[expanded]:animate-overlay-in" />
+        <Dialog.Overlay class="fixed inset-0 z-40 bg-ink/40 motion-reduce:animate-none data-[expanded]:animate-overlay-in data-[closed]:animate-overlay-out" />
         <div class="fixed inset-y-0 right-0 z-50 flex w-full sm:w-[480px]">
-          <Dialog.Content class="flex size-full flex-col overflow-hidden bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-drawer-in">
+          <Dialog.Content class="flex size-full flex-col overflow-hidden bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-drawer-in data-[closed]:animate-drawer-out">
             <div class="flex shrink-0 items-start justify-between gap-3 border-b border-border px-5 py-4">
-              <Dialog.Title class="truncate text-lg font-semibold text-ink">{props.clip ? "แก้ไขคลิป" : "เพิ่มคลิปรีวิว TikTok"}</Dialog.Title>
+              <Dialog.Title class="truncate text-lg font-semibold text-ink">{props.clip ? "แก้ไขคลิป" : "เพิ่มคลิป"}</Dialog.Title>
               <Dialog.CloseButton aria-label="ปิด" class="flex size-11 shrink-0 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-surface-pink">
                 <CloseXIcon />
               </Dialog.CloseButton>
@@ -195,31 +215,34 @@ function ClipEditor(props: {
                 label="ลิงก์คลิป TikTok"
                 required
                 value={url()}
-                placeholder="https://www.tiktok.com/@charmiss.cosmetics/video/…"
+                placeholder="https://www.tiktok.com/@charmiss.cosmetics/video/..."
                 onInput={(e) => setUrl(e.currentTarget.value)}
                 error={errors().url}
                 disabled={saving()}
               />
-              <Show when={parsed()}>{(p) => <p class="-mt-2 text-xs text-ink-gray">@{p().author} · คลิป {p().videoId}</p>}</Show>
-              <TextField label="ชื่อคลิป (ใช้เป็นคำอธิบายสำหรับผู้ใช้โปรแกรมอ่านหน้าจอ)" required value={title()} onInput={(e) => setTitle(e.currentTarget.value)} error={errors().title} disabled={saving()} />
-              <div class="max-w-xs">
-                <SingleImageUploader label="รูปปก" hint="เว้นว่าง = ใช้รูปปกจาก TikTok (แนวตั้ง 9:16)" value={coverUrl()} onChange={setCoverUrl} />
-              </div>
+              <Show when={parsed()}>{(p) => <p class="-mt-2 text-xs text-ink-gray">@{p().author} คลิป {p().videoId}</p>}</Show>
               <div class="flex flex-col gap-1.5">
-                <span class="text-sm font-medium text-ink">การแสดงผล</span>
-                <Toggle checked={active()} onChange={setActive} onLabel="แสดงบนหน้าร้าน" offLabel="ซ่อน" disabled={saving()} />
+                <TextField label="ชื่อคลิป" required value={title()} onInput={(e) => setTitle(e.currentTarget.value)} error={errors().title} disabled={saving()} />
+                <p class="text-xs text-ink-gray">แสดงบนการ์ดเมื่อไม่มีรูปปก และใช้อธิบายคลิปให้โปรแกรมอ่านหน้าจอ</p>
               </div>
+              <div class="max-w-xs">
+                <SingleImageUploader label="รูปปก" hint="ถ้าเว้นว่างจะใช้รูปปกจาก TikTok (แนวตั้ง 9:16)" value={coverUrl()} onChange={setCoverUrl} />
+              </div>
+              <label class="flex flex-col gap-1.5">
+                <span class="text-sm font-medium text-ink">แสดงบนหน้าร้าน</span>
+                <Toggle checked={active()} onChange={setActive} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
+                <span class="text-xs text-ink-gray">ถ้าปิด คลิปนี้จะไม่แสดงในหน้าแรกและหน้าสินค้า</span>
+              </label>
 
               <div class="flex flex-col gap-2">
                 <span class="text-sm font-medium text-ink">สินค้าที่ผูกกับคลิป ({productIds().length})</span>
-                <p class="text-xs text-ink-gray">ผูกเฉพาะสินค้าที่ปรากฏในคลิปจริง — หน้าสินค้านั้นจะแสดงคลิปนี้ก่อน</p>
+                <p class="text-xs text-ink-gray">ผูกเฉพาะสินค้าที่อยู่ในคลิปจริง แล้วหน้าสินค้านั้นจะแสดงคลิปนี้ก่อน</p>
                 <Show when={productIds().length > 0}>
                   <div class="flex flex-wrap gap-1.5">
                     <For each={productIds()}>
                       {(id) => (
                         <span class="inline-flex items-center gap-1 rounded-pill bg-surface-pink px-2.5 py-1 text-xs text-ink">
                           <span class="max-w-[220px] truncate">{productsStore.getById(id)?.name ?? id}</span>
-                          <span class="shrink-0 text-ink-gray">· {id}</span>
                           <button type="button" aria-label="นำออก" onClick={() => toggleProduct(id, false)} class="text-ink-gray hover:text-system-red">
                             <CloseXIcon class="size-3.5" />
                           </button>
@@ -228,19 +251,17 @@ function ClipEditor(props: {
                     </For>
                   </div>
                 </Show>
-                <SearchInput value={productSearch()} onInput={setProductSearch} placeholder="ค้นหาสินค้า / SKU" />
+                <SearchInput value={productSearch()} onInput={setProductSearch} placeholder="ค้นหาชื่อสินค้า, SKU..." />
                 <ul class="max-h-64 overflow-y-auto rounded-card border border-border">
                   <For each={matchingProducts()}>
                     {(p) => (
                       <li class="border-b border-border last:border-0">
                         <label class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-surface-pink/40">
-                          <input type="checkbox" checked={productIds().includes(p.id)} onChange={(e) => toggleProduct(p.id, e.currentTarget.checked)} class="size-4 shrink-0 accent-brand-pink" />
+                          <input type="checkbox" checked={productIds().includes(p.id)} onChange={(e) => toggleProduct(p.id, e.currentTarget.checked)} class="size-4 shrink-0 rounded accent-brand-pink" />
                           <img src={p.mainImage ?? p.image} alt="" class="size-9 shrink-0 rounded-media object-cover" />
                           <span class="min-w-0 flex-1">
                             <span class="line-clamp-1">{p.name}</span>
-                            <span class="text-xs text-ink-gray">
-                              {p.sku} · {p.id}
-                            </span>
+                            <span class="block text-xs text-ink-gray">{p.sku}</span>
                           </span>
                         </label>
                       </li>
@@ -248,6 +269,11 @@ function ClipEditor(props: {
                   </For>
                 </ul>
               </div>
+              <Show when={submitError()}>
+                <p role="alert" class="rounded-card bg-danger-soft px-4 py-3 text-sm font-medium text-danger-strong">
+                  {submitError()}
+                </p>
+              </Show>
             </div>
 
             <div class="flex shrink-0 gap-3 border-t border-border p-4" style={{ "padding-bottom": "max(1rem, env(safe-area-inset-bottom))" }}>
@@ -255,7 +281,7 @@ function ClipEditor(props: {
                 ยกเลิก
               </Button>
               <Button type="button" variant="primary" class="flex-1" loading={saving()} onClick={submit}>
-                {saving() ? "กำลังบันทึก..." : "บันทึก"}
+                {saving() ? "กำลังบันทึก..." : props.clip ? "บันทึกการเปลี่ยนแปลง" : "บันทึกคลิป"}
               </Button>
             </div>
           </Dialog.Content>
@@ -277,5 +303,36 @@ function IconButton(props: { label: string; disabled?: boolean; onClick: () => v
     >
       {props.children}
     </button>
+  );
+}
+
+const MENU_ITEM_CLASS =
+  "flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink";
+
+/** Same Kobalte dropdown shell as `ProductRowActionsMenu`. */
+function ClipRowActionsMenu(props: { name: string; onEdit: () => void; onDelete: () => void }) {
+  return (
+    <DropdownMenu placement="bottom-end" gutter={4}>
+      <DropdownMenu.Trigger
+        aria-label={`จัดการ ${props.name}`}
+        class="flex size-9 shrink-0 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-surface-pink"
+      >
+        <MoreIcon class="size-5" />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content class="z-50 w-48 rounded-card border border-border bg-surface-card p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+          <DropdownMenu.Item onSelect={props.onEdit} class={MENU_ITEM_CLASS}>
+            แก้ไขคลิป
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator class="my-1 h-px bg-border" />
+          <DropdownMenu.Item
+            onSelect={props.onDelete}
+            class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm font-medium text-system-red outline-none transition-colors duration-150 hover:bg-danger-soft data-[highlighted]:bg-danger-soft"
+          >
+            ลบคลิป
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu>
   );
 }

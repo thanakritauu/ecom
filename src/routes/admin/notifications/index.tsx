@@ -1,32 +1,32 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
+import { Button } from "~/components/shared/Button";
+import { Toggle } from "~/components/admin/Toggle";
+import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { NotificationItemFormDrawer } from "~/components/admin/notifications/NotificationItemFormDrawer";
 import { PromoStrip, UtilityBar } from "~/components/shared/PromotionStrip";
 import { useAdminNotificationBar } from "~/lib/adminNotificationBarStore";
-import { buildMockPromotionStripState, type PromotionStripContent } from "~/lib/adminNotificationBar";
+import type { PromotionStripContent } from "~/lib/adminNotificationBar";
 import { pushToast } from "~/lib/toast";
 
-/**
- * CMS Final Admin UX Refinement §02-08 — "โปรโมชั่นแถบ", now nested under
- * "จัดการเนื้อหา" (§02/§18). Exactly two fixed strips, not a list: Purple
- * (content + one on/off Toggle) and Light Pink (content only, always
- * visible, no toggle, no order — §03/§06). Management UI only — nothing
- * here writes back to the Customer Frontend this phase.
- */
+type Variant = "purple" | "pink";
+
+const VARIANT_META: Record<Variant, { title: string; note: string; swatch: string }> = {
+  purple: { title: "แถบสีม่วง", note: "แถบบนสุดของทุกหน้า แสดงทั้งมือถือและเดสก์ท็อป ลูกค้ากดปิดได้", swatch: "bg-brand-purple" },
+  pink: { title: "แถบสีชมพู", note: "แถบใต้แถบสีม่วง แสดงเฉพาะบนเดสก์ท็อป คู่กับปุ่มเข้าสู่ระบบและเลือกภาษา", swatch: "bg-surface-pink ring-1 ring-inset ring-brand-pink/40" },
+};
+
+/** The storefront's two top bars. Edits here show on the storefront right after saving. */
 export default function AdminNotificationsPage() {
   const bar = useAdminNotificationBar();
 
-  const [editingVariant, setEditingVariant] = createSignal<"purple" | "pink" | null>(null);
+  const [editingVariant, setEditingVariant] = createSignal<Variant | null>(null);
   const [saving, setSaving] = createSignal(false);
+  const [confirmToggle, setConfirmToggle] = createSignal<boolean | null>(null);
+  const [toggling, setToggling] = createSignal(false);
 
-  const openEdit = (variant: "purple" | "pink") => setEditingVariant(variant);
-
-  /** Storefront sync — the seed IS what `PromotionStrip.tsx` hardcodes, so "differs from the seed" means "differs from what customers see". */
-  const live = buildMockPromotionStripState();
-  const sameContent = (a: PromotionStripContent, b: PromotionStripContent) =>
-    a.icon === b.icon && a.text === b.text && (a.linkLabel ?? "") === (b.linkLabel ?? "") && (a.linkUrl ?? "") === (b.linkUrl ?? "");
-  const differsFromStorefront = () => !sameContent(bar.state().purple, live.purple) || !bar.state().purple.enabled || !sameContent(bar.state().pink, live.pink);
+  const content = (variant: Variant): PromotionStripContent => (variant === "purple" ? bar.state().purple : bar.state().pink);
 
   const handleSubmit = async (values: PromotionStripContent) => {
     const variant = editingVariant();
@@ -35,144 +35,106 @@ export default function AdminNotificationsPage() {
     try {
       if (variant === "purple") await bar.updatePurple(values);
       else await bar.updatePink(values);
-      pushToast("บันทึกการเปลี่ยนแปลงแล้ว", "success");
+      pushToast("บันทึกแถบประกาศเรียบร้อยแล้ว", "success");
       setEditingVariant(null);
+    } catch {
+      pushToast("บันทึกแถบประกาศไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
     } finally {
       setSaving(false);
     }
   };
 
-  const editingContent = (): PromotionStripContent => {
-    const variant = editingVariant();
-    if (variant === "purple") return bar.state().purple;
-    if (variant === "pink") return bar.state().pink;
-    return { icon: "", text: "" };
+  const applyToggle = async () => {
+    const next = confirmToggle();
+    if (next === null) return;
+    setToggling(true);
+    try {
+      await bar.setPurpleEnabled(next);
+      pushToast(next ? "เปิดแถบสีม่วงแล้ว" : "ปิดแถบสีม่วงแล้ว", "success");
+      setConfirmToggle(null);
+    } catch {
+      pushToast("เปลี่ยนสถานะแถบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
+    } finally {
+      setToggling(false);
+    }
   };
 
   return (
     <div class="flex flex-col gap-6">
-      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "โปรโมชั่นแถบ" }]} />
-      <PageHeader title="โปรโมชั่นแถบ" description="จัดการข้อความแถบด้านบนของหน้าร้าน — แถบสีม่วงและแถบสีชมพูอ่อน แต่ละแถบมีตำแหน่งตายตัว ไม่สามารถจัดลำดับได้" />
+      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "แถบประกาศด้านบน" }]} />
+      <PageHeader title="แถบประกาศด้านบน" description="แก้ไขข้อความแถบด้านบนของหน้าร้าน" />
 
-      <div class="flex flex-col gap-1 rounded-card bg-surface-pink px-4 py-3 text-sm text-ink">
-        <p class="font-medium">หน้าร้านแสดงเนื้อหาคงที่ของทั้งสองแถบ</p>
-        <p class="text-xs text-ink-gray">
-          แถบสีม่วง: “{live.purple.text} {live.purple.linkLabel}” ลิงก์ไป {live.purple.linkUrl} พร้อมป้าย 9.9 · แถบสีชมพูอ่อน: “{live.pink.text}” (แสดงเฉพาะเดสก์ท็อป คู่กับปุ่มเข้าสู่ระบบและเลือกภาษา ไทย / English)
-        </p>
-        <Show when={differsFromStorefront()}>
-          <p class="text-xs font-medium text-system-yellow">⚠ ข้อมูลที่บันทึกไว้ด้านล่างต่างจากที่หน้าร้านแสดงอยู่ — การแก้ไขในหน้านี้ยังไม่มีผลกับหน้าร้าน</p>
-        </Show>
+      <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <For each={["purple", "pink"] as Variant[]}>
+          {(variant) => (
+            <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <h2 class="flex items-center gap-2 text-base font-semibold text-ink">
+                    <span class={`size-3 rounded-pill ${VARIANT_META[variant].swatch}`} /> {VARIANT_META[variant].title}
+                  </h2>
+                  <p class="mt-1 text-xs text-ink-gray">{VARIANT_META[variant].note}</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setEditingVariant(variant)}>
+                  แก้ไขข้อความ
+                </Button>
+              </div>
+
+              <div class="flex items-center gap-3 rounded-card bg-surface-gray/60 p-3">
+                <div class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-card text-ink-placeholder">
+                  <Show when={content(variant).icon} fallback={<span class="text-xs">-</span>}>
+                    <img src={content(variant).icon} alt="" class="size-full object-contain" />
+                  </Show>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm text-ink">{content(variant).text}</p>
+                  <Show when={content(variant).linkLabel} fallback={<p class="text-xs text-ink-gray">ไม่มีลิงก์</p>}>
+                    <p class="truncate text-xs text-ink-gray">
+                      ลิงก์ "{content(variant).linkLabel}" ไปที่ {content(variant).linkUrl}
+                    </p>
+                  </Show>
+                </div>
+              </div>
+
+              <Show when={variant === "purple"}>
+                <label class="flex flex-col gap-1.5">
+                  <span class="text-sm font-medium text-ink">การแสดงผล</span>
+                  <Toggle checked={bar.state().purple.enabled} onChange={(v) => setConfirmToggle(v)} onLabel="แสดง" offLabel="ไม่แสดง" />
+                  <span class="text-xs text-ink-gray">ปิดแล้วแถบสีม่วงจะหายจากหน้าร้านทุกหน้า</span>
+                </label>
+              </Show>
+            </section>
+          )}
+        </For>
       </div>
 
-      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Purple strip — content + one on/off Toggle (§05) */}
-        <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <p class="flex items-center gap-2 text-sm font-semibold text-ink">
-                <span class="size-3 rounded-pill bg-brand-purple" /> แถบสีม่วง
-              </p>
-              <p class="mt-1 text-xs text-ink-gray">แสดงบนสุดของหน้าเว็บไซต์</p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={bar.state().purple.enabled}
-              aria-label="เปิด/ปิดแถบสีม่วง"
-              onClick={() => bar.togglePurpleEnabled()}
-              class="relative flex h-7 w-12 shrink-0 items-center rounded-pill transition-colors duration-150"
-              classList={{ "bg-brand-pink": bar.state().purple.enabled, "bg-surface-gray": !bar.state().purple.enabled }}
-            >
-              <span
-                class="absolute size-5 rounded-pill bg-surface-card shadow-card transition-transform duration-150"
-                classList={{ "translate-x-6": bar.state().purple.enabled, "translate-x-1": !bar.state().purple.enabled }}
-              />
-            </button>
-          </div>
-
-          <div class="flex items-center gap-3 rounded-card bg-surface-gray/40 p-3">
-            <div class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-card text-ink-placeholder">
-              <Show when={bar.state().purple.icon} fallback={<span class="text-xs">—</span>}>
-                <img src={bar.state().purple.icon} alt="" class="size-full object-cover" />
-              </Show>
-            </div>
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-sm text-ink">{bar.state().purple.text}</p>
-              <Show when={bar.state().purple.linkLabel}>
-                <p class="truncate text-xs text-ink-gray">ลิงก์: {bar.state().purple.linkLabel} → {bar.state().purple.linkUrl}</p>
-              </Show>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => openEdit("purple")}
-            class="w-fit rounded-pill border border-brand-pink px-4 py-2 text-sm font-medium text-brand-pink transition-colors duration-150 hover:bg-surface-pink"
-          >
-            แก้ไขข้อความ
-          </button>
+      <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+        <h2 class="text-base font-semibold text-ink">ตัวอย่างบนหน้าร้าน</h2>
+        <p class="text-xs text-ink-gray">แถบสีชมพูแสดงเฉพาะหน้าจอเดสก์ท็อป</p>
+        {/* Look only: `inert` + no pointer events so the bars' own hover menus (account, language) never open in Admin. */}
+        <div class="pointer-events-none select-none overflow-hidden rounded-card border border-border" inert>
+          <PromoStrip state={bar.state()} />
+          <UtilityBar state={bar.state()} />
         </div>
-
-        {/* Pink strip — always visible, no toggle, no order (§06) */}
-        <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-          <div>
-            <p class="flex items-center gap-2 text-sm font-semibold text-ink">
-              <span class="size-3 rounded-pill bg-surface-pink ring-1 ring-inset ring-brand-pink/40" /> แถบสีชมพูอ่อน
-            </p>
-            <p class="mt-1 text-xs text-ink-gray">แสดงตลอดเวลาบนเดสก์ท็อป (ซ่อนบนมือถือ/แท็บเล็ต) — ไม่มีปุ่มเปิด/ปิด</p>
-          </div>
-
-          <div class="flex items-center gap-3 rounded-card bg-surface-gray/40 p-3">
-            <div class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-card text-ink-placeholder">
-              <Show when={bar.state().pink.icon} fallback={<span class="text-xs">—</span>}>
-                <img src={bar.state().pink.icon} alt="" class="size-full object-cover" />
-              </Show>
-            </div>
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-sm text-ink">{bar.state().pink.text}</p>
-              <Show when={bar.state().pink.linkLabel} fallback={<p class="text-xs text-ink-gray">ไม่มีลิงก์</p>}>
-                <p class="truncate text-xs text-ink-gray">ลิงก์: {bar.state().pink.linkLabel} → {bar.state().pink.linkUrl}</p>
-              </Show>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => openEdit("pink")}
-            class="w-fit rounded-pill border border-brand-pink px-4 py-2 text-sm font-medium text-brand-pink transition-colors duration-150 hover:bg-surface-pink"
-          >
-            แก้ไขข้อความ
-          </button>
-        </div>
-      </div>
-
-      {/* CHARMISS CMS — ADMIN ONLY §3/§5 — genuine Frontend reuse: the exact
-          `PromoStrip`/`UtilityBar` components Header.tsx renders (extracted
-          verbatim, see ~/components/shared/PromotionStrip.tsx), not a
-          look-alike mock. Disclosure: Header.tsx's real strips are still
-          static copy today (pre-existing, unrelated to this phase) and do
-          not read from this store yet, so editing the fields above does not
-          change what customers see — the note below says so plainly instead
-          of silently faking a "live" preview that would disagree with the
-          real Frontend. */}
-      <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-        <h2 class="text-base font-semibold text-ink">ตัวอย่างการแสดงผล</h2>
-        <p class="text-xs text-ink-gray">
-          แสดงผลด้วย Component เดียวกับ Header จริงของหน้าร้าน — ปัจจุบันเนื้อหาของทั้งสองแถบในหน้าร้านยังเป็นข้อความคงที่ (ยังไม่เชื่อมกับข้อมูลที่แก้ไขด้านบน) การแก้ไขข้อความ/ไอคอนข้างต้นจึงยังไม่มีผลต่อสิ่งที่ลูกค้าเห็นจริงในเฟสนี้
-        </p>
-        <div class="overflow-hidden rounded-card border border-border">
-          <PromoStrip />
-          <UtilityBar />
-        </div>
-      </div>
+      </section>
 
       <NotificationItemFormDrawer
         open={editingVariant() !== null}
         onOpenChange={(open) => !open && setEditingVariant(null)}
         variant={editingVariant() ?? "purple"}
-        initial={editingContent()}
+        initial={content(editingVariant() ?? "purple")}
         saving={saving()}
         onSubmit={handleSubmit}
+      />
+
+      <ConfirmDialog
+        open={confirmToggle() !== null}
+        onOpenChange={(open) => !open && setConfirmToggle(null)}
+        title={confirmToggle() ? "แสดงแถบสีม่วง?" : "ซ่อนแถบสีม่วง?"}
+        description={confirmToggle() ? "แถบสีม่วงจะกลับมาแสดงบนหน้าร้านทุกหน้า" : "แถบสีม่วงจะถูกซ่อนจากหน้าร้านทุกหน้า"}
+        confirmLabel={confirmToggle() ? "แสดงแถบ" : "ซ่อนแถบ"}
+        loading={toggling()}
+        onConfirm={applyToggle}
       />
     </div>
   );

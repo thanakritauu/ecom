@@ -121,8 +121,8 @@ export function AdminContentProvider(props: { children: JSX.Element }) {
 
   /**
    * §25 — new id, unique slug, Status→Draft, Sections copied by value. Every
-   * Product/Collection/Campaign *reference* inside those sections
-   * (`products`, `collectionId`, `campaignId`) is copied as plain data —
+   * Product/Collection *reference* inside those sections
+   * (`products`, `collectionId`) is copied as plain data —
    * still pointing at the exact same original entities — never a new copy
    * of the entity itself, same "reference, don't duplicate" rule §33
    * enforces everywhere else. Navigation is never copied here — a duplicated
