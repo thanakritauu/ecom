@@ -1,6 +1,5 @@
 import { Dialog } from "@kobalte/core/dialog";
 import { For, Show, createMemo } from "solid-js";
-import { A } from "@solidjs/router";
 import { useCart } from "~/lib/cart";
 import { resolveCartLines, computeCartTotal } from "~/lib/cartSelectors";
 import { useCartPromotions } from "~/lib/storefrontPromotions";
@@ -73,31 +72,22 @@ export function CartDrawer() {
               </div>
 
               <div class="flex shrink-0 flex-col gap-4 rounded-t-card bg-brand-pink p-6">
-                <div class="flex items-center justify-between text-white">
-                  <span class="text-xl font-semibold sm:text-[22px]">ยอดรวม</span>
-                  <span class="text-2xl font-bold sm:text-[32px]">{formatTHB(total())}</span>
+                {/* Label and amount the same size. */}
+                <div class="flex items-center justify-between text-xl font-semibold text-white sm:text-[22px]">
+                  <span>ยอดรวม</span>
+                  <span class="font-bold">{formatTHB(total())}</span>
                 </div>
-                <div class="flex gap-4">
-                  {/* `drawerOpen` lives in cart.tsx and is only ever reset by an
-                      explicit open/close call — a client-side route change alone
-                      does not touch it, so without `closeDrawer()` here the Portal-
-                      rendered Drawer stays mounted (and visible) on top of
-                      whatever page loads next. */}
-                  <A
-                    href="/checkout"
-                    onClick={() => cart.closeDrawer()}
-                    class="flex h-12 flex-1 items-center justify-center rounded-pill bg-white px-2 text-sm font-medium text-brand-pink transition-colors duration-150 hover:bg-white/90"
-                  >
+                <div class="flex gap-3">
+                  {/* `drawerOpen` lives in cart.tsx and is only ever reset by an explicit open/close call; a client-side
+                      route change alone doesn't touch it, so closing here keeps the Portal-rendered drawer from staying
+                      on top of the next page. Shared `Button` (DSL): size lg, white / ghost on the pink box. */}
+                  <Button href="/checkout" variant="white" size="lg" class="flex-1" onClick={() => cart.closeDrawer()}>
                     ชำระเงิน
-                  </A>
-                  {/* Keeps the shopper where they are — just closes the mini cart. */}
-                  <button
-                    type="button"
-                    onClick={() => cart.closeDrawer()}
-                    class="flex h-12 shrink-0 items-center justify-center rounded-pill border border-white px-5 text-sm font-medium text-white transition-colors duration-150 lg:hover:bg-white/10"
-                  >
+                  </Button>
+                  {/* Keeps the shopper where they are, just closes the mini cart. */}
+                  <Button type="button" variant="ghost" size="lg" class="shrink-0" onClick={() => cart.closeDrawer()}>
                     เลือกสินค้าต่อ
-                  </button>
+                  </Button>
                 </div>
               </div>
             </Show>

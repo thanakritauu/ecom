@@ -17,7 +17,8 @@ export type Coupon = {
   /** Admin's coupon thumbnail, shown in the stub instead of the % artwork. */
   image?: string;
   minSpendLabel: string;
-  expiryLabel: string;
+  /** Not shown on the ticket: the expiry date lives only in the coupon's conditions modal (`CouponDetailSheet`). */
+  expiryLabel?: string;
   /** The catalog coupon behind the ticket — when set, tapping the card opens its details & conditions. */
   source?: StoreCoupon;
 };
@@ -128,7 +129,7 @@ export function CouponCard(props: {
       <img src={dashedLine} alt="" aria-hidden="true" class="pointer-events-none absolute left-[99.5px] top-2 h-[88px] w-px" />
       <div class="pointer-events-none absolute inset-y-0 left-[100px] right-0 flex items-center justify-between gap-2 p-4">
         <div class="flex min-w-0 flex-col">
-          {/* A capped % coupon adds one line, so its amount line is 4px shorter to keep all four inside the 104px ticket. */}
+          {/* A capped % coupon adds one line, so its amount line is 4px shorter to keep every line inside the 104px ticket. */}
           <p class="whitespace-nowrap text-xl font-bold text-system-red" classList={{ "leading-7": !props.coupon.capLabel, "leading-6": !!props.coupon.capLabel }}>
             {props.coupon.amountLabel}
           </p>
@@ -136,7 +137,6 @@ export function CouponCard(props: {
             <p class="whitespace-nowrap text-xs font-medium leading-4 text-system-red">{props.coupon.capLabel}</p>
           </Show>
           <p class="text-sm font-medium leading-5 text-ink">{props.coupon.minSpendLabel}</p>
-          <p class="whitespace-nowrap text-xs leading-[normal] text-ink-gray">{props.coupon.expiryLabel}</p>
         </div>
         <Show when={!props.display}>
           <div class="pointer-events-auto shrink-0">
