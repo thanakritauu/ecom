@@ -45,7 +45,7 @@ export function MobileFilterDrawer(props: {
                 onToggleCategory={props.onToggleCategory}
                 onApply={props.onApply}
                 onReset={props.onReset}
-                applyLabel={`แสดง ${props.resultCount} รายการ`}
+                applyLabel="ตกลง"
               />
             </div>
           </Dialog.Content>

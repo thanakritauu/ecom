@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
 import { A, useSearchParams } from "@solidjs/router";
 import { Header } from "~/components/shared/Header";
 import { Footer } from "~/components/shared/Footer";
@@ -25,11 +25,12 @@ import { useProductCatalog } from "~/lib/productCatalog";
 import { useCartPromotions } from "~/lib/storefrontPromotions";
 import { formatTHB } from "~/components/shared/PriceDisplay";
 import { AddressSection } from "~/components/checkout/AddressSection";
-import { DeliverySection } from "~/components/checkout/DeliverySection";
 import { PaymentSection } from "~/components/checkout/PaymentSection";
 import { createCheckoutPayment, type PaidResult } from "~/components/checkout/checkoutPayment";
 import { generateOrderNumber } from "~/lib/orderNumber";
-import { CheckoutOrderSummary } from "~/components/checkout/CheckoutOrderSummary";
+import { CheckoutOrderSummary, CheckoutPerks } from "~/components/checkout/CheckoutOrderSummary";
+import { METHOD_ICONS } from "~/components/checkout/paymentMarks";
+import coinMark from "~/assets/icons/charmiss-coin.png";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
 import { focusFirstInvalid } from "~/lib/validators";
 
@@ -186,9 +187,12 @@ export default function CheckoutPage() {
       <Header minimal />
       {/* Icon sits inline at the start of the sentence, so icon + text center as one block; the wrap is
           balanced so phones get two even lines instead of "ปลอดภัย" alone. */}
-      <p class="text-balance bg-success-soft px-4 py-2 text-center text-sm font-semibold text-success">
-        <ShieldIcon /> ข้อมูลการชำระเงินของคุณได้รับการปกป้องอย่างปลอดภัย
-      </p>
+      {/* Checkout form only: gone once the order is paid (success page). */}
+      <Show when={!order()}>
+        <p class="text-balance bg-success-soft px-4 py-2 text-center text-sm font-semibold text-success">
+          <ShieldIcon /> ข้อมูลการชำระเงินของคุณได้รับการปกป้องอย่างปลอดภัย
+        </p>
+      </Show>
 
       {/* `overflow-x-hidden` forces `overflow-y` to `auto` too (an axis can't
           stay `visible` while the other isn't, per the CSS Overflow spec) —
@@ -215,8 +219,9 @@ export default function CheckoutPage() {
             }
           >
             <Show when={resolvedLines().length > 0} fallback={<EmptyCheckout />}>
-              <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
-                <div ref={formColumn} class="flex min-w-0 flex-1 flex-col gap-6 rounded-card bg-white p-4 lg:p-6">
+              {/* Phones / tablets: form + order summary are one white card (no gap, summary continues below the form). */}
+              <div class="flex flex-col lg:flex-row lg:items-start lg:gap-6">
+                <div ref={formColumn} class="flex min-w-0 flex-1 flex-col gap-6 rounded-t-card bg-white p-4 lg:rounded-card lg:p-6">
                   <Show when={addressBook.ready()} fallback={<AddressSkeleton />}>
                     <AddressSection
                       headingId="shipping-address-heading"
@@ -287,8 +292,7 @@ export default function CheckoutPage() {
                       </section>
                     </Show>
                   </Show>
-                  {/* Delivery (DHL) — between the billing address and payment. */}
-                  <DeliverySection />
+                  {/* Delivery (DHL) box hidden for now: the carrier is named on the summary's "ค่าจัดส่ง" row instead. */}
 
                   {/* Payment — paid here; its button ends the form. */}
                   <PaymentSection
@@ -297,6 +301,20 @@ export default function CheckoutPage() {
                     disabled={hasUnavailableItem()}
                     submitError={submitError()}
                     payLaterHint
+                    payButtonDesktopOnly
+                    afterMethods={
+                      <CheckoutPerks
+                        class="flex rounded-card lg:hidden"
+                        totals={totals()}
+                        coupon={coupon()}
+                        onApplyCoupon={setCoupon}
+                        onRemoveCoupon={() => setCoupon(undefined)}
+                        couponUsesByShopper={couponUsesByShopper}
+                        coinsRedeemed={coinsRedeemed()}
+                        maxCoins={maxCoins()}
+                        onApplyCoins={setCoinsPicked}
+                      />
+                    }
                     notice={
                       <Show when={hasUnavailableItem()}>
                         <p class="rounded-card bg-danger-soft p-3 text-sm text-danger-strong" role="alert">
@@ -376,10 +394,14 @@ function EmptyCheckout() {
 function OrderSuccess(props: { number: string; total: number; coinsEarned: number; payment: PaidResult; isMember: boolean }) {
   return (
     <div class="mx-auto flex w-full max-w-[560px] flex-col items-center justify-center gap-4 rounded-card bg-white px-4 py-12 text-center shadow-card sm:py-16" role="status">
-      <div class="flex size-16 items-center justify-center rounded-pill bg-success-soft text-success">
-        <svg viewBox="0 0 24 24" class="size-8" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-          <path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
+      {/* Pops in, a soft ring pulses out once, then the DSL tick draws itself (app.css `success-check-*`; still under reduced motion). */}
+      <div class="relative flex size-16 items-center justify-center" aria-hidden="true">
+        <span class="success-check-ring absolute inset-0 rounded-pill bg-success/30" />
+        <span class="success-check-pop relative flex size-16 items-center justify-center rounded-pill bg-success text-white">
+          <svg viewBox="0 0 16 16" fill="none" class="size-9">
+            <path class="success-check-path" pathLength="1" d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
       </div>
       <h1 class="text-2xl font-bold text-ink">ชำระเงินสำเร็จ</h1>
       <p class="text-ink-gray">ขอบคุณสำหรับคำสั่งซื้อของคุณ</p>
@@ -394,8 +416,16 @@ function OrderSuccess(props: { number: string; total: number; coinsEarned: numbe
         </div>
         <div class="flex justify-between gap-3">
           <dt class="text-ink-gray">ช่องทางชำระเงิน</dt>
-          <dd class="text-right text-ink">
-            {props.payment.methodLabel}
+          <dd class="flex flex-col items-end gap-1 text-right text-ink">
+            {/* The method's own icons (same artwork as the payment picker), then its name. */}
+            <span class="flex items-center gap-2">
+              <span class="flex shrink-0 items-center -space-x-1.5">
+                <For each={METHOD_ICONS[props.payment.method]}>
+                  {(src) => <img src={src} alt="" class="size-6 rounded-md ring-2 ring-surface-gray" />}
+                </For>
+              </span>
+              {props.payment.methodLabel}
+            </span>
             <Show when={props.payment.detail}>
               <span class="block text-xs text-ink-gray">{props.payment.detail}</span>
             </Show>
@@ -406,13 +436,14 @@ function OrderSuccess(props: { number: string; total: number; coinsEarned: numbe
           — a guest checkout has no account to credit, so this only shows once
           actually signed in, same gate as anywhere else this balance appears. */}
       <Show when={props.isMember && props.coinsEarned > 0}>
-        <div class="flex items-center gap-2 rounded-pill bg-warning-soft px-4 py-2 text-sm font-semibold text-ink">
-          <CoinEarnedIcon />
+        <div class="flex items-center gap-2 rounded-pill bg-surface-pink py-2 pl-2 pr-4 text-sm font-semibold text-ink">
+          <img src={coinMark} alt="" class="size-6 shrink-0" />
           คุณได้รับ {props.coinsEarned.toLocaleString("th-TH")} คอยน์จากคำสั่งซื้อนี้
         </div>
       </Show>
       <div class="flex w-full max-w-sm flex-col gap-2">
-        <Button href="/account" variant="primary" size="lg" class="w-full">
+        {/* Paid: straight to the "กำลังจัดส่ง" tab, where this order now sits. */}
+        <Button href="/account?tab=in_progress" variant="primary" size="lg" class="w-full">
           ดูประวัติการซื้อ
         </Button>
         <Button href="/" variant="outline" size="lg" class="w-full">
@@ -420,15 +451,6 @@ function OrderSuccess(props: { number: string; total: number; coinsEarned: numbe
         </Button>
       </div>
     </div>
-  );
-}
-
-function CoinEarnedIcon() {
-  return (
-    <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M9.5 15.5c.5.7 1.4 1 2.5 1 1.7 0 3-.8 3-2s-1.3-1.8-3-2-3-.8-3-2 1.3-2 3-2c1.1 0 2 .3 2.5 1M12 7.5v1M12 15.5v1" stroke-linecap="round" />
-    </svg>
   );
 }
 

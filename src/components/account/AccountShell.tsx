@@ -16,12 +16,14 @@ export function AccountShell(props: { counts?: AccountCounts; children: JSX.Elem
       <main class="flex flex-col overflow-x-hidden bg-surface-gray/60 py-6">
         <Container width="wide">
           <Show when={auth.isAuthenticated()} fallback={<AccountGuestPrompt />}>
-            <div class="flex flex-col gap-4">
-              <ProfileHeaderCard user={auth.user()!} />
-              <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
+            {/* Phones / tablets: name + menu share one white card. Desktop: that wrapper dissolves (`lg:contents`)
+                into the grid, so the name spans the top and the menu sits beside the page's panel as before. */}
+            <div class="flex flex-col gap-4 lg:grid lg:grid-cols-[264px_minmax(0,1fr)] lg:items-start">
+              <div class="flex flex-col overflow-hidden rounded-card border border-surface-gray bg-white shadow-card lg:contents">
+                <ProfileHeaderCard user={auth.user()!} />
                 <AccountSidebar counts={props.counts} />
-                <div class="flex min-w-0 flex-1 flex-col gap-4">{props.children}</div>
               </div>
+              <div class="flex min-w-0 flex-1 flex-col gap-4">{props.children}</div>
             </div>
           </Show>
         </Container>

@@ -14,7 +14,8 @@ export function ProfileHeaderCard(props: { user: User }) {
     <A
       href="/account/points"
       aria-label={`${props.user.name} มี ${props.user.coinBalance.toLocaleString("th-TH")} คอยน์ ไปที่ Charmiss Club`}
-      class="flex w-full items-center gap-3 rounded-card border border-surface-gray bg-white p-4 font-normal shadow-card sm:gap-4 sm:p-6"
+      // Below `lg` it's the top of AccountShell's shared card (no card chrome of its own); from `lg` its own card across the top.
+      class="flex w-full items-center gap-3 bg-white p-4 font-normal sm:gap-4 sm:p-6 lg:col-span-2 lg:rounded-card lg:border lg:border-surface-gray lg:shadow-card"
     >
       <p class="min-w-0 flex-1 truncate text-lg font-semibold text-ink sm:text-2xl">{props.user.name}</p>
       {/* Balance at the same size/weight as the name beside it. */}

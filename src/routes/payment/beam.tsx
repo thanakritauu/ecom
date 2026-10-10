@@ -48,7 +48,6 @@ export default function BeamCheckoutMockPage() {
           status: "succeeded",
           reference: `BEAM-${Date.now().toString(36).toUpperCase()}`,
           method: method()!.id,
-          detail: "ชำระผ่าน Beam Checkout",
         }),
       900,
     );

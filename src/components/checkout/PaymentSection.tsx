@@ -12,7 +12,7 @@ import { PaymentFailedDialog } from "./PaymentFailedDialog";
 /**
  * One-page Checkout — payment, right after the billing address: pick a
  * method (PromptPay / bank app / card / TrueMoney) and pay with the button at the end
- * of this form. The card number / QR / wallet are entered on Beam's payment
+ * of this form (desktop) or the floating bar. The card number / QR / wallet are entered on Beam's payment
  * page (new window); this section then waits for its result. State and the
  * pay action live in `createCheckoutPayment`, shared with the mobile floating bar.
  */
@@ -28,9 +28,12 @@ export function PaymentSection(props: {
    * abandoned payment says where to pay it later. (The account pay-later page is that place — off there.)
    */
   payLaterHint?: boolean;
+  /** Right after the method list (Checkout below `lg`: the "ส่วนลดและสิทธิพิเศษ" box, so coupons come before paying). */
+  afterMethods?: JSX.Element;
+  /** Checkout: the floating bar pays on phones / tablets, so this button shows from `lg` only. The pay-later page has no bar and keeps it everywhere. */
+  payButtonDesktopOnly?: boolean;
 }) {
   const p = props.payment;
-  const methodHint = () => METHOD_HINT[p.method()];
   // The pay-later alert sits at the top of this section — bring it into view when Beam's window is closed unpaid
   // (a failed/cancelled result already scrolls here, `createCheckoutPayment`'s `fail`).
   const unpaidWindowClosed = () => p.waiting() && p.windowClosed();
@@ -69,9 +72,8 @@ export function PaymentSection(props: {
           />
         }
       >
-        {/* Phones and desktop (the form column sits beside the wider order summary): one full-width row per method.
-            Tablet, where the form is full width: 2x2 tiles, still icons + name on one row. */}
-        <div role="radiogroup" aria-labelledby="payment-method-heading" class="grid grid-cols-1 gap-2 sm:auto-rows-fr sm:grid-cols-2 sm:gap-3 lg:grid-cols-1">
+        {/* 2x2 tiles at every size: icons on top (bank icons wrap, never overlap), the name under them, tick top-right. */}
+        <div role="radiogroup" aria-labelledby="payment-method-heading" class="grid auto-rows-fr grid-cols-2 gap-2 sm:gap-3">
           <For each={PAYMENT_METHODS}>
             {(m) => (
               <button
@@ -80,21 +82,18 @@ export function PaymentSection(props: {
                 aria-checked={p.method() === m.id}
                 disabled={p.waiting()}
                 onClick={() => p.setMethod(m.id)}
-                class="font-normal relative flex min-h-[64px] items-center gap-3 rounded-card border-2 py-4 pl-4 pr-10 text-left transition-colors duration-150 disabled:opacity-60 sm:min-h-[72px] sm:gap-4"
+                class="font-normal relative flex h-full flex-col items-start gap-2 rounded-card border-2 p-3 pr-9 text-left transition-colors duration-150 disabled:opacity-60 sm:p-4 sm:pr-10"
                 classList={{
                   "border-brand-pink bg-surface-pink": p.method() === m.id,
                   "border-surface-gray bg-white lg:hover:border-brand-pink/40": p.method() !== m.id,
                 }}
               >
-                {/* Every method the same way at every size: icons first, then the name, one row — gaps match the DHL
-                    box (12px phones / 16px from sm). All icons one size (32px phones / 40px from sm), banks included. */}
                 <MethodMark id={m.id} />
-                {/* Same 16px semibold as "จัดส่งโดย DHL". keep-all: Thai only breaks at the zero-width space below
-                    ("โมบายล์ | แบงก์กิ้ง"), never mid-word. */}
-                <span class="min-w-0 flex-1 text-base font-semibold leading-[1.75] text-ink [word-break:keep-all]">{breakableLabel(m.label)}</span>
+                {/* keep-all: Thai only breaks at the zero-width space below ("โมบายล์ | แบงก์กิ้ง"), never mid-word. */}
+                <span class="min-w-0 text-sm font-semibold leading-[1.75] text-ink [word-break:keep-all] sm:text-base">{breakableLabel(m.label)}</span>
                 <Show when={p.method() === m.id}>
-                  {/* Tick inside the frame, vertically centred in the 40px right padding every row reserves for it. */}
-                  <span class="absolute right-3 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-pill bg-brand-pink text-white" aria-hidden="true">
+                  {/* Tick in the top-right corner, inside the right padding every tile reserves for it. */}
+                  <span class="absolute right-3 top-3 flex size-5 items-center justify-center rounded-pill bg-brand-pink text-white" aria-hidden="true">
                     <CheckIcon class="size-3" />
                   </span>
                 </Show>
@@ -103,17 +102,12 @@ export function PaymentSection(props: {
           </For>
         </div>
 
-        <Show
-          when={p.waiting()}
-          fallback={
-            <p class="rounded-card bg-surface-gray/60 p-4 text-sm leading-[1.75] text-ink-gray">
-              กด <span class="font-semibold text-ink">"ชำระเงิน"</span> ระบบจะเปิดหน้าชำระเงินของ Beam ในหน้าต่างใหม่ เพื่อ{methodHint()} {formatTHB(props.amount)}
-            </p>
-          }
-        >
+        <Show when={p.waiting()}>
           <WaitingPanel windowClosed={p.windowClosed()} onReopen={p.reopen} onCancel={p.cancelWaiting} />
         </Show>
       </Show>
+
+      {props.afterMethods}
 
       {props.notice}
 
@@ -123,15 +117,14 @@ export function PaymentSection(props: {
         </p>
       </Show>
 
-      {/* The pay button — end of the payment form (moved here from the order-summary box). */}
+      {/* The pay button ends the form (Checkout: desktop only, see `payButtonDesktopOnly`). */}
       <Show when={p.phase() === "form"}>
-        <Button type="button" variant="primary" size="lg" class="w-full" disabled={props.disabled} onClick={p.pay}>
-          ชำระเงิน {formatTHB(props.amount)}
-        </Button>
+        <div classList={{ "hidden lg:block": !!props.payButtonDesktopOnly }}>
+          <Button type="button" variant="primary" size="lg" class="w-full" disabled={props.disabled} onClick={p.pay}>
+            ชำระเงิน {formatTHB(props.amount)}
+          </Button>
+        </div>
       </Show>
-      <p class="flex items-center justify-center gap-1.5 text-center text-xs text-ink-gray">
-        <LockIcon /> ชำระเงินอย่างปลอดภัย ข้อมูลของคุณถูกเข้ารหัส
-      </p>
 
       <Show when={mounted()}>
         <PaymentFailedDialog
@@ -207,22 +200,23 @@ function MethodMark(props: { id: PaymentMethodId }) {
   const banks = () => props.id === "mobilebanking";
   return (
     <span
-      class="flex shrink-0 items-center gap-1"
+      class="flex w-full min-w-0 items-center gap-1"
       role={banks() ? "list" : undefined}
       aria-label={banks() ? "ธนาคารที่รองรับ" : undefined}
       aria-hidden={banks() ? undefined : "true"}
     >
       <Show
         when={banks()}
-        fallback={<For each={METHOD_ICONS[props.id]}>{(src) => <img src={src} alt="" class="size-8 sm:size-10" />}</For>}
+        fallback={<For each={METHOD_ICONS[props.id]}>{(src) => <img src={src} alt="" class="size-8" />}</For>}
       >
-        {/* Same-size icons slightly overlapped (white ring) so the five banks leave room for the name — on phones and
-            in the narrower 2×2 tiles from `sm`. */}
-        <span class="flex items-center -space-x-2 sm:-space-x-2.5">
+        {/* One row at every size. Each slot is 32px and may shrink (the icon inside never does), so the icons only
+            overlap when the tile is too narrow for all five; with room they sit side by side. The last one never
+            shrinks, so nothing spills out of the tile. */}
+        <span class="flex w-full min-w-0 items-center gap-1">
           <For each={PAYMENT_BANKS}>
-            {(bank) => (
-              <span role="listitem" class="rounded-[10px] ring-2 ring-white">
-                <img src={bank.src} alt={bank.name} title={bank.name} class="size-8 sm:size-10" />
+            {(bank, i) => (
+              <span role="listitem" class="flex min-w-0 basis-8" classList={{ "shrink-0": i() === PAYMENT_BANKS.length - 1, shrink: i() < PAYMENT_BANKS.length - 1 }}>
+                <img src={bank.src} alt={bank.name} title={bank.name} class="size-8 max-w-none shrink-0" />
               </span>
             )}
           </For>
@@ -234,14 +228,6 @@ function MethodMark(props: { id: PaymentMethodId }) {
 
 /** Allows a line break only between the two words of "โมบายล์แบงก์กิ้ง" (paired with `word-break: keep-all`). */
 const breakableLabel = (label: string) => label.replace("โมบายล์แบงก์กิ้ง", "โมบายล์\u200Bแบงก์กิ้ง");
-
-/** What happens on Beam's page for each method — completes "…เพื่อ" in the hint under the selector. */
-const METHOD_HINT: Record<PaymentMethodId, string> = {
-  card: "กรอกข้อมูลบัตรและชำระ",
-  promptpay: "สแกน QR พร้อมเพย์ผ่านแอปธนาคารและชำระ",
-  mobilebanking: "เลือกธนาคารและยืนยันการโอนเงินในแอปธนาคาร",
-  truemoney: "ยืนยันการชำระผ่าน TrueMoney Wallet",
-};
 
 /** Beam is open in another window — this page waits for its result (or the shopper re-opens / cancels it). */
 function WaitingPanel(props: { windowClosed: boolean; onReopen: () => void; onCancel: () => void }) {
@@ -263,14 +249,5 @@ function WaitingPanel(props: { windowClosed: boolean; onReopen: () => void; onCa
         </button>
       </div>
     </div>
-  );
-}
-
-function LockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" class="size-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <rect x="4" y="10" width="16" height="10" rx="2" />
-      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-    </svg>
   );
 }

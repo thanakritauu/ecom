@@ -33,7 +33,7 @@ const EMPTY_TAB_TITLE: Record<TabKey, string> = {
 };
 
 export function OrderHistoryPanel(props: { orders: Order[]; ready: boolean }) {
-  // `?tab=pending_payment` opens a tab directly (Checkout's "ชำระเงินไม่สำเร็จ" notice links here).
+  // `?tab=...` opens a tab directly: Checkout's success page links `in_progress` (กำลังจัดส่ง), its failed notices `pending_payment`.
   const [searchParams] = useSearchParams();
   const initialTab = () => {
     const t = searchParams.tab;

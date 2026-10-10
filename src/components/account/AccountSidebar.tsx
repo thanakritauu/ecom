@@ -10,7 +10,7 @@ export type AccountCounts = { orders?: number };
 /**
  * Shared Account Navigation — every account page renders it (via
  * `AccountShell`). Desktop (lg+): a vertical card beside the content.
- * Tablet/phone: one row of pills that scrolls sideways, the current page
+ * Tablet/phone: the lower half of the name card, one row of pills that scrolls sideways, the current page
  * scrolled into view. Only the order history shows a count — loaded from
  * the order repository unless the page passes its own live count.
  */
@@ -37,14 +37,14 @@ export function AccountSidebar(props: { counts?: AccountCounts }) {
   };
 
   return (
-    <nav aria-label="เมนูบัญชีของฉัน" class="w-full min-w-0 shrink-0 rounded-card bg-white shadow-card lg:w-[264px] lg:p-4">
+    <nav aria-label="เมนูบัญชีของฉัน" class="w-full min-w-0 shrink-0 border-t border-surface-gray bg-white lg:w-[264px] lg:rounded-card lg:border-t-0 lg:p-4 lg:shadow-card">
       <ul ref={rail} class="no-scrollbar flex gap-2 overflow-x-auto p-3 lg:flex-col lg:gap-1 lg:overflow-visible lg:p-0">
         <NavItem href="/account" end label="ประวัติการซื้อ" count={orderCount()} />
-        <NavItem href="/account/address" label="ที่อยู่จัดส่ง" />
-        <NavItem href="/account/cards" label="บัตรเครดิต / เดบิต" />
         <NavItem href="/account/points" label="Charmiss Club" />
-        <NavItem href="/account/wishlist" label="รายการโปรด" />
         <NavItem href="/account/profile" label="ข้อมูลส่วนตัว" />
+        <NavItem href="/account/wishlist" label="รายการโปรด" />
+        <NavItem href="/account/address" label="ที่อยู่จัดส่ง" />
+        {/* บัตรเครดิต / เดบิต (/account/cards) is hidden for now; the page itself still works by URL. */}
 
         <li class="my-1 hidden h-px w-full bg-surface-gray lg:block" aria-hidden="true" />
         <li class="shrink-0">
