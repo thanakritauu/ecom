@@ -4,9 +4,13 @@ import { Button } from "~/components/shared/Button";
 import { TextField } from "~/components/shared/TextField";
 import { Toggle } from "~/components/admin/Toggle";
 import { CloseXIcon } from "~/components/admin/icons";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
 import { ProductSelector } from "./ProductSelector";
 
-export type FlashSaleTiming = { daily: true } | { daily: false; endsAt: number };
+export type FlashSaleTiming = { daily: true } | { daily: false; startsAt: number; endsAt: number };
+
+const LABELS: Record<string, string> = { products: "สินค้า", startsAt: "เวลาเริ่ม", endsAt: "เวลาจบ" };
 
 function toDatetimeLocal(epochMs: number): string {
   const d = new Date(epochMs);
@@ -15,9 +19,10 @@ function toDatetimeLocal(epochMs: number): string {
 }
 
 /**
- * Add products to the Home Flash Sale, or change the end time of ones
+ * Add products to the Home Flash Sale, or change the timing of ones
  * already in it. Daily round = the storefront's default (ends every night
- * at midnight Bangkok time and starts again); otherwise one fixed end time.
+ * at midnight Bangkok time and starts again); otherwise one fixed window
+ * (start and end): before the start the product isn't in the flash sale yet.
  * `productIds` given = edit those; omitted = pick products first.
  */
 export function FlashSaleDialog(props: {
@@ -25,13 +30,15 @@ export function FlashSaleDialog(props: {
   onOpenChange: (open: boolean) => void;
   /** Products being edited; when unset the dialog asks which products to add. */
   productIds?: string[];
-  initial?: { daily: boolean; endsAt?: number };
+  initial?: { daily: boolean; startsAt?: number; endsAt?: number };
   onSave: (productIds: string[], timing: FlashSaleTiming) => Promise<void>;
 }) {
   const [picked, setPicked] = createSignal<string[]>([]);
   const [daily, setDaily] = createSignal(true);
+  const [startsAt, setStartsAt] = createSignal("");
   const [endsAt, setEndsAt] = createSignal("");
-  const [errors, setErrors] = createSignal<Record<string, string>>({});
+  const [errors, setErrors] = createSignal<FormErrors>({});
+  const fix = (key: string) => setErrors((e) => clearFieldError(e, key));
   const [saving, setSaving] = createSignal(false);
   const editing = () => props.productIds !== undefined;
 
@@ -42,6 +49,7 @@ export function FlashSaleDialog(props: {
         if (!open) return;
         setPicked([]);
         setDaily(props.initial?.daily ?? true);
+        setStartsAt(toDatetimeLocal(props.initial?.startsAt ?? Date.now()));
         setEndsAt(toDatetimeLocal(props.initial?.endsAt ?? Date.now() + 24 * 60 * 60 * 1000));
         setErrors({});
       },
@@ -50,18 +58,21 @@ export function FlashSaleDialog(props: {
 
   const save = async () => {
     const ids = props.productIds ?? picked();
-    const next: Record<string, string> = {};
+    const next: FormErrors = {};
     if (ids.length === 0) next.products = "กรุณาเลือกสินค้าอย่างน้อย 1 รายการ";
+    const start = new Date(startsAt()).getTime();
     const end = new Date(endsAt()).getTime();
     if (!daily()) {
+      if (!startsAt() || Number.isNaN(start)) next.startsAt = "กรุณาเลือกเวลาเริ่ม";
       if (!endsAt() || Number.isNaN(end)) next.endsAt = "กรุณาเลือกเวลาจบ";
+      else if (!next.startsAt && end <= start) next.endsAt = "เวลาจบต้องอยู่หลังเวลาเริ่ม";
       else if (end <= Date.now()) next.endsAt = "เวลาจบต้องอยู่หลังเวลาปัจจุบัน";
     }
     setErrors(next);
-    if (Object.keys(next).length > 0) return;
+    if (reportFormErrors(next, LABELS)) return;
     setSaving(true);
     try {
-      await props.onSave(ids, daily() ? { daily: true } : { daily: false, endsAt: end });
+      await props.onSave(ids, daily() ? { daily: true } : { daily: false, startsAt: start, endsAt: end });
       props.onOpenChange(false);
     } finally {
       setSaving(false);
@@ -87,12 +98,19 @@ export function FlashSaleDialog(props: {
             </div>
 
             <div class="flex flex-col gap-4 overflow-y-auto p-5">
+              <FormErrorSummary errors={errors()} labels={LABELS} />
               <Show when={!editing()}>
-                <div class="flex flex-col gap-1.5">
+                <div class="flex flex-col gap-1.5" data-field="products">
                   <span class="text-sm font-medium text-ink">
                     สินค้า <span class="text-system-red">*</span>
                   </span>
-                  <ProductSelector selectedIds={picked()} onChange={setPicked} />
+                  <ProductSelector
+                    selectedIds={picked()}
+                    onChange={(ids) => {
+                      setPicked(ids);
+                      if (ids.length > 0) fix("products");
+                    }}
+                  />
                   <Show when={errors().products}>
                     <p class="text-sm text-system-red">{errors().products}</p>
                   </Show>
@@ -101,18 +119,48 @@ export function FlashSaleDialog(props: {
 
               <label class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">รอบรายวัน</span>
-                <Toggle checked={daily()} onChange={setDaily} onLabel="จบเที่ยงคืนและเริ่มใหม่ทุกวัน" offLabel="ตั้งเวลาจบเอง" disabled={saving()} />
-              </label>
-              <Show when={!daily()}>
-                <TextField
-                  label="เวลาจบ"
-                  required
-                  type="datetime-local"
-                  value={endsAt()}
-                  onInput={(e) => setEndsAt(e.currentTarget.value)}
-                  error={errors().endsAt}
+                <Toggle
+                  checked={daily()}
+                  onChange={(on) => {
+                    setDaily(on);
+                    if (on) setErrors((e) => clearFieldError(clearFieldError(e, "startsAt"), "endsAt"));
+                  }}
+                  onLabel="จบเที่ยงคืนและเริ่มใหม่ทุกวัน"
+                  offLabel="ตั้งเวลาเริ่มและจบเอง"
                   disabled={saving()}
                 />
+              </label>
+              <Show when={!daily()}>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <TextField
+                    label="เวลาเริ่ม"
+                    required
+                    type="datetime-local"
+                    data-field="startsAt"
+                    value={startsAt()}
+                    onInput={(e) => {
+                      setStartsAt(e.currentTarget.value);
+                      fix("startsAt");
+                      fix("endsAt");
+                    }}
+                    error={errors().startsAt}
+                    disabled={saving()}
+                  />
+                  <TextField
+                    label="เวลาจบ"
+                    required
+                    type="datetime-local"
+                    data-field="endsAt"
+                    value={endsAt()}
+                    onInput={(e) => {
+                      setEndsAt(e.currentTarget.value);
+                      fix("endsAt");
+                    }}
+                    error={errors().endsAt}
+                    disabled={saving()}
+                  />
+                </div>
+                <p class="-mt-2 text-xs text-ink-gray">ก่อนถึงเวลาเริ่ม สินค้าจะยังไม่ขึ้นในแฟลชเซลหน้าแรก</p>
               </Show>
               <p class="text-xs text-ink-gray">ราคาบนการ์ดคือราคาขายของสินค้า ราคาขีดฆ่าคือราคาก่อนลด และแถบสต๊อกใช้สต๊อกของสินค้า แก้ได้ที่หน้าสินค้า</p>
             </div>

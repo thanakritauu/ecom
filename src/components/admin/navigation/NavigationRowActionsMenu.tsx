@@ -4,8 +4,17 @@ import { MoreIcon } from "~/components/admin/icons";
 const ITEM_CLASS =
   "flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink";
 
-/** Row menu for one navigation item: edit, show/hide, delete. Same Kobalte shell as the other admin row menus. */
-export function NavigationRowActionsMenu(props: { label: string; visible: boolean; onEdit: () => void; onToggleVisible: () => void; onDelete: () => void }) {
+/** Row menu for one navigation item: edit, show/hide (เผยแพร่ for a draft), delete. Same Kobalte shell as the other admin row menus. */
+export function NavigationRowActionsMenu(props: {
+  label: string;
+  visible: boolean;
+  /** A แบบร่าง: the show/hide item reads เผยแพร่ and calls `onPublish` (the caller runs the publish checks). */
+  draft?: boolean;
+  onPublish?: () => void;
+  onEdit: () => void;
+  onToggleVisible: () => void;
+  onDelete: () => void;
+}) {
   return (
     <DropdownMenu placement="bottom-end" gutter={4}>
       <DropdownMenu.Trigger
@@ -20,8 +29,8 @@ export function NavigationRowActionsMenu(props: { label: string; visible: boolea
           <DropdownMenu.Item onSelect={props.onEdit} class={ITEM_CLASS}>
             แก้ไขเมนู
           </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={props.onToggleVisible} class={ITEM_CLASS}>
-            {props.visible ? "ซ่อนเมนู" : "แสดงเมนู"}
+          <DropdownMenu.Item onSelect={() => (props.draft ? props.onPublish?.() : props.onToggleVisible())} class={ITEM_CLASS}>
+            {props.draft ? "เผยแพร่" : props.visible ? "ซ่อนเมนู" : "แสดงเมนู"}
           </DropdownMenu.Item>
           <DropdownMenu.Separator class="my-1 h-px bg-border" />
           <DropdownMenu.Item

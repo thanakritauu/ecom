@@ -1,7 +1,7 @@
 import { createMemo, createSignal, Show, type JSX } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
-import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
+import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
 import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
 import { Toggle } from "~/components/admin/Toggle";
 import { SelectField } from "~/components/admin/SelectField";
@@ -17,6 +17,25 @@ import {
   type CouponDiscountType,
 } from "~/lib/adminMarketing";
 import { CouponCard, type Coupon as PreviewCoupon } from "~/components/shared/CouponCard";
+import { CouponDetailBody } from "~/components/shared/CouponDetailSheet";
+import { RichTextEditor } from "~/components/admin/RichTextEditor";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
+import { isRichTextEmpty } from "~/lib/richText";
+import { buildCoupon } from "~/lib/cartSelectors";
+
+/** Field names for the "ยังกรอกข้อมูลไม่ครบ" toast and summary (`~/lib/adminFormValidation`). */
+const LABELS: Record<string, string> = {
+  code: "โค้ดคูปอง",
+  image: "รูปคูปอง",
+  discount: "ส่วนลด",
+  maxDiscount: "ลดสูงสุด",
+  minSpend: "ยอดซื้อขั้นต่ำ",
+  usageLimit: "จำกัดจำนวนครั้ง",
+  perCustomerLimit: "จำกัดต่อลูกค้า",
+  startDate: "วันเริ่ม",
+  endDate: "วันสิ้นสุด",
+};
 
 export type CouponFormValues = Omit<Coupon, "id" | "createdAt" | "updatedAt">;
 
@@ -67,6 +86,13 @@ export function CouponForm(props: {
     }
   };
   const [minSpend, setMinSpend] = createSignal(props.initial?.minSpend ? String(props.initial.minSpend) : "");
+  /**
+   * Draft-first rule: a new coupon, or one still in แบบร่าง, gets
+   * "บันทึกแบบร่าง" (code only, never listed or usable at checkout) and
+   * "บันทึกและเผยแพร่" (full checks, switched on). After its first publish
+   * the เปิด / ปิด switch decides and the one button is "บันทึกการเปลี่ยนแปลง".
+   */
+  const draftFlow = !props.initial || props.initial.status === "draft";
   const [enabled, setEnabled] = createSignal(props.initial ? props.initial.status === "active" : false);
   const [showOnHome, setShowOnHome] = createSignal(props.initial?.showOnHome ?? true);
   const [showAtCheckout, setShowAtCheckout] = createSignal(props.initial?.showAtCheckout ?? true);
@@ -74,15 +100,18 @@ export function CouponForm(props: {
   const [startTime, setStartTime] = createSignal(props.initial?.startTime ?? "00:00");
   const [endDate, setEndDate] = createSignal(props.initial?.endDate ?? "");
   const [endTime, setEndTime] = createSignal(props.initial?.endTime ?? "23:59");
+  const [extraConditions, setExtraConditions] = createSignal(props.initial?.extraConditions ?? "");
 
-  const [errors, setErrors] = createSignal<Record<string, string>>({});
+  const [errors, setErrors] = createSignal<FormErrors>({});
+  /** Drops these fields' errors once the admin edits them. */
+  const fix = (...keys: string[]) => setErrors((e) => keys.reduce(clearFieldError, e));
   const [saving, setSaving] = createSignal(false);
   const [submitError, setSubmitError] = createSignal<string>();
 
   const dateRangeValid = createMemo(() => isValidDateRange(startDate(), startTime(), endDate(), endTime()));
 
-  const validate = (): Record<string, string> => {
-    const next: Record<string, string> = {};
+  const validate = (): FormErrors => {
+    const next: FormErrors = {};
     const c = code().trim().toUpperCase();
     if (!c) next.code = "กรุณากรอกโค้ดคูปอง";
     else if (!/^[A-Z0-9-]+$/.test(c)) next.code = "ใช้ได้เฉพาะตัวอักษรภาษาอังกฤษ ตัวเลข และขีด";
@@ -114,6 +143,22 @@ export function CouponForm(props: {
     return next;
   };
 
+  /** "บันทึกแบบร่าง": just the code, plus anything typed in must still be valid (e.g. no text in a number field). */
+  const validateDraft = (): FormErrors => {
+    const full = validate();
+    const typed: Record<string, boolean> = {
+      code: true,
+      discount: !!discount().trim(),
+      maxDiscount: true,
+      minSpend: true,
+      usageLimit: true,
+      perCustomerLimit: true,
+      image: true,
+      endDate: !!startDate() && !!endDate(),
+    };
+    return Object.fromEntries(Object.entries(full).filter(([key]) => typed[key]));
+  };
+
   const values = (): CouponFormValues => ({
     code: code().trim().toUpperCase(),
     discountType: discountType(),
@@ -130,6 +175,7 @@ export function CouponForm(props: {
     endDate: endDate(),
     endTime: endTime(),
     status: enabled() ? "active" : "disabled",
+    extraConditions: isRichTextEmpty(extraConditions()) ? undefined : extraConditions(),
   });
 
   /** The form's values in the shape the storefront's own `CouponCard` takes. */
@@ -145,16 +191,20 @@ export function CouponForm(props: {
     };
   });
 
-  const handleSubmit = async (e: SubmitEvent) => {
+  const handleSubmit = (e: SubmitEvent) => {
     e.preventDefault();
-    const validationErrors = validate();
+    void save(draftFlow ? "active" : enabled() ? "active" : "disabled");
+  };
+
+  const save = async (nextStatus: Coupon["status"]) => {
+    const validationErrors = nextStatus === "draft" ? validateDraft() : validate();
     setErrors(validationErrors);
-    if (Object.keys(validationErrors).length > 0) return;
+    if (reportFormErrors(validationErrors, LABELS)) return;
 
     setSaving(true);
     setSubmitError(undefined);
     try {
-      await props.onSubmit(values());
+      await props.onSubmit({ ...values(), status: nextStatus });
     } catch {
       setSubmitError("บันทึกคูปองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     } finally {
@@ -162,8 +212,15 @@ export function CouponForm(props: {
     }
   };
 
+  /** The same values as the storefront coupon, for the conditions sheet preview. */
+  const previewSheetCoupon = createMemo(() => {
+    const v = values();
+    return buildCoupon({ ...v, code: v.code, endDate: v.endDate, usedCount: 0 });
+  });
+
   const couponForm = (
     <>
+      <FormErrorSummary errors={errors()} labels={LABELS} />
       <div class="flex flex-col gap-6">
         <Section title="ข้อมูลคูปอง">
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -171,18 +228,31 @@ export function CouponForm(props: {
               label="โค้ดคูปอง"
               required
               value={code()}
-              onInput={(e) => setCode(e.currentTarget.value.toUpperCase())}
+              data-field="code"
+              onInput={(e) => {
+                setCode(e.currentTarget.value.toUpperCase());
+                fix("code");
+              }}
               error={errors().code}
               disabled={saving()}
               placeholder="เช่น SAVE100"
             />
+            <Show
+              when={!draftFlow}
+              fallback={
+                <p class="self-end text-xs text-ink-gray">
+                  {props.initial ? "คูปองนี้ยังเป็นแบบร่าง ลูกค้ายังใช้ไม่ได้" : "บันทึกแบบร่างไว้ก่อนได้ แล้วกด บันทึกและเผยแพร่ เมื่อข้อมูลครบ"}
+                </p>
+              }
+            >
             <label class="flex flex-col gap-1.5">
               <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
               <Toggle checked={enabled()} onChange={setEnabled} disabled={saving()} />
               <span class="text-xs text-ink-gray">{enabled() ? "ใช้ได้ที่หน้าร้านตามช่วงเวลาที่ตั้งไว้" : "ลูกค้ายังใช้คูปองนี้ไม่ได้"}</span>
             </label>
+            </Show>
           </div>
-          <div class="flex flex-col gap-1.5">
+          <div class="flex flex-col gap-1.5" data-field="image">
             <SingleImageUploader
               label="รูปคูปอง"
               hint="รูปสี่เหลี่ยมจัตุรัส แสดงที่ด้านซ้ายของคูปองแทนไอคอน % ถ้าไม่ใส่จะใช้ไอคอนเดิม"
@@ -219,7 +289,11 @@ export function CouponForm(props: {
               max={discountType() === "percent" ? "100" : undefined}
               step="1"
               value={discount()}
-              onInput={(e) => setDiscount(e.currentTarget.value)}
+              data-field="discount"
+              onInput={(e) => {
+                setDiscount(e.currentTarget.value);
+                fix("discount", "minSpend");
+              }}
               error={errors().discount}
               disabled={saving()}
             />
@@ -230,7 +304,11 @@ export function CouponForm(props: {
                 min="1"
                 step="1"
                 value={maxDiscount()}
-                onInput={(e) => setMaxDiscount(e.currentTarget.value)}
+                data-field="maxDiscount"
+                onInput={(e) => {
+                  setMaxDiscount(e.currentTarget.value);
+                  fix("maxDiscount");
+                }}
                 error={errors().maxDiscount}
                 disabled={saving()}
                 placeholder="ไม่จำกัด"
@@ -242,7 +320,11 @@ export function CouponForm(props: {
               min="0"
               step="1"
               value={minSpend()}
-              onInput={(e) => setMinSpend(e.currentTarget.value)}
+              data-field="minSpend"
+              onInput={(e) => {
+                setMinSpend(e.currentTarget.value);
+                fix("minSpend");
+              }}
               error={errors().minSpend}
               disabled={saving()}
               placeholder="ไม่มีขั้นต่ำ"
@@ -264,7 +346,11 @@ export function CouponForm(props: {
               min="1"
               step="1"
               value={usageLimit()}
-              onInput={(e) => setUsageLimit(e.currentTarget.value)}
+              data-field="usageLimit"
+              onInput={(e) => {
+                setUsageLimit(e.currentTarget.value);
+                fix("usageLimit", "perCustomerLimit");
+              }}
               error={errors().usageLimit}
               disabled={saving()}
               placeholder="ไม่จำกัด"
@@ -275,7 +361,11 @@ export function CouponForm(props: {
               min="1"
               step="1"
               value={perCustomerLimit()}
-              onInput={(e) => setPerCustomerLimit(e.currentTarget.value)}
+              data-field="perCustomerLimit"
+              onInput={(e) => {
+                setPerCustomerLimit(e.currentTarget.value);
+                fix("perCustomerLimit");
+              }}
               error={errors().perCustomerLimit}
               disabled={saving()}
               placeholder="ไม่จำกัด"
@@ -299,11 +389,65 @@ export function CouponForm(props: {
         <Section title="ระยะเวลา">
           <p class="text-xs text-ink-gray">เวลาประเทศไทย คูปองเริ่มและหมดอายุเองตามเวลาที่ตั้งไว้</p>
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextField label="วันเริ่ม" required type="date" value={startDate()} onInput={(e) => setStartDate(e.currentTarget.value)} error={errors().startDate} disabled={saving()} />
-            <TextField label="เวลาเริ่ม" type="time" value={startTime()} onInput={(e) => setStartTime(e.currentTarget.value)} disabled={saving()} />
-            <TextField label="วันสิ้นสุด" required type="date" value={endDate()} onInput={(e) => setEndDate(e.currentTarget.value)} error={errors().endDate} disabled={saving()} />
-            <TextField label="เวลาสิ้นสุด" type="time" value={endTime()} onInput={(e) => setEndTime(e.currentTarget.value)} disabled={saving()} />
+            <TextField
+              label="วันเริ่ม"
+              required
+              type="date"
+              data-field="startDate"
+              value={startDate()}
+              onInput={(e) => {
+                setStartDate(e.currentTarget.value);
+                fix("startDate", "endDate");
+              }}
+              error={errors().startDate}
+              disabled={saving()}
+            />
+            <TextField
+              label="เวลาเริ่ม"
+              type="time"
+              value={startTime()}
+              onInput={(e) => {
+                setStartTime(e.currentTarget.value);
+                fix("endDate");
+              }}
+              disabled={saving()}
+            />
+            <TextField
+              label="วันสิ้นสุด"
+              required
+              type="date"
+              data-field="endDate"
+              value={endDate()}
+              onInput={(e) => {
+                setEndDate(e.currentTarget.value);
+                fix("endDate");
+              }}
+              error={errors().endDate}
+              disabled={saving()}
+            />
+            <TextField
+              label="เวลาสิ้นสุด"
+              type="time"
+              value={endTime()}
+              onInput={(e) => {
+                setEndTime(e.currentTarget.value);
+                fix("endDate");
+              }}
+              disabled={saving()}
+            />
           </div>
+        </Section>
+
+        <Section title="เงื่อนไขเพิ่มเติม">
+          <RichTextEditor
+            field="extraConditions"
+            value={extraConditions()}
+            onChange={setExtraConditions}
+            disabled={saving()}
+            placeholder="เช่น ใช้ได้เฉพาะสมาชิกใหม่ หรือรายละเอียดอื่นที่ลูกค้าควรรู้"
+            hint='ไม่บังคับ แสดงต่อท้ายเงื่อนไขการใช้งานในหน้าต่าง "รายละเอียดคูปอง" เงื่อนไขหลักด้านบนระบบสร้างให้เองจากข้อมูลคูปอง'
+            minHeightClass="min-h-[140px]"
+          />
         </Section>
       </div>
 
@@ -315,16 +459,16 @@ export function CouponForm(props: {
     </>
   );
 
+  // The ticket, then what the shopper's "รายละเอียดคูปอง" sheet shows (the storefront's own sheet body).
   const couponPreview = (
-    <div class="flex flex-col gap-3 p-4 sm:p-5">
+    <div class="flex flex-col gap-5 p-4 sm:p-5">
       <div class="px-1 pt-1">
         <CouponCard coupon={previewCoupon()} display />
       </div>
-      <Show when={code()}>
-        <p class="text-sm text-ink-gray">
-          โค้ด <span class="font-semibold text-ink">{code()}</span>
-        </p>
-      </Show>
+      <div class="flex flex-col gap-5 border-t border-border pt-4">
+        <p class="text-base font-semibold text-ink">รายละเอียดคูปอง</p>
+        <CouponDetailBody coupon={previewSheetCoupon()} />
+      </div>
     </div>
   );
 
@@ -333,14 +477,14 @@ export function CouponForm(props: {
       <AdminFormPreviewLayout form={couponForm} preview={couponPreview} />
 
       <AdminFloatingBar>
-        <div class="flex w-full justify-end gap-3">
-          <Button type="button" variant="outline" onClick={props.onCancel} disabled={saving()}>
-            ยกเลิก
-          </Button>
-          <Button type="submit" variant="primary" loading={saving()}>
-            {saving() ? "กำลังบันทึก..." : props.submitLabel}
-          </Button>
-        </div>
+        <DraftPublishActions
+          draft={draftFlow}
+          saving={saving()}
+          onCancel={props.onCancel}
+          onSaveDraft={() => void save("draft")}
+          onPublish={() => void save("active")}
+          onSave={() => void save(enabled() ? "active" : "disabled")}
+        />
       </AdminFloatingBar>
       <div class="h-16" aria-hidden="true" />
     </form>

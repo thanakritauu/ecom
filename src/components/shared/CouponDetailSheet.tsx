@@ -1,14 +1,17 @@
-import { createSignal, For, onCleanup, Show, type JSX } from "solid-js";
+import { createSignal, createUniqueId, For, onCleanup, Show, type JSX } from "solid-js";
 import { SheetModal } from "./SheetModal";
 import { CheckIcon } from "./icons";
 import { pushToast } from "~/lib/toast";
 import type { Coupon } from "~/lib/cartSelectors";
+import { isRichTextEmpty } from "~/lib/richText";
+import { RichTextContent } from "./RichTextContent";
 
 const baht = (n: number) => `฿${n.toLocaleString("th-TH")}`;
 
 /** "31 ตุลาคม 2569 เวลา 23:59 น." — the coupon's real `expiresAt`, read in Bangkok time. */
 function expiryText(expiresAt: string) {
   const d = new Date(expiresAt);
+  if (Number.isNaN(d.getTime())) return "-";
   const date = d.toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Bangkok" });
   const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Bangkok" });
   return `${date} เวลา ${time} น.`;
@@ -24,6 +27,20 @@ function expiryText(expiresAt: string) {
  * collect/use button.
  */
 export function CouponDetailSheet(props: { open: boolean; onOpenChange: (open: boolean) => void; coupon: Coupon; ticket: JSX.Element; action: JSX.Element }) {
+  return (
+    <SheetModal nested open={props.open} onOpenChange={props.onOpenChange} height="auto" title="รายละเอียดคูปอง" footer={props.action}>
+      <CouponDetailBody coupon={props.coupon} ticket={props.ticket} />
+    </SheetModal>
+  );
+}
+
+/**
+ * The sheet's content (ticket, code + copy, ใช้ได้ถึง, conditions and the
+ * Admin's extra conditions). Exported so Admin's coupon form previews
+ * exactly what the shopper will see. Returns sibling blocks: the parent
+ * stacks them (SheetModal's body is a gap column).
+ */
+export function CouponDetailBody(props: { coupon: Coupon; ticket?: JSX.Element }) {
   const [copied, setCopied] = createSignal(false);
   let resetTimer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(resetTimer));
@@ -54,15 +71,20 @@ export function CouponDetailSheet(props: { open: boolean; onOpenChange: (open: b
     return list;
   };
 
+  const headingId = `coupon-conditions-heading-${createUniqueId()}`;
+  const extraHeadingId = `coupon-extra-heading-${createUniqueId()}`;
+
   return (
-    <SheetModal nested open={props.open} onOpenChange={props.onOpenChange} height="auto" title="รายละเอียดคูปอง" footer={props.action}>
-      {/* Inset so the ticket's own drawn shadow/notches aren't clipped by the scroll area. */}
-      <div class="px-1 pt-1">{props.ticket}</div>
+    <>
+      <Show when={props.ticket}>
+        {/* Inset so the ticket's own drawn shadow/notches aren't clipped by the scroll area. */}
+        <div class="px-1 pt-1">{props.ticket}</div>
+      </Show>
 
       <dl class="flex flex-col gap-3 text-sm">
         <Row label="โค้ดส่วนลด">
           <span class="flex items-center justify-end gap-1">
-            <span class="select-all rounded-pill border border-dashed border-brand-pink px-3 py-0.5 font-semibold tracking-wide text-brand-pink">{props.coupon.code}</span>
+            <span class="select-all rounded-pill border border-dashed border-brand-pink px-3 py-0.5 font-semibold tracking-wide text-brand-pink">{props.coupon.code || "-"}</span>
             {/* Icon-only copy — 44px tap area; the tick (DSL CheckIcon) shows for 2s after copying. */}
             <button
               type="button"
@@ -95,8 +117,8 @@ export function CouponDetailSheet(props: { open: boolean; onOpenChange: (open: b
         <Row label="ใช้ได้ถึง">{expiryText(props.coupon.expiresAt)}</Row>
       </dl>
 
-      <section aria-labelledby="coupon-conditions-heading" class="flex flex-col gap-2">
-        <h3 id="coupon-conditions-heading" class="text-base font-semibold text-ink">
+      <section aria-labelledby={headingId} class="flex flex-col gap-2">
+        <h3 id={headingId} class="text-base font-semibold text-ink">
           เงื่อนไขการใช้งาน
         </h3>
         <ul class="flex flex-col gap-1.5 text-sm leading-[1.75] text-ink-gray">
@@ -110,7 +132,16 @@ export function CouponDetailSheet(props: { open: boolean; onOpenChange: (open: b
           </For>
         </ul>
       </section>
-    </SheetModal>
+
+      <Show when={!isRichTextEmpty(props.coupon.extraConditions)}>
+        <section aria-labelledby={extraHeadingId} class="flex flex-col gap-2">
+          <h3 id={extraHeadingId} class="text-base font-semibold text-ink">
+            เงื่อนไขเพิ่มเติม
+          </h3>
+          <RichTextContent value={props.coupon.extraConditions} class="text-sm text-ink-gray" />
+        </section>
+      </Show>
+    </>
   );
 }
 

@@ -84,7 +84,7 @@ export function buildNavigationTree(items: NavigationItem[], lookups: Navigation
 /** §17 — a `visible` item whose resolved target isn't currently reachable is excluded from what the storefront renders (never a dangling/broken link); an unavailable *parent* also hides its children rather than orphaning them at the top level. Admin's own list uses `buildNavigationTree` directly (unfiltered) instead, so it can still show and manage the item. */
 export function filterVisibleNavigationTree(tree: ResolvedNavigationItem[]): ResolvedNavigationItem[] {
   return tree
-    .filter((item) => item.visible && item.available)
+    .filter((item) => item.visible && !item.draft && item.available)
     .map((item) => ({ ...item, children: filterVisibleNavigationTree(item.children) }));
 }
 

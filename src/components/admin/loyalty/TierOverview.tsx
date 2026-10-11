@@ -25,26 +25,28 @@ export function TierOverview() {
         </h2>
         <p class="text-sm text-ink-gray">เลื่อนระดับจากยอดที่ชำระแล้วในปีนี้ ไม่นับคำสั่งซื้อที่ยกเลิกหรือยังไม่ชำระ</p>
       </div>
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div class="flex flex-col gap-3">
         <For each={TIERS}>
           {(tier) => (
             <div class="flex flex-col gap-3 rounded-card border border-border p-4">
-              <div class="flex items-center gap-3">
-                <TierMark tier={tier.id} class="h-12" />
-                <div class="min-w-0">
-                  <p class="font-semibold text-ink">{tier.name}</p>
-                  <p class="text-sm text-ink-gray">{tier.minSpend === 0 ? "เริ่มต้นเมื่อสมัครสมาชิก" : `ยอดซื้อต่อปี ${formatAdminCurrency(tier.minSpend)} ขึ้นไป`}</p>
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex min-w-0 items-center gap-3">
+                  <TierMark tier={tier.id} class="h-12" />
+                  <div class="min-w-0">
+                    <p class="font-semibold text-ink">{tier.name}</p>
+                    <p class="text-sm text-ink-gray">{tier.minSpend === 0 ? "เริ่มต้นเมื่อสมัครสมาชิก" : `ยอดซื้อต่อปี ${formatAdminCurrency(tier.minSpend)} ขึ้นไป`}</p>
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-x-4 gap-y-1 rounded-card bg-surface-gray/60 px-3 py-2 text-sm">
+                  <span class="text-ink-gray">
+                    ตัวคูณคอยน์ <span class="font-semibold text-ink">x{TIER_COIN_MULTIPLIER[tier.id]}</span>
+                  </span>
+                  <span class="text-ink-gray">
+                    สมาชิก <span class="font-semibold text-ink">{countIn(tier.id).toLocaleString("th-TH")}</span> คน
+                  </span>
                 </div>
               </div>
-              <div class="flex flex-wrap gap-x-4 gap-y-1 rounded-card bg-surface-gray/60 px-3 py-2 text-sm">
-                <span class="text-ink-gray">
-                  ตัวคูณคอยน์ <span class="font-semibold text-ink">x{TIER_COIN_MULTIPLIER[tier.id]}</span>
-                </span>
-                <span class="text-ink-gray">
-                  สมาชิก <span class="font-semibold text-ink">{countIn(tier.id).toLocaleString("th-TH")}</span> คน
-                </span>
-              </div>
-              <ul class="flex flex-col gap-1 text-sm text-ink">
+              <ul class="grid grid-cols-1 gap-x-4 gap-y-1 text-sm text-ink sm:grid-cols-2">
                 <For each={tier.perks}>
                   {(perk) => (
                     <li class="flex items-start gap-1.5">

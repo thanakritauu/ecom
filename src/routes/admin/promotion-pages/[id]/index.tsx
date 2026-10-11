@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { landingPagePublishErrors, landingPagePublishStatus } from "~/components/admin/content/landingPagePublish";
 import { hasMedia, type MediaValue } from "~/lib/media";
 import { MediaPreview } from "~/components/admin/MediaUploader";
 import { useNavigate, useParams } from "@solidjs/router";
@@ -16,7 +17,7 @@ import { HOMEPAGE_SECTION_TYPE_META } from "~/lib/adminHomepage";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { formatMarketingDateTime } from "~/lib/adminMarketing";
-import { LANDING_PAGE_STATUS_META, validatePublishRequirements, findLandingPageReferences, promotionPageHref } from "~/lib/adminContent";
+import { LANDING_PAGE_STATUS_META, findLandingPageReferences, promotionPageHref } from "~/lib/adminContent";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
 import { findNavigationReferences, describeNavigationReference } from "~/lib/adminNavigation";
@@ -71,16 +72,8 @@ export default function AdminLandingPageDetailPage() {
   const confirmToggleAction = async () => {
     const current = page();
     if (!current) return;
-    if (current.status !== "published") {
-      const errs = validatePublishRequirements(current);
-      if (errs.length > 0) {
-        setConfirmToggle(false);
-        pushToast(`เผยแพร่ไม่ได้ ${errs[0]}`, "error");
-        return;
-      }
-    }
     setActionLoading(true);
-    await store.setStatus(current.id, current.status === "published" ? "unpublished" : "published");
+    await store.setStatus(current.id, current.status === "published" ? "unpublished" : current.status === "draft" ? landingPagePublishStatus(current) : "published");
     setActionLoading(false);
     setConfirmToggle(false);
     pushToast(current.status === "published" ? "ยกเลิกการเผยแพร่หน้าแล้ว" : "เผยแพร่หน้าแล้ว", "success");
@@ -148,7 +141,12 @@ export default function AdminLandingPageDetailPage() {
                     isPublished={p().status === "published"}
                     hideView
                     hideDelete={p().isHomepage}
-                    onTogglePublish={() => setConfirmToggle(true)}
+                    onTogglePublish={() => {
+                      // Publishing (a แบบร่าง included) runs the full check first and names what's missing.
+                      const errs = p().status === "published" ? [] : landingPagePublishErrors(p());
+                      if (errs.length > 0) pushToast(`เผยแพร่ "${p().name}" ไม่ได้ ยังขาดข้อมูล ${errs.length} รายการ`, "error", errs.join(", "));
+                      else setConfirmToggle(true);
+                    }}
                     onDuplicate={handleDuplicate}
                     onDelete={requestDelete}
                     triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
@@ -157,8 +155,8 @@ export default function AdminLandingPageDetailPage() {
               }
             />
 
-            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div class="flex flex-col gap-6 lg:col-span-2">
+            <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div class="flex min-w-0 flex-col gap-6">
                 <Show when={!p().isHomepage}>
                 <Section title="แบนเนอร์หลัก">
                   <div class="aspect-[3/1] w-full overflow-hidden rounded-media bg-surface-gray/60">

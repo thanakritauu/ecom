@@ -1,10 +1,13 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { Dialog } from "@kobalte/core/dialog";
 import { TextField } from "~/components/shared/TextField";
-import { Button } from "~/components/shared/Button";
+import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
 import { ChevronDownIcon, CloseXIcon } from "~/components/admin/icons";
 import { IconImageUploader } from "~/components/admin/IconImageUploader";
 import { Toggle } from "~/components/admin/Toggle";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
+import { scrollToFirstErrorIn } from "~/lib/adminDrawerScroll";
 import {
   NAVIGATION_TARGET_TYPES,
   NAVIGATION_TARGET_TYPE_LABELS,
@@ -24,11 +27,15 @@ import type { AdminProduct } from "~/lib/adminProductStore";
 /** Empty string is a valid, explicit "no icon" state (§9) — never omitted/undefined, so a saved item can't accidentally fall back to some default icon later. */
 const NO_ICON_KEY = "";
 
+const LABELS: Record<string, string> = { label: "ชื่อเมนู", targetId: "ปลายทาง", externalUrl: "URL ภายนอก" };
+
 /**
  * Navigation Architecture — one reusable Create/Edit drawer for every
  * `NavigationItem`, same slide-in-from-right shell `QuickViewDrawer.tsx`
  * already established (Kobalte Dialog, same width/animation classes) but
- * with a real form footer (Cancel/Save) instead of QuickViewDrawer's fixed
+ * with a real form footer (the draft-first `DraftPublishActions`: ยกเลิก /
+ * บันทึกแบบร่าง / บันทึกและเผยแพร่ while new or แบบร่าง, else ยกเลิก /
+ * บันทึกการเปลี่ยนแปลง with the แสดง / ไม่แสดง Toggle) instead of QuickViewDrawer's fixed
  * "ดูรายละเอียดทั้งหมด" button — so it isn't reused as-is, a small
  * purpose-built sibling instead of bending that component's contract.
  *
@@ -58,7 +65,11 @@ export function NavigationItemFormDrawer(props: {
   const [externalUrl, setExternalUrl] = createSignal(props.initial?.externalUrl ?? "");
   const [parentId, setParentId] = createSignal(props.initial?.parentId ?? "");
   const [visible, setVisible] = createSignal(props.initial?.visible ?? true);
-  const [errors, setErrors] = createSignal<Record<string, string>>({});
+  /** Creating, or the item is still แบบร่าง: no แสดง / ไม่แสดง Toggle yet. */
+  const draftFlow = () => !props.initial || props.initial.draft === true;
+  const [errors, setErrors] = createSignal<FormErrors>({});
+  const clearError = (key: string) => setErrors((prev) => clearFieldError(prev, key));
+  let bodyRef: HTMLDivElement | undefined;
 
   /** Re-seed every field whenever the drawer opens for a (possibly different) item, so switching from editing one item to another — or to Create — never leaks the previous item's values. */
   createEffect(() => {
@@ -69,7 +80,7 @@ export function NavigationItemFormDrawer(props: {
     setTargetId(props.initial?.targetId ?? "");
     setExternalUrl(props.initial?.externalUrl ?? "");
     setParentId(props.initial?.parentId ?? "");
-    setVisible(props.initial?.visible ?? true);
+    setVisible(props.initial && !props.initial.draft ? props.initial.visible : true);
     setErrors({});
   });
 
@@ -86,10 +97,11 @@ export function NavigationItemFormDrawer(props: {
     switch (targetType()) {
       case "promotion_page":
         return props.pages.map((p) => ({ value: p.id, label: `${p.name} (${LANDING_PAGE_STATUS_META[p.status].label})` }));
+      // A draft target is listed but noted: the menu stays off the storefront until that target is published.
       case "category":
-        return props.categories.map((c) => ({ value: c.id, label: c.name }));
+        return props.categories.map((c) => ({ value: c.id, label: c.status === "draft" ? `${c.name} (แบบร่าง)` : c.name }));
       case "collection":
-        return props.collections.map((c) => ({ value: c.id, label: c.name }));
+        return props.collections.map((c) => ({ value: c.id, label: c.status === "draft" ? `${c.name} (แบบร่าง)` : c.name }));
       case "product":
         return props.products.map((p) => ({ value: p.id, label: p.name }));
       default:
@@ -107,7 +119,8 @@ export function NavigationItemFormDrawer(props: {
       label: label().trim(),
       icon: icon(),
       order: props.initial?.order ?? 0,
-      visible: visible(),
+      visible: draftFlow() ? false : visible(),
+      draft: draftFlow(),
       parentId: parentId() || undefined,
       targetType: targetType(),
       targetId: needsTarget() ? targetId() : undefined,
@@ -118,25 +131,42 @@ export function NavigationItemFormDrawer(props: {
   const handleTargetTypeChange = (next: NavigationTargetType) => {
     setTargetType(next);
     setTargetId("");
+    setErrors((prev) => clearFieldError(clearFieldError(prev, "targetId"), "externalUrl"));
   };
 
-  const validate = () => {
-    const next: Record<string, string> = {};
+  /** `asDraft`: บันทึกแบบร่าง only needs the label; a target or URL that's been filled in must still be valid. */
+  const validate = (asDraft = false) => {
+    const next: FormErrors = {};
     if (!label().trim()) next.label = "กรุณากรอกชื่อเมนู";
-    if (needsTarget() && !targetId()) next.targetId = "กรุณาเลือกปลายทาง";
-    if (needsUrl() && !externalUrl().trim()) next.externalUrl = "กรุณากรอก URL ภายนอก";
+    if (needsTarget() && !targetId()) {
+      if (!asDraft) next.targetId = "กรุณาเลือกปลายทาง";
+    }
+    // A target that was deleted since would leave the menu pointing nowhere.
+    else if (needsTarget() && !targetOptions().some((o) => o.value === targetId())) next.targetId = "ปลายทางนี้ถูกลบไปแล้ว กรุณาเลือกใหม่";
+    if (needsUrl() && !externalUrl().trim()) {
+      if (!asDraft) next.externalUrl = "กรุณากรอก URL ภายนอก";
+    }
+    else if (needsUrl() && !/^https?:\/\/\S+$/i.test(externalUrl().trim())) next.externalUrl = "URL ต้องขึ้นต้นด้วย https://";
     setErrors(next);
-    return Object.keys(next).length === 0;
+    if (!reportFormErrors(next, LABELS)) return true;
+    scrollToFirstErrorIn(bodyRef, next);
+    return false;
   };
 
   const handleSubmit = (e: Event) => {
     e.preventDefault();
-    if (!validate()) return;
+    save(draftFlow() ? "publish" : "save");
+  };
+
+  /** draft = บันทึกแบบร่าง, publish = บันทึกและเผยแพร่ (goes live), save = บันทึกการเปลี่ยนแปลง (keeps the Toggle's แสดง / ไม่แสดง). */
+  const save = (action: "draft" | "publish" | "save") => {
+    if (!validate(action === "draft")) return;
     props.onSubmit({
       label: label().trim(),
       icon: icon(),
       order: props.initial?.order ?? 0,
-      visible: visible(),
+      visible: action === "draft" ? false : action === "publish" ? true : visible(),
+      draft: action === "draft",
       parentId: parentId() || undefined,
       targetType: targetType(),
       targetId: needsTarget() ? targetId() : undefined,
@@ -162,13 +192,18 @@ export function NavigationItemFormDrawer(props: {
               </Dialog.CloseButton>
             </div>
 
-            <form onSubmit={handleSubmit} class="flex flex-1 flex-col overflow-hidden">
-              <div class="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+            <form onSubmit={handleSubmit} noValidate class="flex flex-1 flex-col overflow-hidden">
+              <div ref={bodyRef} class="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+                <FormErrorSummary errors={errors()} labels={LABELS} />
                 <TextField
                   label="ชื่อเมนู"
                   required
                   value={label()}
-                  onInput={(e) => setLabel(e.currentTarget.value)}
+                  onInput={(e) => {
+                    setLabel(e.currentTarget.value);
+                    if (e.currentTarget.value.trim()) clearError("label");
+                  }}
+                  data-field="label"
                   error={errors().label}
                   placeholder="เช่น ลิป, โปรโมชั่น, ดูสินค้าทั้งหมด"
                   disabled={props.saving}
@@ -204,7 +239,7 @@ export function NavigationItemFormDrawer(props: {
                 </Show>
 
                 <Show when={needsTarget()}>
-                  <label class="flex flex-col gap-1.5">
+                  <label data-field="targetId" class="flex flex-col gap-1.5">
                     <span class="text-sm font-medium text-ink">
                       ปลายทาง <span class="text-system-red">*</span>
                     </span>
@@ -212,7 +247,11 @@ export function NavigationItemFormDrawer(props: {
                       <select
                         value={targetId()}
                         disabled={props.saving}
-                        onChange={(e) => setTargetId(e.currentTarget.value)}
+                        aria-invalid={errors().targetId ? true : undefined}
+                        onChange={(e) => {
+                          setTargetId(e.currentTarget.value);
+                          if (e.currentTarget.value) clearError("targetId");
+                        }}
                         class={`h-11 w-full appearance-none rounded-card border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray ${
                           errors().targetId ? "border-system-red" : "border-border"
                         }`}
@@ -236,7 +275,11 @@ export function NavigationItemFormDrawer(props: {
                     label="URL ภายนอก"
                     required
                     value={externalUrl()}
-                    onInput={(e) => setExternalUrl(e.currentTarget.value)}
+                    onInput={(e) => {
+                      setExternalUrl(e.currentTarget.value);
+                      clearError("externalUrl");
+                    }}
+                    data-field="externalUrl"
                     error={errors().externalUrl}
                     placeholder="https://..."
                     disabled={props.saving}
@@ -260,23 +303,34 @@ export function NavigationItemFormDrawer(props: {
                   <span class="text-xs text-ink-gray">ไม่ระบุคือเมนูระดับบนสุด เมนูย่อยแสดงเฉพาะในเมนูบนมือถือ</span>
                 </label>
 
-                <label class="flex flex-col gap-1.5">
-                  <span class="text-sm font-medium text-ink">การแสดงผล</span>
-                  <Toggle checked={visible()} onChange={setVisible} onLabel="แสดง" offLabel="ไม่แสดง" disabled={props.saving} />
-                  <span class="text-xs text-ink-gray">ปิดแล้วเมนูนี้จะไม่แสดงบนหน้าร้าน</span>
-                </label>
+                <Show
+                  when={!draftFlow()}
+                  fallback={
+                    <p class="text-xs text-ink-gray">
+                      {props.initial ? "เมนูนี้ยังเป็นแบบร่าง ไม่แสดงบนหน้าร้าน" : "บันทึกแบบร่างไว้ก่อนได้ แล้วกด บันทึกและเผยแพร่ เมื่อข้อมูลครบ"}
+                    </p>
+                  }
+                >
+                  <label class="flex flex-col gap-1.5">
+                    <span class="text-sm font-medium text-ink">การแสดงผล</span>
+                    <Toggle checked={visible()} onChange={setVisible} onLabel="แสดง" offLabel="ไม่แสดง" disabled={props.saving} />
+                    <span class="text-xs text-ink-gray">ปิดแล้วเมนูนี้จะไม่แสดงบนหน้าร้าน</span>
+                  </label>
+                </Show>
               </div>
 
               <div
                 class="flex shrink-0 gap-3 border-t border-border p-4"
                 style={{ "padding-bottom": "max(1rem, env(safe-area-inset-bottom))" }}
               >
-                <Button type="button" variant="outline" class="flex-1" onClick={() => props.onOpenChange(false)} disabled={props.saving}>
-                  ยกเลิก
-                </Button>
-                <Button type="submit" variant="primary" class="flex-1" loading={props.saving}>
-                  {props.saving ? "กำลังบันทึก..." : props.mode === "create" ? "บันทึกเมนู" : "บันทึกการเปลี่ยนแปลง"}
-                </Button>
+                <DraftPublishActions
+                  draft={draftFlow()}
+                  saving={props.saving}
+                  onCancel={() => props.onOpenChange(false)}
+                  onSaveDraft={() => save("draft")}
+                  onPublish={() => save("publish")}
+                  onSave={() => save("save")}
+                />
               </div>
             </form>
           </Dialog.Content>

@@ -3,11 +3,13 @@ import { Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { MoreIcon } from "~/components/admin/icons";
 
-/** Same Kobalte dropdown shell as `CollectionRowActionsMenu` — Categories have no publish workflow, so this only ever offers ดูรายละเอียด / แก้ไข / ลบ. */
+/** Same Kobalte dropdown shell as `CollectionRowActionsMenu`: ดูรายละเอียด / แก้ไข / ลบ, plus เผยแพร่ for a draft (pass `onPublish`). */
 export function CategoryRowActionsMenu(props: {
   id: string;
   name: string;
   onDelete: () => void;
+  /** Only for a แบบร่าง category: the caller runs the publish checks first. */
+  onPublish?: () => void;
   hideView?: boolean;
   triggerClass?: string;
 }) {
@@ -39,6 +41,14 @@ export function CategoryRowActionsMenu(props: {
           >
             แก้ไขหมวดหมู่
           </DropdownMenu.Item>
+          <Show when={props.onPublish}>
+            <DropdownMenu.Item
+              onSelect={() => props.onPublish?.()}
+              class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
+            >
+              เผยแพร่
+            </DropdownMenu.Item>
+          </Show>
           <DropdownMenu.Separator class="my-1 h-px bg-border" />
           <DropdownMenu.Item
             onSelect={props.onDelete}

@@ -113,8 +113,8 @@ export default function AdminOrderDetailPage() {
               }
             />
 
-            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div class="flex flex-col gap-6 lg:col-span-2">
+            <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div class="flex min-w-0 flex-col gap-6">
                 <Section title="สรุปคำสั่งซื้อ">
                   <div class="flex flex-col gap-2">
                     <StatusRow label="สถานะคำสั่งซื้อ" tone={ORDER_STATUS_META[o().orderStatus].tone} value={ORDER_STATUS_META[o().orderStatus].label} />

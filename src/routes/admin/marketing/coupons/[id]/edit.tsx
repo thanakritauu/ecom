@@ -17,8 +17,9 @@ export default function AdminCouponEditPage() {
   const handleSubmit = async (values: CouponFormValues) => {
     const current = coupon();
     if (!current) return;
+    const wasDraft = current.status === "draft";
     await store.update(current.id, values);
-    pushToast("บันทึกคูปองเรียบร้อยแล้ว", "success");
+    pushToast(values.status === "draft" ? "บันทึกแบบร่างแล้ว ยังไม่มีผลที่หน้าร้าน" : wasDraft ? "บันทึกและเผยแพร่คูปองแล้ว" : "บันทึกคูปองเรียบร้อยแล้ว", "success");
     navigate(`/admin/marketing/coupons/${current.id}`);
   };
 

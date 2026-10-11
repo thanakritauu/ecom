@@ -4,6 +4,7 @@ import { PageHeader } from "~/components/shared/PageHeader";
 import { ProductForm } from "~/components/admin/products/ProductForm";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { pushToast } from "~/lib/toast";
+import { setProductTiktokClips } from "~/lib/adminTiktokClips";
 
 export default function AdminNewProductPage() {
   const store = useAdminProducts();
@@ -19,7 +20,8 @@ export default function AdminNewProductPage() {
         onCancel={() => navigate("/admin/products")}
         onSubmit={async (values) => {
           const created = await store.addProduct(values);
-          pushToast("บันทึกสินค้าเรียบร้อยแล้ว", "success");
+          if (values.tiktokClipIds) setProductTiktokClips(created.id, values.tiktokClipIds);
+          pushToast(values.status === "draft" ? "บันทึกแบบร่างแล้ว ยังไม่แสดงบนหน้าร้าน" : "บันทึกและเผยแพร่สินค้าแล้ว", "success");
           navigate(`/admin/products/${created.id}`);
         }}
       />

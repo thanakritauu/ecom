@@ -25,6 +25,7 @@ import {
   LOW_STOCK_THRESHOLD,
   STOCK_STATUS_META,
   stockStatusLabel,
+  productPublishProblems,
   ADMIN_PRODUCT_STATUS_META,
   type AdminProduct,
   type AdminProductStatus,
@@ -293,7 +294,17 @@ export default function AdminProductListPage() {
     pushToast(`ลบ "${product.name}" เรียบร้อยแล้ว`, "error");
   };
 
-  const requestToggle = (product: AdminProduct) => setConfirmToggle(product);
+  /** A แบบร่าง goes live only once it has everything the form's full check needs. */
+  const requestToggle = (product: AdminProduct) => {
+    if (product.status === "draft") {
+      const missing = productPublishProblems(product);
+      if (missing.length > 0) {
+        pushToast(`เผยแพร่ "${product.name}" ไม่ได้ ยังขาดข้อมูล ${missing.length} รายการ`, "error", missing.join(", "));
+        return;
+      }
+    }
+    setConfirmToggle(product);
+  };
   const confirmToggleAction = async () => {
     const product = confirmToggle();
     if (!product) return;
@@ -329,11 +340,26 @@ export default function AdminProductListPage() {
     }
   };
 
+  /**
+   * เปิดขาย: drafts must pass the full check first (incomplete ones are skipped).
+   * ปิดการขาย: only products already published; a แบบร่าง stays a draft.
+   */
   const bulkSetStatus = async (status: AdminProductStatus) => {
-    const ids = [...selectedIds()];
-    await Promise.all(ids.map((id) => store.setStatus(id, status)));
+    const targets = store.products().filter((p) => selectedIds().has(p.id));
+    const skipped = targets.filter((p) => (status === "active" ? p.status === "draft" && productPublishProblems(p).length > 0 : p.status === "draft"));
+    const ok = targets.filter((p) => !skipped.includes(p));
+    await Promise.all(ok.map((p) => store.setStatus(p.id, status)));
     clearSelection();
-    pushToast(status === "active" ? `เปิดขาย ${ids.length} รายการแล้ว` : `ปิดการขาย ${ids.length} รายการแล้ว`, "success");
+    const done = status === "active" ? `เปิดขาย ${ok.length} รายการแล้ว` : `ปิดการขาย ${ok.length} รายการแล้ว`;
+    if (skipped.length === 0) pushToast(done, "success");
+    else
+      pushToast(
+        done,
+        "warning",
+        status === "active"
+          ? `ข้าม ${skipped.length} รายการที่เป็นแบบร่างและข้อมูลยังไม่ครบ: ${skipped.map((p) => p.name).join(", ")}`
+          : `ข้าม ${skipped.length} รายการที่เป็นแบบร่าง`,
+      );
   };
 
   const columns: DataTableColumn<AdminProduct>[] = [

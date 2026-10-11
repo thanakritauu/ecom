@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
+import { landingPagePublishErrors, landingPagePublishStatus } from "~/components/admin/content/landingPagePublish";
 import { mediaImage } from "~/lib/media";
 import { useNavigate } from "@solidjs/router";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
@@ -19,7 +20,7 @@ import { LandingPageStatusSummary } from "~/components/admin/content/LandingPage
 import { LandingPageRowActionsMenu } from "~/components/admin/content/LandingPageRowActionsMenu";
 import { LandingPageQuickView } from "~/components/admin/content/LandingPageQuickView";
 import { RefreshIcon, ContentIcon, PlusIcon, ImageIcon } from "~/components/admin/icons";
-import { LANDING_PAGE_STATUS_META, validatePublishRequirements, findLandingPageReferences, type LandingPage, type LandingPageStatus, promotionPageHref } from "~/lib/adminContent";
+import { LANDING_PAGE_STATUS_META, findLandingPageReferences, type LandingPage, type LandingPageStatus, promotionPageHref } from "~/lib/adminContent";
 import { formatMarketingDate } from "~/lib/adminMarketing";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
@@ -181,20 +182,22 @@ export default function AdminLandingPagesListPage() {
     pushToast(`ลบ "${p.name}" เรียบร้อยแล้ว`, "error");
   };
 
-  const requestToggle = (p: LandingPage) => setConfirmToggle(p);
-  const confirmToggleAction = async () => {
-    const p = confirmToggle();
-    if (!p) return;
+  /** Publishing (a แบบร่าง included) runs the full check first and names what's missing. */
+  const requestToggle = (p: LandingPage) => {
     if (p.status !== "published") {
-      const errs = validatePublishRequirements(p);
+      const errs = landingPagePublishErrors(p);
       if (errs.length > 0) {
-        setConfirmToggle(null);
-        pushToast(`เผยแพร่ "${p.name}" ไม่ได้ ${errs[0]}`, "error");
+        pushToast(`เผยแพร่ "${p.name}" ไม่ได้ ยังขาดข้อมูล ${errs.length} รายการ`, "error", errs.join(", "));
         return;
       }
     }
+    setConfirmToggle(p);
+  };
+  const confirmToggleAction = async () => {
+    const p = confirmToggle();
+    if (!p) return;
     setActionLoading(true);
-    await store.setStatus(p.id, p.status === "published" ? "unpublished" : "published");
+    await store.setStatus(p.id, p.status === "published" ? "unpublished" : p.status === "draft" ? landingPagePublishStatus(p) : "published");
     setActionLoading(false);
     setConfirmToggle(null);
     pushToast(p.status === "published" ? "ยกเลิกการเผยแพร่หน้าแล้ว" : "เผยแพร่หน้าแล้ว", "success");
@@ -219,12 +222,16 @@ export default function AdminLandingPagesListPage() {
   const bulkSetStatus = async (targetStatus: "published" | "unpublished") => {
     const ids = [...selectedIds()];
     const targets = store.pages().filter((p) => ids.includes(p.id));
-    const blocked = targetStatus === "published" ? targets.filter((p) => validatePublishRequirements(p).length > 0) : [];
-    const ok = targets.filter((p) => !blocked.includes(p));
-    await Promise.all(ok.map((p) => store.setStatus(p.id, targetStatus)));
+    const blocked = targetStatus === "published" ? targets.filter((p) => landingPagePublishErrors(p).length > 0) : [];
+    // A แบบร่าง was never live, so "ยกเลิกการเผยแพร่" leaves it as a draft.
+    const skippedDrafts = targetStatus === "unpublished" ? targets.filter((p) => p.status === "draft") : [];
+    const ok = targets.filter((p) => !blocked.includes(p) && !skippedDrafts.includes(p));
+    await Promise.all(ok.map((p) => store.setStatus(p.id, targetStatus === "published" && p.status === "draft" ? landingPagePublishStatus(p) : targetStatus)));
     clearSelection();
     if (blocked.length > 0) {
-      pushToast(`เผยแพร่สำเร็จ ${ok.length} รายการ และเผยแพร่ไม่ได้ ${blocked.length} รายการเพราะข้อมูลไม่ครบ`, "warning");
+      pushToast(`เผยแพร่สำเร็จ ${ok.length} รายการ และเผยแพร่ไม่ได้ ${blocked.length} รายการเพราะข้อมูลไม่ครบ`, "warning", blocked.map((p) => p.name).join(", "));
+    } else if (skippedDrafts.length > 0) {
+      pushToast(`ยกเลิกการเผยแพร่ ${ok.length} รายการแล้ว`, "warning", `ข้าม ${skippedDrafts.length} รายการที่เป็นแบบร่าง`);
     } else {
       pushToast(targetStatus === "published" ? `เผยแพร่ ${ok.length} รายการแล้ว` : `ยกเลิกการเผยแพร่ ${ok.length} รายการแล้ว`, "success");
     }

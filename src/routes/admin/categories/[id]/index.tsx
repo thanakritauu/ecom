@@ -10,7 +10,7 @@ import { CategoryRowActionsMenu } from "~/components/admin/categories/CategoryRo
 import { CatalogIcon } from "~/components/admin/icons";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { STOREFRONT_CATEGORY_ROUTE_SLUGS, CATEGORY_STATUS_META } from "~/lib/adminCategories";
+import { STOREFRONT_CATEGORY_ROUTE_SLUGS, CATEGORY_STATUS_META, categoryPublishProblems } from "~/lib/adminCategories";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { productsInCategory, findCategoryReferencesInPromotionPages } from "~/lib/masterDataRelations";
@@ -48,6 +48,19 @@ export default function AdminCategoryDetailPage() {
   const requestDelete = () => {
     if (dependencyProductCount() > 0 || navigationRefs().length > 0 || pageRefs().length > 0) setBlockedDelete(true);
     else setConfirmDelete(true);
+  };
+
+  /** Draft-first: same checks as the form's บันทึกและเผยแพร่; refuses with a toast naming what's missing. */
+  const publish = async () => {
+    const current = category();
+    if (!current) return;
+    const problems = categoryPublishProblems(current, store.categories());
+    if (problems.length > 0) {
+      pushToast(`เผยแพร่ "${current.name}" ไม่ได้`, "error", `ยังกรอกข้อมูลไม่ครบ: ${problems.join(", ")}`);
+      return;
+    }
+    await store.setStatus(current.id, "active");
+    pushToast(`เผยแพร่ "${current.name}" แล้ว`, "success");
   };
 
   const confirmDeleteAction = async () => {
@@ -88,7 +101,7 @@ export default function AdminCategoryDetailPage() {
             />
             <PageHeader
               title={c().name}
-              description={`/${c().slug}`}
+              description={c().slug ? `/${c().slug}` : undefined}
               actions={
                 <div class="flex items-center gap-2">
                   <Button variant="primary" href={`/admin/categories/${c().id}/edit`}>
@@ -99,14 +112,15 @@ export default function AdminCategoryDetailPage() {
                     name={c().name}
                     hideView
                     onDelete={requestDelete}
+                    onPublish={c().status === "draft" ? () => void publish() : undefined}
                     triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
                   />
                 </div>
               }
             />
 
-            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div class="flex flex-col gap-6 lg:col-span-2">
+            <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div class="flex min-w-0 flex-col gap-6">
                 <Section title={`สินค้าในหมวดหมู่นี้ (${classifiedProducts().length})`}>
                   <p class="-mt-1 text-xs text-ink-gray">สินค้าที่ตั้งค่าหมวดหมู่นี้ไว้ในหน้าแก้ไขสินค้า</p>
                   <Show when={classifiedProducts().length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่มีสินค้าในหมวดหมู่นี้</p>}>

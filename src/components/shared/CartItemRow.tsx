@@ -23,7 +23,7 @@ export function CartItemRow(props: { entry: ResolvedCartLine; variant?: "drawer"
   const lowStock = () => !outOfStock() && product.stockLeft !== undefined && product.stockLeft <= storefrontLowStockThreshold(product);
   const image = () => variant?.image ?? product.image;
   // Same derived % as ProductCard/PDP, against the price this line is actually charged at.
-  const discountPercent = () => getDiscountPercent({ price: props.entry.unitPrice, compareAtPrice: product.compareAtPrice });
+  const discountPercent = () => (product.showDiscountBadge === false ? undefined : getDiscountPercent({ price: props.entry.unitPrice, compareAtPrice: product.compareAtPrice }));
 
   const remove = () => {
     cart.removeLine(product.id, line.variantId);

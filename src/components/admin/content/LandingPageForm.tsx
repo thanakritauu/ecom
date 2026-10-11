@@ -2,6 +2,7 @@ import { createMemo, createSignal, For, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
+import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
 import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { EmptyState } from "~/components/admin/EmptyState";
@@ -9,13 +10,17 @@ import { ChevronDownIcon, EyeIcon, LayersIcon, PlusIcon } from "~/components/adm
 import { BannerUploader } from "./BannerUploader";
 import { PromotionPageProductPicker } from "./PromotionPageProductPicker";
 import { HomepageSectionCard } from "./HomepageSectionCard";
+import { sectionFieldErrors } from "./HomepageSectionForm";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
+import { mediaErrors } from "~/lib/media";
 import { HomepageSectionsPreview } from "./HomepageSectionsPreview";
 import { HomepageFixedSectionsPanel } from "./HomepageFixedSectionsPanel";
 import { PromotionPagePreviewBody, isListingModePage } from "./PromotionPagePreviewBody";
 import { HOMEPAGE_FIXED_SECTIONS, HOMEPAGE_SECTION_TYPE_META, genHomepageSectionId, isValidYoutubeUrl, type HomepageSection, type HomepageSectionType } from "~/lib/adminHomepage";
 import { formatMarketingDateTime, isValidDateRange } from "~/lib/adminMarketing";
 import { StatusBadge } from "~/components/admin/StatusBadge";
-import { slugify, isReservedSlug, promotionPageHref, validatePublishRequirements, PROMOTION_PAGE_STATUS_META, type LandingPage, type LandingPageFormValues, type LandingPageStatus, type PromotionPage } from "~/lib/adminContent";
+import { slugify, isReservedSlug, promotionPageHref, PROMOTION_PAGE_STATUS_META, type LandingPage, type LandingPageFormValues, type LandingPageStatus, type PromotionPage } from "~/lib/adminContent";
 import { writePreviewDraft } from "~/lib/adminPreviewDraft";
 import { pushToast } from "~/lib/toast";
 
@@ -44,9 +49,22 @@ function blankLandingSection(type: HomepageSectionType): HomepageSection {
   };
 }
 
+const BASE_LABELS: Record<string, string> = {
+  name: "ชื่อหน้า",
+  slug: "Slug",
+  startDate: "วันที่เริ่มต้น",
+  endDate: "วันที่สิ้นสุด",
+  banner: "แบนเนอร์หลัก",
+  videoUrl: "วิดีโอ YouTube",
+  title: "หัวข้อ",
+  products: "เลือกสินค้า",
+  sections: "ส่วนเนื้อหาของหน้า",
+};
+const sectionKey = (id: string) => `section:${id}`;
+
 const statusOption = (value: LandingPageStatus) => ({ value, label: PROMOTION_PAGE_STATUS_META[value].label });
-const CREATE_STATUS_OPTIONS = (["draft", "scheduled"] as LandingPageStatus[]).map(statusOption);
-const EDIT_STATUS_OPTIONS = (["draft", "scheduled", "published", "unpublished"] as LandingPageStatus[]).map(statusOption);
+/** Once a page has been published it's on, scheduled or off; "แบบร่าง" is only the state before its first publish. */
+const LIVE_STATUS_OPTIONS = (["published", "scheduled", "unpublished"] as LandingPageStatus[]).map(statusOption);
 
 /**
  * Landing Page Architecture & Promotion Page Migration — was
@@ -57,13 +75,13 @@ const EDIT_STATUS_OPTIONS = (["draft", "scheduled", "published", "unpublished"] 
  * "Skincare", "9.9 Beauty Sale", or any other merchandising page — not just
  * pages that are literally a marketing "promotion". One Create/Edit form
  * shared by `/new` and `/:id/edit`, same "one form, two routes" shape every
- * other Admin form already uses. Create's Floating Bar has two real actions
- * ("บันทึกแบบร่าง"/"เผยแพร่"), so the Status dropdown there only offers
- * Draft/Scheduled — Published is reached solely through the explicit
- * "เผยแพร่" button, which always runs the full publish validation regardless
- * of the dropdown. Edit's single "บันทึกการเปลี่ยนแปลง" button instead saves
- * whatever status the dropdown currently shows, running the same full
- * validation only when that's Published.
+ * other Admin form already uses. Draft-first rule (`DraftPublishActions`):
+ * a new page, or one still in แบบร่าง, has no Status dropdown, only
+ * "บันทึกแบบร่าง" (name + slug) and "บันทึกและเผยแพร่" (full check; a start
+ * date/time in the future makes it "ตั้งเวลาไว้" so it goes live by itself).
+ * After the first publish the single "บันทึกการเปลี่ยนแปลง" button runs the
+ * full check and saves whatever the dropdown (เผยแพร่แล้ว / ตั้งเวลาไว้ /
+ * ยกเลิกการเผยแพร่) shows.
  */
 export function LandingPageForm(props: {
   initial?: LandingPage;
@@ -92,14 +110,43 @@ export function LandingPageForm(props: {
   const [dragIndex, setDragIndex] = createSignal<number | null>(null);
   const [confirmDeleteSection, setConfirmDeleteSection] = createSignal<HomepageSection | null>(null);
 
-  const [errors, setErrors] = createSignal<Record<string, string>>({});
-  const [publishErrors, setPublishErrors] = createSignal<string[]>([]);
+  const [errors, setErrors] = createSignal<FormErrors>({});
+  /** Per-section field errors (only for sections that still need something), shown inside each section card. */
+  const [sectionErrors, setSectionErrors] = createSignal<Record<string, FormErrors>>({});
+  /** Whether the last save attempt needed the full "goes live" check, so fixes re-check against the same rules. */
+  const [fullCheck, setFullCheck] = createSignal(false);
+  const clearError = (key: string) => setErrors((prev) => clearFieldError(prev, key));
+  const labels = createMemo(() => {
+    const out: Record<string, string> = { ...BASE_LABELS };
+    for (const sec of sections()) out[sectionKey(sec.id)] = `ส่วนเนื้อหา: ${sec.name || "ไม่มีชื่อ"}`;
+    return out;
+  });
   const [saving, setSaving] = createSignal(false);
   const [submitError, setSubmitError] = createSignal<string>();
 
-  const updateSection = (id: string, next: HomepageSection) => setSections((list) => list.map((s) => (s.id === id ? next : s)));
-  const toggleSectionEnabled = (id: string) => setSections((list) => list.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
-  const removeSection = (id: string) => setSections((list) => list.filter((s) => s.id !== id));
+  /** Re-checks one section that's already flagged, so its errors disappear as soon as it's fixed. */
+  const recheckSection = (section: HomepageSection | undefined, id: string) => {
+    if (!sectionErrors()[id]) return;
+    const next = section && section.enabled ? sectionFieldErrors(section) : {};
+    if (Object.keys(next).length > 0) setSectionErrors((prev) => ({ ...prev, [id]: next }));
+    else {
+      setSectionErrors(({ [id]: _fixed, ...rest }) => rest);
+      clearError(sectionKey(id));
+    }
+  };
+  const updateSection = (id: string, next: HomepageSection) => {
+    setSections((list) => list.map((s) => (s.id === id ? next : s)));
+    recheckSection(next, id);
+  };
+  const toggleSectionEnabled = (id: string) => {
+    setSections((list) => list.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
+    recheckSection(sections().find((s) => s.id === id), id);
+    if (sections().some((s) => s.enabled)) clearError("sections");
+  };
+  const removeSection = (id: string) => {
+    setSections((list) => list.filter((s) => s.id !== id));
+    recheckSection(undefined, id);
+  };
 
   const moveSection = (index: number, dir: -1 | 1) => {
     setSections((list) => {
@@ -125,6 +172,8 @@ export function LandingPageForm(props: {
     const created = blankLandingSection(type);
     setSections((list) => [...list, created]);
     setExpandedSectionId(created.id);
+    // Sections replace the flat banner/title/products layout, so those requirements no longer apply.
+    setErrors((prev) => ["banner", "title", "products", "sections"].reduce((acc, key) => clearFieldError(acc, key), prev));
   };
 
   /** §25/§10 — new id, "(สำเนา)" name; Product/Collection REFERENCES (`products`/`collectionId`) are copied as-is, still pointing at the same original entities, never duplicated as new entities. */
@@ -151,11 +200,16 @@ export function LandingPageForm(props: {
 
   const handleNameInput = (value: string) => {
     setName(value);
-    if (!slugTouched()) setSlugRaw(slugify(value));
+    if (value.trim()) clearError("name");
+    if (!slugTouched()) {
+      setSlugRaw(slugify(value));
+      if (slugify(value)) clearError("slug");
+    }
   };
   const handleSlugInput = (value: string) => {
     setSlugTouched(true);
     setSlugRaw(value);
+    clearError("slug");
   };
 
   const isHomepage = () => props.initial?.isHomepage ?? false;
@@ -222,33 +276,74 @@ export function LandingPageForm(props: {
     window.open(`/admin/preview/promotion-pages/${props.initial?.id ?? "draft"}?draft=${draftId}`, "_blank");
   };
 
-  const validateLight = (): Record<string, string> => {
-    const next: Record<string, string> = {};
+  /**
+   * Always-on rules (also for drafts): name, slug, dates, video link. When
+   * the page goes live (published, or scheduled to go live by itself), also
+   * everything the storefront page needs to not show up empty: a banner or
+   * video, a heading and products for a flat page; at least one shown
+   * section, and every shown section complete, for a section-built page.
+   */
+  const validate = (targetStatus: LandingPageStatus, full: boolean): { fields: FormErrors; perSection: Record<string, FormErrors> } => {
+    const next: FormErrors = {};
+    const perSection: Record<string, FormErrors> = {};
     if (!name().trim()) next.name = "กรุณากรอกชื่อหน้า";
-    const cleanSlug = slugify(slug());
-    if (!cleanSlug) next.slug = "กรุณากรอก Slug";
-    else if (props.isSlugTaken(cleanSlug)) next.slug = "Slug นี้ถูกใช้ไปแล้ว กรุณาเลือก Slug อื่น";
-    // §35 — reserved-route check doesn't apply to the Homepage's own record (it never routes through `/promotion/:slug`).
-    else if (!isHomepage() && isReservedSlug(cleanSlug)) next.slug = "Slug นี้ซ้ำกับหน้าอื่นของเว็บไซต์ กรุณาเลือก Slug อื่น";
+    if (!isHomepage()) {
+      const cleanSlug = slugify(slug());
+      if (!cleanSlug) next.slug = "กรุณากรอก Slug";
+      else if (props.isSlugTaken(cleanSlug)) next.slug = "Slug นี้ถูกใช้ไปแล้ว กรุณาเลือก Slug อื่น";
+      // §35 — reserved-route check doesn't apply to the Homepage's own record (it never routes through `/promotion/:slug`).
+      else if (isReservedSlug(cleanSlug)) next.slug = "Slug นี้ซ้ำกับหน้าอื่นของเว็บไซต์ กรุณาเลือก Slug อื่น";
+    }
+    // A scheduled page only goes live on its start date (`isPromotionPageVisible`), so it needs one.
+    if (targetStatus === "scheduled" && !startDate()) next.startDate = "กรุณาระบุวันที่เริ่มต้นสำหรับหน้าที่ตั้งเวลาไว้";
     if (startDate() && endDate() && !dateRangeValid()) next.endDate = "วันสิ้นสุดต้องอยู่หลังวันเริ่ม";
     if (videoUrl().trim() && !isValidYoutubeUrl(videoUrl())) next.videoUrl = "ลิงก์ YouTube ไม่ถูกต้อง";
-    return next;
+    if (!full) return { fields: next, perSection };
+
+    if (sections().length === 0 && !isHomepage()) {
+      const banners = { desktop: bannerDesktop(), tablet: bannerTablet(), mobile: bannerMobile() };
+      // A YouTube video takes the banner's place on the storefront (`PromotionPageView`), so it satisfies the banner requirement on its own.
+      if (!banners.desktop && !videoUrl().trim()) next.banner = "กรุณาอัปโหลดแบนเนอร์เดสก์ท็อป หรือใส่ลิงก์วิดีโอ YouTube";
+      const media = [...mediaErrors(banners.desktop, "แบนเนอร์เดสก์ท็อป"), ...mediaErrors(banners.tablet, "แบนเนอร์แท็บเล็ต"), ...mediaErrors(banners.mobile, "แบนเนอร์มือถือ")];
+      if (media.length > 0) next.banner = media.join(", ");
+      if (!title().trim()) next.title = "กรุณากรอกหัวข้อ";
+      if (products().length === 0) next.products = "กรุณาเลือกสินค้าอย่างน้อย 1 รายการ";
+    }
+    if (sections().length > 0 && !isHomepage() && !sections().some((sec) => sec.enabled)) next.sections = "กรุณาเปิดแสดงส่วนเนื้อหาอย่างน้อย 1 ส่วน";
+    for (const sec of sections()) {
+      if (!sec.enabled) continue;
+      const secErrors = sectionFieldErrors(sec);
+      if (Object.keys(secErrors).length > 0) {
+        perSection[sec.id] = secErrors;
+        next[sectionKey(sec.id)] = Object.values(secErrors).join(", ");
+      }
+    }
+    return { fields: next, perSection };
+  };
+
+  // After a failed save, re-check the flat-page fields as they change so each error clears once fixed.
+  const recheckField = (key: string) => {
+    if (!(key in errors())) return;
+    const { fields } = validate(status(), fullCheck());
+    if (!(key in fields)) clearError(key);
+    else setErrors((prev) => ({ ...prev, [key]: fields[key] }));
   };
 
   const submitWith = async (targetStatus: LandingPageStatus, requireFullValidation: boolean) => {
-    const lightErrors = validateLight();
-    setErrors(lightErrors);
-    if (Object.keys(lightErrors).length > 0) return;
-
-    const values = buildValues(targetStatus);
-    if (requireFullValidation) {
-      const pubErrors = validatePublishRequirements(values);
-      setPublishErrors(pubErrors);
-      if (pubErrors.length > 0) return;
-    } else {
-      setPublishErrors([]);
+    setFullCheck(requireFullValidation);
+    const { fields, perSection } = validate(targetStatus, requireFullValidation);
+    setErrors(fields);
+    setSectionErrors(perSection);
+    if (Object.keys(fields).length > 0) {
+      // Open the first broken section so its fields (and messages) are on screen when the page scrolls to it.
+      const firstBroken = sections().find((sec) => perSection[sec.id]);
+      const flatBroken = Object.keys(fields).some((k) => !k.startsWith("section:"));
+      if (firstBroken && !flatBroken) setExpandedSectionId(firstBroken.id);
+      reportFormErrors(fields, labels());
+      return;
     }
 
+    const values = buildValues(targetStatus);
     setSaving(true);
     setSubmitError(undefined);
     try {
@@ -260,23 +355,27 @@ export function LandingPageForm(props: {
     }
   };
 
-  const handleSaveDraft = (e: Event) => {
-    e.preventDefault();
-    submitWith(status(), false);
-  };
-  const handlePublish = (e: Event) => {
-    e.preventDefault();
-    submitWith("published", true);
-  };
-  const handleSaveChanges = (e: SubmitEvent) => {
-    e.preventDefault();
-    submitWith(status(), status() === "published");
+  /** New pages and pages still in แบบร่าง get บันทึกแบบร่าง / บันทึกและเผยแพร่ instead of the Status dropdown. */
+  const draftFlow = props.mode === "create" || props.initial?.status === "draft";
+
+  /** Publishing with a start date/time still ahead schedules the page; otherwise it goes live now. */
+  const publishStatus = (): LandingPageStatus => {
+    if (!startDate()) return "published";
+    const start = new Date(`${startDate()}T${startTime() || "00:00"}`).getTime();
+    return Number.isFinite(start) && start > Date.now() ? "scheduled" : "published";
   };
 
-  const statusOptions = props.mode === "create" ? CREATE_STATUS_OPTIONS : EDIT_STATUS_OPTIONS;
+  const handleSaveDraft = () => submitWith("draft", false);
+  const handlePublish = () => submitWith(publishStatus(), true);
+  const handleSaveChanges = (e?: Event) => {
+    e?.preventDefault();
+    if (draftFlow) return handlePublish();
+    submitWith(status(), true);
+  };
 
   const landingPageForm = (
     <>
+      <FormErrorSummary errors={errors()} labels={labels()} />
       <div class="flex flex-col gap-6">
           <Section title="ข้อมูลพื้นฐาน">
             <Show when={isHomepage()}>
@@ -289,6 +388,7 @@ export function LandingPageForm(props: {
                 placeholder="9.9 Beauty Sale"
                 value={name()}
                 onInput={(e) => handleNameInput(e.currentTarget.value)}
+                data-field="name"
                 error={errors().name}
                 disabled={saving()}
                 class="sm:col-span-2"
@@ -300,6 +400,7 @@ export function LandingPageForm(props: {
                 placeholder="9-9-beauty-sale"
                 value={slug()}
                 onInput={(e) => handleSlugInput(e.currentTarget.value)}
+                data-field="slug"
                 error={errors().slug}
                 disabled={saving()}
                 class="sm:col-span-2"
@@ -313,46 +414,90 @@ export function LandingPageForm(props: {
                   หน้านี้คือหน้าแรกของเว็บไซต์ ลิงก์หน้าร้าน <span class="font-medium text-ink">/</span>
                 </p>
               </Show>
+              <Show
+                when={!draftFlow}
+                fallback={
+                  <p class="text-xs text-ink-gray sm:col-span-2">
+                    {props.initial ? "หน้านี้ยังเป็นแบบร่าง ไม่แสดงบนหน้าร้าน" : "บันทึกแบบร่างไว้ก่อนได้ แล้วกด บันทึกและเผยแพร่ เมื่อข้อมูลครบ ถ้าวันเริ่มยังมาไม่ถึง หน้าจะแสดงเองเมื่อถึงเวลา"}
+                  </p>
+                }
+              >
               <label class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">สถานะ</span>
                 <div class="relative">
                   <select
                     value={status()}
                     disabled={saving()}
-                    onChange={(e) => setStatus(e.currentTarget.value as LandingPageStatus)}
+                    onChange={(e) => {
+                      setStatus(e.currentTarget.value as LandingPageStatus);
+                      recheckField("startDate");
+                    }}
                     class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
                   >
-                    {statusOptions.map((opt) => (
+                    {LIVE_STATUS_OPTIONS.map((opt) => (
                       <option value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
                   <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
                 </div>
               </label>
+              </Show>
             </div>
           </Section>
 
           <Section title="กำหนดเวลาเผยแพร่">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <TextField label="วันที่เริ่มต้น" type="date" value={startDate()} onInput={(e) => setStartDate(e.currentTarget.value)} disabled={saving()} />
-              <TextField label="เวลาเริ่มต้น" type="time" value={startTime()} onInput={(e) => setStartTime(e.currentTarget.value)} disabled={saving()} />
-              <TextField label="วันที่สิ้นสุด" type="date" value={endDate()} onInput={(e) => setEndDate(e.currentTarget.value)} error={errors().endDate} disabled={saving()} />
-              <TextField label="เวลาสิ้นสุด" type="time" value={endTime()} onInput={(e) => setEndTime(e.currentTarget.value)} disabled={saving()} />
+              <TextField
+                label="วันที่เริ่มต้น"
+                type="date"
+                required={!draftFlow && status() === "scheduled"}
+                value={startDate()}
+                onInput={(e) => {
+                  setStartDate(e.currentTarget.value);
+                  recheckField("startDate");
+                  recheckField("endDate");
+                }}
+                data-field="startDate"
+                error={errors().startDate}
+                disabled={saving()}
+              />
+              <TextField label="เวลาเริ่มต้น" type="time" value={startTime()} onInput={(e) => { setStartTime(e.currentTarget.value); recheckField("endDate"); }} disabled={saving()} />
+              <TextField
+                label="วันที่สิ้นสุด"
+                type="date"
+                value={endDate()}
+                onInput={(e) => {
+                  setEndDate(e.currentTarget.value);
+                  recheckField("endDate");
+                }}
+                data-field="endDate"
+                error={errors().endDate}
+                disabled={saving()}
+              />
+              <TextField label="เวลาสิ้นสุด" type="time" value={endTime()} onInput={(e) => { setEndTime(e.currentTarget.value); recheckField("endDate"); }} disabled={saving()} />
             </div>
           </Section>
 
           <Show when={!isHomepage()}>
-          <Section title="แบนเนอร์หลัก">
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <BannerUploader allowVideo label="แบนเนอร์เดสก์ท็อป" device="desktop" value={bannerDesktop()} onChange={(v) => setBannerDesktop(() => v)} />
-              <BannerUploader allowVideo label="แบนเนอร์แท็บเล็ต" device="tablet" value={bannerTablet()} onChange={(v) => setBannerTablet(() => v)} />
-              <BannerUploader allowVideo label="แบนเนอร์มือถือ" device="mobile" value={bannerMobile()} onChange={(v) => setBannerMobile(() => v)} />
+          <Section title="แบนเนอร์หลัก" required={sections().length === 0}>
+            <div data-field="banner" class="flex flex-col gap-2">
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <BannerUploader allowVideo label="แบนเนอร์เดสก์ท็อป" device="desktop" value={bannerDesktop()} onChange={(v) => { setBannerDesktop(() => v); recheckField("banner"); }} />
+                <BannerUploader allowVideo label="แบนเนอร์แท็บเล็ต" device="tablet" value={bannerTablet()} onChange={(v) => { setBannerTablet(() => v); recheckField("banner"); }} />
+                <BannerUploader allowVideo label="แบนเนอร์มือถือ" device="mobile" value={bannerMobile()} onChange={(v) => { setBannerMobile(() => v); recheckField("banner"); }} />
+              </div>
+              <FieldMessage message={errors().banner} />
             </div>
             <TextField
               label="วิดีโอ YouTube (แสดงแทนแบนเนอร์)"
               placeholder="https://www.youtube.com/watch?v=..."
               value={videoUrl()}
-              onInput={(e) => setVideoUrl(e.currentTarget.value)}
+              onInput={(e) => {
+                setVideoUrl(e.currentTarget.value);
+                recheckField("videoUrl");
+                recheckField("banner");
+              }}
+              data-field="videoUrl"
               error={errors().videoUrl ?? (videoUrl().trim() && !isValidYoutubeUrl(videoUrl()) ? "ลิงก์ YouTube ไม่ถูกต้อง" : undefined)}
               disabled={saving()}
             />
@@ -361,7 +506,19 @@ export function LandingPageForm(props: {
 
           <Section title="เนื้อหาหน้า">
             <div class="flex flex-col gap-4">
-              <TextField label="หัวข้อ" placeholder="Beauty Sale" value={title()} onInput={(e) => setTitle(e.currentTarget.value)} disabled={saving()} />
+              <TextField
+                label="หัวข้อ"
+                required={sections().length === 0}
+                placeholder="Beauty Sale"
+                value={title()}
+                onInput={(e) => {
+                  setTitle(e.currentTarget.value);
+                  recheckField("title");
+                }}
+                data-field="title"
+                error={errors().title}
+                disabled={saving()}
+              />
               <label class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">คำอธิบาย</span>
                 <textarea
@@ -376,8 +533,17 @@ export function LandingPageForm(props: {
             </div>
           </Section>
 
-          <Section title="เลือกสินค้า">
-            <PromotionPageProductPicker selected={products()} onChange={setProducts} />
+          <Section title="เลือกสินค้า" required={sections().length === 0}>
+            <div data-field="products" class="flex flex-col gap-2">
+              <PromotionPageProductPicker
+                selected={products()}
+                onChange={(next) => {
+                  setProducts(next);
+                  recheckField("products");
+                }}
+              />
+              <FieldMessage message={errors().products} />
+            </div>
             <p class="text-xs text-ink-gray">รายการสินค้านี้ใช้เมื่อยังไม่มีส่วนเนื้อหาด้านล่าง เมื่อเพิ่มส่วนเนื้อหาแล้ว หน้าเว็บจะแสดงผลตามส่วนเนื้อหาแทน</p>
           </Section>
           </Show>
@@ -391,6 +557,9 @@ export function LandingPageForm(props: {
           <Section title="ส่วนเนื้อหาของหน้า">
             <div class="flex flex-col gap-4">
               <p class="text-sm text-ink-gray">เพิ่มส่วนเนื้อหาแล้วจัดลำดับได้ตามต้องการ หน้าเว็บแสดงจากบนลงล่างตามลำดับนี้</p>
+              <div data-field="sections">
+                <FieldMessage message={errors().sections} />
+              </div>
               <div class="flex flex-wrap gap-2">
                 <For each={ADD_SECTION_TYPE_OPTIONS}>
                   {(type) => (
@@ -408,8 +577,10 @@ export function LandingPageForm(props: {
                 <div class="flex flex-col gap-3">
                   <For each={sections()}>
                     {(section, index) => (
+                      <div data-field={sectionKey(section.id)}>
                       <HomepageSectionCard
                         section={section}
+                        errors={sectionErrors()[section.id]}
                         index={index()}
                         total={sections().length}
                         expanded={expandedSectionId() === section.id}
@@ -428,6 +599,7 @@ export function LandingPageForm(props: {
                           setDragIndex(null);
                         }}
                       />
+                      </div>
                     )}
                   </For>
                 </div>
@@ -436,17 +608,6 @@ export function LandingPageForm(props: {
           </Section>
 
         </div>
-
-      <Show when={publishErrors().length > 0}>
-        <div role="alert" class="rounded-card bg-danger-soft px-4 py-3 text-sm font-medium text-danger-strong">
-          <p class="mb-1">ยังเผยแพร่ไม่ได้ กรุณาแก้ไขรายการต่อไปนี้</p>
-          <ul class="list-inside list-disc">
-            {publishErrors().map((msg) => (
-              <li>{msg}</li>
-            ))}
-          </ul>
-        </div>
-      </Show>
 
       <Show when={submitError()}>
         <p role="alert" class="rounded-card bg-danger-soft px-4 py-3 text-sm font-medium text-danger-strong">
@@ -498,28 +659,18 @@ export function LandingPageForm(props: {
   );
 
   return (
-    <form onSubmit={handleSaveChanges} class="flex flex-col gap-6">
+    <form onSubmit={handleSaveChanges} noValidate class="flex flex-col gap-6">
       <AdminFormPreviewLayout form={landingPageForm} preview={landingPagePreview} />
 
       <AdminFloatingBar>
-        <div class="flex w-full flex-wrap justify-end gap-3">
-          <Button type="button" variant="outline" onClick={props.onCancel} disabled={saving()}>
-            ยกเลิก
-          </Button>
-          <Show when={props.mode === "create"}>
-            <Button type="button" variant="outline" onClick={handleSaveDraft} loading={saving()}>
-              บันทึกแบบร่าง
-            </Button>
-            <Button type="button" variant="primary" onClick={handlePublish} loading={saving()}>
-              เผยแพร่
-            </Button>
-          </Show>
-          <Show when={props.mode === "edit"}>
-            <Button type="submit" variant="primary" loading={saving()}>
-              {saving() ? "กำลังบันทึก..." : "บันทึกการเปลี่ยนแปลง"}
-            </Button>
-          </Show>
-        </div>
+        <DraftPublishActions
+          draft={draftFlow}
+          saving={saving()}
+          onCancel={props.onCancel}
+          onSaveDraft={handleSaveDraft}
+          onPublish={handlePublish}
+          onSave={() => handleSaveChanges()}
+        />
       </AdminFloatingBar>
       <div class="h-16" aria-hidden="true" />
 
@@ -536,10 +687,26 @@ export function LandingPageForm(props: {
   );
 }
 
-function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
+function FieldMessage(props: { message?: string }) {
+  return (
+    <Show when={props.message}>
+      <p role="alert" class="text-sm text-system-red">{props.message}</p>
+    </Show>
+  );
+}
+
+function Section(props: { title: string; required?: boolean; children: import("solid-js").JSX.Element }) {
   return (
     <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-      <h2 class="text-base font-semibold text-ink">{props.title}</h2>
+      <h2 class="text-base font-semibold text-ink">
+        {props.title}
+        <Show when={props.required}>
+          <span class="text-system-red" aria-hidden="true">
+            {" "}
+            *
+          </span>
+        </Show>
+      </h2>
       {props.children}
     </div>
   );

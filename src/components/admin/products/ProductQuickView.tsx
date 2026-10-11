@@ -1,4 +1,5 @@
 import { createEffect, createSignal, Show } from "solid-js";
+import { richTextToPlain } from "~/lib/richText";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { getStockStatus, STOCK_STATUS_META, stockStatusLabel, ADMIN_PRODUCT_STATUS_META, type AdminProduct } from "~/lib/adminProductStore";
@@ -80,8 +81,8 @@ export function ProductQuickView(props: { product: AdminProduct }) {
         <Field label="หมวดหมู่" value={categoryLabel()} />
       </div>
 
-      <Show when={p().description}>
-        <p class="line-clamp-4 text-sm text-ink-gray">{p().description}</p>
+      <Show when={richTextToPlain(p().description)}>
+        {(text) => <p class="line-clamp-4 whitespace-pre-line text-sm leading-[1.75] text-ink-gray">{text()}</p>}
       </Show>
     </div>
   );

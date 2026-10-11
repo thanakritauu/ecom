@@ -3,11 +3,13 @@ import { Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { MoreIcon } from "~/components/admin/icons";
 
-/** Same Kobalte dropdown shell as `LandingPageRowActionsMenu`: view, edit, on/off, delete. */
+/** Same Kobalte dropdown shell as `LandingPageRowActionsMenu`: view, edit, on/off (เผยแพร่ for a draft), delete. */
 export function CollectionRowActionsMenu(props: {
   id: string;
   name: string;
   isActive: boolean;
+  /** A แบบร่าง: the on/off item reads เผยแพร่ instead (the caller runs the publish checks). */
+  isDraft?: boolean;
   onToggleStatus: () => void;
   onDelete: () => void;
   hideView?: boolean;
@@ -45,7 +47,7 @@ export function CollectionRowActionsMenu(props: {
             onSelect={props.onToggleStatus}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
           >
-            {props.isActive ? "ปิดใช้งาน" : "เปิดใช้งาน"}
+            {props.isDraft ? "เผยแพร่" : props.isActive ? "ปิดใช้งาน" : "เปิดใช้งาน"}
           </DropdownMenu.Item>
           <DropdownMenu.Separator class="my-1 h-px bg-border" />
           <DropdownMenu.Item

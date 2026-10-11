@@ -19,7 +19,7 @@ export default function AdminProductCollectionEditPage() {
     const current = collection();
     if (!current) return;
     await store.update(current.id, values);
-    pushToast("บันทึกกลุ่มสินค้าพิเศษเรียบร้อยแล้ว", "success");
+    pushToast(values.status === "draft" ? "บันทึกแบบร่างเรียบร้อยแล้ว" : current.status === "draft" ? "เผยแพร่กลุ่มสินค้าพิเศษเรียบร้อยแล้ว" : "บันทึกกลุ่มสินค้าพิเศษเรียบร้อยแล้ว", "success");
     navigate(`/admin/content/product-collections/${current.id}`);
   };
 
@@ -45,7 +45,7 @@ export default function AdminProductCollectionEditPage() {
             ]}
           />
           <PageHeader title={`แก้ไข: ${current().name}`} description="แก้ไขข้อมูลกลุ่มสินค้าพิเศษและบันทึกการเปลี่ยนแปลง" />
-          <ProductCollectionForm submitLabel="บันทึกการเปลี่ยนแปลง" initial={current()} onSubmit={handleSubmit} onCancel={() => navigate(`/admin/content/product-collections/${current().id}`)} />
+          <ProductCollectionForm initial={current()} onSubmit={handleSubmit} onCancel={() => navigate(`/admin/content/product-collections/${current().id}`)} />
         </div>
       )}
     </Show>

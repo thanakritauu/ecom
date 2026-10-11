@@ -3,6 +3,7 @@ import { isServer } from "solid-js/web";
 import { allProducts, flashSaleRoundEndsAt, getDiscountPercent } from "./products";
 import type { Product, ProductVariant } from "./types";
 import { normalizeMedia, type MediaValue } from "./media";
+import { isRichTextEmpty } from "./richText";
 import { buildMockCategories } from "./adminCategories";
 import categoryBrow from "~/assets/images/category/category-brow.png";
 import categoryCheek from "~/assets/images/category/category-cheek.png";
@@ -99,6 +100,23 @@ export function lowStockThresholdOf(product: Partial<Pick<AdminProduct, "lowStoc
 
 /** Only these reach the storefront: drafts and products switched off stay in Admin. */
 export const isProductOnSale = (product: Pick<AdminProduct, "status">) => product.status === "active";
+
+/**
+ * What a saved product still lacks before it can go on sale (same required
+ * fields as ProductForm's full check). Used by list actions that publish a
+ * แบบร่าง without opening the form; empty = ready.
+ */
+export function productPublishProblems(product: AdminProduct): string[] {
+  const missing: string[] = [];
+  if (!product.name.trim()) missing.push("ชื่อสินค้า");
+  if (!product.sku.trim()) missing.push("SKU");
+  if (!product.categoryId) missing.push("หมวดหมู่");
+  if (!(product.images?.length || product.image)) missing.push("รูปสินค้า");
+  if (isRichTextEmpty(product.description)) missing.push("รายละเอียดสินค้า");
+  if (!(product.price > 0)) missing.push("ราคาขาย");
+  if (typeof product.stockLeft !== "number" || product.stockLeft < 0) missing.push("จำนวนสต๊อก");
+  return missing;
+}
 
 export function getStockStatus(product: Pick<AdminProduct, "stockLeft" | "lowStockThreshold">): StockStatus {
   const left = product.stockLeft ?? 0;
@@ -265,11 +283,13 @@ export function withDailyFlashSaleEnd(p: AdminProduct): AdminProduct {
   return p.flashSaleDaily ? { ...p, flashSaleEndsAt: flashSaleRoundEndsAt() } : p;
 }
 
-function flashSaleFields(input: Pick<ProductFormValues, "flashSaleEndsAt" | "flashSaleDaily">): Pick<AdminProduct, "flashSaleEndsAt" | "flashSaleDaily"> {
-  if (input.flashSaleEndsAt === undefined && !input.flashSaleDaily) return { flashSaleEndsAt: undefined, flashSaleDaily: undefined };
+function flashSaleFields(
+  input: Pick<ProductFormValues, "flashSaleEndsAt" | "flashSaleStartsAt" | "flashSaleDaily">,
+): Pick<AdminProduct, "flashSaleEndsAt" | "flashSaleStartsAt" | "flashSaleDaily"> {
+  if (input.flashSaleEndsAt === undefined && !input.flashSaleDaily) return { flashSaleEndsAt: undefined, flashSaleStartsAt: undefined, flashSaleDaily: undefined };
   return input.flashSaleDaily
-    ? { flashSaleEndsAt: flashSaleRoundEndsAt(), flashSaleDaily: true }
-    : { flashSaleEndsAt: input.flashSaleEndsAt, flashSaleDaily: undefined };
+    ? { flashSaleEndsAt: flashSaleRoundEndsAt(), flashSaleStartsAt: undefined, flashSaleDaily: true }
+    : { flashSaleEndsAt: input.flashSaleEndsAt, flashSaleStartsAt: input.flashSaleStartsAt, flashSaleDaily: undefined };
 }
 
 export function normalizeAdminProduct(stored: AdminProduct): AdminProduct {
@@ -285,6 +305,10 @@ export function normalizeAdminProduct(stored: AdminProduct): AdminProduct {
     adminVariants: Array.isArray(p.adminVariants) ? p.adminVariants.map(normalizeVariant) : [],
     // Gallery items that may be videos (`~/lib/media`); absent on every product saved before video existed.
     media: Array.isArray(p.media) ? p.media.map(normalizeMedia) : undefined,
+    // One-off flash sales saved before a start time existed have none (= open since saved); a daily round never has one.
+    flashSaleStartsAt: !p.flashSaleDaily && typeof p.flashSaleStartsAt === "number" && Number.isFinite(p.flashSaleStartsAt) ? p.flashSaleStartsAt : undefined,
+    // Only `false` is stored; unset = badge shown.
+    showDiscountBadge: p.showDiscountBadge === false ? false : undefined,
   };
 }
 
@@ -307,8 +331,14 @@ export type ProductFormValues = {
   adminVariants: AdminVariant[];
   /** REAL-TIME LIVE PREVIEW SYSTEM §4/§8 — epoch ms; unset/undefined = no Flash Sale. */
   flashSaleEndsAt?: number;
+  /** One-off flash sale start (epoch ms); required with `flashSaleEndsAt` when not daily. */
+  flashSaleStartsAt?: number;
   /** See `AdminProduct.flashSaleDaily` — when true, `flashSaleEndsAt` is ignored and re-derived on read. */
   flashSaleDaily?: boolean;
+  /** "แสดงป้ายลดราคา": `false` hides the "ลด X%" badge on the storefront. */
+  showDiscountBadge?: boolean;
+  /** Form only (not stored on the product): TikTok clips to link to this product; the routes apply it with `setProductTiktokClips`. */
+  tiktokClipIds?: string[];
   /** Flash Sale progress bar's "of N" — defaults to the larger of the old total and `stockLeft`. */
   stockTotal?: number;
   /** Mock merchandising numbers the Product Card's rating/sold row shows (unset = row hidden). */
@@ -534,6 +564,7 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
       price: input.price,
       compareAtPrice: input.compareAtPrice,
       discountPercent: getDiscountPercent(input),
+      showDiscountBadge: input.showDiscountBadge === false ? false : undefined,
       stockLeft: input.stockLeft,
       stockTotal: Math.max(input.stockTotal ?? 0, input.stockLeft),
       category: input.category ?? storefrontCategoryOf(input.categoryId),
@@ -572,6 +603,7 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
           compareAtPrice: input.compareAtPrice,
           // Stored too (not only derived) — a few readers still take the stored percent as-is.
           discountPercent: getDiscountPercent(input),
+          showDiscountBadge: input.showDiscountBadge === false ? false : undefined,
           stockLeft: input.stockLeft,
           stockTotal: Math.max(input.stockTotal ?? p.stockTotal ?? 0, input.stockLeft),
           lowStockThreshold: input.lowStockThreshold,

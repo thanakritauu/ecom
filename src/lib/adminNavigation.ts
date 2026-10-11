@@ -66,7 +66,15 @@ export type NavigationItem = {
   /** An uploaded icon image (object URL / data URI / absolute path, see `isImageIconSrc`). Empty string = no icon, a valid state. */
   icon: string;
   order: number;
+  /** เปิด / ปิด after the first publish. Always false while `draft`. */
   visible: boolean;
+  /**
+   * Draft-first rule: a new menu item is saved as แบบร่าง (only a label
+   * needed) and never shows on the storefront until its first publish. Optional
+   * so menus saved before drafts existed read as published (their own
+   * `visible` unchanged).
+   */
+  draft?: boolean;
   parentId?: string;
   targetType: NavigationTargetType;
   targetId?: string;
@@ -125,7 +133,9 @@ export function normalizeNavigationItem(raw: Partial<NavigationItem> & { id: str
     label: raw.label ?? "",
     icon: normalizeNavIcon(raw.icon),
     order: typeof raw.order === "number" && Number.isFinite(raw.order) ? raw.order : 0,
-    visible: raw.visible ?? true,
+    draft: raw.draft === true,
+    // A draft is never live, whatever `visible` says.
+    visible: raw.draft === true ? false : raw.visible ?? true,
     parentId: raw.parentId && raw.parentId !== raw.id ? raw.parentId : undefined,
     targetType,
     targetId: targetRequiresId(targetType) ? raw.targetId || undefined : undefined,
@@ -140,6 +150,20 @@ export function isNavigationItemConfigValid(item: NavigationItem): boolean {
   if (targetRequiresId(item.targetType)) return !!item.targetId;
   if (targetRequiresExternalUrl(item.targetType)) return !!item.externalUrl?.trim();
   return true;
+}
+
+/**
+ * What a draft menu item still lacks before it can go live (same checks as
+ * the drawer's บันทึกและเผยแพร่), as field names for the เผยแพร่ toast.
+ * Empty = ready to publish. `targetExists` says whether the picked target id
+ * still exists (a deleted target can't be published to).
+ */
+export function navigationItemPublishProblems(item: NavigationItem, targetExists: (type: NavigationTargetType, id: string) => boolean): string[] {
+  const problems: string[] = [];
+  if (!item.label.trim()) problems.push("ชื่อเมนู");
+  if (targetRequiresId(item.targetType) && (!item.targetId || !targetExists(item.targetType, item.targetId))) problems.push("ปลายทาง");
+  if (targetRequiresExternalUrl(item.targetType) && !/^https?:\/\/\S+$/i.test(item.externalUrl?.trim() ?? "")) problems.push("URL ภายนอก");
+  return problems;
 }
 
 /** Every id currently in `parentId`'s ancestor chain of `id` — used to stop an item being re-parented under its own descendant (a circular menu tree), §11/§12. */
@@ -256,7 +280,14 @@ export function withLateNavigationSeeds(list: NavigationItem[]): NavigationItem[
   return withSequentialOrder([...list, { ...seed, order: after ? after.order + 0.5 : list.length + 1 }]);
 }
 
-export const NAVIGATION_VISIBILITY_META: Record<"visible" | "hidden", { label: string; tone: StatusTone }> = {
+export type NavigationItemState = "draft" | "visible" | "hidden";
+
+export const NAVIGATION_VISIBILITY_META: Record<NavigationItemState, { label: string; tone: StatusTone }> = {
+  draft: { label: "แบบร่าง", tone: "info" },
   visible: { label: "แสดง", tone: "success" },
   hidden: { label: "ซ่อน", tone: "neutral" },
 };
+
+export function navigationItemState(item: Pick<NavigationItem, "draft" | "visible">): NavigationItemState {
+  return item.draft ? "draft" : item.visible ? "visible" : "hidden";
+}

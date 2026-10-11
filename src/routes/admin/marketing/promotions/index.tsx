@@ -26,6 +26,7 @@ import {
   formatMarketingDateTime,
   formatPromotionDiscount,
   marketingPhase,
+  promotionPublishProblems,
   type MarketingPhase,
   type Promotion,
   type PromotionType,
@@ -151,24 +152,37 @@ export default function AdminPromotionListPage() {
     pushToast(`ลบ "${p.name}" เรียบร้อยแล้ว`, "error");
   };
 
+  /** A แบบร่าง is published (full check first, names what's missing); never switched off. */
+  const publishBlocked = (p: Promotion): boolean => {
+    if (p.status !== "draft") return false;
+    const missing = promotionPublishProblems(p);
+    if (missing.length === 0) return false;
+    pushToast(`เผยแพร่ "${p.name}" ไม่ได้ ยังขาดข้อมูล ${missing.length} รายการ`, "error", missing.join(", "));
+    return true;
+  };
+  const requestToggle = (p: Promotion) => {
+    if (!publishBlocked(p)) setConfirmToggle(p);
+  };
+
   const confirmToggleAction = async () => {
     const p = confirmToggle();
     if (!p) return;
-    const turnOn = p.status === "disabled";
+    const turnOn = p.status !== "active";
     setActionLoading(true);
     await store.setStatus(p.id, turnOn ? "active" : "disabled");
     setActionLoading(false);
     setConfirmToggle(null);
-    pushToast(turnOn ? "เปิดใช้งานโปรโมชั่นแล้ว" : "ปิดใช้งานโปรโมชั่นแล้ว", "success");
+    pushToast(turnOn ? (p.status === "draft" ? "เผยแพร่โปรโมชั่นแล้ว" : "เปิดใช้งานโปรโมชั่นแล้ว") : "ปิดใช้งานโปรโมชั่นแล้ว", "success");
   };
 
   // Quick on/off for trying promos on the storefront: no confirm, the cart updates as soon as it's saved.
   const [switching, setSwitching] = createSignal<string | null>(null);
   const switchLive = async (p: Promotion, on: boolean) => {
+    if (on && publishBlocked(p)) return;
     setSwitching(p.id);
     await store.setStatus(p.id, on ? "active" : "disabled");
     setSwitching(null);
-    pushToast(on ? `เปิดใช้ "${p.name}" แล้ว` : `ปิด "${p.name}" แล้ว`, "success");
+    pushToast(on ? (p.status === "draft" ? `เผยแพร่ "${p.name}" แล้ว` : `เปิดใช้ "${p.name}" แล้ว`) : `ปิด "${p.name}" แล้ว`, "success");
   };
   const LiveSwitch = (props: { row: Promotion }) => (
     <span onClick={(e) => e.stopPropagation()} class="inline-flex">
@@ -192,11 +206,26 @@ export default function AdminPromotionListPage() {
     pushToast(`ลบโปรโมชั่น ${ids.length} รายการเรียบร้อยแล้ว`, "error");
   };
 
+  /**
+   * เปิดใช้งาน: drafts must pass the full check first (incomplete ones are skipped).
+   * ปิดใช้งาน: only ones already published; a แบบร่าง stays a draft.
+   */
   const bulkSetStatus = async (status: "active" | "disabled") => {
-    const ids = [...selectedIds()];
-    await Promise.all(ids.map((id) => store.setStatus(id, status)));
+    const targets = store.items().filter((x) => selectedIds().has(x.id));
+    const skipped = targets.filter((x) => x.status === "draft" && (status === "disabled" || promotionPublishProblems(x).length > 0));
+    const ok = targets.filter((x) => !skipped.includes(x));
+    await Promise.all(ok.map((x) => store.setStatus(x.id, status)));
     clearSelection();
-    pushToast(status === "active" ? `เปิดใช้งาน ${ids.length} รายการแล้ว` : `ปิดใช้งาน ${ids.length} รายการแล้ว`, "success");
+    const done = status === "active" ? `เปิดใช้งาน ${ok.length} รายการแล้ว` : `ปิดใช้งาน ${ok.length} รายการแล้ว`;
+    if (skipped.length === 0) pushToast(done, "success");
+    else
+      pushToast(
+        done,
+        "warning",
+        status === "active"
+          ? `ข้าม ${skipped.length} รายการที่เป็นแบบร่างและข้อมูลยังไม่ครบ: ${skipped.map((x) => x.name).join(", ")}`
+          : `ข้าม ${skipped.length} รายการที่เป็นแบบร่าง`,
+      );
   };
 
   const scopeLabel = (p: Promotion) => {
@@ -265,8 +294,9 @@ export default function AdminPromotionListPage() {
           entity="โปรโมชั่น"
           basePath="/admin/marketing/promotions"
           isDisabled={row.status === "disabled"}
+          isDraft={row.status === "draft"}
           onDuplicate={() => handleDuplicate(row)}
-          onToggleStatus={() => setConfirmToggle(row)}
+          onToggleStatus={() => requestToggle(row)}
           onDelete={() => setConfirmDelete(row)}
         />
       ),
@@ -366,8 +396,9 @@ export default function AdminPromotionListPage() {
                       entity="โปรโมชั่น"
                       basePath="/admin/marketing/promotions"
                       isDisabled={row.status === "disabled"}
+                      isDraft={row.status === "draft"}
                       onDuplicate={() => handleDuplicate(row)}
-                      onToggleStatus={() => setConfirmToggle(row)}
+                      onToggleStatus={() => requestToggle(row)}
                       onDelete={() => setConfirmDelete(row)}
                       triggerClass="flex size-9 shrink-0 items-center justify-center self-start rounded-pill text-ink-gray hover:bg-surface-pink"
                     />
@@ -423,13 +454,13 @@ export default function AdminPromotionListPage() {
       <ConfirmDialog
         open={confirmToggle() !== null}
         onOpenChange={(open) => !open && setConfirmToggle(null)}
-        title={confirmToggle()?.status === "disabled" ? "เปิดใช้งานโปรโมชั่นนี้?" : "ปิดใช้งานโปรโมชั่นนี้?"}
+        title={confirmToggle()?.status === "draft" ? "เผยแพร่โปรโมชั่นนี้?" : confirmToggle()?.status === "disabled" ? "เปิดใช้งานโปรโมชั่นนี้?" : "ปิดใช้งานโปรโมชั่นนี้?"}
         description={
-          confirmToggle()?.status === "disabled"
+          confirmToggle()?.status !== "active"
             ? `"${confirmToggle()?.name ?? ""}" จะมีผลในตะกร้าตามวันที่ที่ตั้งไว้`
             : `"${confirmToggle()?.name ?? ""}" จะหยุดมีผลในตะกร้าทันที`
         }
-        confirmLabel={confirmToggle()?.status === "disabled" ? "เปิดใช้งาน" : "ปิดใช้งาน"}
+        confirmLabel={confirmToggle()?.status === "draft" ? "เผยแพร่" : confirmToggle()?.status === "disabled" ? "เปิดใช้งาน" : "ปิดใช้งาน"}
         loading={actionLoading()}
         onConfirm={confirmToggleAction}
       />

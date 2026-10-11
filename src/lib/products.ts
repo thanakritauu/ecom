@@ -623,9 +623,22 @@ export const isBestSeller = (p: Pick<Product, "id">): boolean => p.id.startsWith
 export const isNewArrival = (p: Pick<Product, "id">): boolean => p.id.startsWith("new-");
 export const isTrending = (p: Pick<Product, "id">): boolean => p.id.startsWith("trend-");
 export const isFeatured = (p: Pick<Product, "id">): boolean => p.id.startsWith("feature-");
-/** In the flash sale now: a daily round never runs out; a fixed end time drops the product once it has passed. */
-export const isFlashSale = (p: { flashSaleEndsAt?: number; flashSaleDaily?: boolean }): boolean =>
-  !!p.flashSaleEndsAt && (!!p.flashSaleDaily || p.flashSaleEndsAt > Date.now());
+/**
+ * In the flash sale now: a daily round never runs out; a one-off window
+ * (`flashSaleStartsAt` to `flashSaleEndsAt`) only counts while now is inside
+ * it, so before its start and after its end the product isn't shown as flash sale.
+ */
+export const isFlashSale = (p: { flashSaleEndsAt?: number; flashSaleStartsAt?: number; flashSaleDaily?: boolean }, now = Date.now()): boolean =>
+  !!p.flashSaleEndsAt && (!!p.flashSaleDaily || (p.flashSaleEndsAt > now && (!p.flashSaleStartsAt || p.flashSaleStartsAt <= now)));
+
+/** A one-off flash sale that's set up but hasn't started yet ("รอเริ่ม"). */
+export const isFlashSaleUpcoming = (p: { flashSaleEndsAt?: number; flashSaleStartsAt?: number; flashSaleDaily?: boolean }, now = Date.now()): boolean =>
+  !!p.flashSaleEndsAt && !p.flashSaleDaily && !!p.flashSaleStartsAt && p.flashSaleStartsAt > now;
+
+/** The "ลด X%" badge number, or `undefined` when there's no discount or Admin switched the badge off (`showDiscountBadge: false`). */
+export function discountBadgePercent(p: Pick<Product, "price" | "compareAtPrice" | "showDiscountBadge">): number | undefined {
+  return p.showDiscountBadge === false ? undefined : getDiscountPercent(p);
+}
 
 /**
  * Discount badge % — always derived from the two real prices

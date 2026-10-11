@@ -2,7 +2,7 @@ import { createSignal, For, Show } from "solid-js";
 import { A } from "@solidjs/router";
 import { clientOnly } from "@solidjs/start";
 import type { Product } from "~/lib/types";
-import { getDiscountPercent } from "~/lib/products";
+import { discountBadgePercent } from "~/lib/products";
 import { resolveVariantOptions } from "~/lib/productVariants";
 import { useCart } from "~/lib/cart";
 import { useWishlist } from "~/lib/wishlist";
@@ -74,7 +74,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
   // apart. Routes to the dedicated Out of Stock PDP (`/product/:slug/out-of-stock`)
   // instead of the normal one only when this product itself has no stock.
   const productDetailHref = () => `/product/${props.product.slug}${outOfStock() ? "/out-of-stock" : ""}`;
-  const discountPercent = () => getDiscountPercent(props.product);
+  const discountPercent = () => discountBadgePercent(props.product);
   // Same sale state as before: shown while `flashSaleEndsAt` is set and the
   // product is in stock; the countdown clamps at 00:00:00 on expiry.
   const flashSaleActive = () => !!props.flashSale && !!props.product.flashSaleEndsAt && !outOfStock();

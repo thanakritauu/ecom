@@ -22,8 +22,14 @@ export type AdminTiktokClip = {
   coverUrl?: string;
   /** Products whose PDP shows this clip first. Empty = Home rail / other PDPs only. */
   productIds: string[];
-  /** Off = hidden everywhere on the storefront. */
+  /** Off = hidden everywhere on the storefront. Always false while `draft`. */
   active: boolean;
+  /**
+   * Draft-first rule: a new clip is saved as แบบร่าง (only a title needed,
+   * the link may still be blank) and never shows on the storefront until its
+   * first publish. Optional so clips saved before drafts read as published.
+   */
+  draft?: boolean;
 };
 
 export function buildMockTiktokClips(): AdminTiktokClip[] {
@@ -60,8 +66,22 @@ function normalizeClip(c: Partial<AdminTiktokClip> & { id: string }): AdminTikto
     title: c.title ?? "",
     coverUrl: c.coverUrl || undefined,
     productIds: Array.isArray(c.productIds) ? c.productIds : [],
-    active: c.active !== false,
+    draft: c.draft === true,
+    // A draft is never live, whatever `active` says.
+    active: c.draft === true ? false : c.active !== false,
   };
+}
+
+/**
+ * What a draft clip still lacks before it can go live (same checks as the
+ * editor's บันทึกและเผยแพร่), as field names for the เผยแพร่ toast. Empty =
+ * ready to publish.
+ */
+export function tiktokClipPublishProblems(clip: AdminTiktokClip, all: AdminTiktokClip[]): string[] {
+  const problems: string[] = [];
+  if (!clip.videoId || !clip.author || all.some((c) => c.id !== clip.id && c.videoId === clip.videoId)) problems.push("ลิงก์คลิป TikTok");
+  if (!clip.title.trim()) problems.push("ชื่อคลิป");
+  return problems;
 }
 
 /** The saved clip list, or the seed when nothing (or an older version) is stored. Shared by Admin and the storefront reader. */
@@ -103,6 +123,22 @@ let nextId = 1;
 
 export type TiktokClipInput = Omit<AdminTiktokClip, "id">;
 
+/**
+ * Links exactly `clipIds` to this product and unlinks every other clip from
+ * it (Admin product form, "คลิปรีวิว TikTok"; applied when the product is saved).
+ */
+export function setProductTiktokClips(productId: string, clipIds: string[]) {
+  hydrate();
+  const want = new Set(clipIds);
+  mutate((list) =>
+    list.map((c) => {
+      const has = c.productIds.includes(productId);
+      if (want.has(c.id) === has) return c;
+      return { ...c, productIds: has ? c.productIds.filter((x) => x !== productId) : [...c.productIds, productId] };
+    }),
+  );
+}
+
 export function useAdminTiktokClips() {
   onMount(hydrate);
   return {
@@ -110,16 +146,25 @@ export function useAdminTiktokClips() {
     getById: (id: string) => clips().find((c) => c.id === id),
     /** Clips linked to this product — the ones its PDP shows first (storefront: `tiktokClipsForProduct`). */
     clipsForProduct: (productId: string) => clips().filter((c) => c.productIds.includes(productId)),
-    saveClip: async (id: string | null, input: TiktokClipInput) => {
+    /** Resolves to the clip's id (the new id when adding). */
+    saveClip: async (id: string | null, input: TiktokClipInput): Promise<string> => {
       await simulateDelay();
-      if (id) mutate((list) => list.map((c) => (c.id === id ? { ...c, ...input } : c)));
-      else mutate((list) => [...list, { ...input, id: `clip-new-${Date.now()}-${nextId++}` }]);
+      if (id) {
+        mutate((list) => list.map((c) => (c.id === id ? { ...c, ...input } : c)));
+        return id;
+      }
+      const newId = `clip-new-${Date.now()}-${nextId++}`;
+      mutate((list) => [...list, { ...input, id: newId }]);
+      return newId;
     },
     removeClip: async (id: string) => {
       await simulateDelay();
       mutate((list) => list.filter((c) => c.id !== id));
     },
-    setActive: (id: string, active: boolean) => mutate((list) => list.map((c) => (c.id === id ? { ...c, active } : c))),
+    /** แสดง / ไม่แสดง for a published clip; a draft goes live only through `publishClip`. */
+    setActive: (id: string, active: boolean) => mutate((list) => list.map((c) => (c.id === id && !c.draft ? { ...c, active } : c))),
+    /** Draft-first: a draft's first publish (shown on the storefront). The caller runs the publish checks first. */
+    publishClip: (id: string) => mutate((list) => list.map((c) => (c.id === id ? { ...c, draft: false, active: true } : c))),
     move: (index: number, delta: number) =>
       mutate((list) => {
         const target = index + delta;

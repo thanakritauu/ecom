@@ -17,6 +17,7 @@ import {
   formatMarketingDateTime,
   formatPromotionDiscount,
   marketingPhase,
+  promotionPublishProblems,
   PROMOTION_CONDITION_META,
   promotionCondition,
   promotionGiftTiers,
@@ -48,12 +49,12 @@ export default function AdminPromotionDetailPage() {
   const confirmToggleAction = async () => {
     const current = promotion();
     if (!current) return;
-    const turnOn = current.status === "disabled";
+    const turnOn = current.status !== "active";
     setActionLoading(true);
     await store.setStatus(current.id, turnOn ? "active" : "disabled");
     setActionLoading(false);
     setConfirmToggle(false);
-    pushToast(turnOn ? "เปิดใช้งานโปรโมชั่นแล้ว" : "ปิดใช้งานโปรโมชั่นแล้ว", "success");
+    pushToast(turnOn ? (current.status === "draft" ? "เผยแพร่โปรโมชั่นแล้ว" : "เปิดใช้งานโปรโมชั่นแล้ว") : "ปิดใช้งานโปรโมชั่นแล้ว", "success");
   };
 
   const confirmDeleteAction = async () => {
@@ -107,9 +108,15 @@ export default function AdminPromotionDetailPage() {
                     basePath="/admin/marketing/promotions"
                     entity="โปรโมชั่น"
                     isDisabled={p().status === "disabled"}
+                    isDraft={p().status === "draft"}
                     hideView
                     onDuplicate={handleDuplicate}
-                    onToggleStatus={() => setConfirmToggle(true)}
+                    onToggleStatus={() => {
+                      // A แบบร่าง is published only once it passes the full check; the toast names what's missing.
+                      const missing = p().status === "draft" ? promotionPublishProblems(p()) : [];
+                      if (missing.length > 0) pushToast(`เผยแพร่ "${p().name}" ไม่ได้ ยังขาดข้อมูล ${missing.length} รายการ`, "error", missing.join(", "));
+                      else setConfirmToggle(true);
+                    }}
                     onDelete={() => setConfirmDelete(true)}
                     triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
                   />
@@ -117,8 +124,8 @@ export default function AdminPromotionDetailPage() {
               }
             />
 
-            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div class="flex flex-col gap-6 lg:col-span-2">
+            <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div class="flex min-w-0 flex-col gap-6">
                 <Show when={p().type === "gift_with_purchase"}>
                   <Section title={promotionGiftTiers(p()).length > 1 ? `ของแถมขั้นบันได ${promotionGiftTiers(p()).length} ขั้น` : "ของแถม"}>
                     <PromotionGiftTiers promotion={p()} size="md" />
@@ -165,7 +172,7 @@ export default function AdminPromotionDetailPage() {
                   <StatusBadge tone={phase().tone} class="w-fit">
                     {phase().label}
                   </StatusBadge>
-                  <p class="text-sm text-ink-gray">{p().status === "active" ? "เปิดใช้งานอยู่ มีผลตามช่วงเวลา" : "ปิดใช้งานอยู่ ยังไม่มีผล"}</p>
+                  <p class="text-sm text-ink-gray">{p().status === "draft" ? "แบบร่าง ยังไม่มีผลในตะกร้า" : p().status === "active" ? "เปิดใช้งานอยู่ มีผลตามช่วงเวลา" : "ปิดใช้งานอยู่ ยังไม่มีผล"}</p>
                 </Section>
 
                 <Section title="เงื่อนไข">
@@ -201,9 +208,9 @@ export default function AdminPromotionDetailPage() {
             <ConfirmDialog
               open={confirmToggle()}
               onOpenChange={setConfirmToggle}
-              title={p().status === "disabled" ? "เปิดใช้งานโปรโมชั่นนี้?" : "ปิดใช้งานโปรโมชั่นนี้?"}
-              description={p().status === "disabled" ? `"${p().name}" จะมีผลในตะกร้าตามวันที่ที่ตั้งไว้` : `"${p().name}" จะหยุดมีผลในตะกร้าทันที`}
-              confirmLabel={p().status === "disabled" ? "เปิดใช้งาน" : "ปิดใช้งาน"}
+              title={p().status === "draft" ? "เผยแพร่โปรโมชั่นนี้?" : p().status === "disabled" ? "เปิดใช้งานโปรโมชั่นนี้?" : "ปิดใช้งานโปรโมชั่นนี้?"}
+              description={p().status !== "active" ? `"${p().name}" จะมีผลในตะกร้าตามวันที่ที่ตั้งไว้` : `"${p().name}" จะหยุดมีผลในตะกร้าทันที`}
+              confirmLabel={p().status === "draft" ? "เผยแพร่" : p().status === "disabled" ? "เปิดใช้งาน" : "ปิดใช้งาน"}
               loading={actionLoading()}
               onConfirm={confirmToggleAction}
             />

@@ -11,6 +11,10 @@ import { useAdminOrders } from "~/lib/adminOrderStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { pushToast } from "~/lib/toast";
 import { OrderTimeline } from "./OrderTimeline";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
+
+const EVENT_LABELS: Record<string, string> = { eventStatus: "ขั้นตอน", eventDescription: "รายละเอียด" };
 
 type EventStatus = TrackingEvent["status"];
 
@@ -51,7 +55,12 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
   const saveNumber = async (e: Event) => {
     e.preventDefault();
     const value = numberDraft().replace(/\s/g, "");
-    if (!DHL_TRACKING_PATTERN.test(value)) return setNumberError("เลขพัสดุ DHL ต้องเป็นตัวเลข 10 หลัก");
+    if (!DHL_TRACKING_PATTERN.test(value)) {
+      const message = value ? "เลขพัสดุ DHL ต้องเป็นตัวเลข 10 หลัก" : "กรุณากรอกเลขพัสดุ DHL";
+      setNumberError(message);
+      reportFormErrors({ trackingNumber: message }, { trackingNumber: "เลขพัสดุ DHL" });
+      return;
+    }
     setSavingNumber(true);
     try {
       await store.setTrackingNumber(o().id, value);
@@ -68,7 +77,7 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
   const [eventStatus, setEventStatus] = createSignal<EventStatus>("in_transit");
   const [eventDescription, setEventDescription] = createSignal("");
   const [eventLocation, setEventLocation] = createSignal("");
-  const [eventError, setEventError] = createSignal<string>();
+  const [eventErrors, setEventErrors] = createSignal<FormErrors>({});
   const [savingEvent, setSavingEvent] = createSignal(false);
 
   const applyTemplate = (status: EventStatus) => {
@@ -80,14 +89,17 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
 
   const startAddEvent = () => {
     applyTemplate(o().shipping.trackingNumber ? "in_transit" : "preparing");
-    setEventError(undefined);
+    setEventErrors({});
     setAddingEvent(true);
   };
 
   const saveEvent = async (e: Event) => {
     e.preventDefault();
-    if (eventStatus() !== "preparing" && !o().shipping.trackingNumber) return setEventError("กรุณากรอกเลขพัสดุ DHL ก่อนบันทึกเหตุการณ์ขนส่ง");
-    if (!eventDescription().trim()) return setEventError("กรุณากรอกรายละเอียดเหตุการณ์");
+    const next: FormErrors = {};
+    if (eventStatus() !== "preparing" && !o().shipping.trackingNumber) next.eventStatus = "กรุณากรอกเลขพัสดุ DHL ก่อนบันทึกเหตุการณ์ขนส่ง";
+    if (!eventDescription().trim()) next.eventDescription = "กรุณากรอกรายละเอียดเหตุการณ์";
+    setEventErrors(next);
+    if (reportFormErrors(next, EVENT_LABELS)) return;
     setSavingEvent(true);
     try {
       await store.addTrackingEvent(o().id, { status: eventStatus(), description: eventDescription(), location: eventLocation() });
@@ -144,7 +156,11 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
                 maxLength={10}
                 placeholder="เช่น 5093847261"
                 value={numberDraft()}
-                onInput={(e) => setNumberDraft(e.currentTarget.value.replace(/\D/g, ""))}
+                onInput={(e) => {
+                  setNumberDraft(e.currentTarget.value.replace(/\D/g, ""));
+                  setNumberError(undefined);
+                }}
+                data-field="trackingNumber"
                 error={numberError()}
                 disabled={savingNumber()}
               />
@@ -196,27 +212,43 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
         >
           <form onSubmit={saveEvent} class="flex flex-col gap-3 rounded-card border border-border p-3">
             <p class="text-sm font-semibold text-ink">เพิ่มเหตุการณ์การจัดส่ง</p>
-            <label class="flex flex-col gap-1.5">
-              <span class="text-sm font-medium text-ink">ขั้นตอน</span>
+            <FormErrorSummary errors={eventErrors()} labels={EVENT_LABELS} />
+            <label data-field="eventStatus" class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-ink">
+                ขั้นตอน <span class="text-system-red" aria-hidden="true">*</span>
+              </span>
               <div class="relative">
                 <select
                   value={eventStatus()}
                   disabled={savingEvent()}
-                  onChange={(e) => applyTemplate(e.currentTarget.value as EventStatus)}
+                  aria-invalid={eventErrors().eventStatus ? true : undefined}
+                  onChange={(e) => {
+                    applyTemplate(e.currentTarget.value as EventStatus);
+                    setEventErrors({});
+                  }}
                   class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
                 >
                   <For each={EVENT_TEMPLATES}>{(t) => <option value={t.status}>{stepTitle(t.status)}</option>}</For>
                 </select>
                 <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
               </div>
+              <Show when={eventErrors().eventStatus}>
+                <p role="alert" class="text-sm text-system-red">{eventErrors().eventStatus}</p>
+              </Show>
             </label>
-            <TextField label="รายละเอียด" required value={eventDescription()} onInput={(e) => setEventDescription(e.currentTarget.value)} disabled={savingEvent()} />
+            <TextField
+              label="รายละเอียด"
+              required
+              value={eventDescription()}
+              onInput={(e) => {
+                setEventDescription(e.currentTarget.value);
+                if (e.currentTarget.value.trim()) setEventErrors(({ eventDescription: _fixed, ...rest }) => rest);
+              }}
+              data-field="eventDescription"
+              error={eventErrors().eventDescription}
+              disabled={savingEvent()}
+            />
             <TextField label="สถานที่" placeholder="เช่น DHL Hub บางพลี" value={eventLocation()} onInput={(e) => setEventLocation(e.currentTarget.value)} disabled={savingEvent()} />
-            <Show when={eventError()}>
-              <p role="alert" class="text-sm text-system-red">
-                {eventError()}
-              </p>
-            </Show>
             <p class="text-xs text-ink-gray">บันทึกด้วยเวลาปัจจุบัน และสถานะคำสั่งซื้อจะเลื่อนตามขั้นตอนนี้อัตโนมัติ</p>
             <div class="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setAddingEvent(false)} disabled={savingEvent()}>

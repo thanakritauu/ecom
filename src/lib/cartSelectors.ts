@@ -128,6 +128,8 @@ export type Coupon = {
   expiresAt: string;
   /** "หมดอายุ 31 ต.ค." — derived from `expiresAt`. */
   expiresLabel: string;
+  /** Admin's "เงื่อนไขเพิ่มเติม" (rich text HTML), shown under the automatic conditions. */
+  extraConditions?: string;
 };
 
 const THAI_SHORT_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -159,6 +161,7 @@ export function buildCoupon(c: {
   startTime?: string;
   endDate: string;
   endTime?: string;
+  extraConditions?: string;
 }): Coupon {
   const [, month, day] = c.endDate.split("-").map(Number);
   const discountType = c.discountType ?? "baht";
@@ -180,6 +183,7 @@ export function buildCoupon(c: {
     startsAt: c.startDate ? `${c.startDate}T${c.startTime || "00:00"}:00+07:00` : undefined,
     expiresAt: `${c.endDate}T${c.endTime || "23:59"}:59+07:00`,
     expiresLabel: `หมดอายุ ${day} ${THAI_SHORT_MONTHS[month - 1]}`,
+    extraConditions: c.extraConditions || undefined,
   };
 }
 

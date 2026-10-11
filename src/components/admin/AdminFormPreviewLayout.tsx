@@ -11,13 +11,15 @@ import type { JSX } from "solid-js";
  */
 export function AdminFormPreviewLayout(props: { form: JSX.Element; preview: JSX.Element; previewLabel?: string }) {
   return (
-    <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+    <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_460px] 2xl:grid-cols-[minmax(0,1fr)_560px]">
       <div class="flex min-w-0 flex-col gap-6">{props.form}</div>
-      <div class="flex flex-col gap-3 xl:sticky xl:top-6">
+      {/* Stays in view while the form scrolls: 24px under the 64px sticky top bar, and a preview taller than the
+          window scrolls inside its own box, clear of the floating save bar at the bottom. */}
+      <div class="flex flex-col gap-3 xl:sticky xl:top-[88px] xl:max-h-[calc(100vh-176px)]">
         <p class="shrink-0 text-xs font-semibold uppercase tracking-wide text-ink-placeholder">
           {props.previewLabel ?? "ตัวอย่างบนหน้าร้าน"}
         </p>
-        <div class="overflow-hidden rounded-card bg-surface-card shadow-card">{props.preview}</div>
+        <div class="min-h-0 overflow-hidden overflow-y-auto rounded-card bg-surface-card shadow-card">{props.preview}</div>
       </div>
     </div>
   );

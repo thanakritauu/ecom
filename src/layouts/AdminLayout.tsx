@@ -43,7 +43,9 @@ export function AdminLayout(props: { children: JSX.Element }) {
         <div class="contents print:hidden">
           <AdminTopbar onMenuClick={() => setDrawerOpen(true)} />
         </div>
-        <main class="flex-1 overflow-x-hidden p-4 lg:p-6 print:p-0">{props.children}</main>
+        {/* `overflow-x-clip`, not `-hidden`: hidden makes <main> a scroll container, which breaks every
+            `sticky` inside it (form preview columns, side columns). Clip trims the same overflow without that. */}
+        <main class="flex-1 overflow-x-clip p-4 lg:p-6 print:p-0">{props.children}</main>
       </div>
       <div class="contents print:hidden">
         <AdminMobileDrawer open={drawerOpen()} onOpenChange={setDrawerOpen} />

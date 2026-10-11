@@ -18,8 +18,18 @@ export default function AdminLandingPageEditPage() {
   const handleSubmit = async (values: LandingPageFormValues) => {
     const current = page();
     if (!current) return;
+    const wasDraft = current.status === "draft";
     await store.update(current.id, values);
-    pushToast("บันทึกหน้าแคมเปญเรียบร้อยแล้ว", "success");
+    pushToast(
+      values.status === "draft"
+        ? "บันทึกแบบร่างแล้ว ยังไม่แสดงบนหน้าร้าน"
+        : wasDraft
+          ? values.status === "scheduled"
+            ? "ตั้งเวลาเผยแพร่หน้าแคมเปญแล้ว"
+            : "เผยแพร่หน้าแคมเปญเรียบร้อยแล้ว"
+          : "บันทึกหน้าแคมเปญเรียบร้อยแล้ว",
+      "success",
+    );
     navigate(`/admin/promotion-pages/${current.id}`);
   };
 

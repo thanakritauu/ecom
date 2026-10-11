@@ -12,7 +12,7 @@ export default function AdminProductCollectionNewPage() {
 
   const handleSubmit = async (values: ProductCollectionFormValues) => {
     const created = await store.add(values);
-    pushToast("บันทึกกลุ่มสินค้าพิเศษเรียบร้อยแล้ว", "success");
+    pushToast(values.status === "draft" ? "บันทึกแบบร่างเรียบร้อยแล้ว" : "เผยแพร่กลุ่มสินค้าพิเศษเรียบร้อยแล้ว", "success");
     navigate(`/admin/content/product-collections/${created.id}`);
   };
 
@@ -27,7 +27,7 @@ export default function AdminProductCollectionNewPage() {
         ]}
       />
       <PageHeader title="เพิ่มกลุ่มสินค้าพิเศษ" description="ตั้งชื่อกลุ่มและเลือกสินค้าที่จะอยู่ในกลุ่มนี้" />
-      <ProductCollectionForm submitLabel="บันทึกกลุ่มสินค้าพิเศษ" onSubmit={handleSubmit} onCancel={() => navigate("/admin/content/product-collections")} />
+      <ProductCollectionForm onSubmit={handleSubmit} onCancel={() => navigate("/admin/content/product-collections")} />
     </div>
   );
 }

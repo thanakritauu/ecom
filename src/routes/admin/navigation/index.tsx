@@ -12,6 +12,8 @@ import { NavIcon } from "~/components/shared/NavIcon";
 import {
   NAVIGATION_TARGET_TYPE_LABELS,
   NAVIGATION_VISIBILITY_META,
+  navigationItemState,
+  navigationItemPublishProblems,
   BOTTOM_NAV_PROMOTION_ITEM_ID,
   BOTTOM_NAV_PROMOTION_FALLBACK_HREF,
   type NavigationItem,
@@ -55,7 +57,7 @@ export default function AdminNavigationPage() {
   const tree = createMemo(() => buildNavigationTree(navigation.items(), lookups));
   const rows = createMemo(() => flattenNavigationTree(tree()));
   /** Exactly what the storefront's `navigationContent.visibleTree()` keeps — visible + target live, top level only (Header's rail never renders children). */
-  const storefrontItems = createMemo(() => tree().filter((i) => i.visible && i.available));
+  const storefrontItems = createMemo(() => tree().filter((i) => i.visible && !i.draft && i.available));
   const bottomNavPromotionHref = () => storefrontItems().find((i) => i.id === BOTTOM_NAV_PROMOTION_ITEM_ID)?.href ?? BOTTOM_NAV_PROMOTION_FALLBACK_HREF;
 
   const [formOpen, setFormOpen] = createSignal(false);
@@ -80,12 +82,34 @@ export default function AdminNavigationPage() {
       const current = editing();
       if (current) await navigation.update(current.id, values);
       else await navigation.add(values);
-      pushToast("บันทึกเมนูเรียบร้อยแล้ว", "success");
+      pushToast(values.draft ? "บันทึกแบบร่างเรียบร้อยแล้ว" : !current || current.draft ? "เผยแพร่เมนูเรียบร้อยแล้ว" : "บันทึกเมนูเรียบร้อยแล้ว", "success");
       setFormOpen(false);
     } catch {
       pushToast("บันทึกเมนูไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** Draft-first: same checks as the drawer's บันทึกและเผยแพร่; refuses with a toast naming what's missing. */
+  const targetExists = (type: NavigationItem["targetType"], id: string) => {
+    if (type === "promotion_page") return !!contentStore.getById(id);
+    if (type === "category") return !!categoryStore.getById(id);
+    if (type === "collection") return !!collectionStore.getById(id);
+    if (type === "product") return !!productStore.getById(id);
+    return true;
+  };
+  const publish = async (item: NavigationItem) => {
+    const problems = navigationItemPublishProblems(item, targetExists);
+    if (problems.length > 0) {
+      pushToast(`เผยแพร่ "${item.label}" ไม่ได้`, "error", `ยังกรอกข้อมูลไม่ครบ: ${problems.join(", ")}`);
+      return;
+    }
+    try {
+      await navigation.publish(item.id);
+      pushToast(`เผยแพร่ "${item.label}" แล้ว`, "success");
+    } catch {
+      pushToast("เผยแพร่เมนูไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
     }
   };
 
@@ -192,8 +216,8 @@ export default function AdminNavigationPage() {
                     <div class="min-w-0 flex-1">
                       <div class="flex flex-wrap items-center gap-2">
                         <p class="truncate text-sm font-medium text-ink">{item.label}</p>
-                        <StatusBadge tone={NAVIGATION_VISIBILITY_META[item.visible ? "visible" : "hidden"].tone}>
-                          {NAVIGATION_VISIBILITY_META[item.visible ? "visible" : "hidden"].label}
+                        <StatusBadge tone={NAVIGATION_VISIBILITY_META[navigationItemState(item)].tone}>
+                          {NAVIGATION_VISIBILITY_META[navigationItemState(item)].label}
                         </StatusBadge>
                         <Show when={item.id === BOTTOM_NAV_PROMOTION_ITEM_ID}>
                           <StatusBadge tone="info">แท็บโปรโมชั่นแถบล่าง</StatusBadge>
@@ -218,6 +242,8 @@ export default function AdminNavigationPage() {
                   <NavigationRowActionsMenu
                     label={item.label}
                     visible={item.visible}
+                    draft={item.draft}
+                    onPublish={() => void publish(item)}
                     onEdit={() => openEdit(item)}
                     onToggleVisible={() => setConfirmToggle(item)}
                     onDelete={() => setConfirmDelete(item)}
@@ -232,7 +258,7 @@ export default function AdminNavigationPage() {
       {/* Storefront sync — same filter, same `NavIcon`, same sizes (24px mobile / 32px desktop) and weight rule (semibold when the item has an icon) as Header.tsx's pink category rail. */}
       <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
         <h2 class="text-base font-semibold text-ink">ตัวอย่างแถบเมนูบนหน้าร้าน</h2>
-        <p class="text-xs text-ink-gray">แสดงเฉพาะเมนูที่เปิดแสดงและปลายทางพร้อมใช้งาน เมนูย่อยแสดงเฉพาะในเมนูบนมือถือ</p>
+        <p class="text-xs text-ink-gray">แสดงเฉพาะเมนูที่เผยแพร่แล้ว เปิดแสดง และปลายทางพร้อมใช้งาน เมนูย่อยแสดงเฉพาะในเมนูบนมือถือ</p>
         <For each={[{ label: "เดสก์ท็อป", icon: "size-8", text: "text-base", gap: "gap-6" }, { label: "มือถือ", icon: "size-6", text: "text-sm", gap: "gap-2" }]}>
           {(device) => (
             <div class="flex flex-col gap-1.5">

@@ -18,7 +18,7 @@ import { useAdminProducts } from "~/lib/adminProductStore";
 import { CollectionRowActionsMenu } from "~/components/admin/content/CollectionRowActionsMenu";
 import { CollectionQuickView } from "~/components/admin/content/CollectionQuickView";
 import { RefreshIcon, LayersIcon, PlusIcon, ImageIcon } from "~/components/admin/icons";
-import { COLLECTION_STATUS_META, type ProductCollection, type CollectionStatus } from "~/lib/adminCollections";
+import { COLLECTION_STATUS_META, collectionPublishProblems, type ProductCollection, type CollectionStatus } from "~/lib/adminCollections";
 import { useAdminCollections } from "~/lib/adminCollectionStore";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
@@ -39,6 +39,7 @@ const STATUS_FILTER_OPTIONS: SelectFilterConfig = {
   value: "all",
   options: [
     { value: "all", label: "ทุกสถานะ" },
+    { value: "draft", label: COLLECTION_STATUS_META.draft.label },
     { value: "active", label: COLLECTION_STATUS_META.active.label },
     { value: "inactive", label: COLLECTION_STATUS_META.inactive.label },
   ],
@@ -191,11 +192,27 @@ export default function AdminProductCollectionsListPage() {
   };
 
   const bulkSetStatus = async (status: CollectionStatus) => {
-    const ids = [...selectedIds()];
-    await Promise.all(ids.map((id) => store.setStatus(id, status)));
+    const targets = store.collections().filter((c) => selectedIds().has(c.id));
+    // Draft-first: เปิดใช้งาน publishes a draft only when it passes the publish checks; ปิดใช้งาน leaves drafts as drafts.
+    const blocked = status === "active" ? targets.filter((c) => c.status === "draft" && collectionPublishProblems(c).length > 0) : [];
+    const ok = targets.filter((c) => !blocked.includes(c) && !(status === "inactive" && c.status === "draft"));
+    await Promise.all(ok.map((c) => store.setStatus(c.id, status)));
     clearSelection();
-    pushToast(status === "active" ? `เปิดใช้งาน ${ids.length} รายการแล้ว` : `ปิดใช้งาน ${ids.length} รายการแล้ว`, "success");
+    pushToast(status === "active" ? `เปิดใช้งาน ${ok.length} รายการแล้ว` : `ปิดใช้งาน ${ok.length} รายการแล้ว`, "success");
+    if (blocked.length > 0) pushToast(`เผยแพร่ไม่ได้ ${blocked.length} รายการ`, "warning", `ข้อมูลยังไม่ครบ: ${blocked.map((c) => c.name).join(", ")}`);
   };
+
+  /** Row action for a แบบร่าง: same checks as the form's บันทึกและเผยแพร่; refuses with a toast naming what's missing. */
+  const publish = async (c: ProductCollection) => {
+    const problems = collectionPublishProblems(c);
+    if (problems.length > 0) {
+      pushToast(`เผยแพร่ "${c.name}" ไม่ได้`, "error", `ยังกรอกข้อมูลไม่ครบ: ${problems.join(", ")}`);
+      return;
+    }
+    await store.setStatus(c.id, "active");
+    pushToast(`เผยแพร่ "${c.name}" แล้ว`, "success");
+  };
+  const requestToggle = (c: ProductCollection) => (c.status === "draft" ? void publish(c) : setConfirmToggle(c));
 
   const thumbOf = (c: ProductCollection) => {
     const first = c.products[0];
@@ -248,7 +265,7 @@ export default function AdminProductCollectionsListPage() {
       label: "",
       align: "right",
       render: (row) => (
-        <CollectionRowActionsMenu id={row.id} name={row.name} isActive={row.status === "active"} onToggleStatus={() => setConfirmToggle(row)} onDelete={() => requestDelete(row)} />
+        <CollectionRowActionsMenu id={row.id} name={row.name} isActive={row.status === "active"} isDraft={row.status === "draft"} onToggleStatus={() => requestToggle(row)} onDelete={() => requestDelete(row)} />
       ),
     },
   ];
@@ -331,7 +348,8 @@ export default function AdminProductCollectionsListPage() {
                     id={row.id}
                     name={row.name}
                     isActive={row.status === "active"}
-                    onToggleStatus={() => setConfirmToggle(row)}
+                    isDraft={row.status === "draft"}
+                    onToggleStatus={() => requestToggle(row)}
                     onDelete={() => requestDelete(row)}
                     triggerClass="flex size-9 shrink-0 items-center justify-center self-start rounded-pill text-ink-gray hover:bg-surface-pink"
                   />

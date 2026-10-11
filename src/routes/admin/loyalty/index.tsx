@@ -56,39 +56,48 @@ export default function AdminLoyaltyPage() {
         }
       />
 
-      <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
-        <Stat label="สมาชิกทั้งหมด" value={`${stats().members.toLocaleString("th-TH")} คน`} />
-        <Stat label="คอยน์คงเหลือรวม" value={`${stats().coins.toLocaleString("th-TH")} คอยน์`} />
-        <Stat label="ย้ายมาจาก CRM" value={`${stats().fromCrm.toLocaleString("th-TH")} คน`} />
-      </div>
+      {/* One main column (tiers + coin rules) and one side column (member
+          summary) from xl; stacked below, summary first. */}
+      <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5 xl:col-start-2 xl:row-start-1">
+          <h2 class="text-base font-semibold text-ink">ภาพรวมสมาชิก</h2>
+          <dl class="flex flex-col">
+            <Stat label="สมาชิกทั้งหมด" value={`${stats().members.toLocaleString("th-TH")} คน`} />
+            <Stat label="คอยน์คงเหลือรวม" value={`${stats().coins.toLocaleString("th-TH")} คอยน์`} />
+            <Stat label="ย้ายมาจาก CRM" value={`${stats().fromCrm.toLocaleString("th-TH")} คน`} />
+          </dl>
+        </section>
 
-      <TierOverview />
+        <div class="flex min-w-0 flex-col gap-6 xl:col-start-1 xl:row-start-1">
+          <TierOverview />
 
-      <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-        <div class="flex flex-col gap-1">
-          <h2 class="text-base font-semibold text-ink">กติกาคอยน์</h2>
-          <p class="text-sm text-ink-gray">กติกาเดียวกับหน้าตะกร้า หน้าชำระเงิน และหน้าคอยน์ของลูกค้า</p>
+          <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+            <div class="flex flex-col gap-1">
+              <h2 class="text-base font-semibold text-ink">กติกาคอยน์</h2>
+              <p class="text-sm text-ink-gray">กติกาเดียวกับหน้าตะกร้า หน้าชำระเงิน และหน้าคอยน์ของลูกค้า</p>
+            </div>
+            <dl class="flex flex-col gap-1.5 text-sm">
+              <For each={COIN_RULES}>
+                {(rule) => (
+                  <div class="flex items-start justify-between gap-3 border-b border-border py-2 last:border-0">
+                    <dt class="text-ink-gray">{rule.label}</dt>
+                    <dd class="text-right font-medium text-ink">{rule.value}</dd>
+                  </div>
+                )}
+              </For>
+            </dl>
+          </section>
         </div>
-        <dl class="flex flex-col gap-1.5 text-sm">
-          <For each={COIN_RULES}>
-            {(rule) => (
-              <div class="flex items-start justify-between gap-3 border-b border-border py-2 last:border-0">
-                <dt class="text-ink-gray">{rule.label}</dt>
-                <dd class="text-right font-medium text-ink">{rule.value}</dd>
-              </div>
-            )}
-          </For>
-        </dl>
-      </section>
+      </div>
     </div>
   );
 }
 
 function Stat(props: { label: string; value: string }) {
   return (
-    <div class="flex flex-col gap-1 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-      <p class="text-sm text-ink-gray">{props.label}</p>
-      <p class="text-2xl font-bold text-ink">{props.value}</p>
+    <div class="flex items-baseline justify-between gap-3 border-b border-border py-2.5 last:border-0">
+      <dt class="text-sm text-ink-gray">{props.label}</dt>
+      <dd class="text-xl font-bold text-ink">{props.value}</dd>
     </div>
   );
 }

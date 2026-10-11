@@ -10,7 +10,7 @@ import { CollectionRowActionsMenu } from "~/components/admin/content/CollectionR
 import { LayersIcon } from "~/components/admin/icons";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
-import { COLLECTION_STATUS_META } from "~/lib/adminCollections";
+import { COLLECTION_STATUS_META, collectionPublishProblems } from "~/lib/adminCollections";
 import { useAdminCollections } from "~/lib/adminCollectionStore";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminNavigation } from "~/lib/adminNavigationStore";
@@ -56,6 +56,19 @@ export default function AdminProductCollectionDetailPage() {
     setConfirmDelete(false);
     pushToast(`ลบ "${current.name}" เรียบร้อยแล้ว`, "error");
     navigate("/admin/content/product-collections");
+  };
+
+  /** Draft-first: same checks as the form's บันทึกและเผยแพร่; refuses with a toast naming what's missing. */
+  const publish = async () => {
+    const current = collection();
+    if (!current) return;
+    const problems = collectionPublishProblems(current);
+    if (problems.length > 0) {
+      pushToast(`เผยแพร่ "${current.name}" ไม่ได้`, "error", `ยังกรอกข้อมูลไม่ครบ: ${problems.join(", ")}`);
+      return;
+    }
+    await store.setStatus(current.id, "active");
+    pushToast(`เผยแพร่ "${current.name}" แล้ว`, "success");
   };
 
   const confirmToggleAction = async () => {
@@ -109,7 +122,8 @@ export default function AdminProductCollectionDetailPage() {
                     id={c().id}
                     name={c().name}
                     isActive={c().status === "active"}
-                    onToggleStatus={() => setConfirmToggle(true)}
+                    isDraft={c().status === "draft"}
+                    onToggleStatus={() => (c().status === "draft" ? void publish() : setConfirmToggle(true))}
                     hideView
                     onDelete={requestDelete}
                     triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
@@ -118,8 +132,8 @@ export default function AdminProductCollectionDetailPage() {
               }
             />
 
-            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div class="flex flex-col gap-6 lg:col-span-2">
+            <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div class="flex min-w-0 flex-col gap-6">
                 <Section title="สินค้าในกลุ่มสินค้าพิเศษ">
                   <Show when={products().length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่ได้เลือกสินค้า</p>}>
                     <div class="flex flex-col gap-3">

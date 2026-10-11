@@ -10,6 +10,10 @@ import { EmptyState } from "~/components/admin/EmptyState";
 import { DataTable, type DataTableColumn } from "~/components/admin/DataTable";
 import { ChevronDownIcon, MoreIcon, PlusIcon, ShieldUserIcon } from "~/components/admin/icons";
 import { pushToast } from "~/lib/toast";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
+
+const LABELS: Record<string, string> = { name: "ชื่อ", email: "อีเมล" };
 
 const ROLES = ["Super Admin", "ผู้จัดการสินค้า", "ผู้จัดการคำสั่งซื้อ", "การตลาด", "ดูอย่างเดียว"] as const;
 type Role = (typeof ROLES)[number];
@@ -39,7 +43,8 @@ export default function AdminSettingsAdminsPage() {
   const [name, setName] = createSignal("");
   const [email, setEmail] = createSignal("");
   const [role, setRole] = createSignal<Role>(ROLES[1]);
-  const [errors, setErrors] = createSignal<Record<string, string>>({});
+  const [errors, setErrors] = createSignal<FormErrors>({});
+  const clearError = (key: string) => setErrors((prev) => clearFieldError(prev, key));
   const [confirmDelete, setConfirmDelete] = createSignal<AdminUserRow | null>(null);
 
   const openForm = () => {
@@ -52,13 +57,13 @@ export default function AdminSettingsAdminsPage() {
 
   const handleAdd = (e: SubmitEvent) => {
     e.preventDefault();
-    const next: Record<string, string> = {};
+    const next: FormErrors = {};
     if (!name().trim()) next.name = "กรุณากรอกชื่อ";
     if (!email().trim()) next.email = "กรุณากรอกอีเมล";
     else if (!EMAIL_PATTERN.test(email().trim())) next.email = "กรุณากรอกอีเมลที่ถูกต้อง";
     else if (admins().some((a) => a.email.toLowerCase() === email().trim().toLowerCase())) next.email = "อีเมลนี้เป็นผู้ดูแลระบบอยู่แล้ว";
     setErrors(next);
-    if (Object.keys(next).length > 0) return;
+    if (reportFormErrors(next, LABELS)) return;
     setAdmins((list) => [...list, { id: String(nextId++), name: name().trim(), email: email().trim(), role: role() }]);
     setFormOpen(false);
     pushToast("บันทึกผู้ดูแลระบบเรียบร้อยแล้ว", "success");
@@ -182,8 +187,32 @@ export default function AdminSettingsAdminsPage() {
             <Dialog.Content class="w-full max-w-sm rounded-card bg-surface-card p-5 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
               <Dialog.Title class="text-base font-semibold text-ink">เพิ่มผู้ดูแลระบบ</Dialog.Title>
               <form onSubmit={handleAdd} class="mt-4 flex flex-col gap-4" noValidate>
-                <TextField label="ชื่อ" required value={name()} onInput={(e) => setName(e.currentTarget.value)} error={errors().name} placeholder="ชื่อ-นามสกุล" />
-                <TextField label="อีเมล" type="email" required value={email()} onInput={(e) => setEmail(e.currentTarget.value)} error={errors().email} placeholder="name@charmiss.co" />
+                <FormErrorSummary errors={errors()} labels={LABELS} />
+                <TextField
+                  label="ชื่อ"
+                  required
+                  value={name()}
+                  onInput={(e) => {
+                    setName(e.currentTarget.value);
+                    if (e.currentTarget.value.trim()) clearError("name");
+                  }}
+                  data-field="name"
+                  error={errors().name}
+                  placeholder="ชื่อ-นามสกุล"
+                />
+                <TextField
+                  label="อีเมล"
+                  type="email"
+                  required
+                  value={email()}
+                  onInput={(e) => {
+                    setEmail(e.currentTarget.value);
+                    clearError("email");
+                  }}
+                  data-field="email"
+                  error={errors().email}
+                  placeholder="name@charmiss.co"
+                />
                 <label class="flex flex-col gap-1.5">
                   <span class="text-sm font-medium text-ink">
                     บทบาท <span class="text-system-red">*</span>

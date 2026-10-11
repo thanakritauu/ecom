@@ -10,7 +10,7 @@ import { MediaView } from "../shared/MediaView";
 import { withProductVideos } from "~/lib/productVariants";
 import { isVideoMedia } from "~/lib/media";
 import { FlashSaleBar } from "~/components/shared/FlashSaleBar";
-import { getDiscountPercent } from "~/lib/products";
+import { discountBadgePercent } from "~/lib/products";
 
 /**
  * Figma (node 132:5139) shows a 5-photo gallery; this catalog product only
@@ -110,9 +110,9 @@ export function ProductGallery(props: { product: Product; forceOutOfStock?: bool
           audioButtonClass="right-4 top-16"
         />
 
-        <Show when={getDiscountPercent(props.product) && !outOfStock()}>
+        <Show when={discountBadgePercent(props.product) && !outOfStock()}>
           <Badge tone="red" class="absolute left-4 top-4">
-            ลด {getDiscountPercent(props.product)}%
+            ลด {discountBadgePercent(props.product)}%
           </Badge>
         </Show>
 

@@ -8,9 +8,15 @@ import type { PromotionPageProductRef } from "./adminContent";
  * hand-picking products every time. Name (staff only), on/off status and a
  * product list; the storefront only shows the products of an active one.
  */
-export type CollectionStatus = "active" | "inactive";
+/**
+ * Draft-first rule: a new collection starts as "draft" (only a name needed,
+ * never used on the storefront, exactly like "inactive" there). Its first
+ * publish makes it "active"; after that it's only ever active / inactive.
+ */
+export type CollectionStatus = "draft" | "active" | "inactive";
 
 export const COLLECTION_STATUS_META: Record<CollectionStatus, { label: string; tone: StatusTone }> = {
+  draft: { label: "แบบร่าง", tone: "info" },
   active: { label: "เปิดใช้งาน", tone: "success" },
   inactive: { label: "ปิดใช้งาน", tone: "neutral" },
 };
@@ -41,8 +47,8 @@ export function normalizeProductCollection(c: Omit<Partial<ProductCollection>, "
   return {
     id: c.id,
     name: c.name ?? "",
-    // Older saves may carry "draft" (removed: it behaved exactly like "inactive").
-    status: c.status === "active" ? "active" : "inactive",
+    // Older saves keep their own status; anything unknown is off.
+    status: c.status === "active" || c.status === "draft" ? c.status : "inactive",
     products: Array.isArray(c.products)
       ? c.products.map((ref) => ({ productId: ref.productId, variantIds: Array.isArray(ref.variantIds) ? ref.variantIds : [] }))
       : [],
@@ -59,6 +65,18 @@ export function normalizeProductCollection(c: Omit<Partial<ProductCollection>, "
  */
 export function isCollectionUsable(collection: Pick<ProductCollection, "status">): boolean {
   return collection.status === "active";
+}
+
+/**
+ * What a draft collection still lacks before it can go live (same checks as
+ * the form's บันทึกและเผยแพร่), as field names for the list's เผยแพร่ toast.
+ * Empty = ready to publish.
+ */
+export function collectionPublishProblems(collection: Pick<ProductCollection, "name" | "products">): string[] {
+  const problems: string[] = [];
+  if (!collection.name.trim()) problems.push("ชื่อกลุ่มสินค้าพิเศษ");
+  if (collection.products.length === 0) problems.push("สินค้าในกลุ่มสินค้าพิเศษ");
+  return problems;
 }
 
 const TODAY_LABEL = "18 ก.ย. 2569";

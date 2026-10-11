@@ -28,11 +28,14 @@ export function HomepageSectionCard(props: {
   onDragStart: () => void;
   onDragOver: (e: DragEvent) => void;
   onDrop: (e: DragEvent) => void;
+  /** What this section still needs (from `sectionFieldErrors`); shown on the fields and as a red border on the card. */
+  errors?: Record<string, string>;
 }) {
   const s = () => props.section;
+  const hasErrors = () => Object.keys(props.errors ?? {}).length > 0;
 
   return (
-    <div class="flex flex-col rounded-card border border-border bg-surface-card" draggable="true" onDragStart={props.onDragStart} onDragOver={props.onDragOver} onDrop={props.onDrop}>
+    <div class="flex flex-col rounded-card border bg-surface-card" classList={{ "border-system-red": hasErrors(), "border-border": !hasErrors() }} draggable="true" onDragStart={props.onDragStart} onDragOver={props.onDragOver} onDrop={props.onDrop}>
       <div class="flex flex-wrap items-center gap-3 p-3 sm:p-4">
         <span class="hidden cursor-grab text-ink-placeholder sm:block" aria-hidden="true">
           <DragHandleIcon class="size-4" />
@@ -51,6 +54,9 @@ export function HomepageSectionCard(props: {
           </div>
           <Show when={s().title}>
             <p class="truncate text-sm text-ink-gray">{s().title}</p>
+          </Show>
+          <Show when={hasErrors() && !props.expanded}>
+            <p class="text-sm text-system-red">ยังกรอกข้อมูลไม่ครบ กด "แก้ไข" เพื่อดูรายละเอียด</p>
           </Show>
         </div>
 
@@ -87,7 +93,7 @@ export function HomepageSectionCard(props: {
       </div>
 
       <Show when={props.expanded}>
-        <HomepageSectionForm section={s()} onChange={props.onChange} />
+        <HomepageSectionForm section={s()} onChange={props.onChange} errors={props.errors} />
       </Show>
     </div>
   );

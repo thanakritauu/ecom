@@ -7,6 +7,7 @@ import { ProductForm } from "~/components/admin/products/ProductForm";
 import { CatalogIcon } from "~/components/admin/icons";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { pushToast } from "~/lib/toast";
+import { setProductTiktokClips } from "~/lib/adminTiktokClips";
 
 /**
  * PART 19 — same `ProductForm` as `/new`, pre-filled from the store's
@@ -54,8 +55,10 @@ export default function AdminEditProductPage() {
             submitLabel="บันทึกการเปลี่ยนแปลง"
             onCancel={() => navigate(`/admin/products/${current().id}`)}
             onSubmit={async (values) => {
+              const wasDraft = current().status === "draft";
               const updated = await store.updateProduct(current().id, values);
-              pushToast("บันทึกสินค้าเรียบร้อยแล้ว", "success");
+              if (values.tiktokClipIds) setProductTiktokClips(updated.id, values.tiktokClipIds);
+              pushToast(values.status === "draft" ? "บันทึกแบบร่างแล้ว ยังไม่แสดงบนหน้าร้าน" : wasDraft ? "บันทึกและเผยแพร่สินค้าแล้ว" : "บันทึกสินค้าเรียบร้อยแล้ว", "success");
               navigate(`/admin/products/${updated.id}`);
             }}
           />

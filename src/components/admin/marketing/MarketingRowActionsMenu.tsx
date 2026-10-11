@@ -7,7 +7,8 @@ import { MoreIcon } from "~/components/admin/icons";
  * The View/Edit/Duplicate/On-Off/Delete menu (same set as
  * `ProductRowActionsMenu`), shared by Promotions and Coupons. `basePath` is
  * the entity's list route; `entity` is its Thai noun for the item labels
- * ("แก้ไขคูปอง"); `isDisabled` drives the on/off label.
+ * ("แก้ไขคูปอง"); `isDisabled` drives the on/off label, and `isDraft`
+ * turns it into "เผยแพร่" (a แบบร่าง is published, never switched off).
  */
 export function MarketingRowActionsMenu(props: {
   id: string;
@@ -15,6 +16,7 @@ export function MarketingRowActionsMenu(props: {
   basePath: string;
   entity: string;
   isDisabled: boolean;
+  isDraft?: boolean;
   onDuplicate: () => void;
   onToggleStatus: () => void;
   onDelete: () => void;
@@ -58,7 +60,7 @@ export function MarketingRowActionsMenu(props: {
             onSelect={props.onToggleStatus}
             class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
           >
-            {props.isDisabled ? "เปิดใช้งาน" : "ปิดใช้งาน"}
+            {props.isDraft ? "เผยแพร่" : props.isDisabled ? "เปิดใช้งาน" : "ปิดใช้งาน"}
           </DropdownMenu.Item>
           <DropdownMenu.Separator class="my-1 h-px bg-border" />
           <DropdownMenu.Item

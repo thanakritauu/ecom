@@ -18,6 +18,7 @@ import {
   ADMIN_PRODUCT_STATUS_META,
   type AdminProduct,
   type AdminProductStatus,
+  productPublishProblems,
 } from "~/lib/adminProductStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { useAdminCollections } from "~/lib/adminCollectionStore";
@@ -26,6 +27,9 @@ import { useAdminNavigation } from "~/lib/adminNavigationStore";
 import { findNavigationReferences, describeNavigationReference } from "~/lib/adminNavigation";
 import { collectionsContainingProduct, findProductReferencesInPromotionPages } from "~/lib/masterDataRelations";
 import { pushToast } from "~/lib/toast";
+import { getDiscountPercent, isFlashSaleUpcoming } from "~/lib/products";
+import { isRichTextEmpty } from "~/lib/richText";
+import { RichTextContent } from "~/components/shared/RichTextContent";
 import { useAdminTiktokClips } from "~/lib/adminTiktokClips";
 import { ReviewStars } from "~/components/admin/reviews/ReviewStars";
 import { TiktokClipCover } from "~/components/admin/reviews/TiktokClipCover";
@@ -150,7 +154,11 @@ export default function AdminProductDetailPage() {
                     product={p()}
                     hideView
                     onDuplicate={handleDuplicate}
-                    onToggleStatus={() => setConfirmToggle(true)}
+                    onToggleStatus={() => {
+                      const missing = p().status === "draft" ? productPublishProblems(p()) : [];
+                      if (missing.length > 0) pushToast(`เผยแพร่ "${p().name}" ไม่ได้ ยังขาดข้อมูล ${missing.length} รายการ`, "error", missing.join(", "));
+                      else setConfirmToggle(true);
+                    }}
                     onDelete={requestDelete}
                     triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
                   />
@@ -158,8 +166,8 @@ export default function AdminProductDetailPage() {
               }
             />
 
-            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div class="flex flex-col gap-6 lg:col-span-2">
+            <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div class="flex min-w-0 flex-col gap-6">
                 <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
                   <h2 class="text-base font-semibold text-ink">รูปภาพสินค้า</h2>
                   <div class="flex gap-3 overflow-x-auto">
@@ -196,8 +204,10 @@ export default function AdminProductDetailPage() {
                 </Show>
 
                 <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-                  <h2 class="text-base font-semibold text-ink">คำอธิบายสินค้า</h2>
-                  <p class="text-sm text-ink-gray">{p().description ?? "ยังไม่มีคำอธิบายสินค้า"}</p>
+                  <h2 class="text-base font-semibold text-ink">รายละเอียดสินค้า</h2>
+                  <Show when={!isRichTextEmpty(p().description)} fallback={<p class="text-sm text-ink-gray">ยังไม่มีรายละเอียดสินค้า</p>}>
+                    <RichTextContent value={p().description} class="max-w-[800px] text-sm" />
+                  </Show>
                 </div>
 
                 {/* Read-only — what this product's PDP review area shows: its TikTok clips first, then its own reviews. Managed under รีวิว. */}
@@ -276,6 +286,10 @@ export default function AdminProductDetailPage() {
                     </Show>
                   </div>
                   <Show when={selectedVariant()}>{(v) => <p class="text-xs text-ink-placeholder">ตัวเลือก: {v().label}</p>}</Show>
+                  <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="ป้ายลดราคา" value={!getDiscountPercent(p()) ? "-" : p().showDiscountBadge === false ? "ไม่แสดง" : `ลด ${getDiscountPercent(p())}%`} />
+                    <Row label="แฟลชเซล" value={flashSaleText(p())} />
+                  </dl>
                 </div>
 
                 <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
@@ -369,6 +383,17 @@ export default function AdminProductDetailPage() {
       }}
     </Show>
   );
+}
+
+const flashTimeFormatter = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+
+/** "รายวัน" / "รอเริ่ม 12 ต.ค. 10:00 น." / "ถึง 31 ต.ค. 23:59 น." / "หมดเวลา" / "-". */
+function flashSaleText(p: AdminProduct): string {
+  if (p.flashSaleDaily) return "รอบรายวัน";
+  if (!p.flashSaleEndsAt) return "-";
+  if (isFlashSaleUpcoming(p)) return `รอเริ่ม ${flashTimeFormatter.format(p.flashSaleStartsAt!)} น.`;
+  if (p.flashSaleEndsAt <= Date.now()) return "หมดเวลา";
+  return `ถึง ${flashTimeFormatter.format(p.flashSaleEndsAt)} น.`;
 }
 
 function Row(props: { label: string; value: string }) {

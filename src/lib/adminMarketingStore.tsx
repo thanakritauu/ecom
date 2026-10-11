@@ -112,7 +112,7 @@ function createEntityStore<T extends WithId>(storageKey: string, baseline: () =>
     await simulateDelay();
     const source = getById(id);
     if (!source) throw new Error("NOT_FOUND");
-    const copy: T = { ...source, id: `${idPrefix}-${nextId++}`, status: "disabled", createdAt: TODAY_LABEL, updatedAt: TODAY_LABEL };
+    const copy: T = { ...source, id: `${idPrefix}-${nextId++}`, status: "draft", createdAt: TODAY_LABEL, updatedAt: TODAY_LABEL };
     if ("name" in copy) (copy as unknown as { name: string }).name = `${(source as unknown as { name: string }).name} (สำเนา)`;
     if ("code" in copy) (copy as unknown as { code: string }).code = `${(source as unknown as { code: string }).code}-COPY`;
     mutate((list) => [copy, ...list]);

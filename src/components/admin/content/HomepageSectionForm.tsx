@@ -3,9 +3,12 @@ import { ChevronDownIcon } from "~/components/admin/icons";
 import { TextField } from "~/components/shared/TextField";
 import { BannerUploader } from "./BannerUploader";
 import { HeroAssetsEditor } from "./HeroAssetsEditor";
-import { DestinationSelector } from "./DestinationSelector";
+import { DestinationSelector, destinationError } from "./DestinationSelector";
 import { PromotionPageProductPicker } from "./PromotionPageProductPicker";
 import { HOMEPAGE_PRODUCT_SOURCE_META, type HomepageContentLayout, type HomepageProductSource, type HomepageSection } from "~/lib/adminHomepage";
+import { validateHeroAssets } from "~/lib/pageSections";
+import { mediaErrors } from "~/lib/media";
+import type { FormErrors } from "~/lib/adminFormValidation";
 import { useAdminCollections } from "~/lib/adminCollectionStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 
@@ -29,6 +32,46 @@ const CONTENT_LAYOUT_OPTIONS: { value: HomepageContentLayout; label: string }[] 
 ];
 
 /**
+ * What one section still needs before it can show on the storefront, keyed
+ * by field (`name`, `slides`, `banner`, `collectionId`, `categoryId`,
+ * `products`, `ctaLabel`, `ctaDestination`). The Landing Page form runs this
+ * for every enabled section when the page goes live.
+ */
+export function sectionFieldErrors(section: HomepageSection): FormErrors {
+  const e: FormErrors = {};
+  if (!section.name.trim()) e.name = "กรุณากรอกชื่อส่วน";
+  if (section.type === "hero") {
+    const slideErrors = validateHeroAssets(section.assets);
+    if (slideErrors.length > 0) e.slides = slideErrors.join(", ");
+    else if (section.assets.length === 0 && !section.banners.desktop) e.slides = "กรุณาเพิ่มสไลด์แบนเนอร์ หรืออัปโหลดแบนเนอร์เดสก์ท็อป";
+  }
+  if (section.type === "promotion_banner" || section.type === "content") {
+    if (!section.banners.desktop) e.banner = "กรุณาอัปโหลดแบนเนอร์เดสก์ท็อป";
+  }
+  if (section.type === "hero" || section.type === "promotion_banner" || section.type === "content") {
+    const media = [
+      ...mediaErrors(section.banners.desktop, "แบนเนอร์เดสก์ท็อป"),
+      ...mediaErrors(section.banners.tablet, "แบนเนอร์แท็บเล็ต"),
+      ...mediaErrors(section.banners.mobile, "แบนเนอร์มือถือ"),
+    ];
+    if (media.length > 0) e.banner = media.join(", ");
+  }
+  if (section.type === "product") {
+    if (section.productSource === "collection" && !section.collectionId) e.collectionId = "กรุณาเลือกกลุ่มสินค้าพิเศษ";
+    if (section.productSource === "category" && !section.categoryId) e.categoryId = "กรุณาเลือกหมวดหมู่";
+    if (section.productSource === "manual" && section.products.length === 0) e.products = "กรุณาเลือกสินค้าอย่างน้อย 1 รายการ";
+  }
+  // A CTA section is only a button; other sections may skip it, but a half-filled button breaks on the storefront.
+  const ctaRequired = section.type === "cta";
+  const hasLabel = !!section.cta.label.trim();
+  const hasDestination = section.cta.destination.type !== "none";
+  if ((ctaRequired || hasDestination) && !hasLabel) e.ctaLabel = "กรุณากรอกข้อความบนปุ่ม";
+  const destError = destinationError(section.cta.destination, ctaRequired || hasLabel);
+  if (destError) e.ctaDestination = destError;
+  return e;
+}
+
+/**
  * §8-19 — one type-conditional form for all five section types, mounted
  * fresh (via the caller's `<Show when={expandedId() === section.id}>`)
  * whenever a *different* section is opened for editing, so each field's
@@ -43,7 +86,8 @@ const CONTENT_LAYOUT_OPTIONS: { value: HomepageContentLayout; label: string }[] 
  * copied in), so editing the Collection later is reflected here and on the
  * storefront automatically.
  */
-export function HomepageSectionForm(props: { section: HomepageSection; onChange: (next: HomepageSection) => void }) {
+export function HomepageSectionForm(props: { section: HomepageSection; onChange: (next: HomepageSection) => void; errors?: FormErrors }) {
+  const err = (key: string) => props.errors?.[key];
   const s = () => props.section;
   const patch = (next: Partial<HomepageSection>) => props.onChange({ ...s(), ...next });
   const collectionsStore = useAdminCollections();
@@ -54,7 +98,7 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
 
   return (
     <div class="flex flex-col gap-4 border-t border-border p-4 sm:p-5">
-      <TextField label="ชื่อส่วน (เห็นเฉพาะทีมงาน)" required value={s().name} onInput={(e) => patch({ name: e.currentTarget.value })} class="sm:max-w-md" />
+      <TextField label="ชื่อส่วน (เห็นเฉพาะทีมงาน)" required value={s().name} onInput={(e) => patch({ name: e.currentTarget.value })} error={err("name")} class="sm:max-w-md" />
 
       <Show when={hasEyebrow()}>
         <TextField label="ข้อความเล็กเหนือหัวข้อ" placeholder="เช่น NEW" value={s().eyebrow} onInput={(e) => patch({ eyebrow: e.currentTarget.value })} class="sm:max-w-xs" />
@@ -93,8 +137,11 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
 
       <Show when={s().type === "hero"}>
         <div class="flex flex-col gap-2">
-          <p class="text-sm font-semibold text-ink">สไลด์แบนเนอร์ (รูปภาพ, วิดีโอ, YouTube)</p>
+          <p class="text-sm font-semibold text-ink">
+            สไลด์แบนเนอร์ (รูปภาพ, วิดีโอ, YouTube) <span class="text-system-red" aria-hidden="true">*</span>
+          </p>
           <HeroAssetsEditor assets={s().assets} onChange={(assets) => patch({ assets })} />
+          <FieldMessage message={err("slides")} />
         </div>
       </Show>
 
@@ -103,11 +150,17 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
           <Show when={s().type === "hero"}>
             <p class="text-sm font-semibold text-ink">แบนเนอร์รูปเดียว (ใช้เมื่อไม่มีสไลด์ด้านบน)</p>
           </Show>
+          <Show when={s().type !== "hero"}>
+            <p class="text-sm font-semibold text-ink">
+              แบนเนอร์ <span class="text-system-red" aria-hidden="true">*</span>
+            </p>
+          </Show>
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <BannerUploader allowVideo label="แบนเนอร์เดสก์ท็อป" device="desktop" value={s().banners.desktop} onChange={(v) => patch({ banners: { ...s().banners, desktop: v } })} />
             <BannerUploader allowVideo label="แบนเนอร์แท็บเล็ต" device="tablet" value={s().banners.tablet} onChange={(v) => patch({ banners: { ...s().banners, tablet: v } })} />
             <BannerUploader allowVideo label="แบนเนอร์มือถือ" device="mobile" value={s().banners.mobile} onChange={(v) => patch({ banners: { ...s().banners, mobile: v } })} />
           </div>
+          <FieldMessage message={err("banner")} />
         </div>
       </Show>
 
@@ -137,10 +190,13 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
         </label>
         <Show when={s().productSource === "collection"}>
           <label class="flex flex-col gap-1.5 sm:max-w-md">
-            <span class="text-sm font-medium text-ink">กลุ่มสินค้าพิเศษ</span>
+            <span class="text-sm font-medium text-ink">
+              กลุ่มสินค้าพิเศษ <span class="text-system-red" aria-hidden="true">*</span>
+            </span>
             <div class="relative">
               <select
                 value={s().collectionId}
+                aria-invalid={err("collectionId") ? true : undefined}
                 onChange={(e) => patch({ collectionId: e.currentTarget.value })}
                 class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
               >
@@ -149,14 +205,18 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
               </select>
               <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
             </div>
+            <FieldMessage message={err("collectionId")} />
           </label>
         </Show>
         <Show when={s().productSource === "category"}>
           <label class="flex flex-col gap-1.5 sm:max-w-md">
-            <span class="text-sm font-medium text-ink">หมวดหมู่สินค้า</span>
+            <span class="text-sm font-medium text-ink">
+              หมวดหมู่สินค้า <span class="text-system-red" aria-hidden="true">*</span>
+            </span>
             <div class="relative">
               <select
                 value={s().categoryId}
+                aria-invalid={err("categoryId") ? true : undefined}
                 onChange={(e) => patch({ categoryId: e.currentTarget.value })}
                 class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
               >
@@ -165,6 +225,7 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
               </select>
               <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
             </div>
+            <FieldMessage message={err("categoryId")} />
           </label>
         </Show>
         <Show when={s().productSource !== "manual" && s().productSource !== "collection" && s().productSource !== "category"}>
@@ -174,17 +235,41 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
 
       <Show when={s().type === "product" && s().productSource === "manual"}>
         <div class="flex flex-col gap-2">
-          <p class="text-sm font-semibold text-ink">สินค้าในส่วนนี้</p>
+          <p class="text-sm font-semibold text-ink">
+            สินค้าในส่วนนี้ <span class="text-system-red" aria-hidden="true">*</span>
+          </p>
           <PromotionPageProductPicker selected={s().products} onChange={(products) => patch({ products })} />
+          <FieldMessage message={err("products")} />
         </div>
       </Show>
 
       {/* Landing Page Frontend Polish §10 — "product" sections get a CTA too, used as the section's "View All" link (e.g. to the Collection's own listing). */}
       <div class="flex flex-col gap-3 rounded-card bg-surface-gray/60 p-3">
         <p class="text-sm font-semibold text-ink">ปุ่ม</p>
-        <TextField label="ข้อความบนปุ่ม" placeholder="เช่น ช้อปเลย" value={s().cta.label} onInput={(e) => patch({ cta: { ...s().cta, label: e.currentTarget.value } })} class="sm:max-w-xs" />
-        <DestinationSelector value={s().cta.destination} onChange={(destination) => patch({ cta: { ...s().cta, destination } })} />
+        <TextField
+          label="ข้อความบนปุ่ม"
+          required={s().type === "cta"}
+          placeholder="เช่น ช้อปเลย"
+          value={s().cta.label}
+          onInput={(e) => patch({ cta: { ...s().cta, label: e.currentTarget.value } })}
+          error={err("ctaLabel")}
+          class="sm:max-w-xs"
+        />
+        <DestinationSelector
+          required={s().type === "cta"}
+          value={s().cta.destination}
+          onChange={(destination) => patch({ cta: { ...s().cta, destination } })}
+          error={err("ctaDestination")}
+        />
       </div>
     </div>
+  );
+}
+
+function FieldMessage(props: { message?: string }) {
+  return (
+    <Show when={props.message}>
+      <p role="alert" class="text-sm text-system-red">{props.message}</p>
+    </Show>
   );
 }

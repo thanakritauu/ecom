@@ -19,7 +19,10 @@ type AdminNavigationContextValue = {
   add: (input: NavigationItemFormValues) => Promise<NavigationItem>;
   update: (id: string, input: NavigationItemFormValues) => Promise<NavigationItem>;
   remove: (id: string) => Promise<void>;
+  /** เปิด / ปิด for a published item; does nothing to a draft (it goes live through `publish`). */
   toggleVisible: (id: string) => Promise<void>;
+  /** Draft-first: a draft's first publish (shown on the storefront). The caller runs the publish checks first. */
+  publish: (id: string) => Promise<void>;
   /** Swaps `order` with the item immediately before/after it (within the same `parentId` group) — §11's "use `order`, not array index" rule, exposed as the move affordance the list UI's Up/Down buttons call. */
   move: (id: string, direction: "up" | "down") => Promise<void>;
 };
@@ -102,7 +105,12 @@ export function AdminNavigationProvider(props: { children: JSX.Element }) {
 
   const toggleVisible: AdminNavigationContextValue["toggleVisible"] = async (id) => {
     await simulateDelay();
-    mutate((list) => list.map((i) => (i.id === id ? { ...i, visible: !i.visible, updatedAt: TODAY_LABEL } : i)));
+    mutate((list) => list.map((i) => (i.id === id && !i.draft ? { ...i, visible: !i.visible, updatedAt: TODAY_LABEL } : i)));
+  };
+
+  const publish: AdminNavigationContextValue["publish"] = async (id) => {
+    await simulateDelay();
+    mutate((list) => list.map((i) => (i.id === id ? { ...i, draft: false, visible: true, updatedAt: TODAY_LABEL } : i)));
   };
 
   const move: AdminNavigationContextValue["move"] = async (id, direction) => {
@@ -126,7 +134,7 @@ export function AdminNavigationProvider(props: { children: JSX.Element }) {
   };
 
   return (
-    <AdminNavigationContext.Provider value={{ items, getById, add, update, remove, toggleVisible, move }}>
+    <AdminNavigationContext.Provider value={{ items, getById, add, update, remove, toggleVisible, publish, move }}>
       {props.children}
     </AdminNavigationContext.Provider>
   );

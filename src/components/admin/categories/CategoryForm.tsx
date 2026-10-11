@@ -1,17 +1,22 @@
 import { createSignal, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
-import { Button } from "~/components/shared/Button";
 import { Toggle } from "~/components/admin/Toggle";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
+import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
 import { slugifyCategory, categorySlugRouteWarning, categoryStorefrontHref, STOREFRONT_CATEGORY_ROUTE_SLUGS, type AdminCategory, type CategoryFormValues, type CategoryStatus } from "~/lib/adminCategories";
+
+const LABELS: Record<string, string> = { name: "ชื่อหมวดหมู่", slug: "Slug" };
 
 /**
  * One Create/Edit form shared by `/new` and `/:id/edit` — same "one form,
  * two routes" shape every other Admin form uses. Modeled directly on
- * `ProductCollectionForm` (single save action, no publish workflow) plus the
- * taxonomy fields a Category needs: Slug (auto-derived from Name until the
- * admin edits it directly, same UX as the หน้าแคมเปญ form's slug field). Status is a Toggle (§3) — no Display Order field
- * anymore (§5, removed with no replacement).
+ * `ProductCollectionForm` plus the taxonomy fields a Category needs: Slug
+ * (auto-derived from Name until the admin edits it directly, same UX as the
+ * หน้าแคมเปญ form's slug field). Draft-first: a new category (or one still
+ * แบบร่าง) saves as a draft or publishes; once published, the Toggle decides
+ * whether it's on the storefront.
  */
 export function CategoryForm(props: {
   initial?: AdminCategory;
@@ -24,20 +29,28 @@ export function CategoryForm(props: {
   const [slug, setSlugRaw] = createSignal(props.initial?.slug ?? "");
   const [slugTouched, setSlugTouched] = createSignal(!!props.initial);
   const [description, setDescription] = createSignal(props.initial?.description ?? "");
-  const [status, setStatus] = createSignal<CategoryStatus>(props.initial?.status ?? "active");
+  const [status, setStatus] = createSignal<CategoryStatus>(props.initial && props.initial.status !== "draft" ? props.initial.status : "active");
+  /** Creating, or the category is still แบบร่าง: บันทึกแบบร่าง / บันทึกและเผยแพร่ instead of one save + on/off Toggle. */
+  const draftFlow = !props.initial || props.initial.status === "draft";
 
-  const [errors, setErrors] = createSignal<Record<string, string>>({});
+  const [errors, setErrors] = createSignal<FormErrors>({});
+  const clearError = (key: string) => setErrors((prev) => clearFieldError(prev, key));
   const [saving, setSaving] = createSignal(false);
   const [submitError, setSubmitError] = createSignal<string>();
 
   const handleNameInput = (value: string) => {
     setName(value);
-    if (!slugTouched()) setSlugRaw(slugifyCategory(value));
+    if (value.trim()) clearError("name");
+    if (!slugTouched()) {
+      setSlugRaw(slugifyCategory(value));
+      if (slugifyCategory(value)) clearError("slug");
+    }
   };
 
   const handleSlugInput = (value: string) => {
     setSlugTouched(true);
     setSlugRaw(value);
+    clearError("slug");
   };
 
   const validate = (): Record<string, string> => {
@@ -50,17 +63,30 @@ export function CategoryForm(props: {
     return next;
   };
 
-  const handleSubmit = async (e: SubmitEvent) => {
+  /** บันทึกแบบร่าง: only the name; a slug that's been typed must still be usable (not taken, not a system page). */
+  const validateDraft = (): Record<string, string> => {
+    const full = validate();
+    const next: Record<string, string> = {};
+    if (full.name) next.name = full.name;
+    if (slugifyCategory(slug()) && full.slug) next.slug = full.slug;
+    return next;
+  };
+
+  const handleSubmit = (e: SubmitEvent) => {
     e.preventDefault();
-    const nextErrors = validate();
+    void save(draftFlow ? "active" : status());
+  };
+
+  const save = async (nextStatus: CategoryStatus) => {
+    const nextErrors = nextStatus === "draft" ? validateDraft() : validate();
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (reportFormErrors(nextErrors, LABELS)) return;
 
     const values: CategoryFormValues = {
       name: name().trim(),
       slug: slugifyCategory(slug()),
       description: description().trim(),
-      status: status(),
+      status: nextStatus,
     };
 
     setSaving(true);
@@ -75,7 +101,8 @@ export function CategoryForm(props: {
   };
 
   return (
-    <form onSubmit={handleSubmit} class="flex flex-col gap-6">
+    <form onSubmit={handleSubmit} noValidate class="flex flex-col gap-6">
+      <FormErrorSummary errors={errors()} labels={LABELS} />
       <Section title="ข้อมูลพื้นฐาน">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
@@ -84,6 +111,7 @@ export function CategoryForm(props: {
             placeholder="ลิป"
             value={name()}
             onInput={(e) => handleNameInput(e.currentTarget.value)}
+            data-field="name"
             error={errors().name}
             disabled={saving()}
           />
@@ -93,6 +121,7 @@ export function CategoryForm(props: {
             placeholder="lip"
             value={slug()}
             onInput={(e) => handleSlugInput(e.currentTarget.value)}
+            data-field="slug"
             error={errors().slug}
             disabled={saving()}
           />
@@ -117,11 +146,15 @@ export function CategoryForm(props: {
               class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
             />
           </label>
-          {/* CMS + Frontend Refinement §1 — Status only appears on Edit; Create
-              uses the existing default ("active", same as `normalizeCategory`)
-              with no picker at all, so a brand-new Category can't be created
-              disabled by accident. */}
-          <Show when={props.mode === "edit"}>
+          {/* Draft-first: no on/off at creation or while แบบร่าง; the Toggle only appears once the category has been published. */}
+          <Show
+            when={!draftFlow}
+            fallback={
+              <p class="text-xs text-ink-gray sm:col-span-2">
+                {props.initial ? "หมวดหมู่นี้ยังเป็นแบบร่าง ไม่แสดงบนหน้าร้าน" : "บันทึกแบบร่างไว้ก่อนได้ แล้วกด บันทึกและเผยแพร่ เมื่อข้อมูลครบ"}
+              </p>
+            }
+          >
             <label class="flex flex-col gap-1.5">
               <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
               <Toggle checked={status() === "active"} onChange={(checked) => setStatus(checked ? "active" : "inactive")} disabled={saving()} />
@@ -138,14 +171,14 @@ export function CategoryForm(props: {
       </Show>
 
       <AdminFloatingBar>
-        <div class="flex w-full flex-wrap justify-end gap-3">
-          <Button type="button" variant="outline" onClick={props.onCancel} disabled={saving()}>
-            ยกเลิก
-          </Button>
-          <Button type="submit" variant="primary" loading={saving()}>
-            {saving() ? "กำลังบันทึก..." : props.mode === "create" ? "บันทึกหมวดหมู่" : "บันทึกการเปลี่ยนแปลง"}
-          </Button>
-        </div>
+        <DraftPublishActions
+          draft={draftFlow}
+          saving={saving()}
+          onCancel={props.onCancel}
+          onSaveDraft={() => void save("draft")}
+          onPublish={() => void save("active")}
+          onSave={() => void save(status())}
+        />
       </AdminFloatingBar>
       <div class="h-16" aria-hidden="true" />
     </form>

@@ -11,7 +11,7 @@ export default function AdminCouponNewPage() {
 
   const handleSubmit = async (values: CouponFormValues) => {
     const created = await store.add(values);
-    pushToast("บันทึกคูปองเรียบร้อยแล้ว", "success");
+    pushToast(values.status === "draft" ? "บันทึกแบบร่างแล้ว ยังไม่มีผลที่หน้าร้าน" : "บันทึกและเผยแพร่คูปองแล้ว", "success");
     navigate(`/admin/marketing/coupons/${created.id}`);
   };
 

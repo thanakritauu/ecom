@@ -17,8 +17,9 @@ export default function AdminPromotionEditPage() {
   const handleSubmit = async (values: PromotionFormValues) => {
     const current = promotion();
     if (!current) return;
+    const wasDraft = current.status === "draft";
     await store.update(current.id, values);
-    pushToast("บันทึกโปรโมชั่นเรียบร้อยแล้ว", "success");
+    pushToast(values.status === "draft" ? "บันทึกแบบร่างแล้ว ยังไม่มีผลที่หน้าร้าน" : wasDraft ? "บันทึกและเผยแพร่โปรโมชั่นแล้ว" : "บันทึกโปรโมชั่นเรียบร้อยแล้ว", "success");
     navigate(`/admin/marketing/promotions/${current.id}`);
   };
 

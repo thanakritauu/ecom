@@ -20,11 +20,14 @@ import {
   formatCouponUsage,
   formatMarketingDateTime,
   marketingPhase,
+  couponPublishProblems,
 } from "~/lib/adminMarketing";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
 import { useAdminOrders } from "~/lib/adminOrderStore";
 import { formatOrderDateLabel } from "~/lib/adminOrders";
 import { pushToast } from "~/lib/toast";
+import { isRichTextEmpty } from "~/lib/richText";
+import { RichTextContent } from "~/components/shared/RichTextContent";
 
 export default function AdminCouponDetailPage() {
   const params = useParams<{ id: string }>();
@@ -56,12 +59,12 @@ export default function AdminCouponDetailPage() {
   const confirmToggleAction = async () => {
     const current = coupon();
     if (!current) return;
-    const turnOn = current.status === "disabled";
+    const turnOn = current.status !== "active";
     setActionLoading(true);
     await store.setStatus(current.id, turnOn ? "active" : "disabled");
     setActionLoading(false);
     setConfirmToggle(false);
-    pushToast(turnOn ? "เปิดใช้งานคูปองแล้ว" : "ปิดใช้งานคูปองแล้ว", "success");
+    pushToast(turnOn ? (current.status === "draft" ? "เผยแพร่คูปองแล้ว" : "เปิดใช้งานคูปองแล้ว") : "ปิดใช้งานคูปองแล้ว", "success");
   };
 
   const confirmDeleteAction = async () => {
@@ -104,9 +107,15 @@ export default function AdminCouponDetailPage() {
                     entity="คูปอง"
                     basePath="/admin/marketing/coupons"
                     isDisabled={c().status === "disabled"}
+                    isDraft={c().status === "draft"}
                     hideView
                     onDuplicate={handleDuplicate}
-                    onToggleStatus={() => setConfirmToggle(true)}
+                    onToggleStatus={() => {
+                      // A แบบร่าง is published only once it passes the full check; the toast names what's missing.
+                      const missing = c().status === "draft" ? couponPublishProblems(c()) : [];
+                      if (missing.length > 0) pushToast(`เผยแพร่ "${c().code}" ไม่ได้ ยังขาดข้อมูล ${missing.length} รายการ`, "error", missing.join(", "));
+                      else setConfirmToggle(true);
+                    }}
                     onDelete={() => setConfirmDelete(true)}
                     triggerClass="flex size-11 items-center justify-center rounded-pill border border-border text-ink-gray hover:bg-surface-pink"
                   />
@@ -114,8 +123,8 @@ export default function AdminCouponDetailPage() {
               }
             />
 
-            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div class="flex flex-col gap-6 lg:col-span-2">
+            <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div class="flex min-w-0 flex-col gap-6">
                 <Section title="คูปองบนหน้าร้าน">
                   <div class="max-w-[369px] px-1 pt-1">
                     <CouponCard
@@ -128,6 +137,12 @@ export default function AdminCouponDetailPage() {
                     <Row label="แสดงในหน้าชำระเงิน" value={c().showAtCheckout ? "แสดง" : "ไม่แสดง"} />
                   </dl>
                   <p class="text-xs text-ink-gray">ลูกค้ากรอกโค้ดนี้เองได้ที่หน้าชำระเงินเสมอเมื่อคูปองใช้งานอยู่</p>
+                </Section>
+
+                <Section title="เงื่อนไขเพิ่มเติม">
+                  <Show when={!isRichTextEmpty(c().extraConditions)} fallback={<p class="text-sm text-ink-gray">ไม่มีเงื่อนไขเพิ่มเติม</p>}>
+                    <RichTextContent value={c().extraConditions} class="text-sm text-ink-gray" />
+                  </Show>
                 </Section>
 
                 <Section title={`คำสั่งซื้อที่ใช้คูปองนี้ (${usedIn().length.toLocaleString("th-TH")})`}>
@@ -167,7 +182,7 @@ export default function AdminCouponDetailPage() {
                   <StatusBadge tone={phase().tone} class="w-fit">
                     {phase().label}
                   </StatusBadge>
-                  <p class="text-sm text-ink-gray">{c().status === "active" ? "เปิดใช้งานอยู่ ใช้ได้ตามช่วงเวลา" : "ปิดใช้งานอยู่ ลูกค้าใช้ไม่ได้"}</p>
+                  <p class="text-sm text-ink-gray">{c().status === "draft" ? "แบบร่าง ลูกค้ายังใช้ไม่ได้" : c().status === "active" ? "เปิดใช้งานอยู่ ใช้ได้ตามช่วงเวลา" : "ปิดใช้งานอยู่ ลูกค้าใช้ไม่ได้"}</p>
                 </Section>
 
                 <Section title="ส่วนลด">
@@ -209,9 +224,9 @@ export default function AdminCouponDetailPage() {
             <ConfirmDialog
               open={confirmToggle()}
               onOpenChange={setConfirmToggle}
-              title={c().status === "disabled" ? "เปิดใช้งานคูปองนี้?" : "ปิดใช้งานคูปองนี้?"}
-              description={c().status === "disabled" ? `"${c().code}" จะใช้ได้ที่หน้าร้านตามวันที่ที่ตั้งไว้` : `"${c().code}" จะถูกซ่อนจากร้านค้าและใช้ไม่ได้ทันที`}
-              confirmLabel={c().status === "disabled" ? "เปิดใช้งาน" : "ปิดใช้งาน"}
+              title={c().status === "draft" ? "เผยแพร่คูปองนี้?" : c().status === "disabled" ? "เปิดใช้งานคูปองนี้?" : "ปิดใช้งานคูปองนี้?"}
+              description={c().status !== "active" ? `"${c().code}" จะใช้ได้ที่หน้าร้านตามวันที่ที่ตั้งไว้` : `"${c().code}" จะถูกซ่อนจากร้านค้าและใช้ไม่ได้ทันที`}
+              confirmLabel={c().status === "draft" ? "เผยแพร่" : c().status === "disabled" ? "เปิดใช้งาน" : "ปิดใช้งาน"}
               loading={actionLoading()}
               onConfirm={confirmToggleAction}
             />

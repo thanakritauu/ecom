@@ -3,6 +3,9 @@ import { createEffect, createSignal, For, Show } from "solid-js";
 import { Button } from "~/components/shared/Button";
 import { TextField } from "~/components/shared/TextField";
 import type { AdminProduct } from "~/lib/adminProductStore";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
+import { scrollToFirstErrorIn } from "~/lib/adminDrawerScroll";
 
 export type StockEditValues = { stockLeft: number; variantStock: Record<string, number> };
 
@@ -20,7 +23,13 @@ export function StockEditDialog(props: {
 }) {
   const [stock, setStock] = createSignal("");
   const [variantStock, setVariantStock] = createSignal<Record<string, string>>({});
-  const [errors, setErrors] = createSignal<Record<string, string>>({});
+  const [errors, setErrors] = createSignal<FormErrors>({});
+  const clearError = (key: string) => setErrors((prev) => clearFieldError(prev, key));
+  let bodyRef: HTMLDivElement | undefined;
+  const labels = (): Record<string, string> => ({
+    stock: "สต๊อกสินค้า",
+    ...Object.fromEntries((props.product?.adminVariants ?? []).map((v) => [v.id, `สต๊อก ${v.label || "ตัวเลือก"}`])),
+  });
   const [saving, setSaving] = createSignal(false);
   const [submitError, setSubmitError] = createSignal<string>();
 
@@ -37,11 +46,14 @@ export function StockEditDialog(props: {
     e.preventDefault();
     const p = props.product;
     if (!p) return;
-    const next: Record<string, string> = {};
+    const next: FormErrors = {};
     if (!isValidStock(stock())) next.stock = "กรุณากรอกจำนวนสต๊อกที่ถูกต้อง";
     for (const v of p.adminVariants) if (!isValidStock(variantStock()[v.id] ?? "")) next[v.id] = "กรุณากรอกจำนวนที่ถูกต้อง";
     setErrors(next);
-    if (Object.keys(next).length > 0) return;
+    if (reportFormErrors(next, labels())) {
+      scrollToFirstErrorIn(bodyRef, next);
+      return;
+    }
     setSaving(true);
     setSubmitError(undefined);
     try {
@@ -64,10 +76,11 @@ export function StockEditDialog(props: {
           <Dialog.Content class="flex max-h-[90vh] w-full max-w-md flex-col rounded-card bg-surface-card p-5 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
             <Dialog.Title class="text-lg font-semibold text-ink">แก้ไขสต๊อก</Dialog.Title>
             <Dialog.Description class="mt-1 truncate text-sm text-ink-gray">{props.product?.name ?? ""}</Dialog.Description>
-            <form onSubmit={handleSubmit} class="mt-4 flex min-h-0 flex-col gap-4">
-              <div class="flex min-h-0 flex-col gap-4 overflow-y-auto">
+            <form onSubmit={handleSubmit} noValidate class="mt-4 flex min-h-0 flex-col gap-4">
+              <div ref={bodyRef} class="flex min-h-0 flex-col gap-4 overflow-y-auto">
+                <FormErrorSummary errors={errors()} labels={labels()} />
                 <div class="flex flex-col gap-1.5">
-                  <TextField label="สต๊อกสินค้า" required type="number" min="0" value={stock()} onInput={(e) => setStock(e.currentTarget.value)} error={errors().stock} disabled={saving()} />
+                  <TextField label="สต๊อกสินค้า" required type="number" min="0" value={stock()} onInput={(e) => { setStock(e.currentTarget.value); if (isValidStock(e.currentTarget.value)) clearError("stock"); }} data-field="stock" error={errors().stock} disabled={saving()} />
                   <p class="text-xs text-ink-gray">จำนวนที่ลูกค้าสั่งได้ ถ้าเป็น 0 หน้าร้านจะขึ้นว่าสินค้าหมด</p>
                 </div>
                 <Show when={(props.product?.adminVariants.length ?? 0) > 0}>
@@ -77,13 +90,16 @@ export function StockEditDialog(props: {
                       {(v) => (
                         <TextField
                           label={v.label || "ตัวเลือก"}
+                          required
                           type="number"
                           min="0"
                           value={variantStock()[v.id] ?? ""}
                           onInput={(e) => {
                             const value = e.currentTarget.value;
                             setVariantStock((prev) => ({ ...prev, [v.id]: value }));
+                            if (isValidStock(value)) clearError(v.id);
                           }}
+                          data-field={v.id}
                           error={errors()[v.id]}
                           disabled={saving()}
                         />

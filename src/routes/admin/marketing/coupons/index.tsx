@@ -28,6 +28,7 @@ import {
   formatMarketingDate,
   formatMarketingDateTime,
   marketingPhase,
+  couponPublishProblems,
   type Coupon,
   type MarketingPhase,
 } from "~/lib/adminMarketing";
@@ -163,15 +164,27 @@ export default function AdminCouponListPage() {
     pushToast(`ลบ "${c.code}" เรียบร้อยแล้ว`, "error");
   };
 
+  /** A แบบร่าง is published (full check first, names what's missing); never switched off. */
+  const publishBlocked = (c: Coupon): boolean => {
+    if (c.status !== "draft") return false;
+    const missing = couponPublishProblems(c);
+    if (missing.length === 0) return false;
+    pushToast(`เผยแพร่ "${c.code}" ไม่ได้ ยังขาดข้อมูล ${missing.length} รายการ`, "error", missing.join(", "));
+    return true;
+  };
+  const requestToggle = (c: Coupon) => {
+    if (!publishBlocked(c)) setConfirmToggle(c);
+  };
+
   const confirmToggleAction = async () => {
     const c = confirmToggle();
     if (!c) return;
-    const turnOn = c.status === "disabled";
+    const turnOn = c.status !== "active";
     setActionLoading(true);
     await store.setStatus(c.id, turnOn ? "active" : "disabled");
     setActionLoading(false);
     setConfirmToggle(null);
-    pushToast(turnOn ? "เปิดใช้งานคูปองแล้ว" : "ปิดใช้งานคูปองแล้ว", "success");
+    pushToast(turnOn ? (c.status === "draft" ? "เผยแพร่คูปองแล้ว" : "เปิดใช้งานคูปองแล้ว") : "ปิดใช้งานคูปองแล้ว", "success");
   };
 
   const handleDuplicate = async (c: Coupon) => {
@@ -190,11 +203,26 @@ export default function AdminCouponListPage() {
     pushToast(`ลบคูปอง ${ids.length} รายการเรียบร้อยแล้ว`, "error");
   };
 
+  /**
+   * เปิดใช้งาน: drafts must pass the full check first (incomplete ones are skipped).
+   * ปิดใช้งาน: only ones already published; a แบบร่าง stays a draft.
+   */
   const bulkSetStatus = async (status: "active" | "disabled") => {
-    const ids = [...selectedIds()];
-    await Promise.all(ids.map((id) => store.setStatus(id, status)));
+    const targets = store.items().filter((x) => selectedIds().has(x.id));
+    const skipped = targets.filter((x) => x.status === "draft" && (status === "disabled" || couponPublishProblems(x).length > 0));
+    const ok = targets.filter((x) => !skipped.includes(x));
+    await Promise.all(ok.map((x) => store.setStatus(x.id, status)));
     clearSelection();
-    pushToast(status === "active" ? `เปิดใช้งาน ${ids.length} รายการแล้ว` : `ปิดใช้งาน ${ids.length} รายการแล้ว`, "success");
+    const done = status === "active" ? `เปิดใช้งาน ${ok.length} รายการแล้ว` : `ปิดใช้งาน ${ok.length} รายการแล้ว`;
+    if (skipped.length === 0) pushToast(done, "success");
+    else
+      pushToast(
+        done,
+        "warning",
+        status === "active"
+          ? `ข้าม ${skipped.length} รายการที่เป็นแบบร่างและข้อมูลยังไม่ครบ: ${skipped.map((x) => x.code).join(", ")}`
+          : `ข้าม ${skipped.length} รายการที่เป็นแบบร่าง`,
+      );
   };
 
   const PhaseBadge = (props: { row: Coupon; class?: string }) => {
@@ -209,8 +237,9 @@ export default function AdminCouponListPage() {
       entity="คูปอง"
       basePath="/admin/marketing/coupons"
       isDisabled={props.row.status === "disabled"}
+      isDraft={props.row.status === "draft"}
       onDuplicate={() => handleDuplicate(props.row)}
-      onToggleStatus={() => setConfirmToggle(props.row)}
+      onToggleStatus={() => requestToggle(props.row)}
       onDelete={() => setConfirmDelete(props.row)}
       triggerClass={props.triggerClass}
     />
@@ -390,13 +419,13 @@ export default function AdminCouponListPage() {
       <ConfirmDialog
         open={confirmToggle() !== null}
         onOpenChange={(open) => !open && setConfirmToggle(null)}
-        title={confirmToggle()?.status === "disabled" ? "เปิดใช้งานคูปองนี้?" : "ปิดใช้งานคูปองนี้?"}
+        title={confirmToggle()?.status === "draft" ? "เผยแพร่คูปองนี้?" : confirmToggle()?.status === "disabled" ? "เปิดใช้งานคูปองนี้?" : "ปิดใช้งานคูปองนี้?"}
         description={
-          confirmToggle()?.status === "disabled"
+          confirmToggle()?.status !== "active"
             ? `"${confirmToggle()?.code ?? ""}" จะใช้ได้ที่หน้าร้านตามวันที่ที่ตั้งไว้`
             : `"${confirmToggle()?.code ?? ""}" จะถูกซ่อนจากร้านค้าและใช้ไม่ได้ทันที`
         }
-        confirmLabel={confirmToggle()?.status === "disabled" ? "เปิดใช้งาน" : "ปิดใช้งาน"}
+        confirmLabel={confirmToggle()?.status === "draft" ? "เผยแพร่" : confirmToggle()?.status === "disabled" ? "เปิดใช้งาน" : "ปิดใช้งาน"}
         loading={actionLoading()}
         onConfirm={confirmToggleAction}
       />

@@ -2,6 +2,8 @@ import { For, Show } from "solid-js";
 import type { Product } from "~/lib/types";
 import { productGallery, withProductVideos } from "~/lib/productVariants";
 import { MediaView } from "~/components/shared/MediaView";
+import { RichTextContent } from "~/components/shared/RichTextContent";
+import { isRichTextEmpty } from "~/lib/richText";
 
 /**
  * PDP's last section — the product description followed by every product
@@ -16,8 +18,8 @@ export function ProductDetails(props: { product: Product }) {
       <h2 id="product-details-heading" class="text-center text-2xl font-bold text-ink lg:text-3xl">
         รายละเอียดสินค้า
       </h2>
-      <Show when={props.product.description} fallback={<p class="text-ink-gray">ยังไม่มีรายละเอียดสินค้าเพิ่มเติมสำหรับสินค้านี้</p>}>
-        <p class="whitespace-pre-line text-base leading-relaxed text-ink">{props.product.description}</p>
+      <Show when={!isRichTextEmpty(props.product.description)} fallback={<p class="text-ink-gray">ยังไม่มีรายละเอียดสินค้าเพิ่มเติมสำหรับสินค้านี้</p>}>
+        <RichTextContent value={props.product.description} class="mx-auto w-full max-w-[800px]" />
       </Show>
       <div class="mx-auto flex w-full max-w-[800px] flex-col gap-3 sm:gap-4">
         <For each={images()}>

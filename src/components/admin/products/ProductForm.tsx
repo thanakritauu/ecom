@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, Show, type JSX } from "solid-js";
 import type { Product } from "~/lib/types";
 import { isVideoMedia, mediaImage, type MediaValue } from "~/lib/media";
 import { flashSaleRoundEndsAt, getDiscountPercent } from "~/lib/products";
@@ -13,14 +13,21 @@ import {
 } from "~/lib/adminProductStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { TextField } from "~/components/shared/TextField";
-import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
+import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
 import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
 import { ChevronDownIcon } from "~/components/admin/icons";
 import { Toggle } from "~/components/admin/Toggle";
 import { ProductCard } from "~/components/shared/ProductCard";
 import { ProductImageUploader } from "./ProductImageUploader";
 import { ProductVariantsEditor } from "./ProductVariantsEditor";
+import { ProductTiktokClips } from "./ProductTiktokClips";
+import { RichTextEditor } from "~/components/admin/RichTextEditor";
+import { RichTextContent } from "~/components/shared/RichTextContent";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
+import { isRichTextEmpty } from "~/lib/richText";
+import { useAdminTiktokClips } from "~/lib/adminTiktokClips";
 
 function toDatetimeLocal(epochMs: number): string {
   const d = new Date(epochMs);
@@ -35,10 +42,27 @@ function defaultFlashSaleDatetimeLocal(): string {
 /** Optional number field → `undefined` when blank (so the card hides that row), otherwise the number. */
 const optionalNumber = (raw: string) => (raw.trim() === "" || Number.isNaN(Number(raw)) ? undefined : Number(raw));
 
-const STATUS_OPTIONS: { value: AdminProductStatus; label: string }[] = (["active", "draft", "disabled"] as const).map((value) => ({
+/** Once a product has gone on sale it's either on or off; "แบบร่าง" is only the state before its first publish. */
+const STATUS_OPTIONS: { value: AdminProductStatus; label: string }[] = (["active", "disabled"] as const).map((value) => ({
   value,
   label: ADMIN_PRODUCT_STATUS_META[value].label,
 }));
+
+/** Field names for the "ยังกรอกข้อมูลไม่ครบ" toast and summary (`~/lib/adminFormValidation`). */
+const LABELS: Record<string, string> = {
+  name: "ชื่อสินค้า",
+  sku: "SKU",
+  category: "หมวดหมู่",
+  images: "รูปสินค้า",
+  description: "รายละเอียดสินค้า",
+  price: "ราคาขาย",
+  compareAtPrice: "ราคาก่อนลด",
+  stock: "จำนวนสต๊อก",
+  stockTotal: "จำนวนทั้งหมดของแฟลชเซล",
+  flashSaleStartsAt: "เวลาเริ่มแฟลชเซล",
+  flashSaleEndsAt: "เวลาสิ้นสุดแฟลชเซล",
+  rating: "คะแนนรีวิว",
+};
 
 const STATUS_HINT: Record<AdminProductStatus, string> = {
   active: "แสดงบนหน้าร้านและลูกค้าสั่งซื้อได้",
@@ -73,6 +97,13 @@ export function ProductForm(props: {
   const [soldCount, setSoldCount] = createSignal(props.initial?.soldCount !== undefined ? String(props.initial.soldCount) : "");
   const [reviewCount, setReviewCount] = createSignal(props.initial?.reviewCount !== undefined ? String(props.initial.reviewCount) : "");
   const [status, setStatus] = createSignal<AdminProductStatus>(props.initial?.status ?? "active");
+  /**
+   * New products and products still in แบบร่าง get two actions: "บันทึกแบบร่าง"
+   * (only the name is needed, never shown on the storefront) and "บันทึกและเผยแพร่"
+   * (full checks, goes live). A product that has been on sale just saves, with
+   * the เปิดขาย / ปิดขาย status picker.
+   */
+  const draftFlow = !props.initial || props.initial.status === "draft";
   // Gallery items (images and videos, `~/lib/media`); `images` is the still-image twin every card/list reads (a video counts as its poster).
   const [media, setMedia] = createSignal<MediaValue[]>(
     props.initial?.media?.length ? props.initial.media : props.initial?.images?.length ? props.initial.images : props.initial?.image ? [props.initial.image] : [],
@@ -91,32 +122,78 @@ export function ProductForm(props: {
     props.initial?.flashSaleEndsAt ? toDatetimeLocal(props.initial.flashSaleEndsAt) : defaultFlashSaleDatetimeLocal(),
   );
 
-  const [errors, setErrors] = createSignal<Record<string, string>>({});
+  const [showDiscountBadge, setShowDiscountBadge] = createSignal(props.initial?.showDiscountBadge !== false);
+  const [flashSaleStartsAtLocal, setFlashSaleStartsAtLocal] = createSignal(
+    props.initial?.flashSaleStartsAt ? toDatetimeLocal(props.initial.flashSaleStartsAt) : toDatetimeLocal(Date.now()),
+  );
+  const flashSaleStartsAtValue = () => (!flashSaleEnabled() || flashSaleDaily() ? undefined : new Date(flashSaleStartsAtLocal()).getTime());
+  // Clips this product's PDP shows first; written to the clips on save (`setProductTiktokClips`, see the routes).
+  const clipStore = useAdminTiktokClips();
+  const [tiktokClipIds, setTiktokClipIds] = createSignal<string[]>(props.initial ? clipStore.clipsForProduct(props.initial.id).map((c) => c.id) : []);
+  // The clip store reads localStorage on mount; pick up the stored links once it has (until the admin edits the list).
+  let clipsTouched = false;
+  createEffect(
+    on(clipStore.clips, () => {
+      if (!clipsTouched && props.initial) setTiktokClipIds(clipStore.clipsForProduct(props.initial.id).map((c) => c.id));
+    }),
+  );
+
+  const [errors, setErrors] = createSignal<FormErrors>({});
   const [saving, setSaving] = createSignal(false);
   const [submitError, setSubmitError] = createSignal<string>();
+  /** Setter that also drops that field's error once the admin edits it. */
+  const fix = (...keys: string[]) => setErrors((e) => keys.reduce(clearFieldError, e));
 
-  const validate = (): Record<string, string> => {
-    const next: Record<string, string> = {};
+  const validate = (): FormErrors => {
+    const next: FormErrors = {};
     if (!name().trim()) next.name = "กรุณากรอกชื่อสินค้า";
     if (!sku().trim()) next.sku = "กรุณากรอกรหัส SKU";
     if (!categoryId()) next.category = "กรุณาเลือกหมวดหมู่";
+    if (images().length === 0) next.images = "กรุณาอัปโหลดรูปสินค้าอย่างน้อย 1 รูป";
+    else if (media().some((m) => isVideoMedia(m) && !m.poster)) next.images = "วิดีโอทุกตัวในแกลเลอรีต้องมีภาพปก";
+    if (isRichTextEmpty(description())) next.description = "กรุณากรอกรายละเอียดสินค้า";
     const priceNum = Number(price());
     if (!price().trim() || Number.isNaN(priceNum) || priceNum <= 0) next.price = "กรุณากรอกราคาที่ถูกต้อง";
+    const compareNum = optionalNumber(compareAtPrice());
+    if (compareAtPrice().trim() && (compareNum === undefined || compareNum < 0)) next.compareAtPrice = "กรุณากรอกราคาก่อนลดที่ถูกต้อง";
     const stockNum = Number(stockLeft());
     if (stockLeft().trim() === "" || Number.isNaN(stockNum) || stockNum < 0) next.stock = "จำนวนสต๊อกต้องเป็นตัวเลขและไม่ติดลบ";
     const ratingNum = optionalNumber(rating());
     if (ratingNum !== undefined && (ratingNum < 0 || ratingNum > 5)) next.rating = "คะแนนต้องอยู่ระหว่าง 0-5";
     const totalNum = optionalNumber(stockTotal());
     if (flashSaleEnabled() && totalNum !== undefined && totalNum < stockNum) next.stockTotal = "จำนวนทั้งหมดต้องไม่น้อยกว่าสต๊อกคงเหลือ";
-    if (media().some((m) => isVideoMedia(m) && !m.poster)) next.images = "วิดีโอทุกตัวในแกลเลอรีต้องมีภาพปก";
+    if (flashSaleEnabled() && !flashSaleDaily()) {
+      const start = new Date(flashSaleStartsAtLocal()).getTime();
+      const end = new Date(flashSaleEndsAtLocal()).getTime();
+      if (!flashSaleStartsAtLocal() || Number.isNaN(start)) next.flashSaleStartsAt = "กรุณาเลือกเวลาเริ่มแฟลชเซล";
+      if (!flashSaleEndsAtLocal() || Number.isNaN(end)) next.flashSaleEndsAt = "กรุณาเลือกเวลาสิ้นสุดแฟลชเซล";
+      else if (!next.flashSaleStartsAt && end <= start) next.flashSaleEndsAt = "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม";
+    }
     return next;
   };
 
-  const handleSubmit = async (e: SubmitEvent) => {
+  /** "บันทึกแบบร่าง": just a name, plus anything typed in must still be valid (e.g. no text in a number field). */
+  const validateDraft = (): FormErrors => {
+    const full = validate();
+    const next: FormErrors = {};
+    if (full.name) next.name = full.name;
+    if (price().trim() && full.price) next.price = full.price;
+    if (stockLeft().trim() && full.stock) next.stock = full.stock;
+    for (const key of ["compareAtPrice", "rating", "stockTotal", "flashSaleStartsAt", "flashSaleEndsAt"]) if (full[key]) next[key] = full[key];
+    if (full.images && images().length > 0) next.images = full.images;
+    return next;
+  };
+
+  const handleSubmit = (e: SubmitEvent) => {
     e.preventDefault();
-    const validationErrors = validate();
+    // Draft flow's primary action puts it on sale; otherwise keep the picked เปิดขาย / ปิดขาย.
+    void save(draftFlow ? "active" : status());
+  };
+
+  const save = async (nextStatus: AdminProductStatus) => {
+    const validationErrors = nextStatus === "draft" ? validateDraft() : validate();
     setErrors(validationErrors);
-    if (Object.keys(validationErrors).length > 0) return;
+    if (reportFormErrors(validationErrors, LABELS)) return;
 
     setSaving(true);
     setSubmitError(undefined);
@@ -130,22 +207,25 @@ export function ProductForm(props: {
         // slug is one of those; `categoryId` is the real reference.
         category: STOREFRONT_CATEGORY_SLUGS.find((slug) => slug === selectedCategory?.slug),
         categoryId: categoryId(),
-        description: description().trim() || undefined,
+        description: description() || undefined,
         price: Number(price()),
         compareAtPrice: compareAtPrice().trim() ? Number(compareAtPrice()) : undefined,
+        showDiscountBadge: showDiscountBadge(),
         stockLeft: Number(stockLeft()),
         lowStockThreshold: optionalNumber(lowStockThreshold()) ?? LOW_STOCK_THRESHOLD,
-        status: status(),
+        status: nextStatus,
         images: images(),
         mainImage: effectiveMainImage(),
         media: media().some(isVideoMedia) ? media() : undefined,
         adminVariants: variants(),
         flashSaleEndsAt: flashSaleEndsAtValue(),
+        flashSaleStartsAt: flashSaleStartsAtValue(),
         flashSaleDaily: flashSaleEnabled() && flashSaleDaily(),
         stockTotal: optionalNumber(stockTotal()),
         rating: optionalNumber(rating()),
         soldCount: optionalNumber(soldCount()),
         reviewCount: optionalNumber(reviewCount()),
+        tiktokClipIds: tiktokClipIds(),
       });
     } catch {
       setSubmitError("บันทึกสินค้าไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
@@ -180,6 +260,7 @@ export function ProductForm(props: {
       price: priceNum,
       compareAtPrice: compareAtPriceNum,
       discountPercent,
+      showDiscountBadge: showDiscountBadge() ? undefined : false,
       // CMS + Frontend Final Refinement §6 — Live Preview must always read as
       // "in stock" (never the out-of-stock hover/badge/disabled state), no
       // matter what the real Stock field currently holds. This clamp only
@@ -190,6 +271,7 @@ export function ProductForm(props: {
       stockLeft: Math.max(stockLeftNum, 1),
       stockTotal: Math.max(optionalNumber(stockTotal()) ?? props.initial?.stockTotal ?? 0, stockLeftNum, 1),
       flashSaleEndsAt: flashSaleEndsAtValue(),
+      flashSaleStartsAt: flashSaleStartsAtValue(),
       // The card's shade circle follows the swatch settings (color, or the
       // separate swatch image in Image mode); the variant's photos stay its
       // modal/option photos — the two are uploaded independently.
@@ -210,145 +292,312 @@ export function ProductForm(props: {
     };
   });
 
+  const inputClass = (error?: string) =>
+    `h-11 w-full rounded-card border bg-surface-card px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray ${error ? "border-system-red" : "border-border"}`;
+
   const productForm = (
     <>
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div class="flex flex-col gap-6 lg:col-span-2">
-          <Section title="ข้อมูลพื้นฐาน">
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <TextField label="ชื่อสินค้า" required value={name()} onInput={(e) => setName(e.currentTarget.value)} error={errors().name} disabled={saving()} class="sm:col-span-2" />
-              <TextField label="SKU" required value={sku()} onInput={(e) => setSku(e.currentTarget.value)} error={errors().sku} disabled={saving()} />
-              <label class="flex flex-col gap-1.5">
-                <span class="text-sm font-medium text-ink">
-                  หมวดหมู่ <span class="text-system-red">*</span>
-                </span>
-                <div class="relative">
-                  <select
-                    value={categoryId()}
-                    disabled={saving()}
-                    onChange={(e) => setCategoryId(e.currentTarget.value)}
-                    class={`h-11 w-full appearance-none rounded-card border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray ${errors().category ? "border-system-red" : "border-border"}`}
-                  >
-                    <option value="">เลือกหมวดหมู่</option>
-                    <For each={categoryStore.categories()}>{(c) => <option value={c.id}>{c.name}</option>}</For>
-                  </select>
-                  <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
-                </div>
-                <Show when={errors().category}>
-                  <p class="text-sm text-system-red">{errors().category}</p>
-                </Show>
-              </label>
-              <label class="flex flex-col gap-1.5 sm:col-span-2">
-                <span class="text-sm font-medium text-ink">คำอธิบายสินค้า</span>
-                <textarea
-                  value={description()}
-                  disabled={saving()}
-                  onInput={(e) => setDescription(e.currentTarget.value)}
-                  rows={4}
-                  class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                />
-              </label>
-            </div>
-          </Section>
+      <FormErrorSummary errors={errors()} labels={LABELS} />
 
-          <Section title="รูปภาพและวิดีโอสินค้า">
-            <ProductImageUploader allowVideo images={media()} onChange={setMedia} maxImages={10} mainImage={effectiveMainImage()} onSetMain={setMainImage} />
-            <Show when={errors().images}>
-              <p class="text-sm text-system-red">{errors().images}</p>
-            </Show>
-          </Section>
-
-          <Section title="ตัวเลือกสินค้า">
-            <ProductVariantsEditor variants={variants()} onChange={setVariants} />
-          </Section>
-        </div>
-
-        <div class="flex flex-col gap-6">
-          <Section title="ราคา">
-            <div class="grid grid-cols-2 gap-4">
-              <TextField label="ราคาขาย" required type="number" min="0" value={price()} onInput={(e) => setPrice(e.currentTarget.value)} error={errors().price} disabled={saving()} />
-              <TextField label="ราคาก่อนลด" type="number" min="0" value={compareAtPrice()} onInput={(e) => setCompareAtPrice(e.currentTarget.value)} disabled={saving()} />
-            </div>
-            <Show when={previewProduct().discountPercent}>
-              <p class="text-xs text-ink-gray">
-                ป้ายส่วนลดบนการ์ดสินค้า <span class="font-semibold text-system-red">-{previewProduct().discountPercent}%</span> คำนวณจากราคาก่อนลดและราคาขาย
-              </p>
-            </Show>
-          </Section>
-
-          <Section title="แฟลชเซล">
-            <label class="flex flex-col gap-1.5">
-              <span class="text-sm font-medium text-ink">แสดงในแฟลชเซล</span>
-              <Toggle checked={flashSaleEnabled()} onChange={setFlashSaleEnabled} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
-              <span class="text-xs text-ink-gray">สินค้าจะขึ้นในส่วนแฟลชเซลหน้าแรกพร้อมเวลานับถอยหลัง ในราคาขายด้านบน</span>
+      <Section title="ข้อมูลพื้นฐาน">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div class="sm:col-span-2">
+            <TextField
+              label="ชื่อสินค้า"
+              required
+              data-field="name"
+              class="w-full"
+              value={name()}
+              onInput={(e) => {
+                setName(e.currentTarget.value);
+                fix("name");
+              }}
+              error={errors().name}
+              disabled={saving()}
+            />
+          </div>
+          <TextField
+            label="SKU"
+            required
+            data-field="sku"
+            value={sku()}
+            onInput={(e) => {
+              setSku(e.currentTarget.value);
+              fix("sku");
+            }}
+            error={errors().sku}
+            disabled={saving()}
+          />
+          <div class="flex flex-col gap-1.5" data-field="category">
+            <label for="product-category" class="text-sm font-medium text-ink">
+              หมวดหมู่ <span class="text-system-red" aria-hidden="true">*</span>
             </label>
-            <Show when={flashSaleEnabled()}>
-              <TextField
-                label="จำนวนทั้งหมดของแฟลชเซล"
-                type="number"
-                min="0"
-                value={stockTotal()}
-                placeholder={String(Math.max(props.initial?.stockTotal ?? 0, Number(stockLeft()) || 0))}
-                onInput={(e) => setStockTotal(e.currentTarget.value)}
-                error={errors().stockTotal}
-                disabled={saving()}
-              />
-              <p class="-mt-2 text-xs text-ink-gray">แถบบนการ์ดแสดงสต๊อกคงเหลือเทียบกับจำนวนนี้</p>
-              <label class="flex flex-col gap-1.5">
-                <span class="text-sm font-medium text-ink">รอบรายวัน</span>
-                <Toggle checked={flashSaleDaily()} onChange={setFlashSaleDaily} disabled={saving()} />
-                <span class="text-xs text-ink-gray">จบตอนเที่ยงคืนและเริ่มรอบใหม่ทุกวัน ถ้าปิดต้องกำหนดเวลาสิ้นสุดเอง</span>
-              </label>
-              <Show when={!flashSaleDaily()}>
-                <label class="flex flex-col gap-1.5">
-                  <span class="text-sm font-medium text-ink">สิ้นสุดเวลา</span>
-                  <input
-                    type="datetime-local"
-                    value={flashSaleEndsAtLocal()}
-                    disabled={saving()}
-                    onInput={(e) => setFlashSaleEndsAtLocal(e.currentTarget.value)}
-                    class="h-11 w-full rounded-card border border-border bg-surface-card px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-                  />
-                </label>
-              </Show>
-            </Show>
-          </Section>
-
-          <Section title="สต๊อกสินค้า">
-            <div class="grid grid-cols-2 gap-4">
-              <TextField label="จำนวนสต๊อก" required type="number" min="0" value={stockLeft()} onInput={(e) => setStockLeft(e.currentTarget.value)} error={errors().stock} disabled={saving()} />
-              <TextField label="ใกล้หมดเมื่อเหลือ" type="number" min="0" value={lowStockThreshold()} onInput={(e) => setLowStockThreshold(e.currentTarget.value)} disabled={saving()} />
-            </div>
-            <p class="text-xs text-ink-gray">เมื่อสต๊อกเหลือไม่เกิน {optionalNumber(lowStockThreshold()) ?? LOW_STOCK_THRESHOLD} ชิ้น ตะกร้าจะขึ้นป้าย "เหลือ X ชิ้นสุดท้าย"</p>
-          </Section>
-
-          <Section title="คะแนนและยอดขาย">
-            <div class="grid grid-cols-3 gap-4">
-              <TextField label="คะแนนรีวิว" type="number" min="0" max="5" step="0.1" value={rating()} onInput={(e) => setRating(e.currentTarget.value)} error={errors().rating} disabled={saving()} />
-              <TextField label="ขายแล้ว (ชิ้น)" type="number" min="0" value={soldCount()} onInput={(e) => setSoldCount(e.currentTarget.value)} disabled={saving()} />
-              <TextField label="จำนวนรีวิว" type="number" min="0" value={reviewCount()} onInput={(e) => setReviewCount(e.currentTarget.value)} disabled={saving()} />
-            </div>
-            <p class="text-xs text-ink-gray">แสดงบนการ์ดสินค้า ถ้าเว้นว่างจะไม่แสดงแถวคะแนนและยอดขาย</p>
-          </Section>
-
-          <Section title="สถานะ">
             <div class="relative">
               <select
-                value={status()}
+                id="product-category"
+                value={categoryId()}
                 disabled={saving()}
-                onChange={(e) => setStatus(e.currentTarget.value as AdminProductStatus)}
-                class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+                aria-required="true"
+                aria-invalid={!!errors().category}
+                onChange={(e) => {
+                  setCategoryId(e.currentTarget.value);
+                  fix("category");
+                }}
+                class={`${inputClass(errors().category)} appearance-none pr-9`}
               >
-                {STATUS_OPTIONS.map((opt) => (
-                  <option value={opt.value}>{opt.label}</option>
-                ))}
+                <option value="">เลือกหมวดหมู่</option>
+                <For each={categoryStore.categories()}>{(c) => <option value={c.id}>{c.name}</option>}</For>
               </select>
               <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
             </div>
-            <p class="text-xs text-ink-gray">{STATUS_HINT[status()]}</p>
-          </Section>
+            <Show when={errors().category}>
+              <p class="text-sm text-system-red">{errors().category}</p>
+            </Show>
+          </div>
+          <Show
+            when={!draftFlow}
+            fallback={
+              <p class="text-xs text-ink-gray sm:col-span-2">
+                {props.initial ? "สินค้านี้ยังเป็นแบบร่าง ไม่แสดงบนหน้าร้าน" : "บันทึกแบบร่างไว้ก่อนได้ แล้วกด บันทึกและเผยแพร่ เมื่อข้อมูลครบ"}
+              </p>
+            }
+          >
+          <div class="flex flex-col gap-1.5 sm:col-span-2">
+              <label for="product-status" class="text-sm font-medium text-ink">
+                สถานะ
+              </label>
+              <div class="relative">
+                <select
+                  id="product-status"
+                  value={status()}
+                  disabled={saving()}
+                  onChange={(e) => setStatus(e.currentTarget.value as AdminProductStatus)}
+                  class={`${inputClass()} appearance-none pr-9`}
+                >
+                  {STATUS_OPTIONS.map((opt) => (
+                    <option value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+              </div>
+              <p class="text-xs text-ink-gray">{STATUS_HINT[status()]}</p>
+            </div>
+          </Show>
         </div>
-      </div>
+      </Section>
+
+      <Section title="รูปภาพและวิดีโอสินค้า" required>
+        <div data-field="images" class="flex flex-col gap-2">
+          <ProductImageUploader
+            allowVideo
+            images={media()}
+            onChange={(next) => {
+              setMedia(next);
+              fix("images");
+            }}
+            maxImages={10}
+            mainImage={effectiveMainImage()}
+            onSetMain={setMainImage}
+          />
+          <Show when={errors().images}>
+            <p role="alert" class="text-sm text-system-red">
+              {errors().images}
+            </p>
+          </Show>
+        </div>
+      </Section>
+
+      <Section title="รายละเอียดสินค้า" required>
+        <RichTextEditor
+          field="description"
+          value={description()}
+          onChange={(html) => {
+            setDescription(html);
+            if (!isRichTextEmpty(html)) fix("description");
+          }}
+          error={errors().description}
+          disabled={saving()}
+          placeholder="เล่าจุดเด่น วิธีใช้ ส่วนผสม แทรกรูปประกอบระหว่างข้อความได้"
+          hint="แสดงในส่วน รายละเอียดสินค้า ของหน้าสินค้า ข้อความช่วงต้นใช้เป็นคำโปรยใต้ชื่อสินค้าด้วย"
+          minHeightClass="min-h-[240px]"
+        />
+      </Section>
+
+      <Section title="ราคา">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <TextField
+            label="ราคาขาย"
+            required
+            type="number"
+            min="0"
+            data-field="price"
+            value={price()}
+            onInput={(e) => {
+              setPrice(e.currentTarget.value);
+              fix("price");
+            }}
+            error={errors().price}
+            disabled={saving()}
+          />
+          <TextField
+            label="ราคาก่อนลด"
+            type="number"
+            min="0"
+            data-field="compareAtPrice"
+            value={compareAtPrice()}
+            onInput={(e) => {
+              setCompareAtPrice(e.currentTarget.value);
+              fix("compareAtPrice");
+            }}
+            error={errors().compareAtPrice}
+            disabled={saving()}
+          />
+        </div>
+        <ToggleRow
+          title="แสดงป้ายลดราคา"
+          hint={
+            previewProduct().discountPercent
+              ? `ป้าย "ลด ${previewProduct().discountPercent}%" บนการ์ดและหน้าสินค้า คำนวณจากราคาก่อนลดและราคาขาย ถ้าปิด ราคาก่อนลดแบบขีดฆ่ายังแสดงอยู่`
+              : "ป้ายจะขึ้นเมื่อราคาก่อนลดสูงกว่าราคาขาย ถ้าปิด ราคาก่อนลดแบบขีดฆ่ายังแสดงอยู่"
+          }
+        >
+          <Toggle checked={showDiscountBadge()} onChange={setShowDiscountBadge} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
+        </ToggleRow>
+      </Section>
+
+      <Section title="ตัวเลือกสินค้า">
+        <ProductVariantsEditor variants={variants()} onChange={setVariants} />
+      </Section>
+
+      <Section title="สต๊อกสินค้า">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <TextField
+            label="จำนวนสต๊อก"
+            required
+            type="number"
+            min="0"
+            data-field="stock"
+            value={stockLeft()}
+            onInput={(e) => {
+              setStockLeft(e.currentTarget.value);
+              fix("stock", "stockTotal");
+            }}
+            error={errors().stock}
+            disabled={saving()}
+          />
+          <TextField label="ใกล้หมดเมื่อเหลือ" type="number" min="0" value={lowStockThreshold()} onInput={(e) => setLowStockThreshold(e.currentTarget.value)} disabled={saving()} />
+        </div>
+        <p class="text-xs text-ink-gray">เมื่อสต๊อกเหลือไม่เกิน {optionalNumber(lowStockThreshold()) ?? LOW_STOCK_THRESHOLD} ชิ้น ตะกร้าจะขึ้นป้าย "เหลือ X ชิ้นสุดท้าย"</p>
+      </Section>
+
+      <Section title="แฟลชเซล">
+        <ToggleRow title="แสดงในแฟลชเซล" hint="สินค้าจะขึ้นในส่วนแฟลชเซลหน้าแรกพร้อมเวลานับถอยหลัง ในราคาขายด้านบน">
+          <Toggle
+            checked={flashSaleEnabled()}
+            onChange={(on) => {
+              setFlashSaleEnabled(on);
+              if (!on) fix("stockTotal", "flashSaleStartsAt", "flashSaleEndsAt");
+            }}
+            onLabel="แสดง"
+            offLabel="ไม่แสดง"
+            disabled={saving()}
+          />
+        </ToggleRow>
+        <Show when={flashSaleEnabled()}>
+          <div class="flex flex-col gap-1.5">
+            <TextField
+              label="จำนวนทั้งหมดของแฟลชเซล"
+              type="number"
+              min="0"
+              data-field="stockTotal"
+              value={stockTotal()}
+              placeholder={String(Math.max(props.initial?.stockTotal ?? 0, Number(stockLeft()) || 0))}
+              onInput={(e) => {
+                setStockTotal(e.currentTarget.value);
+                fix("stockTotal");
+              }}
+              error={errors().stockTotal}
+              disabled={saving()}
+            />
+            <p class="text-xs text-ink-gray">แถบบนการ์ดแสดงสต๊อกคงเหลือเทียบกับจำนวนนี้</p>
+          </div>
+          <ToggleRow title="รอบรายวัน" hint="จบตอนเที่ยงคืนและเริ่มรอบใหม่ทุกวัน ถ้าปิดต้องกำหนดเวลาเริ่มและเวลาสิ้นสุดเอง">
+            <Toggle
+              checked={flashSaleDaily()}
+              onChange={(on) => {
+                setFlashSaleDaily(on);
+                if (on) fix("flashSaleStartsAt", "flashSaleEndsAt");
+              }}
+              disabled={saving()}
+            />
+          </ToggleRow>
+          <Show when={!flashSaleDaily()}>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <TextField
+                label="เริ่มเวลา"
+                required
+                type="datetime-local"
+                data-field="flashSaleStartsAt"
+                value={flashSaleStartsAtLocal()}
+                onInput={(e) => {
+                  setFlashSaleStartsAtLocal(e.currentTarget.value);
+                  fix("flashSaleStartsAt", "flashSaleEndsAt");
+                }}
+                error={errors().flashSaleStartsAt}
+                disabled={saving()}
+              />
+              <TextField
+                label="สิ้นสุดเวลา"
+                required
+                type="datetime-local"
+                data-field="flashSaleEndsAt"
+                value={flashSaleEndsAtLocal()}
+                onInput={(e) => {
+                  setFlashSaleEndsAtLocal(e.currentTarget.value);
+                  fix("flashSaleEndsAt");
+                }}
+                error={errors().flashSaleEndsAt}
+                disabled={saving()}
+              />
+            </div>
+            <p class="-mt-2 text-xs text-ink-gray">ก่อนถึงเวลาเริ่ม สินค้าจะยังไม่ขึ้นในแฟลชเซล และหายไปเองเมื่อถึงเวลาสิ้นสุด</p>
+          </Show>
+        </Show>
+      </Section>
+
+      <Section title="คลิปรีวิว TikTok">
+        <ProductTiktokClips
+          value={tiktokClipIds()}
+          onChange={(ids) => {
+            clipsTouched = true;
+            setTiktokClipIds(ids);
+          }}
+          disabled={saving()}
+        />
+      </Section>
+
+      <Section title="คะแนนและยอดขาย">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <TextField
+            label="คะแนนรีวิว"
+            type="number"
+            min="0"
+            max="5"
+            step="0.1"
+            data-field="rating"
+            value={rating()}
+            onInput={(e) => {
+              setRating(e.currentTarget.value);
+              fix("rating");
+            }}
+            error={errors().rating}
+            disabled={saving()}
+          />
+          <TextField label="ขายแล้ว (ชิ้น)" type="number" min="0" value={soldCount()} onInput={(e) => setSoldCount(e.currentTarget.value)} disabled={saving()} />
+          <TextField label="จำนวนรีวิว" type="number" min="0" value={reviewCount()} onInput={(e) => setReviewCount(e.currentTarget.value)} disabled={saving()} />
+        </div>
+        <p class="text-xs text-ink-gray">แสดงบนการ์ดสินค้า ถ้าเว้นว่างจะไม่แสดงแถวคะแนนและยอดขาย</p>
+      </Section>
 
       <Show when={submitError()}>
         <p role="alert" class="rounded-card bg-danger-soft px-4 py-3 text-sm font-medium text-danger-strong">
@@ -363,9 +612,16 @@ export function ProductForm(props: {
       when={images().length > 0}
       fallback={<p class="p-4 text-sm text-ink-gray sm:p-5">อัปโหลดรูปสินค้าอย่างน้อย 1 รูปเพื่อดูตัวอย่างการ์ดสินค้า</p>}
     >
-      <div class="p-4 sm:p-5">
+      {/* Card at about its storefront size, centred in the (wider) preview column. */}
+      <div class="mx-auto w-full max-w-[300px] p-4 sm:p-5">
         <ProductCard product={previewProduct()} flashSale={flashSaleEnabled()} />
       </div>
+      <Show when={!isRichTextEmpty(description())}>
+        <div class="flex flex-col gap-3 border-t border-border p-4 sm:p-5">
+          <p class="text-sm font-semibold text-ink">รายละเอียดสินค้า</p>
+          <RichTextContent value={description()} class="text-sm" />
+        </div>
+      </Show>
     </Show>
   );
 
@@ -378,14 +634,14 @@ export function ProductForm(props: {
           several screens long, so Save/Cancel float at the viewport bottom
           instead of requiring a scroll back down. */}
       <AdminFloatingBar>
-        <div class="flex w-full justify-end gap-3">
-          <Button type="button" variant="outline" onClick={props.onCancel} disabled={saving()}>
-            ยกเลิก
-          </Button>
-          <Button type="submit" variant="primary" loading={saving()}>
-            {saving() ? "กำลังบันทึก..." : props.submitLabel}
-          </Button>
-        </div>
+        <DraftPublishActions
+          draft={draftFlow}
+          saving={saving()}
+          onCancel={props.onCancel}
+          onSaveDraft={() => void save("draft")}
+          onPublish={() => void save("active")}
+          onSave={() => void save(status())}
+        />
       </AdminFloatingBar>
       {/* Reserves room so the floating bar above never covers the form's own last field. */}
       <div class="h-16" aria-hidden="true" />
@@ -393,11 +649,31 @@ export function ProductForm(props: {
   );
 }
 
-function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
+function Section(props: { title: string; required?: boolean; children: JSX.Element }) {
   return (
     <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-      <h2 class="text-base font-semibold text-ink">{props.title}</h2>
+      <h2 class="text-base font-semibold text-ink">
+        {props.title}
+        <Show when={props.required}>
+          <span class="text-system-red" aria-hidden="true">
+            {" "}
+            *
+          </span>
+        </Show>
+      </h2>
       {props.children}
+    </div>
+  );
+}
+
+function ToggleRow(props: { title: string; hint: string; children: JSX.Element }) {
+  return (
+    <div class="flex items-center justify-between gap-4">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-ink">{props.title}</p>
+        <p class="text-xs leading-[1.75] text-ink-gray">{props.hint}</p>
+      </div>
+      <div class="shrink-0">{props.children}</div>
     </div>
   );
 }

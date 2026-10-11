@@ -11,7 +11,7 @@ export default function AdminPromotionNewPage() {
 
   const handleSubmit = async (values: PromotionFormValues) => {
     const created = await store.add(values);
-    pushToast("บันทึกโปรโมชั่นเรียบร้อยแล้ว", "success");
+    pushToast(values.status === "draft" ? "บันทึกแบบร่างแล้ว ยังไม่มีผลที่หน้าร้าน" : "บันทึกและเผยแพร่โปรโมชั่นแล้ว", "success");
     navigate(`/admin/marketing/promotions/${created.id}`);
   };
 

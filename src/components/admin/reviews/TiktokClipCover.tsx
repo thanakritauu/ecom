@@ -10,7 +10,7 @@ import tiktokLogo from "~/assets/icons/social-tiktok.svg";
  * order as TikTokReviewRail.
  */
 export function TiktokClipCover(props: { clip: AdminTiktokClip; class?: string }) {
-  const posters = createAsync(() => getTikTokPosters(props.clip.coverUrl ? [] : [{ videoId: props.clip.videoId, author: props.clip.author }]));
+  const posters = createAsync(() => getTikTokPosters(props.clip.coverUrl || !props.clip.videoId ? [] : [{ videoId: props.clip.videoId, author: props.clip.author }]));
   const fallbackTile = (
     <span class="absolute inset-0 flex items-end bg-gradient-to-b from-ink/80 to-ink p-1.5 text-left" aria-hidden="true">
       <span class="line-clamp-3 text-[10px] leading-[1.75] text-white/90">{props.clip.title}</span>

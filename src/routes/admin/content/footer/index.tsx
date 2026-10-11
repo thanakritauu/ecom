@@ -21,6 +21,8 @@ import {
   type FooterLink,
 } from "~/lib/siteFooter";
 import { pushToast } from "~/lib/toast";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
 
 /**
  * Storefront footer editor. Saves to the same store `Footer.tsx` reads
@@ -47,6 +49,18 @@ function isLiveHref(href: string): boolean {
 
 const isValidHref = (href: string) => /^(\/|https?:\/\/|mailto:|tel:)/.test(href.trim());
 const isValidUrl = (href: string) => /^https?:\/\/\S+$/.test(href.trim());
+
+/** Readable names for the error keys below (`col-0`, `col-0-links`, `legalLinks`, `email`, `social-<platform>`). */
+function footerLabel(key: string): string {
+  const col = /^col-(\d+)(-links)?$/.exec(key);
+  if (col) return `คอลัมน์ที่ ${Number(col[1]) + 1} ${col[2] ? "ลิงก์" : "ชื่อหัวข้อ"}`;
+  if (key === "legalLinks") return "ลิงก์ข้อกำหนด";
+  if (key === "email") return "อีเมล";
+  const social = /^social-(.+)$/.exec(key);
+  if (social) return `ลิงก์ ${FOOTER_SOCIAL_LABELS[social[1] as keyof typeof FOOTER_SOCIAL_LABELS] ?? social[1]}`;
+  return key;
+}
+const labelsFor = (errors: FormErrors) => Object.fromEntries(Object.keys(errors).map((k) => [k, footerLabel(k)]));
 
 const stripMeta = (c: FooterContent) => JSON.stringify({ ...c, updatedAt: undefined });
 const clone = (c: FooterContent): FooterContent => JSON.parse(JSON.stringify(c)) as FooterContent;
@@ -83,26 +97,28 @@ export default function AdminFooterPage() {
 
   const errors = createMemo(() => {
     const d = draft();
-    const e: Record<string, string> = {};
+    const e: FormErrors = {};
+    const broken = (links: FooterLink[]) => links.some((l) => linkError(l).label || linkError(l).href);
     d.columns.forEach((col, i) => {
       if (!col.title.trim()) e[`col-${i}`] = "กรุณากรอกชื่อหัวข้อ";
+      // A column with no links shows as a lone heading on the storefront.
+      if (col.links.length === 0) e[`col-${i}-links`] = "กรุณาเพิ่มลิงก์อย่างน้อย 1 รายการ";
+      else if (broken(col.links)) e[`col-${i}-links`] = "กรอกชื่อและลิงก์ให้ครบทุกรายการ";
     });
-    const allLinks = [...d.columns.flatMap((c) => c.links), ...d.legalLinks];
-    if (allLinks.some((l) => linkError(l).label || linkError(l).href)) e.links = "กรอกชื่อและลิงก์ให้ครบทุกรายการ";
+    if (broken(d.legalLinks)) e.legalLinks = "กรอกชื่อและลิงก์ให้ครบทุกรายการ";
     if (d.contact.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.contact.email.trim())) e.email = "รูปแบบอีเมลไม่ถูกต้อง";
     d.social.forEach((s) => {
       if (s.enabled && !isValidUrl(s.href)) e[`social-${s.platform}`] = "กรุณากรอกลิงก์ที่ขึ้นต้นด้วย https://";
     });
     return e;
   });
-  const err = (key: string) => (showErrors() ? errors()[key] : undefined);
+  // Shown only after the first save attempt; being a memo, each one disappears as soon as it's fixed.
+  const shownErrors = createMemo<FormErrors>(() => (showErrors() ? errors() : {}));
+  const err = (key: string) => shownErrors()[key];
 
   const save = async () => {
     setShowErrors(true);
-    if (Object.keys(errors()).length > 0) {
-      pushToast("กรุณาตรวจสอบข้อมูลที่ยังไม่ครบ", "error");
-      return;
-    }
+    if (reportFormErrors(errors(), labelsFor(errors()))) return;
     setSaving(true);
     try {
       await new Promise((r) => setTimeout(r, 300 + Math.random() * 200));
@@ -146,7 +162,10 @@ export default function AdminFooterPage() {
         <p class="-mt-4 text-xs text-ink-gray">แก้ไขล่าสุด {saved().updatedAt}</p>
       </Show>
 
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <FormErrorSummary errors={shownErrors()} labels={labelsFor(shownErrors())} />
+
+      {/* Admin never lays out 3 columns: the link columns go 2-up. */}
+      <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Index each={draft().columns}>
           {(col, i) => (
             <Section title={`คอลัมน์ที่ ${i + 1}`}>
@@ -155,19 +174,28 @@ export default function AdminFooterPage() {
                 required
                 value={col().title}
                 disabled={saving()}
+                data-field={`col-${i}`}
                 error={err(`col-${i}`)}
                 onInput={(e) => {
                   const v = e.currentTarget.value;
                   update((c) => (c.columns[i].title = v));
                 }}
               />
-              <LinkListEditor
-                links={col().links}
-                disabled={saving()}
-                showErrors={showErrors()}
-                linkError={linkError}
-                onChange={(links) => update((c) => (c.columns[i].links = links))}
-              />
+              <div data-field={`col-${i}-links`} class="flex flex-col gap-1.5">
+                <span class="text-sm font-medium text-ink">
+                  ลิงก์ <span class="text-system-red" aria-hidden="true">*</span>
+                </span>
+                <LinkListEditor
+                  links={col().links}
+                  disabled={saving()}
+                  showErrors={showErrors()}
+                  linkError={linkError}
+                  onChange={(links) => update((c) => (c.columns[i].links = links))}
+                />
+                <Show when={col().links.length === 0 && err(`col-${i}-links`)}>
+                  <p class="text-sm text-system-red">{err(`col-${i}-links`)}</p>
+                </Show>
+              </div>
             </Section>
           )}
         </Index>
@@ -203,6 +231,7 @@ export default function AdminFooterPage() {
               type="email"
               value={draft().contact.email}
               disabled={saving()}
+              data-field="email"
               error={err("email")}
               onInput={(e) => {
                 const v = e.currentTarget.value;
@@ -244,6 +273,8 @@ export default function AdminFooterPage() {
                     placeholder="https://"
                     value={s().href}
                     disabled={saving()}
+                    data-field={`social-${s().platform}`}
+                    aria-invalid={err(`social-${s().platform}`) ? true : undefined}
                     onInput={(e) => {
                       const v = e.currentTarget.value;
                       update((c) => (c.social[i].href = v));
@@ -270,7 +301,7 @@ export default function AdminFooterPage() {
             update((c) => (c.copyright = v));
           }}
         />
-        <div class="flex flex-col gap-1.5">
+        <div data-field="legalLinks" class="flex flex-col gap-1.5">
           <span class="text-sm font-medium text-ink">ลิงก์ข้อกำหนด</span>
           <LinkListEditor
             links={draft().legalLinks}
@@ -380,6 +411,7 @@ function LinkListEditor(props: {
                     placeholder="ชื่อลิงก์"
                     value={link().label}
                     disabled={props.disabled}
+                    aria-invalid={e().label ? true : undefined}
                     onInput={(ev) => set(i, { label: ev.currentTarget.value })}
                     class={`${inputClass} ${e().label ? "border-system-red" : "border-border"}`}
                   />
@@ -388,6 +420,7 @@ function LinkListEditor(props: {
                     placeholder="/products หรือ https://"
                     value={link().href}
                     disabled={props.disabled}
+                    aria-invalid={e().href ? true : undefined}
                     onInput={(ev) => set(i, { href: ev.currentTarget.value })}
                     class={`${inputClass} ${e().href ? "border-system-red" : "border-border"}`}
                   />

@@ -9,23 +9,27 @@ import { AVAILABLE_COUPONS, couponLabels } from "./cartSelectors";
  * now is inside its window. `marketingPhase` is that same rule, worded for
  * Admin's badges, so the badge always says what the shop is doing right now.
  */
-export type MarketingStatus = "active" | "disabled";
+export type MarketingStatus = "active" | "disabled" | "draft";
 
-/** Shown state: on + before start / on + inside the window / on + past the end / off. */
-export type MarketingPhase = "scheduled" | "live" | "expired" | "disabled";
+/**
+ * Shown state: on + before start / on + inside the window / on + past the end / off /
+ * แบบร่าง (draft-first rule: saved but never published, never runs on the storefront).
+ */
+export type MarketingPhase = "scheduled" | "live" | "expired" | "disabled" | "draft";
 
 export const MARKETING_PHASE_META: Record<MarketingPhase, { label: string; tone: StatusTone }> = {
   live: { label: "กำลังใช้งาน", tone: "success" },
   scheduled: { label: "ตั้งเวลาไว้", tone: "info" },
   expired: { label: "หมดอายุ", tone: "warning" },
   disabled: { label: "ปิดใช้งาน", tone: "neutral" },
+  draft: { label: "แบบร่าง", tone: "neutral" },
 };
 
-export const MARKETING_PHASES: MarketingPhase[] = ["live", "scheduled", "expired", "disabled"];
+export const MARKETING_PHASES: MarketingPhase[] = ["live", "scheduled", "expired", "disabled", "draft"];
 
-/** Records saved before the on/off model (draft / scheduled / expired) read as: draft = off, the rest = on (the dates decide). */
+/** Stored status as-is (active / disabled / draft); older values (scheduled / expired) read as on, the dates decide. */
 export function normalizeMarketingStatus(status: string | undefined): MarketingStatus {
-  return status === "disabled" || status === "draft" ? "disabled" : "active";
+  return status === "disabled" || status === "draft" ? status : "active";
 }
 
 type Window = { startDate: string; startTime: string; endDate: string; endTime: string };
@@ -38,6 +42,7 @@ export function marketingWindow(w: Window): { startsAt: number; endsAt: number }
 }
 
 export function marketingPhase(item: Window & { status: MarketingStatus }, now = Date.now()): MarketingPhase {
+  if (item.status === "draft") return "draft";
   if (item.status !== "active") return "disabled";
   const { startsAt, endsAt } = marketingWindow(item);
   if (now < startsAt) return "scheduled";
@@ -326,6 +331,8 @@ export type Coupon = {
   perCustomerLimit?: number;
   /** Ticket thumbnail (image only). Empty keeps the ticket's % artwork. */
   image?: string;
+  /** "เงื่อนไขเพิ่มเติม": rich text (HTML, `~/lib/richText`) shown under the automatic conditions in the storefront coupon sheet. Empty = none. */
+  extraConditions?: string;
   /** Shown as a collectable ticket in Home's "คูปองส่วนลด" section. */
   showOnHome: boolean;
   /** Listed in Checkout's coupon picker. Any live code can still be typed in at Checkout. */
@@ -397,6 +404,7 @@ export function normalizeCoupons(list: Coupon[]): Coupon[] {
       perCustomerLimit: c.perCustomerLimit || undefined,
       // The form stores a small data URL; an object URL from an older save no longer points at anything after a reload.
       image: c.image && !c.image.startsWith("blob:") ? c.image : undefined,
+      extraConditions: typeof c.extraConditions === "string" && c.extraConditions.trim() ? c.extraConditions : undefined,
       showOnHome: !!c.showOnHome,
       showAtCheckout: !!c.showAtCheckout,
       status: normalizeMarketingStatus(c.status),
@@ -447,4 +455,43 @@ export function buildMockPromotions(): Promotion[] {
 }
 export function buildMockCoupons(): Coupon[] {
   return COUPON_SEEDS.map((seed, i) => ({ ...seed, id: seedId("coupon", i), createdAt: TODAY_LABEL, updatedAt: TODAY_LABEL }));
+}
+
+// ---------------------------------------------------------------------------
+// Draft-first rule: what a saved แบบร่าง still lacks before it can be
+// published from a list / detail page without opening the form (same
+// required fields as the form's full check). Empty = ready.
+// ---------------------------------------------------------------------------
+
+export function promotionPublishProblems(p: Promotion): string[] {
+  const missing: string[] = [];
+  if (!p.name.trim()) missing.push("ชื่อโปรโมชั่น");
+  if (p.type === "gift_with_purchase") {
+    const tiers = promotionGiftTiers(p);
+    if (tiers.length === 0 || tiers.some((t) => !(t.threshold > 0))) missing.push("เงื่อนไขซื้อครบ");
+    if (tiers.length === 0 || tiers.some((t) => !t.giftProductId)) missing.push("สินค้าของแถม");
+  }
+  if (p.type === "percent_off" && !(p.discountPercent && p.discountPercent >= 1 && p.discountPercent <= 100)) missing.push("ส่วนลด (%)");
+  if (p.type === "baht_off" && !(p.discountAmount && p.discountAmount > 0)) missing.push("ส่วนลด (บาท)");
+  if (p.type === "bundle") {
+    if ((p.bundleItems?.length ?? 0) < 2) missing.push("สินค้าในเซ็ต");
+    if (!(p.bundlePrice && p.bundlePrice > 0)) missing.push("ราคาเซ็ต");
+  }
+  if (p.type === "buy_x_get_y") {
+    if (!p.buyItems?.length) missing.push("สินค้าที่ต้องซื้อ");
+    if (!p.getItems?.length) missing.push("สินค้าที่แถม");
+  }
+  if (!p.startDate) missing.push("วันเริ่ม");
+  if (!p.endDate) missing.push("วันสิ้นสุด");
+  return missing;
+}
+
+export function couponPublishProblems(c: Coupon): string[] {
+  const missing: string[] = [];
+  if (!c.code.trim()) missing.push("โค้ดคูปอง");
+  const okDiscount = c.discountType === "percent" ? Number.isInteger(c.discount) && c.discount >= 1 && c.discount <= 100 : Number.isInteger(c.discount) && c.discount > 0;
+  if (!okDiscount) missing.push("ส่วนลด");
+  if (!c.startDate) missing.push("วันเริ่ม");
+  if (!c.endDate) missing.push("วันสิ้นสุด");
+  return missing;
 }

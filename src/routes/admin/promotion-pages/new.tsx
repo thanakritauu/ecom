@@ -13,7 +13,7 @@ export default function AdminLandingPageNewPage() {
   const handleSubmit = async (values: LandingPageFormValues) => {
     const created = await store.add(values);
     pushToast(
-      created.status === "published" ? "เผยแพร่หน้าแคมเปญเรียบร้อยแล้ว" : "บันทึกหน้าแคมเปญเรียบร้อยแล้ว",
+      created.status === "draft" ? "บันทึกแบบร่างแล้ว ยังไม่แสดงบนหน้าร้าน" : created.status === "scheduled" ? "ตั้งเวลาเผยแพร่หน้าแคมเปญแล้ว" : "เผยแพร่หน้าแคมเปญเรียบร้อยแล้ว",
       "success",
     );
     navigate(`/admin/promotion-pages/${created.id}`);

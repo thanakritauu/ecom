@@ -1,9 +1,13 @@
-import { createMemo, createSignal, For, Index, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
+import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
 import { SelectField } from "~/components/admin/SelectField";
 import { Toggle } from "~/components/admin/Toggle";
+import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
 import { ProductSelector } from "./ProductSelector";
 import { BundlePriceSummary, fromItemDrafts, itemDraftsValid, PromotionItemsBox, toItemDrafts, type PromotionItemDraft } from "./PromotionItems";
 import { useAdminProducts } from "~/lib/adminProductStore";
@@ -31,6 +35,28 @@ export type PromotionFormValues = Omit<Promotion, "id" | "createdAt" | "updatedA
 type TierDraft = { threshold: string; giftProductId: string; giftQty: string };
 const emptyTier = (): TierDraft => ({ threshold: "", giftProductId: "", giftQty: "1" });
 
+const BASE_LABELS: Record<string, string> = {
+  name: "ชื่อโปรโมชั่น",
+  discountPercent: "ส่วนลด (%)",
+  maxDiscount: "ลดสูงสุด",
+  discountAmount: "ส่วนลด (บาท)",
+  minSpend: "ยอดซื้อขั้นต่ำ",
+  bundleItems: "สินค้าในเซ็ต",
+  bundlePrice: "ราคาเซ็ต",
+  buyItems: "สินค้าที่ต้องซื้อ",
+  getItems: "สินค้าที่แถม",
+  startDate: "วันเริ่ม",
+  endDate: "วันสิ้นสุด",
+  productIds: "สินค้าที่เข้าร่วม",
+};
+/** `tier-0-threshold` etc. read as "ขั้นที่ 1 ซื้อครบ". */
+function promotionLabel(key: string): string {
+  const tier = /^tier-(\d+)-(threshold|giftQty|gift)$/.exec(key);
+  if (!tier) return BASE_LABELS[key] ?? key;
+  const field = tier[2] === "threshold" ? "ซื้อครบ" : tier[2] === "giftQty" ? "จำนวนของแถม" : "สินค้าของแถม";
+  return `ขั้นที่ ${Number(tier[1]) + 1} ${field}`;
+}
+
 /**
  * Shared Create/Edit form, same "one form, two routes" shape as
  * `ProductForm.tsx`. The type dropdown decides the rest of the form: free
@@ -45,6 +71,13 @@ export function PromotionForm(props: {
 }) {
   const [name, setName] = createSignal(props.initial?.name ?? "");
   const [type, setType] = createSignal<PromotionType>(props.initial?.type ?? "gift_with_purchase");
+  /**
+   * Draft-first rule: a new promotion, or one still in แบบร่าง, gets
+   * "บันทึกแบบร่าง" (name only, never runs in the cart) and "บันทึกและเผยแพร่"
+   * (full checks, switched on). After its first publish the เปิด / ปิด switch
+   * decides and the one button is "บันทึกการเปลี่ยนแปลง".
+   */
+  const draftFlow = !props.initial || props.initial.status === "draft";
   const [enabled, setEnabled] = createSignal(props.initial ? props.initial.status === "active" : false);
   const [minSpend, setMinSpend] = createSignal(props.initial?.type !== "gift_with_purchase" && props.initial?.minSpend !== undefined ? String(props.initial.minSpend) : "");
   const [discountPercent, setDiscountPercent] = createSignal(props.initial?.discountPercent ? String(props.initial.discountPercent) : "");
@@ -85,7 +118,9 @@ export function PromotionForm(props: {
   const [endDate, setEndDate] = createSignal(props.initial?.endDate ?? "");
   const [endTime, setEndTime] = createSignal(props.initial?.endTime ?? "23:59");
 
-  const [errors, setErrors] = createSignal<Record<string, string>>({});
+  const [errors, setErrors] = createSignal<FormErrors>({});
+  const [submitted, setSubmitted] = createSignal(false);
+  const labels = () => Object.fromEntries(Object.keys(errors()).map((k) => [k, promotionLabel(k)]));
   const [saving, setSaving] = createSignal(false);
   const [submitError, setSubmitError] = createSignal<string>();
 
@@ -136,11 +171,55 @@ export function PromotionForm(props: {
       if (getItems().length === 0) next.getItems = "กรุณาเลือกสินค้าที่แถม";
       else if (!itemDraftsValid(getItems())) next.getItems = "จำนวนต้องเป็นจำนวนเต็มอย่างน้อย 1";
     }
+    // "เฉพาะสินค้าที่เลือก" with nothing picked would apply to no product at all.
+    if (promotionHasProductScope(type()) && !applyToAll() && productIds().length === 0) next.productIds = "กรุณาเลือกสินค้าอย่างน้อย 1 รายการ";
     if (!startDate()) next.startDate = "กรุณาเลือกวันเริ่ม";
     if (!endDate()) next.endDate = "กรุณาเลือกวันสิ้นสุด";
     if (startDate() && endDate() && !dateRangeValid()) next.endDate = "วันสิ้นสุดต้องอยู่หลังวันเริ่ม";
     return next;
   };
+
+  /** "บันทึกแบบร่าง": just the name, plus anything typed in must still be valid (e.g. no text in a number field). */
+  const validateDraft = (): Record<string, string> => {
+    const full = validate();
+    const typed = (key: string): boolean => {
+      const tier = /^tier-(\d+)-(threshold|giftQty|gift)$/.exec(key);
+      if (tier) {
+        const t = tiers()[Number(tier[1])];
+        return tier[2] === "threshold" ? !!t?.threshold.trim() : tier[2] === "giftQty";
+      }
+      switch (key) {
+        case "name":
+        case "minSpend":
+        case "maxDiscount":
+          return true;
+        case "discountPercent":
+          return !!discountPercent().trim();
+        case "discountAmount":
+          return !!discountAmount().trim();
+        case "bundlePrice":
+          return !!bundlePrice().trim();
+        case "bundleItems":
+          return bundleItems().length > 0 && !itemDraftsValid(bundleItems());
+        case "buyItems":
+          return buyItems().length > 0 && !itemDraftsValid(buyItems());
+        case "getItems":
+          return getItems().length > 0 && !itemDraftsValid(getItems());
+        case "endDate":
+          return !!startDate() && !!endDate();
+        default:
+          return false;
+      }
+    };
+    return Object.fromEntries(Object.entries(full).filter(([key]) => typed(key)));
+  };
+
+  // After a failed save, drop each error as soon as its field is fixed (never adds new ones while typing).
+  createEffect(() => {
+    if (!submitted()) return;
+    const now = validate();
+    setErrors((prev) => Object.fromEntries(Object.keys(prev).filter((k) => k in now).map((k) => [k, now[k]])));
+  });
 
   const previewValues = (): PromotionFormValues => ({
     name: name().trim(),
@@ -169,16 +248,21 @@ export function PromotionForm(props: {
     status: enabled() ? "active" : "disabled",
   });
 
-  const handleSubmit = async (e: SubmitEvent) => {
+  const handleSubmit = (e: SubmitEvent) => {
     e.preventDefault();
-    const validationErrors = validate();
+    void save(draftFlow ? "active" : enabled() ? "active" : "disabled");
+  };
+
+  const save = async (nextStatus: Promotion["status"]) => {
+    const validationErrors = nextStatus === "draft" ? validateDraft() : validate();
     setErrors(validationErrors);
-    if (Object.keys(validationErrors).length > 0) return;
+    setSubmitted(true);
+    if (reportFormErrors(validationErrors, Object.fromEntries(Object.keys(validationErrors).map((k) => [k, promotionLabel(k)])))) return;
 
     setSaving(true);
     setSubmitError(undefined);
     try {
-      await props.onSubmit(previewValues());
+      await props.onSubmit({ ...previewValues(), status: nextStatus });
     } catch {
       setSubmitError("บันทึกโปรโมชั่นไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     } finally {
@@ -187,12 +271,15 @@ export function PromotionForm(props: {
   };
 
   return (
-    <form onSubmit={handleSubmit} class="flex flex-col gap-6">
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div class="flex flex-col gap-6 lg:col-span-2">
+    <form onSubmit={handleSubmit} noValidate class="flex flex-col gap-6">
+      <AdminFormPreviewLayout
+        previewLabel="ตัวอย่างโปรโมชั่น"
+        form={
+        <>
+          <FormErrorSummary errors={errors()} labels={labels()} />
           <Section title="ข้อมูลพื้นฐาน">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <TextField label="ชื่อโปรโมชั่น" required value={name()} onInput={(e) => setName(e.currentTarget.value)} error={errors().name} disabled={saving()} class="sm:col-span-2" />
+              <TextField label="ชื่อโปรโมชั่น" required value={name()} onInput={(e) => setName(e.currentTarget.value)} data-field="name" error={errors().name} disabled={saving()} class="sm:col-span-2" />
               <SelectField
                 label="ประเภทโปรโมชั่น"
                 required
@@ -201,14 +288,24 @@ export function PromotionForm(props: {
                 onChange={(v) => {
                   setType(v as PromotionType);
                   setErrors({});
+                  setSubmitted(false);
                 }}
                 disabled={saving()}
               />
+              <Show
+                when={!draftFlow}
+                fallback={
+                  <p class="self-end text-xs text-ink-gray">
+                    {props.initial ? "โปรโมชั่นนี้ยังเป็นแบบร่าง ยังไม่มีผลในตะกร้า" : "บันทึกแบบร่างไว้ก่อนได้ แล้วกด บันทึกและเผยแพร่ เมื่อข้อมูลครบ"}
+                  </p>
+                }
+              >
               <label class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
                 <Toggle checked={enabled()} onChange={setEnabled} disabled={saving()} />
                 <span class="text-xs text-ink-gray">{enabled() ? "เปิดใช้ตามช่วงเวลาที่ตั้งไว้" : "ปิดอยู่ ยังไม่มีผล"}</span>
               </label>
+              </Show>
             </div>
           </Section>
 
@@ -239,29 +336,29 @@ export function PromotionForm(props: {
             </Show>
             <Show when={type() === "percent_off"}>
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <TextField label="ส่วนลด (%)" required type="number" min="1" max="100" step="1" value={discountPercent()} onInput={(e) => setDiscountPercent(e.currentTarget.value)} error={errors().discountPercent} disabled={saving()} />
-                <TextField label="ลดสูงสุด (บาท)" type="number" min="1" step="1" value={maxDiscount()} onInput={(e) => setMaxDiscount(e.currentTarget.value)} error={errors().maxDiscount} disabled={saving()} placeholder="ไม่จำกัด" />
-                <TextField label="ยอดซื้อขั้นต่ำ (บาท)" type="number" min="0" step="1" value={minSpend()} onInput={(e) => setMinSpend(e.currentTarget.value)} error={errors().minSpend} disabled={saving()} placeholder="ไม่มีขั้นต่ำ" />
+                <TextField label="ส่วนลด (%)" required type="number" min="1" max="100" step="1" value={discountPercent()} onInput={(e) => setDiscountPercent(e.currentTarget.value)} data-field="discountPercent" error={errors().discountPercent} disabled={saving()} />
+                <TextField label="ลดสูงสุด (บาท)" type="number" min="1" step="1" value={maxDiscount()} onInput={(e) => setMaxDiscount(e.currentTarget.value)} data-field="maxDiscount" error={errors().maxDiscount} disabled={saving()} placeholder="ไม่จำกัด" />
+                <TextField label="ยอดซื้อขั้นต่ำ (บาท)" type="number" min="0" step="1" value={minSpend()} onInput={(e) => setMinSpend(e.currentTarget.value)} data-field="minSpend" error={errors().minSpend} disabled={saving()} placeholder="ไม่มีขั้นต่ำ" />
               </div>
               <p class="text-xs text-ink-gray">ลดเป็นเปอร์เซ็นต์จากราคาสินค้าที่เข้าร่วม เว้นลดสูงสุดและยอดขั้นต่ำว่างไว้ถ้าไม่จำกัด</p>
             </Show>
             <Show when={type() === "baht_off"}>
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <TextField label="ส่วนลด (บาท)" required type="number" min="1" step="1" value={discountAmount()} onInput={(e) => setDiscountAmount(e.currentTarget.value)} error={errors().discountAmount} disabled={saving()} />
-                <TextField label="ยอดซื้อขั้นต่ำ (บาท)" type="number" min="0" step="1" value={minSpend()} onInput={(e) => setMinSpend(e.currentTarget.value)} error={errors().minSpend} disabled={saving()} placeholder="ไม่มีขั้นต่ำ" />
+                <TextField label="ส่วนลด (บาท)" required type="number" min="1" step="1" value={discountAmount()} onInput={(e) => setDiscountAmount(e.currentTarget.value)} data-field="discountAmount" error={errors().discountAmount} disabled={saving()} />
+                <TextField label="ยอดซื้อขั้นต่ำ (บาท)" type="number" min="0" step="1" value={minSpend()} onInput={(e) => setMinSpend(e.currentTarget.value)} data-field="minSpend" error={errors().minSpend} disabled={saving()} placeholder="ไม่มีขั้นต่ำ" />
               </div>
               <p class="text-xs text-ink-gray">ลดเป็นจำนวนเงินจากยอดสินค้าที่เข้าร่วม เว้นยอดขั้นต่ำว่างไว้ถ้าไม่มีขั้นต่ำ</p>
             </Show>
             <Show when={type() === "buy_x_get_y"}>
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <PromotionItemsBox title="สินค้าที่ต้องซื้อ" hint="ลูกค้าต้องซื้อครบทุกรายการตามจำนวน" items={buyItems()} onChange={setBuyItems} error={errors().buyItems} disabled={saving()} />
-                <PromotionItemsBox title="สินค้าที่แถม" hint="ลูกค้าได้รับฟรีทุกรายการตามจำนวน" items={getItems()} onChange={setGetItems} error={errors().getItems} disabled={saving()} accent />
+                <div data-field="buyItems" class="min-w-0"><PromotionItemsBox title="สินค้าที่ต้องซื้อ" hint="ลูกค้าต้องซื้อครบทุกรายการตามจำนวน" items={buyItems()} onChange={setBuyItems} error={errors().buyItems} disabled={saving()} /></div>
+                <div data-field="getItems" class="min-w-0"><PromotionItemsBox title="สินค้าที่แถม" hint="ลูกค้าได้รับฟรีทุกรายการตามจำนวน" items={getItems()} onChange={setGetItems} error={errors().getItems} disabled={saving()} accent /></div>
               </div>
             </Show>
             <Show when={type() === "bundle"}>
-              <PromotionItemsBox title="สินค้าในเซ็ต" hint="เลือกอย่างน้อย 2 รายการ" items={bundleItems()} onChange={setBundleItems} error={errors().bundleItems} disabled={saving()} />
+              <div data-field="bundleItems" class="min-w-0"><PromotionItemsBox title="สินค้าในเซ็ต" hint="เลือกอย่างน้อย 2 รายการ" items={bundleItems()} onChange={setBundleItems} error={errors().bundleItems} disabled={saving()} /></div>
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <TextField label="ราคาเซ็ต (บาท)" required type="number" min="1" step="1" value={bundlePrice()} onInput={(e) => setBundlePrice(e.currentTarget.value)} error={errors().bundlePrice} disabled={saving()} />
+                <TextField label="ราคาเซ็ต (บาท)" required type="number" min="1" step="1" value={bundlePrice()} onInput={(e) => setBundlePrice(e.currentTarget.value)} data-field="bundlePrice" error={errors().bundlePrice} disabled={saving()} />
               </div>
               <BundlePriceSummary normal={bundleNormalTotal()} price={Number(bundlePrice()) || 0} />
             </Show>
@@ -273,7 +370,7 @@ export function PromotionForm(props: {
                 step={conditionType() === "qty" ? "1" : "0.01"}
                 value={minSpend()}
                 onInput={(e) => setMinSpend(e.currentTarget.value)}
-                error={errors().minSpend}
+                data-field="minSpend" error={errors().minSpend}
                 disabled={saving()}
               />
               <p class="text-xs text-ink-gray">เว้นว่างไว้ถ้าต้องการส่งฟรีทุกออเดอร์</p>
@@ -306,6 +403,7 @@ export function PromotionForm(props: {
                           step={conditionType() === "qty" ? "1" : "0.01"}
                           value={tier().threshold}
                           onInput={(e) => updateTier(i, { threshold: e.currentTarget.value })}
+                          data-field={`tier-${i}-threshold`}
                           error={errors()[`tier-${i}-threshold`]}
                           disabled={saving()}
                         />
@@ -316,11 +414,12 @@ export function PromotionForm(props: {
                           min="1"
                           value={tier().giftQty}
                           onInput={(e) => updateTier(i, { giftQty: e.currentTarget.value })}
+                          data-field={`tier-${i}-giftQty`}
                           error={errors()[`tier-${i}-giftQty`]}
                           disabled={saving()}
                         />
                       </div>
-                      <div class="flex flex-col gap-2">
+                      <div data-field={`tier-${i}-gift`} class="flex flex-col gap-2">
                         <span class="text-sm font-medium text-ink">
                           สินค้าของแถม <span class="text-system-red">*</span>
                         </span>
@@ -379,9 +478,9 @@ export function PromotionForm(props: {
           <Section title="ระยะเวลา">
             <p class="text-xs text-ink-gray">เวลาประเทศไทย โปรเริ่มและหยุดเองตามเวลาที่ตั้งไว้</p>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <TextField label="วันเริ่ม" required type="date" value={startDate()} onInput={(e) => setStartDate(e.currentTarget.value)} error={errors().startDate} disabled={saving()} />
+              <TextField label="วันเริ่ม" required type="date" value={startDate()} onInput={(e) => setStartDate(e.currentTarget.value)} data-field="startDate" error={errors().startDate} disabled={saving()} />
               <TextField label="เวลาเริ่ม" type="time" value={startTime()} onInput={(e) => setStartTime(e.currentTarget.value)} disabled={saving()} />
-              <TextField label="วันสิ้นสุด" required type="date" value={endDate()} onInput={(e) => setEndDate(e.currentTarget.value)} error={errors().endDate} disabled={saving()} />
+              <TextField label="วันสิ้นสุด" required type="date" value={endDate()} onInput={(e) => setEndDate(e.currentTarget.value)} data-field="endDate" error={errors().endDate} disabled={saving()} />
               <TextField label="เวลาสิ้นสุด" type="time" value={endTime()} onInput={(e) => setEndTime(e.currentTarget.value)} disabled={saving()} />
             </div>
           </Section>
@@ -393,15 +492,28 @@ export function PromotionForm(props: {
               <Toggle checked={applyToAll()} onChange={setApplyToAll} onLabel="ทุกสินค้า" offLabel="เฉพาะสินค้าที่เลือก" disabled={saving()} />
             </label>
             <Show when={!applyToAll()}>
-              <ProductSelector selectedIds={productIds()} onChange={setProductIds} />
+              <div data-field="productIds" class="flex flex-col gap-2">
+                <span class="text-sm font-medium text-ink">
+                  สินค้าที่เลือก <span class="text-system-red">*</span>
+                </span>
+                <ProductSelector selectedIds={productIds()} onChange={setProductIds} />
+                <Show when={errors().productIds}>
+                  <p class="text-sm text-system-red">{errors().productIds}</p>
+                </Show>
+              </div>
             </Show>
           </Section>
           </Show>
-        </div>
 
-        <div class="flex flex-col gap-6">
-          <Section title="ตัวอย่างโปรโมชั่น">
-            <div class="flex flex-col gap-2 text-sm">
+          <Show when={submitError()}>
+            <p role="alert" class="rounded-card bg-danger-soft px-4 py-3 text-sm font-medium text-danger-strong">
+              {submitError()}
+            </p>
+          </Show>
+        </>
+        }
+        preview={
+            <div class="flex flex-col gap-2 p-4 text-sm sm:p-5">
               <p class="text-base font-semibold text-ink">{name() || "ชื่อโปรโมชั่น"}</p>
               <p class="font-medium text-brand-pink">{formatPromotionDiscount(previewValues(), productName)}</p>
               <Show when={type() === "gift_with_purchase" && tiers().length > 1}>
@@ -426,30 +538,23 @@ export function PromotionForm(props: {
                   {formatMarketingDateTime(startDate(), startTime())} - {formatMarketingDateTime(endDate(), endTime())}
                 </p>
               </Show>
-              <p class="text-ink-gray">{enabled() ? "เปิดใช้งาน" : "ปิดใช้งาน"}</p>
+              <p class="text-ink-gray">{draftFlow ? "แบบร่าง" : enabled() ? "เปิดใช้งาน" : "ปิดใช้งาน"}</p>
               <Show when={startDate() && endDate() && !dateRangeValid()}>
                 <p class="text-system-red">ช่วงวันที่ไม่ถูกต้อง</p>
               </Show>
             </div>
-          </Section>
-        </div>
-      </div>
-
-      <Show when={submitError()}>
-        <p role="alert" class="rounded-card bg-danger-soft px-4 py-3 text-sm font-medium text-danger-strong">
-          {submitError()}
-        </p>
-      </Show>
+        }
+      />
 
       <AdminFloatingBar>
-        <div class="flex w-full justify-end gap-3">
-          <Button type="button" variant="outline" onClick={props.onCancel} disabled={saving()}>
-            ยกเลิก
-          </Button>
-          <Button type="submit" variant="primary" loading={saving()}>
-            {saving() ? "กำลังบันทึก..." : props.submitLabel}
-          </Button>
-        </div>
+        <DraftPublishActions
+          draft={draftFlow}
+          saving={saving()}
+          onCancel={props.onCancel}
+          onSaveDraft={() => void save("draft")}
+          onPublish={() => void save("active")}
+          onSave={() => void save(enabled() ? "active" : "disabled")}
+        />
       </AdminFloatingBar>
       <div class="h-16" aria-hidden="true" />
     </form>

@@ -1,9 +1,11 @@
-import { createResource, createSignal, For, Index, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createResource, createSignal, For, Index, onMount, Show, type JSX } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { ChevronDownIcon, PlusIcon } from "~/components/admin/icons";
 import { Toggle } from "~/components/admin/Toggle";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
 import {
   GENDER_LABEL,
   isValidEmail,
@@ -16,6 +18,26 @@ import { isBangkok, THAI_PROVINCES } from "~/lib/checkoutData";
 import { districtsOf, loadThaiAddressData, postalCodesOf, stripAreaPrefix, subDistrictsOf } from "~/lib/thaiAddress";
 
 const GENDER_OPTIONS: { value: CustomerGender; label: string }[] = (Object.keys(GENDER_LABEL) as CustomerGender[]).map((value) => ({ value, label: GENDER_LABEL[value] }));
+
+const BASE_LABELS: Record<string, string> = { firstName: "ชื่อ", lastName: "นามสกุล", email: "อีเมล", phone: "เบอร์โทรศัพท์" };
+const ADDRESS_FIELD_LABELS: Record<string, string> = {
+  recipientName: "ชื่อผู้รับ",
+  phone: "เบอร์โทรศัพท์",
+  addressLine: "ที่อยู่",
+  province: "จังหวัด",
+  district: "อำเภอ/เขต",
+  subDistrict: "ตำบล/แขวง",
+  postalCode: "รหัสไปรษณีย์",
+};
+/** `addr-0-phone` reads as "ที่อยู่ที่ 1 เบอร์โทรศัพท์". */
+function customerLabel(key: string): string {
+  const m = /^addr-(\d+)-(\w+)$/.exec(key);
+  if (!m) return BASE_LABELS[key] ?? key;
+  return `ที่อยู่ที่ ${Number(m[1]) + 1} ${ADDRESS_FIELD_LABELS[m[2]] ?? m[2]}`;
+}
+const labelsFor = (errors: FormErrors) => Object.fromEntries(Object.keys(errors).map((k) => [k, customerLabel(k)]));
+/** Same rule as the storefront address form for any number (Thai or foreign): 6-12 digits. */
+const isValidPhone = (value: string) => /^\+?[\d\s-]+$/.test(value) && value.replace(/\D/g, "").length >= 6 && value.replace(/\D/g, "").length <= 12;
 
 let draftAddressId = 0;
 const emptyAddress = (kind?: "billing"): CustomerAddress => ({
@@ -69,7 +91,8 @@ export function CustomerForm(props: {
   const removeAddress = (index: number) => setAddresses((list) => list.filter((_, i) => i !== index));
   const addAddress = (kind?: "billing") => setAddresses((list) => [...list, emptyAddress(kind)]);
 
-  const [errors, setErrors] = createSignal<Record<string, string>>({});
+  const [errors, setErrors] = createSignal<FormErrors>({});
+  const [submitted, setSubmitted] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [submitError, setSubmitError] = createSignal<string>();
 
@@ -85,6 +108,7 @@ export function CustomerForm(props: {
 
     const cleanPhone = phone().trim();
     if (!cleanPhone) next.phone = "กรุณากรอกเบอร์โทรศัพท์";
+    else if (!isValidPhone(cleanPhone)) next.phone = "เบอร์โทรต้องเป็นตัวเลข 6-12 หลัก";
     else if (props.isPhoneTaken(cleanPhone)) next.phone = "เบอร์โทรศัพท์นี้ถูกใช้งานแล้ว";
 
     // Same required fields as the storefront address form.
@@ -92,6 +116,7 @@ export function CustomerForm(props: {
       const billing = a.kind === "billing";
       if (!a.recipientName.trim()) next[`addr-${i}-recipientName`] = billing ? "กรุณากรอกชื่อ หรือชื่อบริษัท" : "กรุณากรอกชื่อผู้รับ";
       if (!a.phone.trim()) next[`addr-${i}-phone`] = "กรุณากรอกเบอร์โทรศัพท์";
+      else if (!isValidPhone(a.phone.trim())) next[`addr-${i}-phone`] = "เบอร์โทรต้องเป็นตัวเลข 6-12 หลัก";
       if (!a.addressLine.trim()) next[`addr-${i}-addressLine`] = "กรุณากรอกที่อยู่";
       if (!a.province) next[`addr-${i}-province`] = "กรุณาเลือกจังหวัด";
       if (!a.district.trim()) next[`addr-${i}-district`] = isBangkok(a.province) ? "กรุณาเลือกเขต" : "กรุณาเลือกอำเภอ";
@@ -102,11 +127,19 @@ export function CustomerForm(props: {
     return next;
   };
 
+  // After a failed save, drop each error as soon as its field is fixed (never adds new ones while typing).
+  createEffect(() => {
+    if (!submitted()) return;
+    const now = validate();
+    setErrors((prev) => Object.fromEntries(Object.keys(prev).filter((k) => k in now).map((k) => [k, now[k]])));
+  });
+
   const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     const nextErrors = validate();
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    setSubmitted(true);
+    if (reportFormErrors(nextErrors, labelsFor(nextErrors))) return;
 
     const values: CustomerFormValues = {
       firstName: firstName().trim(),
@@ -143,7 +176,8 @@ export function CustomerForm(props: {
   };
 
   return (
-    <form onSubmit={handleSubmit} class="flex flex-col gap-6">
+    <form onSubmit={handleSubmit} noValidate class="flex flex-col gap-6">
+      <FormErrorSummary errors={errors()} labels={labelsFor(errors())} />
       <Section title="ข้อมูลส่วนตัว">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
@@ -152,6 +186,7 @@ export function CustomerForm(props: {
             placeholder="สมหญิง"
             value={firstName()}
             onInput={(e) => setFirstName(e.currentTarget.value)}
+            data-field="firstName"
             error={errors().firstName}
             disabled={saving()}
           />
@@ -161,6 +196,7 @@ export function CustomerForm(props: {
             placeholder="ใจดี"
             value={lastName()}
             onInput={(e) => setLastName(e.currentTarget.value)}
+            data-field="lastName"
             error={errors().lastName}
             disabled={saving()}
           />
@@ -171,6 +207,7 @@ export function CustomerForm(props: {
             placeholder="customer@example.com"
             value={email()}
             onInput={(e) => setEmail(e.currentTarget.value)}
+            data-field="email"
             error={errors().email}
             disabled={saving()}
           />
@@ -180,6 +217,7 @@ export function CustomerForm(props: {
             placeholder="081-234-5678"
             value={phone()}
             onInput={(e) => setPhone(e.currentTarget.value)}
+            data-field="phone"
             error={errors().phone}
             disabled={saving()}
           />
@@ -233,10 +271,11 @@ export function CustomerForm(props: {
                         required
                         value={a().recipientName}
                         onInput={(e) => patchAddress(i, { recipientName: e.currentTarget.value })}
+                        data-field={`addr-${i}-recipientName`}
                         error={err("recipientName")}
                         disabled={saving()}
                       />
-                      <TextField label="เบอร์โทรศัพท์" required placeholder="081-234-5678" value={a().phone} onInput={(e) => patchAddress(i, { phone: e.currentTarget.value })} error={err("phone")} disabled={saving()} />
+                      <TextField label="เบอร์โทรศัพท์" required placeholder="081-234-5678" value={a().phone} onInput={(e) => patchAddress(i, { phone: e.currentTarget.value })} data-field={`addr-${i}-phone`} error={err("phone")} disabled={saving()} />
                       <div class="sm:col-span-2">
                         <TextField
                           label="บ้านเลขที่ อาคาร ซอย ถนน"
@@ -244,6 +283,7 @@ export function CustomerForm(props: {
                           placeholder="88/12 ซอยสุขุมวิท 31"
                           value={a().addressLine}
                           onInput={(e) => patchAddress(i, { addressLine: e.currentTarget.value })}
+                          data-field={`addr-${i}-addressLine`}
                           error={err("addressLine")}
                           disabled={saving()}
                         />
@@ -252,7 +292,7 @@ export function CustomerForm(props: {
                         label="จังหวัด"
                         required
                         value={a().province}
-                        error={err("province")}
+                        field={`addr-${i}-province`} error={err("province")}
                         disabled={saving()}
                         onChange={(v) => patchAddress(i, { province: v, district: "", subDistrict: "", postalCode: "" })}
                       >
@@ -263,18 +303,18 @@ export function CustomerForm(props: {
                         label={bkk() ? "เขต" : "อำเภอ"}
                         required
                         value={a().district}
-                        error={err("district")}
+                        field={`addr-${i}-district`} error={err("district")}
                         disabled={saving() || !a().province || !geo()}
                         onChange={(v) => patchAddress(i, { district: v, subDistrict: "", postalCode: "" })}
                       >
                         <option value="">{!a().province ? "-" : geo.loading ? "กำลังโหลด" : bkk() ? "เลือกเขต" : "เลือกอำเภอ"}</option>
                         <For each={districtOptions()}>{(d) => <option value={d} selected={d === a().district}>{d}</option>}</For>
                       </SelectField>
-                      <SelectField label={bkk() ? "แขวง" : "ตำบล"} required value={a().subDistrict} error={err("subDistrict")} disabled={saving() || !a().district} onChange={pickSubDistrict}>
+                      <SelectField label={bkk() ? "แขวง" : "ตำบล"} required value={a().subDistrict} field={`addr-${i}-subDistrict`} error={err("subDistrict")} disabled={saving() || !a().district} onChange={pickSubDistrict}>
                         <option value="">{!a().district ? "-" : bkk() ? "เลือกแขวง" : "เลือกตำบล"}</option>
                         <For each={subDistrictOptions()}>{(d) => <option value={d} selected={d === a().subDistrict}>{d}</option>}</For>
                       </SelectField>
-                      <SelectField label="รหัสไปรษณีย์" required value={a().postalCode} error={err("postalCode")} disabled={saving() || !a().district} onChange={(v) => patchAddress(i, { postalCode: v })}>
+                      <SelectField label="รหัสไปรษณีย์" required value={a().postalCode} field={`addr-${i}-postalCode`} error={err("postalCode")} disabled={saving() || !a().district} onChange={(v) => patchAddress(i, { postalCode: v })}>
                         <option value="">{!a().district ? "-" : "เลือกรหัสไปรษณีย์"}</option>
                         <For each={postalOptions()}>{(c) => <option value={c} selected={c === a().postalCode}>{c}</option>}</For>
                       </SelectField>
@@ -331,9 +371,9 @@ function withDefault(list: CustomerAddress[]): CustomerAddress[] {
 }
 
 /** Native select in the admin select style (DSL 6). */
-function SelectField(props: { label: string; value: string; required?: boolean; error?: string; disabled?: boolean; onChange: (value: string) => void; children: JSX.Element }) {
+function SelectField(props: { label: string; value: string; required?: boolean; error?: string; disabled?: boolean; field?: string; onChange: (value: string) => void; children: JSX.Element }) {
   return (
-    <label class="flex flex-col gap-1.5">
+    <label data-field={props.field} class="flex flex-col gap-1.5">
       <span class="text-sm font-medium text-ink">
         {props.label}
         <Show when={props.required}>

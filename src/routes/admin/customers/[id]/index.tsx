@@ -163,8 +163,8 @@ export default function AdminCustomerDetailPage() {
             }
           />
 
-          <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div class="flex flex-col gap-6 lg:col-span-2">
+          <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div class="flex min-w-0 flex-col gap-6">
               <Section title="สรุปการซื้อ">
                 <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <SummaryStat label="คำสั่งซื้อ" value={`${orderCount().toLocaleString("th-TH")} รายการ`} />

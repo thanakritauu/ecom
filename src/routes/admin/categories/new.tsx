@@ -12,7 +12,7 @@ export default function AdminCategoryNewPage() {
 
   const handleSubmit = async (values: CategoryFormValues) => {
     const created = await store.add(values);
-    pushToast("บันทึกหมวดหมู่เรียบร้อยแล้ว", "success");
+    pushToast(values.status === "draft" ? "บันทึกแบบร่างเรียบร้อยแล้ว" : "เผยแพร่หมวดหมู่เรียบร้อยแล้ว", "success");
     navigate(`/admin/categories/${created.id}`);
   };
 

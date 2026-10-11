@@ -5,6 +5,11 @@ import { Button } from "~/components/shared/Button";
 import { CloseXIcon } from "~/components/admin/icons";
 import { IconImageUploader } from "~/components/admin/IconImageUploader";
 import type { PromotionStripContent } from "~/lib/adminNotificationBar";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
+import { scrollToFirstErrorIn } from "~/lib/adminDrawerScroll";
+
+const LABELS: Record<string, string> = { text: "ข้อความ", linkUrl: "ลิงก์ปลายทาง" };
 
 /** Edits one top bar (icon, text, link). The purple bar's on/off lives on the page. */
 export function NotificationItemFormDrawer(props: {
@@ -19,7 +24,9 @@ export function NotificationItemFormDrawer(props: {
   const [text, setText] = createSignal(props.initial.text);
   const [linkLabel, setLinkLabel] = createSignal(props.initial.linkLabel ?? "");
   const [linkUrl, setLinkUrl] = createSignal(props.initial.linkUrl ?? "");
-  const [errors, setErrors] = createSignal<Record<string, string>>({});
+  const [errors, setErrors] = createSignal<FormErrors>({});
+  const clearError = (key: string) => setErrors((prev) => clearFieldError(prev, key));
+  let bodyRef: HTMLDivElement | undefined;
 
   createEffect(() => {
     if (!props.open) return;
@@ -33,11 +40,15 @@ export function NotificationItemFormDrawer(props: {
   const title = () => (props.variant === "purple" ? "แก้ไขแถบสีม่วง" : "แก้ไขแถบสีชมพู");
 
   const validate = () => {
-    const next: Record<string, string> = {};
+    const next: FormErrors = {};
     if (!text().trim()) next.text = "กรุณากรอกข้อความ";
-    if (linkLabel().trim() && !linkUrl().trim()) next.linkUrl = "กรุณากรอกลิงก์ปลายทาง";
+    const url = linkUrl().trim();
+    if (linkLabel().trim() && !url) next.linkUrl = "กรุณากรอกลิงก์ปลายทาง";
+    else if (linkLabel().trim() && !url.startsWith("/") && !/^https?:\/\/\S+$/i.test(url)) next.linkUrl = "ลิงก์ต้องขึ้นต้นด้วย / หรือ https://";
     setErrors(next);
-    return Object.keys(next).length === 0;
+    if (!reportFormErrors(next, LABELS)) return true;
+    scrollToFirstErrorIn(bodyRef, next);
+    return false;
   };
 
   const handleSubmit = (e: Event) => {
@@ -67,15 +78,16 @@ export function NotificationItemFormDrawer(props: {
               </Dialog.CloseButton>
             </div>
 
-            <form onSubmit={handleSubmit} class="flex flex-1 flex-col overflow-hidden">
-              <div class="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+            <form onSubmit={handleSubmit} noValidate class="flex flex-1 flex-col overflow-hidden">
+              <div ref={bodyRef} class="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+                <FormErrorSummary errors={errors()} labels={LABELS} />
                 <div class="flex flex-col gap-1.5">
                   <span class="text-sm font-medium text-ink">ไอคอน</span>
                   <IconImageUploader value={icon()} onChange={setIcon} disabled={props.saving} />
                   <span class="text-xs text-ink-gray">ไม่ใส่ก็ได้ แถบจะแสดงเฉพาะข้อความ</span>
                 </div>
 
-                <label class="flex flex-col gap-1.5">
+                <label data-field="text" class="flex flex-col gap-1.5">
                   <span class="text-sm font-medium text-ink">
                     ข้อความ<span class="text-system-red"> *</span>
                   </span>
@@ -83,7 +95,11 @@ export function NotificationItemFormDrawer(props: {
                     value={text()}
                     disabled={props.saving}
                     placeholder="เช่น ลดสูงสุด 70% รับคูปองลดเพิ่ม 25%"
-                    onInput={(e) => setText(e.currentTarget.value)}
+                    aria-invalid={errors().text ? true : undefined}
+                    onInput={(e) => {
+                      setText(e.currentTarget.value);
+                      if (e.currentTarget.value.trim()) clearError("text");
+                    }}
                     rows={3}
                     class={`rounded-card border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray ${
                       errors().text ? "border-system-red" : "border-border"
@@ -97,7 +113,10 @@ export function NotificationItemFormDrawer(props: {
                 <TextField
                   label="ข้อความลิงก์"
                   value={linkLabel()}
-                  onInput={(e) => setLinkLabel(e.currentTarget.value)}
+                  onInput={(e) => {
+                    setLinkLabel(e.currentTarget.value);
+                    if (!e.currentTarget.value.trim()) clearError("linkUrl");
+                  }}
                   placeholder="เช่น ช็อปเลย"
                   disabled={props.saving}
                 />
@@ -107,7 +126,11 @@ export function NotificationItemFormDrawer(props: {
                     label="ลิงก์ปลายทาง"
                     required
                     value={linkUrl()}
-                    onInput={(e) => setLinkUrl(e.currentTarget.value)}
+                    onInput={(e) => {
+                      setLinkUrl(e.currentTarget.value);
+                      clearError("linkUrl");
+                    }}
+                    data-field="linkUrl"
                     error={errors().linkUrl}
                     placeholder="/promotion/promotions"
                     disabled={props.saving}

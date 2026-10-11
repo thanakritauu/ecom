@@ -42,6 +42,10 @@ export type Product = {
   stockLeft?: number;
   stockTotal?: number;
   flashSaleEndsAt?: number; // epoch ms, only set when the card should show the countdown ribbon
+  /** Epoch ms the one-off flash sale opens (Admin "เริ่มเวลา"). Unset = already open (daily rounds, older saves). Before it the product isn't in the flash sale. */
+  flashSaleStartsAt?: number;
+  /** Admin "แสดงป้ายลดราคา": `false` hides only the "ลด X%" badge (the struck-through price stays). Unset = shown. */
+  showDiscountBadge?: boolean;
   variants?: ProductVariant[];
   /**
    * Product / Category / Collection Source-of-Truth Cleanup —

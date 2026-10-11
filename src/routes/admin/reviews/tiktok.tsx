@@ -10,11 +10,18 @@ import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { SearchInput } from "~/components/admin/SearchInput";
 import { SingleImageUploader } from "~/components/admin/SingleImageUploader";
 import { Toggle } from "~/components/admin/Toggle";
+import { StatusBadge } from "~/components/admin/StatusBadge";
+import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
 import { ArrowDownIcon, ArrowUpIcon, CloseXIcon, MoreIcon, PlusIcon, ReviewsIcon } from "~/components/admin/icons";
 import { TiktokClipCover } from "~/components/admin/reviews/TiktokClipCover";
 import { useAdminProducts } from "~/lib/adminProductStore";
-import { parseTiktokUrl, tiktokClipUrl, useAdminTiktokClips, type AdminTiktokClip } from "~/lib/adminTiktokClips";
+import { parseTiktokUrl, tiktokClipPublishProblems, tiktokClipUrl, useAdminTiktokClips, type AdminTiktokClip } from "~/lib/adminTiktokClips";
 import { pushToast } from "~/lib/toast";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
+import { scrollToFirstErrorIn } from "~/lib/adminDrawerScroll";
+
+const CLIP_LABELS: Record<string, string> = { url: "ลิงก์คลิป TikTok", title: "ชื่อคลิป" };
 
 /**
  * "คลิปรีวิว TikTok" — the clip rail at the top of every PDP (and Home's
@@ -40,6 +47,19 @@ export default function AdminTiktokClipsPage() {
   });
   const [pendingDelete, setPendingDelete] = createSignal<AdminTiktokClip | null>(null);
   const [deleting, setDeleting] = createSignal(false);
+
+  const draftCount = () => store.clips().filter((c) => c.draft).length;
+
+  /** Draft-first: same checks as the editor's บันทึกและเผยแพร่; refuses with a toast naming what's missing. */
+  const publish = (clip: AdminTiktokClip) => {
+    const problems = tiktokClipPublishProblems(clip, store.clips());
+    if (problems.length > 0) {
+      pushToast(`เผยแพร่ "${clip.title || "คลิป"}" ไม่ได้`, "error", `ยังกรอกข้อมูลไม่ครบ: ${problems.join(", ")}`);
+      return;
+    }
+    store.publishClip(clip.id);
+    pushToast(`เผยแพร่ "${clip.title}" แล้ว`, "success");
+  };
 
   const confirmDelete = async () => {
     const clip = pendingDelete();
@@ -70,7 +90,10 @@ export default function AdminTiktokClipsPage() {
       <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
         <div class="flex flex-col gap-1">
           <h2 class="text-base font-semibold text-ink">ลำดับคลิป ({store.clips().length})</h2>
-          <p class="text-xs text-ink-gray">หน้าร้านแสดงคลิปตามลำดับนี้ ใช้ปุ่มลูกศรเพื่อเลื่อนขึ้นหรือลง</p>
+          <p class="text-xs text-ink-gray">
+            หน้าร้านแสดงคลิปตามลำดับนี้ ใช้ปุ่มลูกศรเพื่อเลื่อนขึ้นหรือลง
+            <Show when={draftCount() > 0}> แบบร่าง {draftCount()} คลิปยังไม่แสดงบนหน้าร้าน</Show>
+          </p>
         </div>
 
         <Show
@@ -86,9 +109,11 @@ export default function AdminTiktokClipsPage() {
                     <TiktokClipCover clip={clip} />
                     <div class="flex min-w-0 flex-1 flex-col gap-1">
                       <p class="line-clamp-2 text-sm font-medium text-ink">{clip.title || "-"}</p>
-                      <a href={tiktokClipUrl(clip)} target="_blank" rel="noopener noreferrer" class="truncate text-xs text-ink-gray hover:text-brand-pink">
-                        @{clip.author} คลิป {clip.videoId}
-                      </a>
+                      <Show when={clip.videoId} fallback={<span class="text-xs text-ink-gray">ยังไม่ใส่ลิงก์คลิป</span>}>
+                        <a href={tiktokClipUrl(clip)} target="_blank" rel="noopener noreferrer" class="truncate text-xs text-ink-gray hover:text-brand-pink">
+                          @{clip.author} คลิป {clip.videoId}
+                        </a>
+                      </Show>
                       <p class="text-xs text-ink-gray">
                         <Show when={clip.productIds.length > 0} fallback={<span>ไม่ผูกสินค้า แสดงในหน้าแรกและต่อท้ายคลิปของสินค้าในทุกหน้าสินค้า</span>}>
                           {/* Mock catalog shows the same real product in several slots — list each name once. */}
@@ -98,22 +123,33 @@ export default function AdminTiktokClipsPage() {
                     </div>
                   </div>
                   <div class="flex shrink-0 flex-wrap items-center justify-end gap-1">
-                    <Toggle
-                      checked={clip.active}
-                      onChange={(on) => {
-                        store.setActive(clip.id, on);
-                        pushToast(on ? "แสดงคลิปแล้ว" : "ซ่อนคลิปแล้ว", "success");
-                      }}
-                      onLabel="แสดง"
-                      offLabel="ไม่แสดง"
-                    />
+                    {/* Draft-first: no แสดง / ไม่แสดง switch until the clip's first publish (row menu: เผยแพร่). */}
+                    <Show
+                      when={!clip.draft}
+                      fallback={<StatusBadge tone="info" class="mr-1">แบบร่าง</StatusBadge>}
+                    >
+                      <Toggle
+                        checked={clip.active}
+                        onChange={(on) => {
+                          store.setActive(clip.id, on);
+                          pushToast(on ? "แสดงคลิปแล้ว" : "ซ่อนคลิปแล้ว", "success");
+                        }}
+                        onLabel="แสดง"
+                        offLabel="ไม่แสดง"
+                      />
+                    </Show>
                     <IconButton label="เลื่อนขึ้น" disabled={i() === 0} onClick={() => store.move(i(), -1)}>
                       <ArrowUpIcon />
                     </IconButton>
                     <IconButton label="เลื่อนลง" disabled={i() === store.clips().length - 1} onClick={() => store.move(i(), 1)}>
                       <ArrowDownIcon />
                     </IconButton>
-                    <ClipRowActionsMenu name={clip.title || clip.videoId} onEdit={() => setEditing(clip)} onDelete={() => setPendingDelete(clip)} />
+                    <ClipRowActionsMenu
+                      name={clip.title || clip.videoId}
+                      onEdit={() => setEditing(clip)}
+                      onPublish={clip.draft ? () => publish(clip) : undefined}
+                      onDelete={() => setPendingDelete(clip)}
+                    />
                   </div>
                 </li>
               )}
@@ -132,7 +168,7 @@ export default function AdminTiktokClipsPage() {
               onClose={() => setEditing(null)}
               onSave={async (input) => {
                 await store.saveClip(target === "new" ? null : target.id, input);
-                pushToast("บันทึกคลิปเรียบร้อยแล้ว", "success");
+                pushToast(input.draft ? "บันทึกแบบร่างเรียบร้อยแล้ว" : target === "new" || target.draft ? "เผยแพร่คลิปเรียบร้อยแล้ว" : "บันทึกคลิปเรียบร้อยแล้ว", "success");
                 setEditing(null);
               }}
             />
@@ -154,21 +190,34 @@ export default function AdminTiktokClipsPage() {
   );
 }
 
-/** Add/edit drawer — same right-side Kobalte drawer shell as QuickViewDrawer, with Save/Cancel instead of "ดูรายละเอียด". */
-function ClipEditor(props: {
+/**
+ * Add/edit drawer — same right-side Kobalte drawer shell as QuickViewDrawer,
+ * with the draft-first `DraftPublishActions` footer instead of "ดูรายละเอียด":
+ * a new clip (or one still แบบร่าง) gets บันทึกแบบร่าง (title only) and
+ * บันทึกและเผยแพร่; a published one gets บันทึกการเปลี่ยนแปลง + the แสดง Toggle.
+ * `onSave` receives `draft` / `active` already set for the chosen button.
+ */
+export function ClipEditor(props: {
   open: boolean;
   clip?: AdminTiktokClip;
+  /** New clip only: products ticked from the start (the product form passes its own product). */
+  defaultProductIds?: string[];
   onClose: () => void;
   onSave: (input: Omit<AdminTiktokClip, "id">) => Promise<void>;
 }) {
   const productsStore = useAdminProducts();
+  const clipsStore = useAdminTiktokClips();
+  let bodyRef: HTMLDivElement | undefined;
   const [url, setUrl] = createSignal(props.clip ? tiktokClipUrl(props.clip) : "");
   const [title, setTitle] = createSignal(props.clip?.title ?? "");
   const [coverUrl, setCoverUrl] = createSignal(props.clip?.coverUrl ?? "");
-  const [productIds, setProductIds] = createSignal<string[]>(props.clip?.productIds ?? []);
-  const [active, setActive] = createSignal(props.clip?.active ?? true);
+  const [productIds, setProductIds] = createSignal<string[]>(props.clip?.productIds ?? props.defaultProductIds ?? []);
+  const [active, setActive] = createSignal(props.clip && !props.clip.draft ? props.clip.active : true);
+  /** Creating, or the clip is still แบบร่าง. */
+  const draftFlow = !props.clip || props.clip.draft === true;
   const [productSearch, setProductSearch] = createSignal("");
-  const [errors, setErrors] = createSignal<Record<string, string>>({});
+  const [errors, setErrors] = createSignal<FormErrors>({});
+  const clearError = (key: string) => setErrors((prev) => clearFieldError(prev, key));
   const [saving, setSaving] = createSignal(false);
   const [submitError, setSubmitError] = createSignal<string>();
 
@@ -180,16 +229,34 @@ function ClipEditor(props: {
   const toggleProduct = (id: string, on: boolean) =>
     setProductIds((list) => (on ? (list.includes(id) ? list : [...list, id]) : list.filter((x) => x !== id)));
 
-  const submit = async () => {
-    const next: Record<string, string> = {};
-    if (!parsed()) next.url = "กรุณากรอกลิงก์คลิป TikTok ที่ถูกต้อง";
+  /** draft = บันทึกแบบร่าง (title only; a typed link must still be a real TikTok link), publish = บันทึกและเผยแพร่, save = บันทึกการเปลี่ยนแปลง. */
+  const submit = async (action: "draft" | "publish" | "save") => {
+    const next: FormErrors = {};
+    const p = parsed();
+    if (!url().trim()) {
+      if (action !== "draft") next.url = "กรุณากรอกลิงก์คลิป TikTok";
+    }
+    else if (!p) next.url = "ลิงก์ต้องเป็นแบบ tiktok.com/@ชื่อบัญชี/video/เลขคลิป";
+    // The same clip twice would show twice in the rail.
+    else if (clipsStore.clips().some((c) => c.videoId === p.videoId && c.id !== props.clip?.id)) next.url = "คลิปนี้อยู่ในรายการแล้ว";
     if (!title().trim()) next.title = "กรุณากรอกชื่อคลิป";
     setErrors(next);
-    if (Object.keys(next).length > 0) return;
+    if (reportFormErrors(next, CLIP_LABELS)) {
+      scrollToFirstErrorIn(bodyRef, next);
+      return;
+    }
     setSaving(true);
     setSubmitError(undefined);
     try {
-      await props.onSave({ ...parsed()!, title: title().trim(), coverUrl: coverUrl() || undefined, productIds: productIds(), active: active() });
+      await props.onSave({
+        author: p?.author ?? "",
+        videoId: p?.videoId ?? "",
+        title: title().trim(),
+        coverUrl: coverUrl() || undefined,
+        productIds: productIds(),
+        active: action === "draft" ? false : action === "publish" ? true : active(),
+        draft: action === "draft",
+      });
     } catch {
       setSubmitError("บันทึกคลิปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     } finally {
@@ -210,29 +277,52 @@ function ClipEditor(props: {
               </Dialog.CloseButton>
             </div>
 
-            <div class="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+            <div ref={bodyRef} class="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+              <FormErrorSummary errors={errors()} labels={CLIP_LABELS} />
               <TextField
                 label="ลิงก์คลิป TikTok"
                 required
                 value={url()}
                 placeholder="https://www.tiktok.com/@charmiss.cosmetics/video/..."
-                onInput={(e) => setUrl(e.currentTarget.value)}
+                onInput={(e) => {
+                  setUrl(e.currentTarget.value);
+                  clearError("url");
+                }}
+                data-field="url"
                 error={errors().url}
                 disabled={saving()}
               />
               <Show when={parsed()}>{(p) => <p class="-mt-2 text-xs text-ink-gray">@{p().author} คลิป {p().videoId}</p>}</Show>
               <div class="flex flex-col gap-1.5">
-                <TextField label="ชื่อคลิป" required value={title()} onInput={(e) => setTitle(e.currentTarget.value)} error={errors().title} disabled={saving()} />
+                <TextField
+                  label="ชื่อคลิป"
+                  required
+                  value={title()}
+                  onInput={(e) => {
+                    setTitle(e.currentTarget.value);
+                    if (e.currentTarget.value.trim()) clearError("title");
+                  }}
+                  data-field="title"
+                  error={errors().title} disabled={saving()} />
                 <p class="text-xs text-ink-gray">แสดงบนการ์ดเมื่อไม่มีรูปปก และใช้อธิบายคลิปให้โปรแกรมอ่านหน้าจอ</p>
               </div>
               <div class="max-w-xs">
                 <SingleImageUploader label="รูปปก" hint="ถ้าเว้นว่างจะใช้รูปปกจาก TikTok (แนวตั้ง 9:16)" value={coverUrl()} onChange={setCoverUrl} />
               </div>
-              <label class="flex flex-col gap-1.5">
-                <span class="text-sm font-medium text-ink">แสดงบนหน้าร้าน</span>
-                <Toggle checked={active()} onChange={setActive} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
-                <span class="text-xs text-ink-gray">ถ้าปิด คลิปนี้จะไม่แสดงในหน้าแรกและหน้าสินค้า</span>
-              </label>
+              <Show
+                when={!draftFlow}
+                fallback={
+                  <p class="text-xs text-ink-gray">
+                    {props.clip ? "คลิปนี้ยังเป็นแบบร่าง ไม่แสดงบนหน้าร้าน" : "บันทึกแบบร่างไว้ก่อนได้ แล้วกด บันทึกและเผยแพร่ เมื่อข้อมูลครบ"}
+                  </p>
+                }
+              >
+                <label class="flex flex-col gap-1.5">
+                  <span class="text-sm font-medium text-ink">แสดงบนหน้าร้าน</span>
+                  <Toggle checked={active()} onChange={setActive} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
+                  <span class="text-xs text-ink-gray">ถ้าปิด คลิปนี้จะไม่แสดงในหน้าแรกและหน้าสินค้า</span>
+                </label>
+              </Show>
 
               <div class="flex flex-col gap-2">
                 <span class="text-sm font-medium text-ink">สินค้าที่ผูกกับคลิป ({productIds().length})</span>
@@ -277,12 +367,14 @@ function ClipEditor(props: {
             </div>
 
             <div class="flex shrink-0 gap-3 border-t border-border p-4" style={{ "padding-bottom": "max(1rem, env(safe-area-inset-bottom))" }}>
-              <Button type="button" variant="outline" class="flex-1" onClick={props.onClose} disabled={saving()}>
-                ยกเลิก
-              </Button>
-              <Button type="button" variant="primary" class="flex-1" loading={saving()} onClick={submit}>
-                {saving() ? "กำลังบันทึก..." : props.clip ? "บันทึกการเปลี่ยนแปลง" : "บันทึกคลิป"}
-              </Button>
+              <DraftPublishActions
+                draft={draftFlow}
+                saving={saving()}
+                onCancel={props.onClose}
+                onSaveDraft={() => void submit("draft")}
+                onPublish={() => void submit("publish")}
+                onSave={() => void submit("save")}
+              />
             </div>
           </Dialog.Content>
         </div>
@@ -310,7 +402,7 @@ const MENU_ITEM_CLASS =
   "flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink";
 
 /** Same Kobalte dropdown shell as `ProductRowActionsMenu`. */
-function ClipRowActionsMenu(props: { name: string; onEdit: () => void; onDelete: () => void }) {
+function ClipRowActionsMenu(props: { name: string; onEdit: () => void; onPublish?: () => void; onDelete: () => void }) {
   return (
     <DropdownMenu placement="bottom-end" gutter={4}>
       <DropdownMenu.Trigger
@@ -324,6 +416,11 @@ function ClipRowActionsMenu(props: { name: string; onEdit: () => void; onDelete:
           <DropdownMenu.Item onSelect={props.onEdit} class={MENU_ITEM_CLASS}>
             แก้ไขคลิป
           </DropdownMenu.Item>
+          <Show when={props.onPublish}>
+            <DropdownMenu.Item onSelect={() => props.onPublish?.()} class={MENU_ITEM_CLASS}>
+              เผยแพร่
+            </DropdownMenu.Item>
+          </Show>
           <DropdownMenu.Separator class="my-1 h-px bg-border" />
           <DropdownMenu.Item
             onSelect={props.onDelete}

@@ -16,12 +16,20 @@ import type { StatusTone } from "~/components/admin/StatusBadge";
  * independently-editable list that could drift from it. Curating a shown
  * product set for merchandising is Collection's job now.
  */
-export type CategoryStatus = "active" | "inactive";
+/**
+ * Draft-first rule: a new category starts as "draft" (only a name needed,
+ * never on the storefront, treated exactly like "inactive" there). Its first
+ * publish makes it "active"; after that it's only ever active / inactive.
+ */
+export type CategoryStatus = "draft" | "active" | "inactive";
 
 export const CATEGORY_STATUS_META: Record<CategoryStatus, { label: string; tone: StatusTone }> = {
+  draft: { label: "แบบร่าง", tone: "info" },
   active: { label: "เปิดใช้งาน", tone: "success" },
   inactive: { label: "ปิดใช้งาน", tone: "neutral" },
 };
+
+const CATEGORY_STATUSES: CategoryStatus[] = ["draft", "active", "inactive"];
 
 export type AdminCategory = {
   id: string;
@@ -56,16 +64,31 @@ export function normalizeCategory(c: Partial<AdminCategory> & { id: string }): A
     name: c.name ?? "",
     slug: c.slug ?? "",
     description: c.description ?? "",
-    status: c.status ?? "active",
+    // Older saves (before drafts) keep their own active / inactive.
+    status: CATEGORY_STATUSES.includes(c.status as CategoryStatus) ? (c.status as CategoryStatus) : "active",
     createdAt: c.createdAt ?? "",
     updatedAt: c.updatedAt ?? "",
   };
 }
 
-/** Case-insensitive; `excludeId` lets Edit compare against every *other* category. */
+/** Case-insensitive; `excludeId` lets Edit compare against every *other* category. A blank slug (a draft that hasn't picked one yet) never clashes. */
 export function isCategorySlugTaken(categories: AdminCategory[], slug: string, excludeId?: string): boolean {
   const target = slug.trim().toLowerCase();
+  if (!target) return false;
   return categories.some((c) => c.id !== excludeId && c.slug.trim().toLowerCase() === target);
+}
+
+/**
+ * What a draft category still lacks before it can go live (same checks as
+ * the form's บันทึกและเผยแพร่), as field names for the list's เผยแพร่ toast.
+ * Empty = ready to publish.
+ */
+export function categoryPublishProblems(category: AdminCategory, all: AdminCategory[]): string[] {
+  const problems: string[] = [];
+  if (!category.name.trim()) problems.push("ชื่อหมวดหมู่");
+  const slug = slugifyCategory(category.slug);
+  if (!slug || isCategorySlugTaken(all, slug, category.id) || categorySlugRouteWarning(slug)?.tone === "error") problems.push("Slug");
+  return problems;
 }
 
 /**

@@ -17,7 +17,8 @@ import { useProductCatalog } from "~/lib/productCatalog";
 import { useCategoryContent } from "~/lib/categoryContent";
 import { categoryListHref } from "~/lib/pageSections";
 import type { Product } from "~/lib/types";
-import { getDiscountPercent } from "~/lib/products";
+import { discountBadgePercent } from "~/lib/products";
+import { richTextToPlain } from "~/lib/richText";
 import { useCart } from "~/lib/cart";
 import { pushToast } from "~/lib/toast";
 import { flyToCart } from "~/lib/flyToCart";
@@ -138,16 +139,17 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
 
               <h1 class="text-2xl font-bold text-ink lg:text-[28px] lg:leading-[1.4]">{props.product.name}</h1>
 
-              <Show when={props.product.description}>
-                <p class="text-base text-ink">{props.product.description}</p>
+              {/* Short summary: the description's words only (the full rich text with pictures is in "รายละเอียดสินค้า" below). */}
+              <Show when={richTextToPlain(props.product.description)}>
+                {(summary) => <p class="line-clamp-3 whitespace-pre-line text-base leading-[1.75] text-ink">{summary()}</p>}
               </Show>
 
               <div class="flex flex-col gap-2 rounded-card bg-surface-pink px-6 py-5">
                 <div class="flex flex-wrap items-center gap-2">
                   <PriceDisplay price={props.product.price} compareAtPrice={props.product.compareAtPrice} />
-                  <Show when={getDiscountPercent(props.product)}>
+                  <Show when={discountBadgePercent(props.product)}>
                     <span class="rounded-pill bg-danger-strong/90 px-1.5 py-0.5 text-xs font-semibold text-danger-soft">
-                      ลด {getDiscountPercent(props.product)}%
+                      ลด {discountBadgePercent(props.product)}%
                     </span>
                   </Show>
                 </div>

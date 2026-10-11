@@ -4,7 +4,8 @@ import { TIKTOK_REVIEW_CLIPS, type TikTokReviewClip } from "./tiktokReviews";
 
 function readActiveClips(): TikTokReviewClip[] {
   return readStoredTiktokClips()
-    .filter((c) => c.active && c.videoId)
+    // Drafts and hidden clips never reach the storefront.
+    .filter((c) => c.active && !c.draft && c.videoId)
     .map((c) => ({
       videoId: c.videoId,
       author: c.author,

@@ -40,7 +40,38 @@ const TYPE_OPTIONS: { value: HomepageDestination["type"]; label: string }[] = [
  * changed (`landingPage`/`landingPageId`, normalized from any legacy
  * `promotion`-typed record on read — see `normalizeHomepageDestination`).
  */
-export function DestinationSelector(props: { value: HomepageDestination; onChange: (next: HomepageDestination) => void }) {
+/**
+ * What's missing for a destination to actually link somewhere on the
+ * storefront (undefined when it's fine). `required` also rejects "ไม่มี".
+ */
+export function destinationError(d: HomepageDestination, required = false): string | undefined {
+  switch (d.type) {
+    case "none":
+      return required ? "กรุณาเลือกปลายทาง" : undefined;
+    case "internal":
+      if (!d.path.trim()) return "กรุณากรอกลิงก์หน้าในเว็บไซต์";
+      return d.path.trim().startsWith("/") ? undefined : "ลิงก์หน้าในเว็บไซต์ต้องขึ้นต้นด้วย /";
+    case "external":
+      if (!d.url.trim()) return "กรุณากรอก URL ภายนอก";
+      return /^https?:\/\/\S+$/i.test(d.url.trim()) ? undefined : "URL ต้องขึ้นต้นด้วย https://";
+    case "landingPage":
+      return d.landingPageId ? undefined : "กรุณาเลือกหน้าแคมเปญ";
+    case "product":
+      return d.productId ? undefined : "กรุณาเลือกสินค้า";
+    case "category":
+      return d.categoryId ? undefined : "กรุณาเลือกหมวดหมู่";
+    case "collection":
+      return d.collectionId ? undefined : "กรุณาเลือกกลุ่มสินค้าพิเศษ";
+  }
+}
+
+export function DestinationSelector(props: {
+  value: HomepageDestination;
+  onChange: (next: HomepageDestination) => void;
+  /** Shows the red * on the label. */
+  required?: boolean;
+  error?: string;
+}) {
   const setType = (type: HomepageDestination["type"]) => {
     switch (type) {
       case "internal":
@@ -69,10 +100,19 @@ export function DestinationSelector(props: { value: HomepageDestination; onChang
   return (
     <div class="flex flex-col gap-3">
       <label class="flex flex-col gap-1.5">
-        <span class="text-sm font-medium text-ink">ปลายทาง</span>
+        <span class="text-sm font-medium text-ink">
+          ปลายทาง
+          <Show when={props.required}>
+            <span class="text-system-red" aria-hidden="true">
+              {" "}
+              *
+            </span>
+          </Show>
+        </span>
         <div class="relative">
           <select
             value={props.value.type}
+            aria-invalid={props.value.type === "none" && props.error ? true : undefined}
             onChange={(e) => setType(e.currentTarget.value as HomepageDestination["type"])}
             class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
           >
@@ -116,6 +156,10 @@ export function DestinationSelector(props: { value: HomepageDestination; onChang
 
       <Show when={props.value.type === "collection"}>
         <CollectionPicker value={(props.value as { collectionId: string }).collectionId} onChange={(id) => props.onChange({ type: "collection", collectionId: id })} />
+      </Show>
+
+      <Show when={props.error}>
+        <p role="alert" class="text-sm text-system-red">{props.error}</p>
       </Show>
     </div>
   );

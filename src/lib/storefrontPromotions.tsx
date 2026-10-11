@@ -73,6 +73,7 @@ function toStorefrontCoupon(c: AdminCoupon, orders: UsageOrder[]): Coupon {
     startTime: c.startTime,
     endDate: c.endDate,
     endTime: c.endTime,
+    extraConditions: c.extraConditions,
   });
 }
 

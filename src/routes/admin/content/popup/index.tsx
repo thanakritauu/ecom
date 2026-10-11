@@ -27,7 +27,10 @@ import {
   type PromoPopupContent,
 } from "~/lib/promoPopup";
 import { pushToast } from "~/lib/toast";
-import { PlusIcon, TrashIcon } from "~/components/admin/icons";
+import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
+import { reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
+import { PlusIcon } from "~/components/admin/icons";
+import { CloseIcon } from "~/components/shared/icons";
 import { useAdminContent } from "~/lib/adminContentStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { promotionPageHref } from "~/lib/adminContent";
@@ -38,9 +41,6 @@ import { categoryStorefrontHref, STOREFRONT_CATEGORY_ROUTE_SLUGS } from "~/lib/a
  * reads live. Changing what customers see gives the popup a new id, so it
  * shows again even to people who ticked "ไม่ต้องแสดงอีก" on the old one.
  */
-const iconButtonClass =
-  "flex size-9 shrink-0 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 hover:bg-surface-pink disabled:cursor-not-allowed disabled:opacity-30";
-
 type LiveStatus = { label: string; tone: StatusTone };
 
 function liveStatus(c: PromoPopupContent, now: number): LiveStatus {
@@ -51,6 +51,15 @@ function liveStatus(c: PromoPopupContent, now: number): LiveStatus {
   if (!Number.isNaN(end) && now > end) return { label: "หมดเวลาแล้ว", tone: "danger" };
   return { label: "กำลังแสดง", tone: "success" };
 }
+
+const LABELS: Record<string, string> = {
+  pages: "หน้าที่แสดง Popup",
+  media: "รูปภาพหรือวิดีโอ",
+  title: "หัวข้อ",
+  ctaLabel: "ข้อความบนปุ่ม",
+  ctaUrl: "ลิงก์ของปุ่ม",
+  endsAt: "สิ้นสุด",
+};
 
 const stripMeta = (c: PromoPopupContent) => JSON.stringify({ ...c, id: undefined, updatedAt: undefined });
 const isValidHref = (href: string) => /^(\/|https?:\/\/)\S*$/.test(href.trim());
@@ -111,7 +120,7 @@ export default function AdminPromoPopupPage() {
 
   const errors = createMemo(() => {
     const d = draft();
-    const e: Record<string, string> = {};
+    const e: FormErrors = {};
     if (d.pages.length === 0) e.pages = "กรุณาเลือกอย่างน้อย 1 หน้า";
     if (!d.media.src) e.media = "กรุณาอัปโหลดรูปภาพหรือวิดีโอ";
     else if (d.media.type === "video" && !d.media.poster) e.media = "วิดีโอต้องมีภาพปก กรุณาอัปโหลดภาพปกวิดีโอ";
@@ -124,16 +133,15 @@ export default function AdminPromoPopupPage() {
     if (d.startsAt && d.endsAt && new Date(d.endsAt).getTime() <= new Date(d.startsAt).getTime()) e.endsAt = "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม";
     return e;
   });
-  const err = (key: string) => (showErrors() ? errors()[key] : undefined);
+  // Shown only after the first save attempt; being a memo, each one disappears as soon as it's fixed.
+  const shownErrors = createMemo<FormErrors>(() => (showErrors() ? errors() : {}));
+  const err = (key: string) => shownErrors()[key];
 
   const status = createMemo(() => liveStatus(draft(), Date.now()));
 
   const save = async () => {
     setShowErrors(true);
-    if (Object.keys(errors()).length > 0) {
-      pushToast("กรุณาตรวจสอบข้อมูลที่ยังไม่ครบ", "error");
-      return;
-    }
+    if (reportFormErrors(errors(), LABELS)) return;
     setSaving(true);
     try {
       await new Promise((r) => setTimeout(r, 300 + Math.random() * 200));
@@ -172,6 +180,71 @@ export default function AdminPromoPopupPage() {
 
   const form = (
     <>
+      <FormErrorSummary errors={shownErrors()} labels={LABELS} />
+      <Section title="รูปภาพหรือวิดีโอ" required field="media">
+        <MediaUploader
+          label="รูปหรือวิดีโอด้านบนของ Popup"
+          hint={`ขนาด ${PROMO_POPUP_MEDIA_SIZE.width}x${PROMO_POPUP_MEDIA_SIZE.height}px (${PROMO_POPUP_MEDIA_SIZE.ratio}) ถ้าสัดส่วนไม่ตรง ระบบจะครอปตรงกลางให้เต็มกรอบ`}
+          value={promoPopupMediaValue(draft().media)}
+          onChange={(v) => setDraft((d) => ({ ...d, media: withPromoPopupMediaValue(d.media, v) }))}
+          aspectClass="aspect-[16/10]"
+          boxClass="w-full max-w-sm"
+          posterAspectClass="aspect-[16/10]"
+          disabled={saving()}
+        />
+        <Show when={err("media")}>
+          <p class="-mt-2 text-sm text-system-red">{err("media")}</p>
+        </Show>
+        <TextField label="คำอธิบายรูป" value={draft().media.alt} disabled={saving()} onInput={(e) => setMedia({ alt: e.currentTarget.value })} />
+        <p class="-mt-2 text-xs text-ink-gray">คำอธิบายรูปใช้กับโปรแกรมอ่านหน้าจอ ไม่แสดงบนหน้าร้าน</p>
+      </Section>
+
+      <Section title="ข้อความ">
+        <TextField label="หัวข้อ" required value={draft().title} data-field="title" error={err("title")} disabled={saving()} onInput={(e) => set("title", e.currentTarget.value)} />
+        <label class="flex flex-col gap-1.5">
+          <span class="text-sm font-medium text-ink">รายละเอียด</span>
+          <textarea
+            value={draft().description}
+            disabled={saving()}
+            rows={3}
+            onInput={(e) => set("description", e.currentTarget.value)}
+            class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
+          />
+          <span class="text-xs text-ink-gray">กด Enter เพื่อขึ้นบรรทัดใหม่</span>
+        </label>
+        <TextField
+          label="เงื่อนไข"
+          placeholder="เช่น ใช้โค้ด SAVE100 ขั้นต่ำ ฿2,000"
+          value={draft().condition ?? ""}
+          disabled={saving()}
+          onInput={(e) => set("condition", e.currentTarget.value)}
+        />
+        <p class="-mt-2 text-xs text-ink-gray">แสดงเป็นป้ายสีชมพูใต้รายละเอียด เว้นว่างได้</p>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <TextField label="ข้อความบนปุ่ม" required value={draft().ctaLabel} data-field="ctaLabel" error={err("ctaLabel")} disabled={saving()} onInput={(e) => set("ctaLabel", e.currentTarget.value)} />
+          <Show when={draft().audience === "everyone"}>
+            <TextField
+              label="ลิงก์ของปุ่ม"
+              required
+              placeholder="/promotion/promotions"
+              value={draft().ctaUrl ?? ""}
+              data-field="ctaUrl"
+              error={err("ctaUrl")}
+              disabled={saving()}
+              onInput={(e) => set("ctaUrl", e.currentTarget.value)}
+            />
+          </Show>
+        </div>
+      </Section>
+
+      <Section title="ช่วงเวลาแสดง">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <DateTimeField label="เริ่มแสดง" value={draft().startsAt ?? ""} disabled={saving()} onChange={(v) => set("startsAt", v || undefined)} />
+          <DateTimeField label="สิ้นสุด" field="endsAt" value={draft().endsAt ?? ""} disabled={saving()} error={err("endsAt")} onChange={(v) => set("endsAt", v || undefined)} />
+        </div>
+        <p class="text-xs text-ink-gray">เว้นว่างได้ ถ้าไม่ระบุจะแสดงตลอดเวลาที่เปิดอยู่</p>
+      </Section>
+
       <Section title="การแสดงผล">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <Toggle checked={draft().enabled} onChange={(v) => set("enabled", v)} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
@@ -190,24 +263,25 @@ export default function AdminPromoPopupPage() {
         />
       </Section>
 
-      <Section title="หน้าที่แสดง Popup">
+      <Section title="หน้าที่แสดง Popup" required field="pages">
+        {/* Picked pages as chips; × takes one off. */}
         <Show when={draft().pages.length > 0} fallback={<p class="text-sm text-ink-gray">ยังไม่ได้เลือกหน้า</p>}>
-          <ul class="flex flex-col divide-y divide-border">
+          <ul class="flex flex-wrap gap-2">
             <For each={draft().pages}>
               {(path) => (
-                <li class="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
-                  <div class="flex min-w-0 flex-1 flex-col">
-                    <span class="truncate text-sm font-medium text-ink">{pageLabel(path) ?? "ลิงก์ที่กรอกเอง"}</span>
-                    <span class="truncate text-xs text-ink-gray">{path}</span>
-                  </div>
+                <li
+                  title={path}
+                  class="flex min-h-9 max-w-full items-center gap-1 rounded-pill border border-brand-pink/30 bg-surface-pink py-1 pl-3 pr-1 text-sm font-medium text-brand-pink"
+                >
+                  <span class="truncate">{pageLabel(path) ?? path}</span>
                   <button
                     type="button"
-                    aria-label={`เอา ${path} ออก`}
+                    aria-label={`เอา ${pageLabel(path) ?? path} ออก`}
                     disabled={saving()}
                     onClick={() => set("pages", draft().pages.filter((p) => p !== path))}
-                    class={`${iconButtonClass} hover:!bg-danger-soft hover:text-system-red`}
+                    class="flex size-7 shrink-0 items-center justify-center rounded-pill transition-colors duration-150 hover:bg-brand-pink/10 disabled:opacity-40"
                   >
-                    <TrashIcon class="size-4" />
+                    <CloseIcon class="size-3.5" />
                   </button>
                 </li>
               )}
@@ -250,69 +324,6 @@ export default function AdminPromoPopupPage() {
           </div>
           <span class="text-xs text-ink-gray">วางลิงก์เต็มหรือ slug ก็ได้ ใส่ * ท้ายลิงก์เพื่อแสดงทุกหน้าที่อยู่ใต้ลิงก์นั้น เช่น /promotion/*</span>
         </div>
-      </Section>
-
-      <Section title="รูปภาพหรือวิดีโอ">
-        <MediaUploader
-          label="รูปหรือวิดีโอด้านบนของ Popup"
-          hint={`ขนาด ${PROMO_POPUP_MEDIA_SIZE.width}x${PROMO_POPUP_MEDIA_SIZE.height}px (${PROMO_POPUP_MEDIA_SIZE.ratio}) ถ้าสัดส่วนไม่ตรง ระบบจะครอปตรงกลางให้เต็มกรอบ`}
-          value={promoPopupMediaValue(draft().media)}
-          onChange={(v) => setDraft((d) => ({ ...d, media: withPromoPopupMediaValue(d.media, v) }))}
-          aspectClass="aspect-[16/10]"
-          boxClass="w-full max-w-sm"
-          posterAspectClass="aspect-[16/10]"
-          disabled={saving()}
-        />
-        <Show when={err("media")}>
-          <p class="-mt-2 text-sm text-system-red">{err("media")}</p>
-        </Show>
-        <TextField label="คำอธิบายรูป" value={draft().media.alt} disabled={saving()} onInput={(e) => setMedia({ alt: e.currentTarget.value })} />
-        <p class="-mt-2 text-xs text-ink-gray">คำอธิบายรูปใช้กับโปรแกรมอ่านหน้าจอ ไม่แสดงบนหน้าร้าน</p>
-      </Section>
-
-      <Section title="ข้อความ">
-        <TextField label="หัวข้อ" required value={draft().title} error={err("title")} disabled={saving()} onInput={(e) => set("title", e.currentTarget.value)} />
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium text-ink">รายละเอียด</span>
-          <textarea
-            value={draft().description}
-            disabled={saving()}
-            rows={3}
-            onInput={(e) => set("description", e.currentTarget.value)}
-            class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray"
-          />
-          <span class="text-xs text-ink-gray">กด Enter เพื่อขึ้นบรรทัดใหม่</span>
-        </label>
-        <TextField
-          label="เงื่อนไข"
-          placeholder="เช่น ใช้โค้ด SAVE100 ขั้นต่ำ ฿2,000"
-          value={draft().condition ?? ""}
-          disabled={saving()}
-          onInput={(e) => set("condition", e.currentTarget.value)}
-        />
-        <p class="-mt-2 text-xs text-ink-gray">แสดงเป็นป้ายสีชมพูใต้รายละเอียด เว้นว่างได้</p>
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <TextField label="ข้อความบนปุ่ม" required value={draft().ctaLabel} error={err("ctaLabel")} disabled={saving()} onInput={(e) => set("ctaLabel", e.currentTarget.value)} />
-          <Show when={draft().audience === "everyone"}>
-            <TextField
-              label="ลิงก์ของปุ่ม"
-              required
-              placeholder="/promotion/promotions"
-              value={draft().ctaUrl ?? ""}
-              error={err("ctaUrl")}
-              disabled={saving()}
-              onInput={(e) => set("ctaUrl", e.currentTarget.value)}
-            />
-          </Show>
-        </div>
-      </Section>
-
-      <Section title="ช่วงเวลาแสดง">
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <DateTimeField label="เริ่มแสดง" value={draft().startsAt ?? ""} disabled={saving()} onChange={(v) => set("startsAt", v || undefined)} />
-          <DateTimeField label="สิ้นสุด" value={draft().endsAt ?? ""} disabled={saving()} error={err("endsAt")} onChange={(v) => set("endsAt", v || undefined)} />
-        </div>
-        <p class="text-xs text-ink-gray">เว้นว่างได้ ถ้าไม่ระบุจะแสดงตลอดเวลาที่เปิดอยู่</p>
       </Section>
 
       <Show when={dirty() && contentChanged() && saved().updatedAt !== undefined}>
@@ -370,24 +381,33 @@ export default function AdminPromoPopupPage() {
   );
 }
 
-function Section(props: { title: string; children: JSX.Element }) {
+function Section(props: { title: string; required?: boolean; field?: string; children: JSX.Element }) {
   return (
-    <section class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-      <h2 class="text-base font-semibold text-ink">{props.title}</h2>
+    <section data-field={props.field} class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
+      <h2 class="text-base font-semibold text-ink">
+        {props.title}
+        <Show when={props.required}>
+          <span class="text-system-red" aria-hidden="true">
+            {" "}
+            *
+          </span>
+        </Show>
+      </h2>
       {props.children}
     </section>
   );
 }
 
-function DateTimeField(props: { label: string; value: string; onChange: (v: string) => void; disabled?: boolean; error?: string }) {
+function DateTimeField(props: { label: string; value: string; onChange: (v: string) => void; disabled?: boolean; error?: string; field?: string }) {
   return (
-    <label class="flex flex-col gap-1.5">
+    <label data-field={props.field} class="flex flex-col gap-1.5">
       <span class="text-sm font-medium text-ink">{props.label}</span>
       <div class="flex gap-2">
         <input
           type="datetime-local"
           value={props.value}
           disabled={props.disabled}
+          aria-invalid={props.error ? true : undefined}
           onInput={(e) => props.onChange(e.currentTarget.value)}
           class={`h-11 min-w-0 flex-1 rounded-card border bg-surface-card px-4 text-sm text-ink outline-none focus:border-brand-pink disabled:cursor-not-allowed disabled:bg-surface-gray ${props.error ? "border-system-red" : "border-border"}`}
         />

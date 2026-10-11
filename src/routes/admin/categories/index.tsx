@@ -15,7 +15,7 @@ import { QuickViewDrawer } from "~/components/admin/QuickViewDrawer";
 import { CategoryRowActionsMenu } from "~/components/admin/categories/CategoryRowActionsMenu";
 import { CategoryQuickView } from "~/components/admin/categories/CategoryQuickView";
 import { RefreshIcon, CatalogIcon, PlusIcon } from "~/components/admin/icons";
-import { CATEGORY_STATUS_META, type AdminCategory, type CategoryStatus } from "~/lib/adminCategories";
+import { CATEGORY_STATUS_META, categoryPublishProblems, type AdminCategory, type CategoryStatus } from "~/lib/adminCategories";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { useAdminContent } from "~/lib/adminContentStore";
@@ -39,6 +39,7 @@ const STATUS_FILTER_OPTIONS: SelectFilterConfig = {
   value: "all",
   options: [
     { value: "all", label: "ทุกสถานะ" },
+    { value: "draft", label: CATEGORY_STATUS_META.draft.label },
     { value: "active", label: CATEGORY_STATUS_META.active.label },
     { value: "inactive", label: CATEGORY_STATUS_META.inactive.label },
   ],
@@ -147,10 +148,25 @@ export default function AdminCategoriesListPage() {
    * read-only `StatusBadge` is still shown so the table stays informative.
    */
   const bulkSetStatus = async (status: CategoryStatus) => {
-    const ids = [...selectedIds()];
-    await Promise.all(ids.map((id) => store.setStatus(id, status)));
+    const targets = store.categories().filter((c) => selectedIds().has(c.id));
+    // Draft-first: เปิดใช้งาน publishes a draft only when it passes the publish checks; ปิดใช้งาน leaves drafts as drafts.
+    const blocked = status === "active" ? targets.filter((c) => c.status === "draft" && categoryPublishProblems(c, store.categories()).length > 0) : [];
+    const ok = targets.filter((c) => !blocked.includes(c) && !(status === "inactive" && c.status === "draft"));
+    await Promise.all(ok.map((c) => store.setStatus(c.id, status)));
     clearSelection();
-    pushToast(status === "active" ? `เปิดใช้งาน ${ids.length} รายการแล้ว` : `ปิดใช้งาน ${ids.length} รายการแล้ว`, "success");
+    pushToast(status === "active" ? `เปิดใช้งาน ${ok.length} รายการแล้ว` : `ปิดใช้งาน ${ok.length} รายการแล้ว`, "success");
+    if (blocked.length > 0) pushToast(`เผยแพร่ไม่ได้ ${blocked.length} รายการ`, "warning", `ข้อมูลยังไม่ครบ: ${blocked.map((c) => c.name).join(", ")}`);
+  };
+
+  /** Row action for a แบบร่าง: same checks as the form's บันทึกและเผยแพร่; refuses with a toast naming what's missing. */
+  const publish = async (c: AdminCategory) => {
+    const problems = categoryPublishProblems(c, store.categories());
+    if (problems.length > 0) {
+      pushToast(`เผยแพร่ "${c.name}" ไม่ได้`, "error", `ยังกรอกข้อมูลไม่ครบ: ${problems.join(", ")}`);
+      return;
+    }
+    await store.setStatus(c.id, "active");
+    pushToast(`เผยแพร่ "${c.name}" แล้ว`, "success");
   };
 
   /** §10/§43 dependency guard — a Category must never be deleted while Products still classify themselves under it, a Promotion Page/Homepage Section still sources from it, or a NavigationItem still targets it. */
@@ -226,7 +242,7 @@ export default function AdminCategoriesListPage() {
       render: (row) => (
         <div class="min-w-0">
           <p class="truncate text-sm font-medium text-ink">{row.name}</p>
-          <p class="truncate text-xs text-ink-gray">/{row.slug}</p>
+          <p class="truncate text-xs text-ink-gray">{row.slug ? `/${row.slug}` : "-"}</p>
         </div>
       ),
     },
@@ -237,7 +253,7 @@ export default function AdminCategoriesListPage() {
       key: "actions",
       label: "",
       align: "right",
-      render: (row) => <CategoryRowActionsMenu id={row.id} name={row.name} onDelete={() => requestDelete(row)} />,
+      render: (row) => <CategoryRowActionsMenu id={row.id} name={row.name} onDelete={() => requestDelete(row)} onPublish={row.status === "draft" ? () => void publish(row) : undefined} />,
     },
   ];
 
@@ -306,13 +322,13 @@ export default function AdminCategoriesListPage() {
                   />
                   <button type="button" onClick={() => setQuickViewId(row.id)} class="font-normal flex min-w-0 flex-1 flex-col text-left">
                     <p class="truncate text-sm font-medium text-ink">{row.name}</p>
-                    <p class="truncate text-xs text-ink-gray">/{row.slug}</p>
+                    <p class="truncate text-xs text-ink-gray">{row.slug ? `/${row.slug}` : "-"}</p>
                     <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <StatusBadge tone={CATEGORY_STATUS_META[row.status].tone}>{CATEGORY_STATUS_META[row.status].label}</StatusBadge>
                     </div>
                     <p class="mt-1 text-xs text-ink-placeholder">{categoryProductCount(row.id).toLocaleString("th-TH")} สินค้า แก้ไขล่าสุด {row.updatedAt}</p>
                   </button>
-                  <CategoryRowActionsMenu id={row.id} name={row.name} onDelete={() => requestDelete(row)} triggerClass="flex size-9 shrink-0 items-center justify-center self-start rounded-pill text-ink-gray hover:bg-surface-pink" />
+                  <CategoryRowActionsMenu id={row.id} name={row.name} onDelete={() => requestDelete(row)} onPublish={row.status === "draft" ? () => void publish(row) : undefined} triggerClass="flex size-9 shrink-0 items-center justify-center self-start rounded-pill text-ink-gray hover:bg-surface-pink" />
                 </div>
               )}
             />

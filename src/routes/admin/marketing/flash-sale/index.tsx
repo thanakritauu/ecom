@@ -18,7 +18,7 @@ import { FlashSaleDialog, type FlashSaleTiming } from "~/components/admin/market
 import { RefreshIcon, FlashBoltIcon, PlusIcon, MoreIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { useAdminProducts, type AdminProduct } from "~/lib/adminProductStore";
-import { flashSaleRoundEndsAt, getDiscountPercent } from "~/lib/products";
+import { flashSaleRoundEndsAt, getDiscountPercent, isFlashSaleUpcoming } from "~/lib/products";
 import type { ExportColumn } from "~/lib/adminExport";
 import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
@@ -30,10 +30,11 @@ import type { AsyncStatus } from "~/lib/types";
  * `stockLeft` / `stockTotal`. This page lists them and edits only those two
  * fields on the product; price and stock stay on the product page.
  */
-type FlashState = "live" | "soldout" | "ended" | "hidden";
+type FlashState = "live" | "upcoming" | "soldout" | "ended" | "hidden";
 
 const FLASH_STATE_META: Record<FlashState, { label: string; tone: StatusTone }> = {
   live: { label: "กำลังแสดง", tone: "success" },
+  upcoming: { label: "รอเริ่ม", tone: "info" },
   soldout: { label: "สินค้าหมด", tone: "danger" },
   ended: { label: "หมดเวลา", tone: "warning" },
   hidden: { label: "ไม่ได้เปิดขาย", tone: "neutral" },
@@ -41,7 +42,7 @@ const FLASH_STATE_META: Record<FlashState, { label: string; tone: StatusTone }> 
 
 const TABS: StatusTab<"all" | FlashState>[] = [
   { value: "all", label: "ทั้งหมด" },
-  ...(["live", "soldout", "ended", "hidden"] as const).map((s) => ({ value: s, label: FLASH_STATE_META[s].label })),
+  ...(["live", "upcoming", "soldout", "ended", "hidden"] as const).map((s) => ({ value: s, label: FLASH_STATE_META[s].label })),
 ];
 
 const SORT_OPTIONS = [
@@ -57,12 +58,18 @@ const endsAtOf = (p: AdminProduct) => (p.flashSaleDaily ? flashSaleRoundEndsAt()
 function flashState(p: AdminProduct, now = Date.now()): FlashState {
   if (p.status !== "active") return "hidden";
   if (!p.flashSaleDaily && endsAtOf(p) <= now) return "ended";
+  if (isFlashSaleUpcoming(p, now)) return "upcoming";
   if ((p.stockLeft ?? 0) <= 0) return "soldout";
   return "live";
 }
 
 const timeFormatter = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
-const roundLabel = (p: AdminProduct) => (p.flashSaleDaily ? "รายวัน จบเที่ยงคืน" : `จบ ${timeFormatter.format(endsAtOf(p))} น.`);
+const roundLabel = (p: AdminProduct) =>
+  p.flashSaleDaily
+    ? "รายวัน จบเที่ยงคืน"
+    : p.flashSaleStartsAt
+      ? `${timeFormatter.format(p.flashSaleStartsAt)} น. ถึง ${timeFormatter.format(endsAtOf(p))} น.`
+      : `จบ ${timeFormatter.format(endsAtOf(p))} น.`;
 
 export default function AdminFlashSalePage() {
   const productStore = useAdminProducts();
@@ -75,7 +82,7 @@ export default function AdminFlashSalePage() {
   const [pageSize, setPageSizeRaw] = createSignal(20);
   const [listStatus, setListStatus] = createSignal<AsyncStatus>("loading");
   const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
-  const [dialog, setDialog] = createSignal<{ productIds?: string[]; initial?: { daily: boolean; endsAt?: number } } | null>(null);
+  const [dialog, setDialog] = createSignal<{ productIds?: string[]; initial?: { daily: boolean; startsAt?: number; endsAt?: number } } | null>(null);
   const [confirmRemove, setConfirmRemove] = createSignal<AdminProduct[] | null>(null);
   const [actionLoading, setActionLoading] = createSignal(false);
 
@@ -151,7 +158,7 @@ export default function AdminFlashSalePage() {
   const clearSelection = () => setSelectedIds(new Set<string>());
 
   /** Writes only the flash-sale fields of each product; returns how many saves failed. */
-  const writeFlashSale = async (ids: string[], fields: { flashSaleEndsAt?: number; flashSaleDaily?: boolean }) => {
+  const writeFlashSale = async (ids: string[], fields: { flashSaleEndsAt?: number; flashSaleStartsAt?: number; flashSaleDaily?: boolean }) => {
     const results = await Promise.allSettled(
       ids.map((id) => productStore.patchProduct(id, fields)),
     );
@@ -159,7 +166,9 @@ export default function AdminFlashSalePage() {
   };
 
   const saveTiming = async (ids: string[], timing: FlashSaleTiming) => {
-    const failed = await writeFlashSale(ids, timing.daily ? { flashSaleDaily: true, flashSaleEndsAt: flashSaleRoundEndsAt() } : { flashSaleDaily: undefined, flashSaleEndsAt: timing.endsAt });
+    const failed = await writeFlashSale(ids, timing.daily
+        ? { flashSaleDaily: true, flashSaleEndsAt: flashSaleRoundEndsAt(), flashSaleStartsAt: undefined }
+        : { flashSaleDaily: undefined, flashSaleStartsAt: timing.startsAt, flashSaleEndsAt: timing.endsAt });
     const adding = dialog()?.productIds === undefined;
     if (failed === 0) pushToast(adding ? `เพิ่ม ${ids.length} สินค้าในแฟลชเซลแล้ว` : "บันทึกเวลาแฟลชเซลเรียบร้อยแล้ว", "success");
     else pushToast(`บันทึกไม่สำเร็จ ${failed} รายการ กรุณาลองใหม่อีกครั้ง`, "error");
@@ -172,7 +181,7 @@ export default function AdminFlashSalePage() {
     setActionLoading(true);
     const failed = await writeFlashSale(
       list.map((p) => p.id),
-      { flashSaleDaily: undefined, flashSaleEndsAt: undefined },
+      { flashSaleDaily: undefined, flashSaleEndsAt: undefined, flashSaleStartsAt: undefined },
     );
     setActionLoading(false);
     setConfirmRemove(null);
@@ -183,7 +192,14 @@ export default function AdminFlashSalePage() {
 
   const editTiming = (ids: string[]) => {
     const first = productStore.getById(ids[0]);
-    setDialog({ productIds: ids, initial: { daily: !!first?.flashSaleDaily, endsAt: first?.flashSaleDaily ? undefined : first?.flashSaleEndsAt } });
+    setDialog({
+      productIds: ids,
+      initial: {
+        daily: !!first?.flashSaleDaily,
+        startsAt: first?.flashSaleDaily ? undefined : first?.flashSaleStartsAt,
+        endsAt: first?.flashSaleDaily ? undefined : first?.flashSaleEndsAt,
+      },
+    });
   };
 
   const selectedProducts = () => [...selectedIds()].map((id) => productStore.getById(id)).filter((p): p is AdminProduct => !!p);
@@ -289,7 +305,7 @@ export default function AdminFlashSalePage() {
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "แฟลชเซล" }]} />
       <PageHeader
         title="แฟลชเซล"
-        description="เลือกสินค้าที่ขึ้นในแฟลชเซลหน้าแรก และตั้งเวลาจบ"
+        description="เลือกสินค้าที่ขึ้นในแฟลชเซลหน้าแรก และตั้งเวลาเริ่มและจบ"
         actions={
           <div class="flex flex-wrap items-center gap-2">
             <ExportMenu filenameBase="flash-sale-report" columns={exportColumns} rows={sorted()} />

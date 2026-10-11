@@ -19,7 +19,7 @@ export default function AdminCategoryEditPage() {
     const current = category();
     if (!current) return;
     await store.update(current.id, values);
-    pushToast("บันทึกหมวดหมู่เรียบร้อยแล้ว", "success");
+    pushToast(values.status === "draft" ? "บันทึกแบบร่างเรียบร้อยแล้ว" : current.status === "draft" ? "เผยแพร่หมวดหมู่เรียบร้อยแล้ว" : "บันทึกหมวดหมู่เรียบร้อยแล้ว", "success");
     navigate(`/admin/categories/${current.id}`);
   };
 
