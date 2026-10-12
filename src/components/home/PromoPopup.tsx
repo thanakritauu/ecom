@@ -1,7 +1,8 @@
 import { Dialog } from "@kobalte/core/dialog";
 import { useLocation, useNavigate } from "@solidjs/router";
-import { createEffect, createSignal, on, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { useAuth } from "~/lib/auth";
+import { cookieConsentSettled } from "~/lib/cookieConsent";
 import {
   hidePromoForever,
   isPopupOnPage,
@@ -16,6 +17,9 @@ import {
 import { MediaView } from "../shared/MediaView";
 import { Button } from "../shared/Button";
 import { CheckIcon, CloseMark } from "../shared/icons";
+
+/** Pause between the cookie choice (or page load, for a returning visitor) and the popup. */
+const POPUP_DELAY_MS = 1200;
 
 /**
  * Storefront promo popup, mounted once in app.tsx and opened on the pages
@@ -48,13 +52,28 @@ export function PromoPopup(props: { content?: PromoPopupContent }) {
 
   // Client-only (after mount), re-checked on every page change: the popup can
   // be set to a page the visitor only reaches later in the visit.
+  // Cookie bar first: the popup waits until the visitor has made a cookie choice (or made one on an earlier
+  // visit), then opens after a short pause so the two never land at once.
+  let openTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(openTimer));
+  const canOpenOn = (pathname: string) =>
+    !open() &&
+    !pathname.startsWith("/admin") &&
+    isPopupOnPage(content().pages, pathname) &&
+    eligible() &&
+    !(guestsOnly() && auth.isAuthenticated()) &&
+    !auth.isAuthModalOpen() &&
+    !document.querySelector('[role="dialog"]');
   createEffect(
-    on([mounted, () => location.pathname, () => content().id], ([isMounted, pathname]) => {
-      if (!isMounted || open() || pathname.startsWith("/admin")) return;
-      if (!isPopupOnPage(content().pages, pathname) || !eligible() || (guestsOnly() && auth.isAuthenticated())) return;
-      if (auth.isAuthModalOpen() || document.querySelector('[role="dialog"]')) return;
-      markPromoShownToday(content().id);
-      setOpen(true);
+    on([mounted, cookieConsentSettled, () => location.pathname, () => content().id], ([isMounted, settled, pathname]) => {
+      clearTimeout(openTimer);
+      if (!isMounted || !settled || !canOpenOn(pathname)) return;
+      openTimer = setTimeout(() => {
+        // Re-check: the visitor may have moved on, signed in or opened another dialog meanwhile.
+        if (!canOpenOn(location.pathname)) return;
+        markPromoShownToday(content().id);
+        setOpen(true);
+      }, POPUP_DELAY_MS);
     }),
   );
   // A new-member offer: signed-in members never see it (also covers the session restoring just after mount).

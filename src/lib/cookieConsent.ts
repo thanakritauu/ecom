@@ -71,3 +71,12 @@ const [settingsOpen, setSettingsOpen] = createSignal(false);
 export const cookieSettingsOpen = settingsOpen;
 export const openCookieSettings = () => setSettingsOpen(true);
 export const setCookieSettingsOpen = setSettingsOpen;
+
+/**
+ * `true` once the visitor has made a cookie choice (stored from an earlier
+ * visit, or just now). The promo popup waits for it, so the cookie bar always
+ * comes first and the two never show at the same time.
+ */
+const [consentSettled, setConsentSettled] = createSignal(false);
+export const cookieConsentSettled = consentSettled;
+export const markCookieConsentSettled = () => setConsentSettled(true);

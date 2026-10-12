@@ -5,6 +5,7 @@ import { INFO_PAGES } from "~/lib/siteInfo";
 import {
   COOKIE_CATEGORIES,
   cookieSettingsOpen,
+  markCookieConsentSettled,
   readCookieConsent,
   saveCookieConsent,
   setCookieSettingsOpen,
@@ -28,6 +29,7 @@ export function CookieConsent() {
     const stored = readCookieConsent();
     if (stored) setChoice({ analytics: stored.analytics, marketing: stored.marketing });
     setDecided(!!stored);
+    if (stored) markCookieConsentSettled();
   });
 
   const decide = (next: { analytics: boolean; marketing: boolean }) => {
@@ -35,6 +37,7 @@ export function CookieConsent() {
     setChoice(next);
     setDecided(true);
     setCookieSettingsOpen(false);
+    markCookieConsentSettled();
   };
   const acceptAll = () => decide({ analytics: true, marketing: true });
   const necessaryOnly = () => decide({ analytics: false, marketing: false });
