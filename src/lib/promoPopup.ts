@@ -62,6 +62,20 @@ export type PromoPopupContent = {
   updatedAt?: string;
 };
 
+/**
+ * One popup in Admin's list. `key` never changes (routes, ordering); `id` is
+ * the customer-facing campaign id and changes when the content does. The list
+ * order is the priority: on a page several popups match, only the first one
+ * that may show opens.
+ */
+export type PromoPopupRecord = PromoPopupContent & {
+  key: string;
+  /** Staff-facing name in the Admin list. */
+  name: string;
+  /** แบบร่าง: never shown on the storefront (draft-first rule). */
+  draft?: boolean;
+};
+
 export const PROMO_POPUP_AUDIENCE_META: Record<PromoPopupAudience, { label: string; hint: string }> = {
   guests: { label: "ผู้ที่ยังไม่ได้เป็นสมาชิก", hint: "สมาชิกที่เข้าสู่ระบบแล้วจะไม่เห็น ปุ่มจะเปิดหน้าต่างสมัครสมาชิก / เข้าสู่ระบบ" },
   everyone: { label: "ทุกคน", hint: "แสดงทั้งลูกค้าทั่วไปและสมาชิก ปุ่มจะพาไปยังลิงก์ที่กำหนด" },
@@ -105,7 +119,9 @@ export function isPopupOnPage(pages: string[], pathname: string): boolean {
   });
 }
 
-export const PROMO_POPUP_STORAGE_KEY = "charmiss:admin:promo-popup";
+/** The single popup saved before Admin could hold several; migrated into the list once. */
+const LEGACY_POPUP_STORAGE_KEY = "charmiss:admin:promo-popup";
+export const PROMO_POPUP_STORAGE_KEY = "charmiss:admin:promo-popups";
 export const PROMO_POPUP_CHANGED_EVENT = "charmiss:promo-popup-changed";
 
 /** The fields a customer sees: any change here means a new campaign (new id). */
@@ -135,23 +151,40 @@ function normalizeMediaFields(m: PromoPopupMedia): PromoPopupMedia {
   return { ...rest, poster: typeof rest.poster === "string" ? rest.poster : "", hasAudio: !!rest.hasAudio };
 }
 
-export function readStoredPromoPopup(): PromoPopupContent {
-  if (typeof localStorage === "undefined") return buildDefaultPromoPopup();
+export const newPromoPopupKey = () => `popup-key-${Date.now().toString(36)}`;
+
+export function buildDefaultPromoPopups(): PromoPopupRecord[] {
+  return [{ ...buildDefaultPromoPopup(), key: "popup-main", name: "สมาชิกใหม่รับส่วนลด" }];
+}
+
+export function normalizePromoPopupRecord(raw: Partial<PromoPopupRecord>): PromoPopupRecord {
+  const content = normalizePromoPopup(raw);
+  return { ...content, key: raw.key || newPromoPopupKey(), name: (raw.name ?? content.title ?? "").trim() || "Popup", draft: !!raw.draft || undefined };
+}
+
+export function readStoredPromoPopups(): PromoPopupRecord[] {
+  if (typeof localStorage === "undefined") return buildDefaultPromoPopups();
   try {
     const raw = localStorage.getItem(PROMO_POPUP_STORAGE_KEY);
-    return raw ? normalizePromoPopup(JSON.parse(raw) as PromoPopupContent) : buildDefaultPromoPopup();
+    if (raw) return (JSON.parse(raw) as Partial<PromoPopupRecord>[]).map(normalizePromoPopupRecord);
+    const legacy = localStorage.getItem(LEGACY_POPUP_STORAGE_KEY);
+    if (legacy) {
+      const old = JSON.parse(legacy) as PromoPopupContent;
+      return [normalizePromoPopupRecord({ ...old, key: "popup-main", name: old.title })];
+    }
+    return buildDefaultPromoPopups();
   } catch {
-    return buildDefaultPromoPopup();
+    return buildDefaultPromoPopups();
   }
 }
 
-export function saveStoredPromoPopup(content: PromoPopupContent) {
+export function saveStoredPromoPopups(list: PromoPopupRecord[]) {
   if (typeof localStorage === "undefined") return;
   try {
-    localStorage.setItem(PROMO_POPUP_STORAGE_KEY, JSON.stringify(content));
+    localStorage.setItem(PROMO_POPUP_STORAGE_KEY, JSON.stringify(list));
     window.dispatchEvent(new Event(PROMO_POPUP_CHANGED_EVENT));
   } catch {
-    // storage full / unavailable: the storefront keeps the previous popup.
+    // storage full / unavailable: the storefront keeps the previous popups.
   }
 }
 
@@ -165,15 +198,14 @@ export function isPromoPopupInSchedule(c: PromoPopupContent, now = Date.now()): 
 }
 
 /**
- * The popup as Admin last saved it. SSR / first paint use the seed (the
- * popup is always closed then anyway); the saved copy is read on mount and
- * again whenever Admin saves. Call it before the component's own `onMount`
- * so the stored copy is in place when the open decision runs.
+ * The popups as Admin last saved them, in priority order. SSR / first paint
+ * use the seed (the popup is always closed then anyway); the saved list is
+ * read on mount and again whenever Admin saves.
  */
-export function useStorefrontPromoPopup(): Accessor<PromoPopupContent> {
-  const [state, setState] = createSignal<PromoPopupContent>(buildDefaultPromoPopup());
+export function useStorefrontPromoPopups(): Accessor<PromoPopupRecord[]> {
+  const [state, setState] = createSignal<PromoPopupRecord[]>(buildDefaultPromoPopups());
   onMount(() => {
-    const refresh = () => setState(readStoredPromoPopup());
+    const refresh = () => setState(readStoredPromoPopups());
     const onStorage = (e: StorageEvent) => {
       if (e.key === null || e.key === PROMO_POPUP_STORAGE_KEY) refresh();
     };
@@ -196,34 +228,50 @@ const todayKey = () => {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 };
 
-/** Once a day: the first storefront visit of the day opens it; closing it waits for the next day's visit. */
-export function wasPromoShownToday(id: string): boolean {
+/** Per-popup records (popup id -> day shown); the old single-value format reads as one entry. */
+function readShown(): Record<string, string> {
   try {
-    return localStorage.getItem(SHOWN_KEY) === `${id}|${todayKey()}`;
+    const raw = localStorage.getItem(SHOWN_KEY);
+    if (!raw) return {};
+    if (raw.startsWith("{")) return JSON.parse(raw) as Record<string, string>;
+    const [id, day] = raw.split("|");
+    return id && day ? { [id]: day } : {};
   } catch {
-    return false;
+    return {};
   }
+}
+
+/** Once a day per popup: the first matching visit of the day opens it; closing it waits for the next day's visit. */
+export function wasPromoShownToday(id: string): boolean {
+  return readShown()[id] === todayKey();
 }
 
 export function markPromoShownToday(id: string) {
   try {
-    localStorage.setItem(SHOWN_KEY, `${id}|${todayKey()}`);
+    localStorage.setItem(SHOWN_KEY, JSON.stringify({ ...readShown(), [id]: todayKey() }));
   } catch {
     // storage unavailable (private mode): falls back to once per page load.
   }
 }
 
-export function isPromoHidden(id: string): boolean {
+/** "ไม่ต้องแสดงอีก" ids; the old single-value format reads as one id. */
+function readHidden(): string[] {
   try {
-    return localStorage.getItem(HIDDEN_KEY) === id;
+    const raw = localStorage.getItem(HIDDEN_KEY);
+    if (!raw) return [];
+    return raw.startsWith("[") ? (JSON.parse(raw) as string[]) : [raw];
   } catch {
-    return false;
+    return [];
   }
+}
+
+export function isPromoHidden(id: string): boolean {
+  return readHidden().includes(id);
 }
 
 export function hidePromoForever(id: string) {
   try {
-    localStorage.setItem(HIDDEN_KEY, id);
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify([...new Set([...readHidden(), id])]));
   } catch {
     // storage unavailable (private mode): it just shows again next load.
   }

@@ -12,6 +12,7 @@ import { createDialogOpenState } from "~/lib/focusRestore";
 import { Badge } from "./Badge";
 import { AddToCartButton } from "./AddToCartButton";
 import { PriceDisplay } from "./PriceDisplay";
+import { PromotionBadges } from "./PromotionBadges";
 import { ProductMeta } from "./ProductMeta";
 import { StockProgressBar } from "./StockProgressBar";
 import { FlashSaleBar } from "./FlashSaleBar";
@@ -321,6 +322,8 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
           <ImageBlock class="relative aspect-square w-full overflow-hidden rounded-xl border border-border lg:rounded-media" flashSaleOverlay />
 
           <div class="flex flex-1 flex-col gap-2">
+            {/* Small promo badges right above the name (one row, scrolls sideways when they don't fit). */}
+            <PromotionBadges product={props.product} variant="card" class="-mb-1" />
             <A href={productDetailHref()} class="flex flex-col gap-2">
               {/* leading-7 (28px), not 24px: with line-clamp the hidden 3rd line still paints, and Thai
                   stacked marks (e.g. "ฉ่ำ", "ทิ้น") rise past a 24px line box into line 2 as a stray dot. */}
@@ -357,6 +360,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
         <div class="flex min-w-0 flex-1 flex-col gap-2 self-stretch">
           <FlashSaleStrip />
 
+          <PromotionBadges product={props.product} variant="card" class="-mb-1" />
           <A href={productDetailHref()} class="flex flex-col gap-1">
             {/* leading-7: room for Thai stacked marks under line-clamp (same reason as the grid card). */}
             <p class="line-clamp-2 text-sm font-medium leading-7 text-ink sm:text-base">{props.product.name}</p>

@@ -27,6 +27,7 @@ import {
   promotionItemsTotal,
   type Promotion,
   type PromotionType,
+  promotionBadgeLabel,
 } from "~/lib/adminMarketing";
 
 export type PromotionFormValues = Omit<Promotion, "id" | "createdAt" | "updatedAt">;
@@ -99,6 +100,7 @@ export function PromotionForm(props: {
   // Which tier's product picker is open (one at a time keeps the form short).
   const [pickingTier, setPickingTier] = createSignal<number | null>(initialTiers.length > 0 ? null : 0);
   const [showInCart, setShowInCart] = createSignal(props.initial?.showInCart ?? false);
+  const [badgeLabel, setBadgeLabel] = createSignal(props.initial?.badgeLabel ?? "");
   const productStore = useAdminProducts();
   const productName = (id: string) => productStore.getById(id)?.name;
   const unitLabel = () => (conditionType() === "qty" ? "ชิ้น" : "฿");
@@ -240,6 +242,7 @@ export function PromotionForm(props: {
     giftProductId: undefined,
     giftQty: undefined,
     showInCart: runsInCart() ? showInCart() : undefined,
+    badgeLabel: runsInCart() ? badgeLabel().trim() || undefined : undefined,
     productIds: promotionHasProductScope(type()) && !applyToAll() ? productIds() : [],
     startDate: startDate(),
     startTime: startTime(),
@@ -472,6 +475,17 @@ export function PromotionForm(props: {
               </div>
               <Toggle checked={showInCart()} onChange={setShowInCart} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
             </div>
+            <TextField
+              label="ข้อความบนป้ายโปรโมชั่น"
+              placeholder={promotionBadgeLabel({ ...previewValues(), badgeLabel: undefined })}
+              value={badgeLabel()}
+              maxLength={40}
+              disabled={saving()}
+              onInput={(e) => setBadgeLabel(e.currentTarget.value)}
+            />
+            <p class="-mt-2 text-xs text-ink-gray">
+              ป้ายแสดงบนการ์ดสินค้า (เฉพาะโปรที่เลือกสินค้า) และหน้าสินค้า เว้นว่างจะใช้ข้อความตามเงื่อนไขของโปร
+            </p>
           </Section>
           </Show>
 

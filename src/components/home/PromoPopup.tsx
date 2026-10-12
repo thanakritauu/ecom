@@ -10,7 +10,9 @@ import {
   isPromoPopupInSchedule,
   markPromoShownToday,
   promoPopupMediaValue,
-  useStorefrontPromoPopup,
+  useStorefrontPromoPopups,
+  buildDefaultPromoPopup,
+  type PromoPopupRecord,
   wasPromoShownToday,
   type PromoPopupContent,
 } from "~/lib/promoPopup";
@@ -30,12 +32,16 @@ const POPUP_DELAY_MS = 1200;
  * than the 668px sheet: it's a one-glance announcement, not a task. Opened
  * client-side after mount (SSR always renders it closed, so no hydration
  * mismatch), and skipped when another dialog is already up on first paint.
- * Content comes from Admin (/admin/content/popup) via `useStorefrontPromoPopup`.
+ * Content comes from Admin (/admin/content/popup, a list in priority order) via
+ * `useStorefrontPromoPopups`: on each page the first popup that may show
+ * opens, one at a time.
  */
 export function PromoPopup(props: { content?: PromoPopupContent }) {
-  // Must run before this component's own onMount so the stored copy is read first.
-  const stored = useStorefrontPromoPopup();
-  const content = () => props.content ?? stored();
+  // Must run before this component's own onMount so the stored list is read first.
+  const stored = useStorefrontPromoPopups();
+  // The popup picked for the current page (the list's first one that may show there).
+  const [picked, setPicked] = createSignal<PromoPopupContent>(buildDefaultPromoPopup());
+  const content = () => props.content ?? picked();
   const auth = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = createSignal(false);
@@ -47,40 +53,43 @@ export function PromoPopup(props: { content?: PromoPopupContent }) {
   onMount(() => setMounted(true));
 
   const guestsOnly = () => content().audience === "guests";
-  const eligible = () =>
-    content().enabled && isPromoPopupInSchedule(content()) && !isPromoHidden(content().id) && !wasPromoShownToday(content().id);
+  const mayShow = (p: PromoPopupRecord, pathname: string) =>
+    !p.draft &&
+    p.enabled &&
+    isPromoPopupInSchedule(p) &&
+    isPopupOnPage(p.pages, pathname) &&
+    !isPromoHidden(p.id) &&
+    !wasPromoShownToday(p.id) &&
+    !(p.audience === "guests" && auth.isAuthenticated());
+  const pickFor = (pathname: string) => stored().find((p) => mayShow(p, pathname));
 
-  // Client-only (after mount), re-checked on every page change: the popup can
+  // Client-only (after mount), re-checked on every page change: a popup can
   // be set to a page the visitor only reaches later in the visit.
   // Cookie bar first: the popup waits until the visitor has made a cookie choice (or made one on an earlier
   // visit), then opens after a short pause so the two never land at once.
   let openTimer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(openTimer));
   const canOpenOn = (pathname: string) =>
-    !open() &&
-    !pathname.startsWith("/admin") &&
-    isPopupOnPage(content().pages, pathname) &&
-    eligible() &&
-    !(guestsOnly() && auth.isAuthenticated()) &&
-    !auth.isAuthModalOpen() &&
-    !document.querySelector('[role="dialog"]');
+    !open() && !pathname.startsWith("/admin") && !!pickFor(pathname) && !auth.isAuthModalOpen() && !document.querySelector('[role="dialog"]');
   createEffect(
-    on([mounted, cookieConsentSettled, () => location.pathname, () => content().id], ([isMounted, settled, pathname]) => {
+    on([mounted, cookieConsentSettled, () => location.pathname, stored], ([isMounted, settled, pathname]) => {
       clearTimeout(openTimer);
       if (!isMounted || !settled || !canOpenOn(pathname)) return;
       openTimer = setTimeout(() => {
         // Re-check: the visitor may have moved on, signed in or opened another dialog meanwhile.
         if (!canOpenOn(location.pathname)) return;
-        markPromoShownToday(content().id);
+        const next = pickFor(location.pathname)!;
+        setNeverAgain(false);
+        setPicked(next);
+        markPromoShownToday(next.id);
         setOpen(true);
       }, POPUP_DELAY_MS);
     }),
   );
   // A new-member offer: signed-in members never see it (also covers the session restoring just after mount).
-  // Admin switching it off (another tab) closes it too.
   createEffect(() => {
     if (!open()) return;
-    if ((guestsOnly() && auth.isAuthenticated()) || !content().enabled) setOpen(false);
+    if (guestsOnly() && auth.isAuthenticated()) setOpen(false);
   });
 
   const close = () => {

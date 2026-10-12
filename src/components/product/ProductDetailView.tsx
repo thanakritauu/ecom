@@ -5,6 +5,7 @@ import { Footer } from "~/components/shared/Footer";
 import { Container } from "~/components/shared/Container";
 import { Button } from "~/components/shared/Button";
 import { PriceDisplay } from "~/components/shared/PriceDisplay";
+import { PromotionBadges } from "~/components/shared/PromotionBadges";
 import { ProductRail } from "~/components/shared/ProductRail";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { ProductGallery } from "~/components/product/ProductGallery";
@@ -137,6 +138,7 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
                 </Show>
               </div>
 
+              <PromotionBadges product={props.product} variant="pdp" class="-mb-2" />
               <h1 class="text-2xl font-bold text-ink lg:text-[28px] lg:leading-[1.4]">{props.product.name}</h1>
 
               {/* Short summary: the description's words only (the full rich text with pictures is in "รายละเอียดสินค้า" below). */}

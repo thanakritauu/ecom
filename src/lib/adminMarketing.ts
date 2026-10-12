@@ -162,6 +162,8 @@ export type Promotion = {
   getItems?: PromotionItem[];
   /** "แสดงในตะกร้า": whether the Cart Drawer / Cart Page shows this promo's own progress banner. A hidden promo still applies. */
   showInCart?: boolean;
+  /** Text on the storefront promo badge (product card / PDP). Empty = `promotionBadgeLabel` builds it from the conditions. */
+  badgeLabel?: string;
   /** Empty applies to every product (`free_shipping`, `gift_with_purchase`, `percent_off`, `baht_off`). */
   productIds: string[];
   startDate: string;
@@ -494,4 +496,19 @@ export function couponPublishProblems(c: Coupon): string[] {
   if (!c.startDate) missing.push("วันเริ่ม");
   if (!c.endDate) missing.push("วันสิ้นสุด");
   return missing;
+}
+
+/**
+ * The storefront promo badge text: the admin's own `badgeLabel`, else a short
+ * label from the conditions ("ส่งฟรี", "ซื้อครบ ฿590 รับของแถม").
+ */
+export function promotionBadgeLabel(p: Pick<Promotion, "type" | "badgeLabel" | "minSpend" | "conditionType" | "tiers" | "giftProductId" | "giftQty">): string {
+  if (p.badgeLabel?.trim()) return p.badgeLabel.trim();
+  const condition = promotionCondition(p);
+  if (p.type === "free_shipping") return p.minSpend ? `ส่งฟรีเมื่อซื้อครบ ${formatPromotionThreshold(condition, p.minSpend)}` : "ส่งฟรี";
+  if (p.type === "gift_with_purchase") {
+    const first = promotionGiftTiers(p)[0];
+    return first ? `ซื้อครบ ${formatPromotionThreshold(condition, first.threshold)} รับของแถม` : "รับของแถม";
+  }
+  return PROMOTION_TYPE_META[p.type].label;
 }
