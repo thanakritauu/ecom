@@ -11,7 +11,7 @@ import type { HomepageSection } from "~/lib/adminHomepage";
  * The device toggle + render body live in `HomepageSectionsPreview`,
  * shared with `LandingPageForm`'s own always-visible Live Preview column.
  */
-export function HomepagePreviewDialog(props: { open: boolean; onOpenChange: (open: boolean) => void; sections: HomepageSection[] }) {
+export function HomepagePreviewDialog(props: { open: boolean; onOpenChange: (open: boolean) => void; sections: HomepageSection[]; homepage?: boolean }) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
@@ -25,7 +25,7 @@ export function HomepagePreviewDialog(props: { open: boolean; onOpenChange: (ope
               </Dialog.CloseButton>
             </div>
             <div class="flex-1 overflow-y-auto bg-surface-gray/60 p-5">
-              <HomepageSectionsPreview sections={props.sections} />
+              <HomepageSectionsPreview sections={props.sections} homepage={props.homepage} />
             </div>
           </Dialog.Content>
         </div>

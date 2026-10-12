@@ -176,6 +176,12 @@ export type Promotion = {
   badgeLabel?: string;
   /** Empty applies to every product (`free_shipping`, `gift_with_purchase`, `percent_off`, `baht_off`). */
   productIds: string[];
+  /**
+   * "เลือกตัวเลือกสินค้า": per picked product, the only options that count
+   * (product id -> option ids). A product missing here (or the whole field
+   * unset, older records) counts with every option ("ทั้งสินค้า").
+   */
+  productVariantIds?: Record<string, string[]>;
   startDate: string;
   startTime: string;
   endDate: string;
@@ -184,6 +190,15 @@ export type Promotion = {
   createdAt: string;
   updatedAt: string;
 };
+
+/** Whether a cart line (product + option) counts toward this promo's scope. */
+export function promotionCoversLine(p: Pick<Promotion, "productIds" | "productVariantIds">, productId: string, variantId?: string): boolean {
+  if (p.productIds.length === 0) return true;
+  if (!p.productIds.includes(productId)) return false;
+  const options = p.productVariantIds?.[productId];
+  if (!options?.length) return true;
+  return !!variantId && options.includes(variantId);
+}
 
 /** Types whose form has a "สินค้าที่เข้าร่วม" scope (all products or picked ones). */
 export const promotionHasProductScope = (type: PromotionType) => type === "free_shipping" || type === "gift_with_purchase" || type === "percent_off" || type === "baht_off";

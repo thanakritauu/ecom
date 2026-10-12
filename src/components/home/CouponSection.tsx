@@ -24,7 +24,7 @@ async function simulateCollect() {
  * an h1, a wrapping grid instead of the sideways rail, and an empty state
  * instead of hiding the section.
  */
-export function CouponSection(props: { page?: boolean; /** Extra content under the coupons, on the purple (the page's "วิธีใช้คูปอง" box). */ after?: JSX.Element }) {
+export function CouponSection(props: { page?: boolean; /** Home heading override from the page's section settings; empty = "คูปองส่วนลด". */ title?: string; /** Extra content under the coupons, on the purple (the page's "วิธีใช้คูปอง" box). */ after?: JSX.Element }) {
   /** Home: the coupons Admin shows on Home (switched on, inside their dates), one ticket per code, the same ticket Checkout's picker uses. */
   const { homeCoupons, checkoutCoupons } = useStorefrontPromotions();
   const coupons = () => {
@@ -82,7 +82,7 @@ export function CouponSection(props: { page?: boolean; /** Extra content under t
         <Container width="wide" class="flex flex-col items-center gap-4">
           <div class="relative mb-9 flex flex-col items-center text-center sm:mb-[52px] lg:mb-[75px]">
             <Dynamic component={props.page ? "h1" : "h2"} id="coupon-heading" class="text-4xl font-bold leading-[normal] text-white sm:text-[48px] lg:text-[62px]">
-              คูปองส่วนลด
+              {props.title || "คูปองส่วนลด"}
             </Dynamic>
             <p class="-mt-2 text-[31px] font-bold leading-[normal] text-white sm:-mt-[11px] sm:text-[41px] lg:-mt-[14px] lg:text-[53px]">ลดทั้งเว็บ!</p>
           </div>

@@ -1,7 +1,7 @@
 import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
 import type { ResolvedCartLine, CheckoutTotals, Coupon } from "~/lib/cartSelectors";
 import type { GiftLine } from "~/lib/promotionEngine";
-import { MOCK_COIN_BALANCE, SHIPPING_FEE } from "~/lib/cartSelectors";
+import { MOCK_COIN_BALANCE, SHIPPING_FEE, flashLimitNote } from "~/lib/cartSelectors";
 import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
 import { formatTHB } from "../shared/PriceDisplay";
 import { ChevronIcon } from "../shared/ChevronIcon";
@@ -83,7 +83,11 @@ export function CheckoutOrderSummary(props: {
       <Show when={itemsExpanded()}>
         <ul class="flex flex-col gap-4 p-4">
           <For each={props.lines}>
-            {({ line, product, variant, unitPrice }) => (
+            {(entry) => {
+              const { line, product, variant } = entry;
+              // "ราคาก่อนลด" of the whole line, struck through when the line costs less (flash sale / sale price).
+              const before = (entry.compareAtPrice ?? entry.unitPrice) * line.qty;
+              return (
               <li class="flex list-none items-center gap-2">
                 <img
                   src={variant?.image ?? product.image}
@@ -97,10 +101,19 @@ export function CheckoutOrderSummary(props: {
                     {variant && <span>ตัวเลือกสินค้า {variant.label}</span>}
                     <span>x{line.qty}</span>
                   </p>
+                  <Show when={flashLimitNote(entry)}>
+                    {(note) => <p class="text-xs leading-[1.75] text-system-red">{note()}</p>}
+                  </Show>
                 </div>
-                <p class="shrink-0 text-base font-semibold text-ink">{formatTHB(unitPrice * line.qty)}</p>
+                <div class="flex shrink-0 flex-col items-end">
+                  <p class="text-base font-semibold text-ink">{formatTHB(entry.lineTotal)}</p>
+                  <Show when={before > entry.lineTotal}>
+                    <p class="text-xs text-ink-gray line-through">{formatTHB(before)}</p>
+                  </Show>
+                </div>
               </li>
-            )}
+              );
+            }}
           </For>
           <For each={props.gifts}>
             {(g) => (
@@ -115,9 +128,6 @@ export function CheckoutOrderSummary(props: {
                   <p class="line-clamp-1 text-sm font-medium leading-[1.75] text-ink">{g.product.name}</p>
                   <p class="flex flex-wrap gap-x-2 text-xs text-ink-gray">
                     <Show when={g.variant}>{(v) => <span>ตัวเลือกสินค้า {v().label}</span>}</Show>
-                    <Show when={g.needsChoice}>
-                      <span class="font-medium text-system-red">ยังไม่ได้เลือกตัวเลือก</span>
-                    </Show>
                     <span>ของแถมฟรี x{g.qty}</span>
                   </p>
                 </div>

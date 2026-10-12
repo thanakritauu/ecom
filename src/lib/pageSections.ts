@@ -17,7 +17,17 @@ import { isVideoMedia, mediaErrors, mediaSrc, normalizeMedia, normalizeMediaSet,
  * per surface.
  */
 
-export type HomepageSectionType = "hero" | "promotion_banner" | "product" | "content" | "cta";
+/**
+ * Built-in sections: the storefront's bespoke home blocks (Flash Sale with its
+ * countdown, Best Sellers' category tabs, the coupon claim band, ...). Each one
+ * renders its existing component and pulls its own data exactly as before;
+ * a section record only controls where it sits, whether it shows, and an
+ * optional heading override (`title`, empty = the component's own heading).
+ */
+export const BUILTIN_SECTION_TYPES = ["flash_sale", "best_sellers", "coupons", "new_arrivals", "trending", "reviews", "faq"] as const;
+export type BuiltinSectionType = (typeof BUILTIN_SECTION_TYPES)[number];
+
+export type HomepageSectionType = "hero" | "promotion_banner" | "product" | "content" | "cta" | BuiltinSectionType;
 
 export const HOMEPAGE_SECTION_TYPE_META: Record<HomepageSectionType, { label: string }> = {
   hero: { label: "แบนเนอร์สไลด์" },
@@ -25,7 +35,33 @@ export const HOMEPAGE_SECTION_TYPE_META: Record<HomepageSectionType, { label: st
   product: { label: "รายการสินค้า" },
   content: { label: "รูปพร้อมข้อความ" },
   cta: { label: "ปุ่มชวนคลิก" },
+  flash_sale: { label: "Flash Sale" },
+  best_sellers: { label: "สินค้าขายดี" },
+  coupons: { label: "คูปองส่วนลด" },
+  new_arrivals: { label: "มาใหม่" },
+  trending: { label: "กำลังฮิตสัปดาห์นี้" },
+  reviews: { label: "รีวิวลูกค้า" },
+  faq: { label: "คำถามที่พบบ่อย" },
 };
+
+/**
+ * `note`: what the block shows and where its data comes from (Admin card + form).
+ * `defaultTitle`: the component's own heading, used when `title` is empty;
+ * absent = the heading is artwork (Flash Sale's wordmark) and can't be changed.
+ */
+export const BUILTIN_SECTION_META: Record<BuiltinSectionType, { note: string; defaultTitle?: string }> = {
+  flash_sale: { note: "ดึงสินค้าแฟลชเซลอัตโนมัติ พร้อมนับถอยหลัง ถ้าไม่มีสินค้าแฟลชเซลจะซ่อนเอง" },
+  best_sellers: { note: "ดึงสินค้าขายดีอัตโนมัติ พร้อมแท็บกรองตามหมวดในเมนู", defaultTitle: "สินค้าขายดี" },
+  coupons: { note: "ดึงคูปองที่ตั้งให้แสดงหน้าแรกอัตโนมัติ พร้อมปุ่มเก็บคูปอง ถ้าไม่มีคูปองจะซ่อนเอง", defaultTitle: "คูปองส่วนลด" },
+  new_arrivals: { note: "ดึงสินค้ามาใหม่อัตโนมัติ ถ้าไม่มีสินค้าจะซ่อนเอง", defaultTitle: "มาใหม่" },
+  trending: { note: "ดึงสินค้ากำลังฮิตอัตโนมัติ ถ้าไม่มีสินค้าจะซ่อนเอง", defaultTitle: "กำลังฮิตสัปดาห์นี้" },
+  reviews: { note: "คะแนนรีวิวและคลิปรีวิวจาก TikTok ที่เปิดไว้ในเมนูรีวิว ถ้าไม่มีคลิปจะซ่อนเอง", defaultTitle: "#CharmissReviews" },
+  faq: { note: "คำถามที่พบบ่อยชุดเดียวกับหน้าช่วยเหลือ", defaultTitle: "คำถามที่พบบ่อย" },
+};
+
+export function isBuiltinSectionType(type: unknown): type is BuiltinSectionType {
+  return typeof type === "string" && (BUILTIN_SECTION_TYPES as readonly string[]).includes(type);
+}
 
 /** Section types removed from the model (e.g. the old "campaign" section) can still sit in `localStorage`; page normalizers drop any section whose type isn't in this list. */
 export function isHomepageSectionType(type: unknown): type is HomepageSectionType {

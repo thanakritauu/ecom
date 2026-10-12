@@ -15,6 +15,8 @@ import { ExportMenu } from "~/components/admin/ExportMenu";
 import { MarketingStatusSummary, type StatusTab } from "~/components/admin/marketing/MarketingStatusSummary";
 import { MarketingListSkeleton } from "~/components/admin/marketing/MarketingListSkeleton";
 import { FlashSaleDialog, type FlashSaleTiming } from "~/components/admin/marketing/FlashSaleDialog";
+import { FlashSalePriceDialog } from "~/components/admin/marketing/FlashSalePriceDialog";
+import { defaultFlashSaleConfig, effectiveLevel, flashPricesOf, isInFlashSale, type FlashSaleConfig } from "~/lib/flashSalePricing";
 import { RefreshIcon, FlashBoltIcon, PlusIcon, MoreIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import { useAdminProducts, type AdminProduct } from "~/lib/adminProductStore";
@@ -25,10 +27,10 @@ import type { AsyncStatus } from "~/lib/types";
 
 /**
  * Flash Sale = products that carry the flash-sale fields (`flashSaleEndsAt`,
- * `flashSaleDaily`). The Home Flash Sale rail shows exactly these, at the
- * product's own price / compare-at price, with the stock bar from
- * `stockLeft` / `stockTotal`. This page lists them and edits only those two
- * fields on the product; price and stock stay on the product page.
+ * `flashSaleDaily`). The flash sale has its own prices and limits
+ * (`AdminProduct.flashSale`, `~/lib/flashSalePricing`), set here per product
+ * (ระดับสินค้า or ระดับตัวเลือกสินค้า); the product's normal price stays on
+ * the product page and is shown struck through on the storefront during the sale.
  */
 type FlashState = "live" | "upcoming" | "soldout" | "ended" | "hidden";
 
@@ -52,7 +54,25 @@ const SORT_OPTIONS = [
   { value: "discount-desc", label: "ส่วนลด มากไปน้อย" },
 ];
 
-const inFlashSale = (p: AdminProduct) => p.flashSaleEndsAt !== undefined || !!p.flashSaleDaily;
+const inFlashSale = isInFlashSale;
+
+/** Cheapest flash price row (what the storefront card shows), if the config gives one. */
+const cheapestFlash = (p: AdminProduct) => {
+  const rows = flashPricesOf(p);
+  return rows.length > 0 ? rows.reduce((a, b) => (b.flash < a.flash ? b : a)) : undefined;
+};
+const flashDiscountOf = (p: AdminProduct) => {
+  const c = cheapestFlash(p);
+  return c ? getDiscountPercent({ price: c.flash, compareAtPrice: c.normal }) : undefined;
+};
+/** "จำกัด 30 / ลูกค้า 2" for product level; option level points to the editor. */
+const limitText = (p: AdminProduct) => {
+  const cfg = p.flashSale;
+  if (!cfg) return "-";
+  if (effectiveLevel(p) === "option") return "ตามตัวเลือก";
+  const parts = [cfg.totalLimit ? `ทั้งหมด ${cfg.totalLimit.toLocaleString("th-TH")}` : "", cfg.customerLimit ? `ต่อลูกค้า ${cfg.customerLimit.toLocaleString("th-TH")}` : ""].filter(Boolean);
+  return parts.length > 0 ? parts.join(" / ") : "ไม่มีจำกัด";
+};
 const endsAtOf = (p: AdminProduct) => (p.flashSaleDaily ? flashSaleRoundEndsAt() : p.flashSaleEndsAt ?? 0);
 
 function flashState(p: AdminProduct, now = Date.now()): FlashState {
@@ -84,6 +104,8 @@ export default function AdminFlashSalePage() {
   const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
   const [dialog, setDialog] = createSignal<{ productIds?: string[]; initial?: { daily: boolean; startsAt?: number; endsAt?: number } } | null>(null);
   const [confirmRemove, setConfirmRemove] = createSignal<AdminProduct[] | null>(null);
+  const [priceProductId, setPriceProductId] = createSignal<string | null>(null);
+  const priceProduct = () => (priceProductId() ? productStore.getById(priceProductId()!) : undefined);
   const [actionLoading, setActionLoading] = createSignal(false);
 
   const loadList = () => {
@@ -131,7 +153,7 @@ export default function AdminFlashSalePage() {
       case "stock-asc":
         return list.sort((a, b) => (a.stockLeft ?? 0) - (b.stockLeft ?? 0));
       case "discount-desc":
-        return list.sort((a, b) => (getDiscountPercent(b) ?? 0) - (getDiscountPercent(a) ?? 0));
+        return list.sort((a, b) => (flashDiscountOf(b) ?? 0) - (flashDiscountOf(a) ?? 0));
       default:
         return list.sort((a, b) => endsAtOf(a) - endsAtOf(b));
     }
@@ -157,18 +179,23 @@ export default function AdminFlashSalePage() {
     });
   const clearSelection = () => setSelectedIds(new Set<string>());
 
+  type FlashFields = { flashSaleEndsAt?: number; flashSaleStartsAt?: number; flashSaleDaily?: boolean; flashSale?: FlashSaleConfig };
   /** Writes only the flash-sale fields of each product; returns how many saves failed. */
-  const writeFlashSale = async (ids: string[], fields: { flashSaleEndsAt?: number; flashSaleStartsAt?: number; flashSaleDaily?: boolean }) => {
+  const writeFlashSale = async (ids: string[], fields: FlashFields | ((p: AdminProduct | undefined) => FlashFields)) => {
     const results = await Promise.allSettled(
-      ids.map((id) => productStore.patchProduct(id, fields)),
+      ids.map((id) => productStore.patchProduct(id, typeof fields === "function" ? fields(productStore.getById(id)) : fields)),
     );
     return results.filter((r) => r.status === "rejected").length;
   };
 
-  const saveTiming = async (ids: string[], timing: FlashSaleTiming) => {
-    const failed = await writeFlashSale(ids, timing.daily
-        ? { flashSaleDaily: true, flashSaleEndsAt: flashSaleRoundEndsAt(), flashSaleStartsAt: undefined }
-        : { flashSaleDaily: undefined, flashSaleStartsAt: timing.startsAt, flashSaleEndsAt: timing.endsAt });
+  const saveTiming = async (ids: string[], timing: FlashSaleTiming, percent?: number) => {
+    const timingFields: FlashFields = timing.daily
+      ? { flashSaleDaily: true, flashSaleEndsAt: flashSaleRoundEndsAt(), flashSaleStartsAt: undefined }
+      : { flashSaleDaily: undefined, flashSaleStartsAt: timing.startsAt, flashSaleEndsAt: timing.endsAt };
+    // Products being added start at "ลด X%" (level product); one already in the flash sale keeps its own prices.
+    const failed = await writeFlashSale(ids, (p) =>
+      percent !== undefined && !(p && inFlashSale(p) && p.flashSale) ? { ...timingFields, flashSale: defaultFlashSaleConfig(percent) } : timingFields,
+    );
     const adding = dialog()?.productIds === undefined;
     if (failed === 0) pushToast(adding ? `เพิ่ม ${ids.length} สินค้าในแฟลชเซลแล้ว` : "บันทึกเวลาแฟลชเซลเรียบร้อยแล้ว", "success");
     else pushToast(`บันทึกไม่สำเร็จ ${failed} รายการ กรุณาลองใหม่อีกครั้ง`, "error");
@@ -181,7 +208,7 @@ export default function AdminFlashSalePage() {
     setActionLoading(true);
     const failed = await writeFlashSale(
       list.map((p) => p.id),
-      { flashSaleDaily: undefined, flashSaleEndsAt: undefined, flashSaleStartsAt: undefined },
+      { flashSaleDaily: undefined, flashSaleEndsAt: undefined, flashSaleStartsAt: undefined, flashSale: undefined },
     );
     setActionLoading(false);
     setConfirmRemove(null);
@@ -202,13 +229,27 @@ export default function AdminFlashSalePage() {
     });
   };
 
+  const savePricing = async (config: FlashSaleConfig) => {
+    const id = priceProductId();
+    if (!id) return;
+    try {
+      await productStore.patchProduct(id, { flashSale: config });
+      pushToast("บันทึกราคาแฟลชเซลเรียบร้อยแล้ว", "success");
+    } catch {
+      pushToast("บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
+      throw new Error("SAVE_FAILED");
+    }
+  };
+
   const selectedProducts = () => [...selectedIds()].map((id) => productStore.getById(id)).filter((p): p is AdminProduct => !!p);
 
   const exportColumns: ExportColumn<AdminProduct>[] = [
     { header: "SKU", value: (p) => p.sku },
     { header: "ชื่อสินค้า", value: (p) => p.name },
-    { header: "ราคา", value: (p) => p.price },
-    { header: "ราคาก่อนลด", value: (p) => p.compareAtPrice ?? "" },
+    { header: "ราคาปกติ", value: (p) => p.price },
+    { header: "ราคาแฟลชเซล", value: (p) => cheapestFlash(p)?.flash ?? "" },
+    { header: "ระดับ", value: (p) => (effectiveLevel(p) === "option" ? "ระดับตัวเลือกสินค้า" : "ระดับสินค้า") },
+    { header: "จำกัดการซื้อ", value: (p) => limitText(p) },
     { header: "สต๊อกคงเหลือ", value: (p) => p.stockLeft ?? 0 },
     { header: "สต๊อกทั้งหมด", value: (p) => p.stockTotal ?? 0 },
     { header: "รอบ", value: (p) => roundLabel(p) },
@@ -220,18 +261,26 @@ export default function AdminFlashSalePage() {
     return <StatusBadge tone={meta().tone}>{meta().label}</StatusBadge>;
   };
 
-  const Price = (props: { row: AdminProduct }) => (
-    <div class="flex flex-col items-end gap-0.5 whitespace-nowrap">
-      <span class="font-medium text-ink">{formatAdminCurrency(props.row.price)}</span>
-      <Show when={props.row.compareAtPrice && props.row.compareAtPrice > props.row.price}>
-        <span class="text-xs text-ink-gray">
-          <s>{formatAdminCurrency(props.row.compareAtPrice!)}</s> ลด {getDiscountPercent(props.row)}%
-        </span>
-      </Show>
-    </div>
-  );
+  /** Flash price (cheapest when options differ) over the struck normal price. */
+  const Price = (props: { row: AdminProduct }) => {
+    const c = () => cheapestFlash(props.row);
+    const several = () => new Set(flashPricesOf(props.row).map((r) => r.flash)).size > 1;
+    return (
+      <div class="flex flex-col items-end gap-0.5 whitespace-nowrap">
+        <Show when={c()} fallback={<span class="text-sm text-system-red">ยังไม่ตั้งราคา</span>}>
+          <span class="font-medium text-ink">
+            {several() ? "เริ่ม " : ""}
+            {formatAdminCurrency(c()!.flash)}
+          </span>
+          <span class="text-xs text-ink-gray">
+            <s>{formatAdminCurrency(c()!.normal)}</s> ลด {flashDiscountOf(props.row)}%
+          </span>
+        </Show>
+      </div>
+    );
+  };
 
-  const stockText = (p: AdminProduct) => `${(p.stockLeft ?? 0).toLocaleString("th-TH")} / ${(p.stockTotal ?? p.stockLeft ?? 0).toLocaleString("th-TH")}`;
+  const stockText = (p: AdminProduct) => (p.stockLeft ?? 0).toLocaleString("th-TH");
 
   const RowMenu = (props: { row: AdminProduct; triggerClass?: string }) => (
     <DropdownMenu placement="bottom-end" gutter={4}>
@@ -244,6 +293,9 @@ export default function AdminFlashSalePage() {
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content class="z-50 w-52 rounded-card border border-border bg-surface-card p-2 shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+          <DropdownMenu.Item onSelect={() => setPriceProductId(props.row.id)} class={MENU_ITEM}>
+            ตั้งราคาและจำนวนจำกัด
+          </DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => editTiming([props.row.id])} class={MENU_ITEM}>
             ตั้งเวลาแฟลชเซล
           </DropdownMenu.Item>
@@ -293,7 +345,8 @@ export default function AdminFlashSalePage() {
         </div>
       ),
     },
-    { key: "price", label: "ราคา", align: "right", render: (row) => <Price row={row} /> },
+    { key: "price", label: "ราคาแฟลชเซล", align: "right", render: (row) => <Price row={row} /> },
+    { key: "limit", label: "จำกัดการซื้อ", render: (row) => <span class="whitespace-nowrap text-ink-gray">{limitText(row)}</span> },
     { key: "stock", label: "สต๊อก", align: "right", render: (row) => <span class="whitespace-nowrap text-ink">{stockText(row)}</span> },
     { key: "round", label: "รอบ", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{roundLabel(row)}</span> },
     { key: "status", label: "สถานะ", render: (row) => <StateBadge row={row} /> },
@@ -305,7 +358,7 @@ export default function AdminFlashSalePage() {
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "แฟลชเซล" }]} />
       <PageHeader
         title="แฟลชเซล"
-        description="เลือกสินค้าที่ขึ้นในแฟลชเซลหน้าแรก และตั้งเวลาเริ่มและจบ"
+        description="เลือกสินค้า ตั้งราคาแฟลชเซล จำนวนจำกัด และเวลาเริ่มและจบ ราคาขายปกติของสินค้าไม่เปลี่ยน"
         actions={
           <div class="flex flex-wrap items-center gap-2">
             <ExportMenu filenameBase="flash-sale-report" columns={exportColumns} rows={sorted()} />
@@ -354,7 +407,7 @@ export default function AdminFlashSalePage() {
               columns={columns}
               rows={pageItems()}
               getRowKey={(row) => row.id}
-              onRowClick={(row) => editTiming([row.id])}
+              onRowClick={(row) => setPriceProductId(row.id)}
               renderMobileCard={(row) => (
                 <div class="flex gap-3 rounded-card bg-surface-card p-3 shadow-card">
                   <input
@@ -365,17 +418,24 @@ export default function AdminFlashSalePage() {
                     onChange={() => toggleSelect(row.id)}
                     class="mt-1 size-4 shrink-0 rounded accent-brand-pink"
                   />
-                  <button type="button" onClick={() => editTiming([row.id])} class="font-normal flex min-w-0 flex-1 gap-3 text-left">
+                  <button type="button" onClick={() => setPriceProductId(row.id)} class="font-normal flex min-w-0 flex-1 gap-3 text-left">
                     <img src={row.image} alt="" class="size-16 shrink-0 rounded-media object-cover" />
                     <div class="min-w-0 flex-1">
                       <p class="truncate text-sm font-medium text-ink">{row.name}</p>
                       <p class="truncate text-xs text-ink-gray">{row.sku}</p>
                       <p class="mt-1 text-sm font-semibold text-ink">
-                        {formatAdminCurrency(row.price)}
-                        <Show when={row.compareAtPrice && row.compareAtPrice > row.price}>
-                          <span class="ml-1.5 text-xs font-normal text-ink-gray">ลด {getDiscountPercent(row)}%</span>
+                        <Show when={cheapestFlash(row)} fallback={<span class="font-normal text-system-red">ยังไม่ตั้งราคา</span>}>
+                          {(c) => (
+                            <>
+                              {formatAdminCurrency(c().flash)}
+                              <span class="ml-1.5 text-xs font-normal text-ink-gray">
+                                <s>{formatAdminCurrency(c().normal)}</s> ลด {flashDiscountOf(row)}%
+                              </span>
+                            </>
+                          )}
                         </Show>
                       </p>
+                      <p class="text-xs text-ink-gray">จำกัดการซื้อ {limitText(row)}</p>
                       <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
                         <span class="whitespace-nowrap text-sm text-ink-gray">สต๊อก {stockText(row)}</span>
                         <StateBadge row={row} />
@@ -408,6 +468,13 @@ export default function AdminFlashSalePage() {
         productIds={dialog()?.productIds}
         initial={dialog()?.initial}
         onSave={saveTiming}
+      />
+
+      <FlashSalePriceDialog
+        open={priceProductId() !== null}
+        onOpenChange={(open) => !open && setPriceProductId(null)}
+        product={priceProduct()}
+        onSave={savePricing}
       />
 
       <ConfirmDialog

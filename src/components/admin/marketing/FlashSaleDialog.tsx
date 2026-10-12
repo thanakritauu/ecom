@@ -10,7 +10,7 @@ import { ProductSelector } from "./ProductSelector";
 
 export type FlashSaleTiming = { daily: true } | { daily: false; startsAt: number; endsAt: number };
 
-const LABELS: Record<string, string> = { products: "สินค้า", startsAt: "เวลาเริ่ม", endsAt: "เวลาจบ" };
+const LABELS: Record<string, string> = { products: "สินค้า", percent: "ส่วนลดเริ่มต้น", startsAt: "เวลาเริ่ม", endsAt: "เวลาจบ" };
 
 function toDatetimeLocal(epochMs: number): string {
   const d = new Date(epochMs);
@@ -31,12 +31,14 @@ export function FlashSaleDialog(props: {
   /** Products being edited; when unset the dialog asks which products to add. */
   productIds?: string[];
   initial?: { daily: boolean; startsAt?: number; endsAt?: number };
-  onSave: (productIds: string[], timing: FlashSaleTiming) => Promise<void>;
+  /** `percent` = starting flash price ("ลด %" of the normal price) for products being added; unset when editing timing. */
+  onSave: (productIds: string[], timing: FlashSaleTiming, percent?: number) => Promise<void>;
 }) {
   const [picked, setPicked] = createSignal<string[]>([]);
   const [daily, setDaily] = createSignal(true);
   const [startsAt, setStartsAt] = createSignal("");
   const [endsAt, setEndsAt] = createSignal("");
+  const [percent, setPercent] = createSignal("10");
   const [errors, setErrors] = createSignal<FormErrors>({});
   const fix = (key: string) => setErrors((e) => clearFieldError(e, key));
   const [saving, setSaving] = createSignal(false);
@@ -48,6 +50,7 @@ export function FlashSaleDialog(props: {
       (open) => {
         if (!open) return;
         setPicked([]);
+        setPercent("10");
         setDaily(props.initial?.daily ?? true);
         setStartsAt(toDatetimeLocal(props.initial?.startsAt ?? Date.now()));
         setEndsAt(toDatetimeLocal(props.initial?.endsAt ?? Date.now() + 24 * 60 * 60 * 1000));
@@ -60,6 +63,8 @@ export function FlashSaleDialog(props: {
     const ids = props.productIds ?? picked();
     const next: FormErrors = {};
     if (ids.length === 0) next.products = "กรุณาเลือกสินค้าอย่างน้อย 1 รายการ";
+    const pct = Number(percent());
+    if (!editing() && (!Number.isInteger(pct) || pct < 1 || pct > 99)) next.percent = "ส่วนลดต้องเป็นจำนวนเต็ม 1-99%";
     const start = new Date(startsAt()).getTime();
     const end = new Date(endsAt()).getTime();
     if (!daily()) {
@@ -72,7 +77,7 @@ export function FlashSaleDialog(props: {
     if (reportFormErrors(next, LABELS)) return;
     setSaving(true);
     try {
-      await props.onSave(ids, daily() ? { daily: true } : { daily: false, startsAt: start, endsAt: end });
+      await props.onSave(ids, daily() ? { daily: true } : { daily: false, startsAt: start, endsAt: end }, editing() ? undefined : pct);
       props.onOpenChange(false);
     } finally {
       setSaving(false);
@@ -114,6 +119,24 @@ export function FlashSaleDialog(props: {
                   <Show when={errors().products}>
                     <p class="text-sm text-system-red">{errors().products}</p>
                   </Show>
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  <TextField
+                    label="ส่วนลดเริ่มต้น (%)"
+                    required
+                    type="number"
+                    min="1"
+                    max="99"
+                    data-field="percent"
+                    value={percent()}
+                    onInput={(e) => {
+                      setPercent(e.currentTarget.value);
+                      fix("percent");
+                    }}
+                    error={errors().percent}
+                    disabled={saving()}
+                  />
+                  <p class="text-xs text-ink-gray">ราคาแฟลชเซลเริ่มที่ราคาปกติลดตาม % นี้ ปรับราคาเป็นบาท แยกตามตัวเลือก หรือจำกัดจำนวนได้ทีละสินค้าหลังเพิ่ม</p>
                 </div>
               </Show>
 
@@ -162,7 +185,7 @@ export function FlashSaleDialog(props: {
                 </div>
                 <p class="-mt-2 text-xs text-ink-gray">ก่อนถึงเวลาเริ่ม สินค้าจะยังไม่ขึ้นในแฟลชเซลหน้าแรก</p>
               </Show>
-              <p class="text-xs text-ink-gray">ราคาบนการ์ดคือราคาขายของสินค้า ราคาขีดฆ่าคือราคาก่อนลด และแถบสต๊อกใช้สต๊อกของสินค้า แก้ได้ที่หน้าสินค้า</p>
+              <p class="text-xs text-ink-gray">ช่วงแฟลชเซล การ์ดแสดงราคาแฟลชเซลและขีดฆ่าราคาขายปกติ หมดเวลาแล้วกลับเป็นราคาปกติเอง</p>
             </div>
 
             <div class="flex gap-3 border-t border-border p-4">

@@ -2,6 +2,7 @@ import { createContext, createMemo, useContext, type Accessor, type JSX } from "
 import { isPromotionPageVisible } from "./adminContent";
 import type { HomepageSection } from "./pageSections";
 import { useLandingPages } from "./promotionPages";
+import { buildBuiltinSections } from "./adminHomepage";
 
 type HomepageContentContextValue = {
   /** `false` only for the one frame before the underlying Promotion Page provider's own real (client-only) read has happened. */
@@ -31,7 +32,8 @@ export function HomepageContentProvider(props: { children: JSX.Element }) {
   const homepage = () => landingPages.pages().find((p) => p.isHomepage);
   const sections = createMemo<HomepageSection[]>(() => {
     const page = homepage();
-    return page && isPromotionPageVisible(page) ? page.sections : [];
+    // A hidden (or missing) homepage still shows the built-in blocks, as `/` always did when they were hardcoded.
+    return page && isPromotionPageVisible(page) ? page.sections : buildBuiltinSections();
   });
 
   return <HomepageContentContext.Provider value={{ ready: landingPages.ready, sections }}>{props.children}</HomepageContentContext.Provider>;

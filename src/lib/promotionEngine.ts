@@ -1,7 +1,7 @@
 import type { Product, ProductVariant } from "./types";
 import type { ResolvedCartLine } from "./cartSelectors";
 import { SHIPPING_FEE } from "./cartSelectors";
-import { isMarketingLive, promotionCondition, promotionGiftTiers, type Promotion, type PromotionCondition } from "./adminMarketing";
+import { isMarketingLive, promotionCondition, promotionCoversLine, promotionGiftTiers, type Promotion, type PromotionCondition } from "./adminMarketing";
 
 /**
  * The storefront side of the cart-threshold promotions Admin manages
@@ -60,19 +60,16 @@ export type GiftLine = {
   qty: number;
   /** Options the customer may pick (see `GiftTierState.options`). More than one = a choice is needed. */
   options: ProductVariant[];
-  /** The option this gift ships as: the only allowed one, or the customer's pick. */
+  /** The option this gift ships as: the customer's pick, else the first allowed option. Unset = no options. */
   variant?: ProductVariant;
-  /** The gift has several options and none is picked yet: Checkout won't go ahead until it is. */
-  needsChoice: boolean;
 };
 
 const isLive = (p: Promotion) => isMarketingLive(p);
 
 function progress(promo: Promotion, lines: ResolvedCartLine[]): PromoProgress {
   const unit = promotionCondition(promo);
-  const scope = promo.productIds.length > 0 ? new Set(promo.productIds) : undefined;
-  const eligible = scope ? lines.filter((l) => scope.has(l.product.id)) : lines;
-  const current = eligible.reduce((sum, l) => sum + (unit === "qty" ? l.line.qty : l.unitPrice * l.line.qty), 0);
+  const eligible = lines.filter((l) => promotionCoversLine(promo, l.product.id, l.line.variantId));
+  const current = eligible.reduce((sum, l) => sum + (unit === "qty" ? l.line.qty : l.lineTotal), 0);
   return { unit, current };
 }
 
@@ -124,8 +121,9 @@ export function giftLinesOf(gifts: GiftPromotionState[], choices: Record<string,
       .filter((t) => t.unlocked)
       .map((t): GiftLine => {
         const key = `${g.id}@${t.index}`;
-        const variant = t.options.length === 1 ? t.options[0] : t.options.find((v) => v.id === choices[key]);
-        return { key, product: t.product, qty: t.qty, options: t.options, variant, needsChoice: t.options.length > 1 && !variant };
+        // The customer's pick if it's still allowed, else the first allowed option (picked for them; they can change it).
+        const variant = t.options.find((v) => v.id === choices[key]) ?? t.options[0];
+        return { key, product: t.product, qty: t.qty, options: t.options, variant };
       }),
   );
 }

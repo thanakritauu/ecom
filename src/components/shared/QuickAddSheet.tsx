@@ -135,7 +135,7 @@ export function QuickAddSheet(props: {
           <PurchaseFooter
             optionLabel={selectedOption()?.label}
             price={selectedOption()?.price ?? props.product.price}
-            compareAtPrice={props.product.compareAtPrice}
+            compareAtPrice={selectedOption() ? selectedOption()!.compareAtPrice : props.product.compareAtPrice}
             quantity={quantity()}
             onQuantityChange={setQuantity}
             maxQuantity={maxQuantity()}
@@ -217,8 +217,9 @@ export function QuickAddSheet(props: {
  * its name (14px) under it. Selected = pink border + a pink check badge; a
  * sold-out option is faded and can't be picked. The magnifier in the photo's
  * bottom-right corner enlarges it (a sibling of the radio, never nested in it).
+ * Also the gift option picker's tile (`GiftVariantSheet`), so both look the same.
  */
-function OptionTile(props: { option: VariantOption; selected: boolean; onSelect: () => void; onZoom?: () => void }) {
+export function OptionTile(props: { option: VariantOption; selected: boolean; onSelect: () => void; onZoom?: () => void }) {
   return (
     <div class="relative w-full min-w-0 sm:w-[100px] sm:shrink-0">
       <button

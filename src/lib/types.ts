@@ -41,6 +41,8 @@ export type Product = {
   discountPercent?: number;
   stockLeft?: number;
   stockTotal?: number;
+  /** Live flash sale with a total limit only: units left at the flash price (the stock bar shows this of `stockTotal`). */
+  flashStockLeft?: number;
   flashSaleEndsAt?: number; // epoch ms, only set when the card should show the countdown ribbon
   /** Epoch ms the one-off flash sale opens (Admin "เริ่มเวลา"). Unset = already open (daily rounds, older saves). Before it the product isn't in the flash sale. */
   flashSaleStartsAt?: number;

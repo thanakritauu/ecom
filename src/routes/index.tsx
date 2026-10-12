@@ -3,16 +3,19 @@ import { Footer } from "~/components/shared/Footer";
 import { HeroBanner } from "~/components/home/HeroBanner";
 import { HomepageSections } from "~/components/home/HomepageSections";
 import { useHomepageContent } from "~/lib/homepageContent";
-import { FlashSaleSection } from "~/components/home/FlashSaleSection";
-import { BestSellersSection } from "~/components/home/BestSellersSection";
-import { CouponSection } from "~/components/home/CouponSection";
-import { NewArrivalsSection } from "~/components/home/NewArrivalsSection";
-import { TrendingSection } from "~/components/home/TrendingSection";
-import { ReviewsSection } from "~/components/home/ReviewsSection";
-import { FAQSection } from "~/components/home/FAQSection";
 
+/**
+ * The whole page renders from the homepage record's one ordered section list
+ * (Admin, หน้าแคมเปญ > หน้าแรก): editable sections and the built-in blocks
+ * (Flash Sale ... FAQ) alike. The hero carousel sits where the list's hero
+ * section sits (on top when there is none); its on/off only picks Admin's
+ * slides over the default ones, as before.
+ */
 export default function Home() {
   const homepage = useHomepageContent();
+  const heroIndex = () => homepage.sections().findIndex((s) => s.type === "hero");
+  const beforeHero = () => (heroIndex() < 0 ? [] : homepage.sections().slice(0, heroIndex()));
+  const afterHero = () => (heroIndex() < 0 ? homepage.sections() : homepage.sections().slice(heroIndex() + 1));
   return (
     <>
       <a
@@ -22,20 +25,11 @@ export default function Home() {
         ข้ามไปยังเนื้อหาหลัก
       </a>
       <Header />
-      <main id="main-content" class="flex flex-col overflow-x-hidden">
+      {/* 24px to the Footer whichever section ends up last (FAQ already has exactly pb-6). */}
+      <main id="main-content" class="flex flex-col overflow-x-hidden [&>section:last-child]:!pb-6">
+        <HomepageSections sections={beforeHero()} productRows={1} swipe hideEmptyProductSections />
         <HeroBanner />
-        {/* Phase 10.2 — replaces the old static "Featured Collection" section
-            with the same content, now driven by Admin's Homepage Content
-            (published) state; every other section below stays exactly as it
-            was (not part of the 5 admin-manageable section types). */}
-        <HomepageSections sections={homepage.sections()} productRows={1} swipe hideEmptyProductSections />
-        <FlashSaleSection />
-        <BestSellersSection />
-        <CouponSection />
-        <NewArrivalsSection />
-        <TrendingSection />
-        <ReviewsSection />
-        <FAQSection />
+        <HomepageSections sections={afterHero()} productRows={1} swipe hideEmptyProductSections />
       </main>
       <Footer />
     </>

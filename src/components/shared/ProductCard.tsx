@@ -79,7 +79,9 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
   // Same sale state as before: shown while `flashSaleEndsAt` is set and the
   // product is in stock; the countdown clamps at 00:00:00 on expiry.
   const flashSaleActive = () => !!props.flashSale && !!props.product.flashSaleEndsAt && !outOfStock();
-  const showStockProgress = () => flashSaleActive() && !!props.product.stockLeft && !!props.product.stockTotal;
+  // A flash sale with "จำกัดการซื้อทั้งหมด" counts down its own units (`flashStockLeft`); otherwise the product's stock.
+  const barLeft = () => props.product.flashStockLeft ?? props.product.stockLeft;
+  const showStockProgress = () => flashSaleActive() && !!barLeft() && !!props.product.stockTotal;
   const selectedVariant = () => props.product.variants?.find((v) => v.id === selectedVariantId());
   // Falls back to the default photo whenever the selected shade has no photo
   // of its own — today that's every SKU (see products.ts), so this is wired
@@ -339,7 +341,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
                 card in a row whether or not that card has a shade row above it. */}
             <div class="mt-auto flex flex-col gap-2">
               <Show when={showStockProgress()}>
-                <StockProgressBar stockLeft={props.product.stockLeft!} stockTotal={props.product.stockTotal!} />
+                <StockProgressBar stockLeft={barLeft()!} stockTotal={props.product.stockTotal!} />
               </Show>
 
               {/* Below sm the card is ~150px wide — the CTA scales with it (14px, tighter padding) instead of wrapping to two lines. */}
@@ -373,7 +375,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
 
           <Show when={showStockProgress()}>
             <div class="sm:max-w-[280px]">
-              <StockProgressBar compact stockLeft={props.product.stockLeft!} stockTotal={props.product.stockTotal!} />
+              <StockProgressBar compact stockLeft={barLeft()!} stockTotal={props.product.stockTotal!} />
             </div>
           </Show>
 

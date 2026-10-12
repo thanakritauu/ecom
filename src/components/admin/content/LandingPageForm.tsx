@@ -15,23 +15,24 @@ import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
 import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
 import { mediaErrors } from "~/lib/media";
 import { HomepageSectionsPreview } from "./HomepageSectionsPreview";
-import { HomepageFixedSectionsPanel } from "./HomepageFixedSectionsPanel";
 import { PromotionPagePreviewBody, isListingModePage } from "./PromotionPagePreviewBody";
-import { HOMEPAGE_FIXED_SECTIONS, HOMEPAGE_SECTION_TYPE_META, genHomepageSectionId, isValidYoutubeUrl, type HomepageSection, type HomepageSectionType } from "~/lib/adminHomepage";
+import { BUILTIN_SECTION_TYPES, HOMEPAGE_SECTION_TYPE_META, genHomepageSectionId, isBuiltinSectionType, isValidYoutubeUrl, type HomepageSection, type HomepageSectionType } from "~/lib/adminHomepage";
 import { formatMarketingDateTime, isValidDateRange } from "~/lib/adminMarketing";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { slugify, isReservedSlug, promotionPageHref, PROMOTION_PAGE_STATUS_META, type LandingPage, type LandingPageFormValues, type LandingPageStatus, type PromotionPage } from "~/lib/adminContent";
 import { writePreviewDraft } from "~/lib/adminPreviewDraft";
 import { pushToast } from "~/lib/toast";
 
-const ADD_SECTION_TYPE_OPTIONS: HomepageSectionType[] = ["hero", "product", "content", "cta"];
+const ADD_SECTION_TYPE_OPTIONS: HomepageSectionType[] = ["hero", "promotion_banner", "product", "content", "cta"];
+/** Ready-made storefront blocks (their own data and design); only heading + on/off are set here. */
+const ADD_BUILTIN_TYPE_OPTIONS: HomepageSectionType[] = [...BUILTIN_SECTION_TYPES];
 const TODAY_LABEL = "18 ก.ย. 2569";
 
 function blankLandingSection(type: HomepageSectionType): HomepageSection {
   return {
     id: genHomepageSectionId(),
     type,
-    name: `${HOMEPAGE_SECTION_TYPE_META[type].label} ใหม่`,
+    name: isBuiltinSectionType(type) ? HOMEPAGE_SECTION_TYPE_META[type].label : `${HOMEPAGE_SECTION_TYPE_META[type].label} ใหม่`,
     enabled: true,
     eyebrow: "",
     title: "",
@@ -109,6 +110,8 @@ export function LandingPageForm(props: {
   const [expandedSectionId, setExpandedSectionId] = createSignal<string | null>(null);
   const [dragIndex, setDragIndex] = createSignal<number | null>(null);
   const [confirmDeleteSection, setConfirmDeleteSection] = createSignal<HomepageSection | null>(null);
+  /** Where "+ add section" puts the new section: after this section id, or at the end ("" ). */
+  const [insertAfterId, setInsertAfterId] = createSignal("");
 
   const [errors, setErrors] = createSignal<FormErrors>({});
   /** Per-section field errors (only for sections that still need something), shown inside each section card. */
@@ -146,6 +149,7 @@ export function LandingPageForm(props: {
   const removeSection = (id: string) => {
     setSections((list) => list.filter((s) => s.id !== id));
     recheckSection(undefined, id);
+    if (insertAfterId() === id) setInsertAfterId("");
   };
 
   const moveSection = (index: number, dir: -1 | 1) => {
@@ -170,8 +174,15 @@ export function LandingPageForm(props: {
 
   const addSection = (type: HomepageSectionType) => {
     const created = blankLandingSection(type);
-    setSections((list) => [...list, created]);
-    setExpandedSectionId(created.id);
+    setSections((list) => {
+      const at = list.findIndex((s) => s.id === insertAfterId());
+      if (at === -1) return [...list, created];
+      const next = [...list];
+      next.splice(at + 1, 0, created);
+      return next;
+    });
+    // Built-in blocks only have a heading and on/off, so there's nothing to open.
+    if (!isBuiltinSectionType(type)) setExpandedSectionId(created.id);
     // Sections replace the flat banner/title/products layout, so those requirements no longer apply.
     setErrors((prev) => ["banner", "title", "products", "sections"].reduce((acc, key) => clearFieldError(acc, key), prev));
   };
@@ -548,26 +559,55 @@ export function LandingPageForm(props: {
           </Section>
           </Show>
 
-          <Show when={isHomepage()}>
-            <Section title="โครงสร้างหน้าแรกบนหน้าร้าน">
-              <HomepageFixedSectionsPanel sections={sections()} />
-            </Section>
-          </Show>
-
           <Section title="ส่วนเนื้อหาของหน้า">
             <div class="flex flex-col gap-4">
-              <p class="text-sm text-ink-gray">เพิ่มส่วนเนื้อหาแล้วจัดลำดับได้ตามต้องการ หน้าเว็บแสดงจากบนลงล่างตามลำดับนี้</p>
+              <p class="text-sm text-ink-gray">
+                ทุกส่วนของหน้าอยู่ในรายการนี้ หน้าเว็บแสดงจากบนลงล่างตามลำดับนี้ จัดลำดับด้วยปุ่มขึ้นลงหรือลากวาง ปิดส่วนที่ไม่ต้องการแสดงได้ และแทรกส่วนใหม่ (เช่น แบนเนอร์โปรโมชั่น) ไว้ระหว่างส่วนไหนก็ได้
+              </p>
               <div data-field="sections">
                 <FieldMessage message={errors().sections} />
               </div>
-              <div class="flex flex-wrap gap-2">
-                <For each={ADD_SECTION_TYPE_OPTIONS}>
-                  {(type) => (
-                    <Button type="button" variant="outline" size="sm" onClick={() => addSection(type)}>
-                      <PlusIcon class="size-3.5" /> {HOMEPAGE_SECTION_TYPE_META[type].label}
-                    </Button>
-                  )}
-                </For>
+              <Show when={sections().length > 0}>
+                <label class="flex flex-col gap-1.5 sm:max-w-md">
+                  <span class="text-sm font-medium text-ink">ตำแหน่งของส่วนที่เพิ่มใหม่</span>
+                  <div class="relative">
+                    <select
+                      value={insertAfterId()}
+                      onChange={(e) => setInsertAfterId(e.currentTarget.value)}
+                      class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
+                    >
+                      <option value="">ต่อท้ายสุดของหน้า</option>
+                      <For each={sections()}>
+                        {(sec, i) => <option value={sec.id}>ต่อจากส่วนที่ {i() + 1} {sec.name || HOMEPAGE_SECTION_TYPE_META[sec.type].label}</option>}
+                      </For>
+                    </select>
+                    <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
+                  </div>
+                </label>
+              </Show>
+              <div class="flex flex-col gap-2">
+                <p class="text-xs font-medium text-ink-gray">ส่วนที่ปรับแต่งเอง</p>
+                <div class="flex flex-wrap gap-2">
+                  <For each={ADD_SECTION_TYPE_OPTIONS}>
+                    {(type) => (
+                      <Button type="button" variant="outline" size="sm" onClick={() => addSection(type)}>
+                        <PlusIcon class="size-3.5" /> {HOMEPAGE_SECTION_TYPE_META[type].label}
+                      </Button>
+                    )}
+                  </For>
+                </div>
+              </div>
+              <div class="flex flex-col gap-2">
+                <p class="text-xs font-medium text-ink-gray">ส่วนสำเร็จรูป (ดึงข้อมูลจากหน้าร้านอัตโนมัติ)</p>
+                <div class="flex flex-wrap gap-2">
+                  <For each={ADD_BUILTIN_TYPE_OPTIONS}>
+                    {(type) => (
+                      <Button type="button" variant="outline" size="sm" onClick={() => addSection(type)}>
+                        <PlusIcon class="size-3.5" /> {HOMEPAGE_SECTION_TYPE_META[type].label}
+                      </Button>
+                    )}
+                  </For>
+                </div>
               </div>
 
               <Show
@@ -625,6 +665,7 @@ export function LandingPageForm(props: {
       {/* Storefront sync — a page `PromotionPageView` shows as a listing (flat, or one product section) previews as that listing, YouTube video included; everything else through the section renderer. */}
       <HomepageSectionsPreview
         sections={effectiveSections()}
+        homepage={isHomepage()}
         content={
           !isHomepage() && isListingModePage(sections()) ? (
             <PromotionPagePreviewBody
@@ -639,14 +680,6 @@ export function LandingPageForm(props: {
           ) : undefined
         }
       />
-      <Show when={isHomepage()}>
-        <p class="text-xs text-ink-gray">
-          ตัวอย่างนี้แสดงเฉพาะส่วนที่แก้ไขได้ บนหน้าร้านจะต่อด้วยส่วนคงที่ ได้แก่{" "}
-          {HOMEPAGE_FIXED_SECTIONS.filter((f) => !f.editable)
-            .map((f) => f.label)
-            .join(", ")}
-        </p>
-      </Show>
       <Show when={startDate() && endDate()}>
         <p class="text-xs text-ink-gray">
           ช่วงเวลาแสดง {formatMarketingDateTime(startDate(), startTime())} - {formatMarketingDateTime(endDate(), endTime())}

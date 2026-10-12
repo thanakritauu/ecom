@@ -1,7 +1,7 @@
 import type { StatusTone } from "~/components/admin/StatusBadge";
 import { isValidDateRange } from "./adminMarketing";
-import { normalizeHomepageSection, isHomepageSectionType, validateHeroAssets, isValidYoutubeUrl, type HomepageSection, type HomepageDestination } from "./pageSections";
-import { buildHomepageSectionBaseline, buildLiveHeroAssets, HOMEPAGE_HERO_SECTION_ID } from "./adminHomepage";
+import { normalizeHomepageSection, isHomepageSectionType, isBuiltinSectionType, validateHeroAssets, isValidYoutubeUrl, type HomepageSection, type HomepageDestination } from "./pageSections";
+import { buildBuiltinSections, buildHomepageSectionBaseline, buildLiveHeroAssets, HOMEPAGE_HERO_SECTION_ID } from "./adminHomepage";
 import heroBanner1 from "~/assets/images/hero/hero-banner-1.png";
 import heroBanner2 from "~/assets/images/hero/hero-banner-2.png";
 import heroBanner3 from "~/assets/images/hero/hero-banner-3.png";
@@ -566,15 +566,30 @@ export function withLateSeedPages(stored: PromotionPage[]): PromotionPage[] {
  *    the three live `HeroBanner.tsx` slides, enabled.
  *  - v4: Iconic Glow page slug `charmiss-x-sanrio` → `iconic-glow` (the old
  *    URL keeps working via `LEGACY_PROMOTION_SLUGS`).
+ *  - v5: the homepage's hardcoded blocks (Flash Sale ... FAQ) became built-in
+ *    sections; a homepage without any gets them appended, enabled, in the old
+ *    on-page order, so `/` renders exactly as before.
  */
-export const PROMOTION_PAGE_SEED_VERSION = 4;
+export const PROMOTION_PAGE_SEED_VERSION = 5;
 
 /** Retired slugs → their current slug, so `/promotion/<old>` redirects instead of 404ing on links shared before a rename. */
 export const LEGACY_PROMOTION_SLUGS: Record<string, string> = { "charmiss-x-sanrio": "iconic-glow" };
 
 export function upgradePromotionPageSeeds(stored: PromotionPage[], fromVersion: number): PromotionPage[] {
   const v3 = fromVersion >= 3 ? stored : upgradeToV3(stored, fromVersion);
-  if (fromVersion >= 4) return v3;
+  const v4 = fromVersion >= 4 ? v3 : upgradeToV4(v3);
+  if (fromVersion >= 5) return v4;
+  // v5 — built-in home blocks join the homepage's section list (after everything already there).
+  // The hero carousel used to sit on top whatever its list position, and now follows the list, so it moves to the front.
+  return v4.map((p) => {
+    if (!p.isHomepage || p.sections.some((sec) => isBuiltinSectionType(sec.type))) return p;
+    const hero = p.sections.find((sec) => sec.type === "hero");
+    const ordered = hero ? [hero, ...p.sections.filter((sec) => sec !== hero)] : p.sections;
+    return { ...p, sections: [...ordered, ...buildBuiltinSections()] };
+  });
+}
+
+function upgradeToV4(v3: PromotionPage[]): PromotionPage[] {
   // v4 — only the untouched seed slug moves, and only if nothing else already took the new one.
   const target = LEGACY_PROMOTION_SLUGS["charmiss-x-sanrio"];
   if (v3.some((p) => p.slug === target)) return v3;

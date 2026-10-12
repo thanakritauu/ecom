@@ -1,7 +1,8 @@
 import { createEffect, createMemo, createSignal, For, on, Show, type JSX } from "solid-js";
 import type { Product } from "~/lib/types";
 import { isVideoMedia, mediaImage, type MediaValue } from "~/lib/media";
-import { flashSaleRoundEndsAt, getDiscountPercent } from "~/lib/products";
+import { getDiscountPercent } from "~/lib/products";
+import { flashSaleSummary } from "~/lib/flashSalePricing";
 import {
   ADMIN_PRODUCT_STATUS_META,
   LOW_STOCK_THRESHOLD,
@@ -29,16 +30,6 @@ import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminF
 import { isRichTextEmpty } from "~/lib/richText";
 import { useAdminTiktokClips } from "~/lib/adminTiktokClips";
 
-function toDatetimeLocal(epochMs: number): string {
-  const d = new Date(epochMs);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function defaultFlashSaleDatetimeLocal(): string {
-  return toDatetimeLocal(Date.now() + 24 * 60 * 60 * 1000);
-}
-
 /** Optional number field → `undefined` when blank (so the card hides that row), otherwise the number. */
 const optionalNumber = (raw: string) => (raw.trim() === "" || Number.isNaN(Number(raw)) ? undefined : Number(raw));
 
@@ -58,9 +49,6 @@ const LABELS: Record<string, string> = {
   price: "ราคาขาย",
   compareAtPrice: "ราคาก่อนลด",
   stock: "จำนวนสต๊อก",
-  stockTotal: "จำนวนทั้งหมดของแฟลชเซล",
-  flashSaleStartsAt: "เวลาเริ่มแฟลชเซล",
-  flashSaleEndsAt: "เวลาสิ้นสุดแฟลชเซล",
   rating: "คะแนนรีวิว",
 };
 
@@ -92,7 +80,6 @@ export function ProductForm(props: {
   const [compareAtPrice, setCompareAtPrice] = createSignal(props.initial?.compareAtPrice ? String(props.initial.compareAtPrice) : "");
   const [stockLeft, setStockLeft] = createSignal(props.initial ? String(props.initial.stockLeft ?? 0) : "0");
   const [lowStockThreshold, setLowStockThreshold] = createSignal(props.initial ? String(props.initial.lowStockThreshold) : String(LOW_STOCK_THRESHOLD));
-  const [stockTotal, setStockTotal] = createSignal(props.initial?.stockTotal !== undefined ? String(props.initial.stockTotal) : "");
   const [rating, setRating] = createSignal(props.initial?.rating !== undefined ? String(props.initial.rating) : "");
   const [soldCount, setSoldCount] = createSignal(props.initial?.soldCount !== undefined ? String(props.initial.soldCount) : "");
   const [reviewCount, setReviewCount] = createSignal(props.initial?.reviewCount !== undefined ? String(props.initial.reviewCount) : "");
@@ -113,20 +100,9 @@ export function ProductForm(props: {
   // §8 — falls back to the Gallery's first photo whenever no explicit pin exists yet, or the pinned photo was since removed — never crashes, never silently keeps pointing at a URL that's no longer in the Gallery.
   const effectiveMainImage = () => (mainImage() && images().includes(mainImage()!) ? mainImage()! : images()[0]);
   const [variants, setVariants] = createSignal<AdminVariant[]>(props.initial?.adminVariants ?? []);
-  const [flashSaleEnabled, setFlashSaleEnabled] = createSignal(!!props.initial?.flashSaleEndsAt);
-  // New Flash Sale products default to the storefront's daily round; a product with a saved one-off end time keeps it.
-  const [flashSaleDaily, setFlashSaleDaily] = createSignal(props.initial?.flashSaleEndsAt ? !!props.initial.flashSaleDaily : true);
-  const flashSaleEndsAtValue = () =>
-    !flashSaleEnabled() ? undefined : flashSaleDaily() ? flashSaleRoundEndsAt() : new Date(flashSaleEndsAtLocal()).getTime();
-  const [flashSaleEndsAtLocal, setFlashSaleEndsAtLocal] = createSignal(
-    props.initial?.flashSaleEndsAt ? toDatetimeLocal(props.initial.flashSaleEndsAt) : defaultFlashSaleDatetimeLocal(),
-  );
-
+  // Flash sale (prices, limits, timing) is managed on the Flash Sale page; this form only shows a summary.
+  const inFlashSale = () => !!props.initial && (props.initial.flashSaleEndsAt !== undefined || !!props.initial.flashSaleDaily);
   const [showDiscountBadge, setShowDiscountBadge] = createSignal(props.initial?.showDiscountBadge !== false);
-  const [flashSaleStartsAtLocal, setFlashSaleStartsAtLocal] = createSignal(
-    props.initial?.flashSaleStartsAt ? toDatetimeLocal(props.initial.flashSaleStartsAt) : toDatetimeLocal(Date.now()),
-  );
-  const flashSaleStartsAtValue = () => (!flashSaleEnabled() || flashSaleDaily() ? undefined : new Date(flashSaleStartsAtLocal()).getTime());
   // Clips this product's PDP shows first; written to the clips on save (`setProductTiktokClips`, see the routes).
   const clipStore = useAdminTiktokClips();
   const [tiktokClipIds, setTiktokClipIds] = createSignal<string[]>(props.initial ? clipStore.clipsForProduct(props.initial.id).map((c) => c.id) : []);
@@ -160,15 +136,6 @@ export function ProductForm(props: {
     if (stockLeft().trim() === "" || Number.isNaN(stockNum) || stockNum < 0) next.stock = "จำนวนสต๊อกต้องเป็นตัวเลขและไม่ติดลบ";
     const ratingNum = optionalNumber(rating());
     if (ratingNum !== undefined && (ratingNum < 0 || ratingNum > 5)) next.rating = "คะแนนต้องอยู่ระหว่าง 0-5";
-    const totalNum = optionalNumber(stockTotal());
-    if (flashSaleEnabled() && totalNum !== undefined && totalNum < stockNum) next.stockTotal = "จำนวนทั้งหมดต้องไม่น้อยกว่าสต๊อกคงเหลือ";
-    if (flashSaleEnabled() && !flashSaleDaily()) {
-      const start = new Date(flashSaleStartsAtLocal()).getTime();
-      const end = new Date(flashSaleEndsAtLocal()).getTime();
-      if (!flashSaleStartsAtLocal() || Number.isNaN(start)) next.flashSaleStartsAt = "กรุณาเลือกเวลาเริ่มแฟลชเซล";
-      if (!flashSaleEndsAtLocal() || Number.isNaN(end)) next.flashSaleEndsAt = "กรุณาเลือกเวลาสิ้นสุดแฟลชเซล";
-      else if (!next.flashSaleStartsAt && end <= start) next.flashSaleEndsAt = "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม";
-    }
     return next;
   };
 
@@ -179,7 +146,7 @@ export function ProductForm(props: {
     if (full.name) next.name = full.name;
     if (price().trim() && full.price) next.price = full.price;
     if (stockLeft().trim() && full.stock) next.stock = full.stock;
-    for (const key of ["compareAtPrice", "rating", "stockTotal", "flashSaleStartsAt", "flashSaleEndsAt"]) if (full[key]) next[key] = full[key];
+    for (const key of ["compareAtPrice", "rating"]) if (full[key]) next[key] = full[key];
     if (full.images && images().length > 0) next.images = full.images;
     return next;
   };
@@ -218,10 +185,6 @@ export function ProductForm(props: {
         mainImage: effectiveMainImage(),
         media: media().some(isVideoMedia) ? media() : undefined,
         adminVariants: variants(),
-        flashSaleEndsAt: flashSaleEndsAtValue(),
-        flashSaleStartsAt: flashSaleStartsAtValue(),
-        flashSaleDaily: flashSaleEnabled() && flashSaleDaily(),
-        stockTotal: optionalNumber(stockTotal()),
         rating: optionalNumber(rating()),
         soldCount: optionalNumber(soldCount()),
         reviewCount: optionalNumber(reviewCount()),
@@ -269,9 +232,8 @@ export function ProductForm(props: {
       // `ProductFormValues.stockLeft` this form actually submits, are both
       // completely untouched (see `handleSubmit`'s own `stockLeft: Number(stockLeft())`).
       stockLeft: Math.max(stockLeftNum, 1),
-      stockTotal: Math.max(optionalNumber(stockTotal()) ?? props.initial?.stockTotal ?? 0, stockLeftNum, 1),
-      flashSaleEndsAt: flashSaleEndsAtValue(),
-      flashSaleStartsAt: flashSaleStartsAtValue(),
+      stockTotal: Math.max(props.initial?.stockTotal ?? 0, stockLeftNum, 1),
+      flashSaleEndsAt: inFlashSale() ? props.initial?.flashSaleEndsAt : undefined,
       // The card's shade circle follows the swatch settings (color, or the
       // separate swatch image in Image mode); the variant's photos stay its
       // modal/option photos — the two are uploaded independently.
@@ -480,7 +442,7 @@ export function ProductForm(props: {
             value={stockLeft()}
             onInput={(e) => {
               setStockLeft(e.currentTarget.value);
-              fix("stock", "stockTotal");
+              fix("stock");
             }}
             error={errors().stock}
             disabled={saving()}
@@ -490,80 +452,17 @@ export function ProductForm(props: {
         <p class="text-xs text-ink-gray">เมื่อสต๊อกเหลือไม่เกิน {optionalNumber(lowStockThreshold()) ?? LOW_STOCK_THRESHOLD} ชิ้น ตะกร้าจะขึ้นป้าย "เหลือ X ชิ้นสุดท้าย"</p>
       </Section>
 
-      <Section title="แฟลชเซล">
-        <ToggleRow title="แสดงในแฟลชเซล" hint="สินค้าจะขึ้นในส่วนแฟลชเซลหน้าแรกพร้อมเวลานับถอยหลัง ในราคาขายด้านบน">
-          <Toggle
-            checked={flashSaleEnabled()}
-            onChange={(on) => {
-              setFlashSaleEnabled(on);
-              if (!on) fix("stockTotal", "flashSaleStartsAt", "flashSaleEndsAt");
-            }}
-            onLabel="แสดง"
-            offLabel="ไม่แสดง"
-            disabled={saving()}
-          />
-        </ToggleRow>
-        <Show when={flashSaleEnabled()}>
-          <div class="flex flex-col gap-1.5">
-            <TextField
-              label="จำนวนทั้งหมดของแฟลชเซล"
-              type="number"
-              min="0"
-              data-field="stockTotal"
-              value={stockTotal()}
-              placeholder={String(Math.max(props.initial?.stockTotal ?? 0, Number(stockLeft()) || 0))}
-              onInput={(e) => {
-                setStockTotal(e.currentTarget.value);
-                fix("stockTotal");
-              }}
-              error={errors().stockTotal}
-              disabled={saving()}
-            />
-            <p class="text-xs text-ink-gray">แถบบนการ์ดแสดงสต๊อกคงเหลือเทียบกับจำนวนนี้</p>
-          </div>
-          <ToggleRow title="รอบรายวัน" hint="จบตอนเที่ยงคืนและเริ่มรอบใหม่ทุกวัน ถ้าปิดต้องกำหนดเวลาเริ่มและเวลาสิ้นสุดเอง">
-            <Toggle
-              checked={flashSaleDaily()}
-              onChange={(on) => {
-                setFlashSaleDaily(on);
-                if (on) fix("flashSaleStartsAt", "flashSaleEndsAt");
-              }}
-              disabled={saving()}
-            />
-          </ToggleRow>
-          <Show when={!flashSaleDaily()}>
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <TextField
-                label="เริ่มเวลา"
-                required
-                type="datetime-local"
-                data-field="flashSaleStartsAt"
-                value={flashSaleStartsAtLocal()}
-                onInput={(e) => {
-                  setFlashSaleStartsAtLocal(e.currentTarget.value);
-                  fix("flashSaleStartsAt", "flashSaleEndsAt");
-                }}
-                error={errors().flashSaleStartsAt}
-                disabled={saving()}
-              />
-              <TextField
-                label="สิ้นสุดเวลา"
-                required
-                type="datetime-local"
-                data-field="flashSaleEndsAt"
-                value={flashSaleEndsAtLocal()}
-                onInput={(e) => {
-                  setFlashSaleEndsAtLocal(e.currentTarget.value);
-                  fix("flashSaleEndsAt");
-                }}
-                error={errors().flashSaleEndsAt}
-                disabled={saving()}
-              />
-            </div>
-            <p class="-mt-2 text-xs text-ink-gray">ก่อนถึงเวลาเริ่ม สินค้าจะยังไม่ขึ้นในแฟลชเซล และหายไปเองเมื่อถึงเวลาสิ้นสุด</p>
-          </Show>
-        </Show>
-      </Section>
+      <Show when={props.initial}>
+        {(product) => (
+          <Section title="แฟลชเซล">
+            <p class="text-sm text-ink">{inFlashSale() ? flashSaleSummary(product()) : "ไม่ได้อยู่ในแฟลชเซล"}</p>
+            <p class="text-xs text-ink-gray">ราคาแฟลชเซล จำนวนจำกัด และเวลา ตั้งแยกจากราคาขายปกติ ราคาขายด้านบนไม่เปลี่ยน</p>
+            <a href="/admin/marketing/flash-sale" class="self-start text-sm font-medium text-brand-pink underline decoration-from-font">
+              จัดการที่หน้าแฟลชเซล
+            </a>
+          </Section>
+        )}
+      </Show>
 
       <Section title="คลิปรีวิว TikTok">
         <ProductTiktokClips
@@ -614,7 +513,7 @@ export function ProductForm(props: {
     >
       {/* Card at about its storefront size, centred in the (wider) preview column. */}
       <div class="mx-auto w-full max-w-[300px] p-4 sm:p-5">
-        <ProductCard product={previewProduct()} flashSale={flashSaleEnabled()} />
+        <ProductCard product={previewProduct()} flashSale={inFlashSale()} />
       </div>
       <Show when={!isRichTextEmpty(description())}>
         <div class="flex flex-col gap-3 border-t border-border p-4 sm:p-5">

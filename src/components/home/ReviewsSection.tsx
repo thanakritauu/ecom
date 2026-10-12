@@ -4,7 +4,7 @@ import { TikTokReviewRail } from "../shared/TikTokReviewRail";
 import { useStorefrontTiktokClips } from "~/lib/storefrontTiktokClips";
 import starGold from "~/assets/icons/star-gold-4.svg";
 
-export function ReviewsSection() {
+export function ReviewsSection(props: { /** Heading override from the page's section settings; empty = the usual heading. */ title?: string }) {
   const clips = useStorefrontTiktokClips();
   // No active clips in Admin: drop the whole section (a #CharmissReviews band with nothing in it reads as broken).
   return (
@@ -19,7 +19,7 @@ export function ReviewsSection() {
               id="reviews-heading"
               class="text-center text-[28px] font-bold leading-9 text-brand-pink sm:text-[34px] sm:leading-[42px] lg:text-[40px] lg:leading-[50px]"
             >
-              #CharmissReviews
+              {props.title || "#CharmissReviews"}
             </h2>
 
             <div class="flex items-center justify-center gap-2 whitespace-nowrap rounded-pill bg-white px-4 py-1.5 text-sm shadow-card sm:gap-3 sm:px-5 sm:py-2 sm:text-base lg:leading-5">

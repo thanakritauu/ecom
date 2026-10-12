@@ -15,6 +15,13 @@ import { resolveHomepageDestinationHref, type HomepageSection, type HomepageProd
 import { ResponsiveBanner } from "~/components/shared/ResponsiveBanner";
 import { ResponsiveMedia } from "~/components/shared/MediaView";
 import { EmptyState } from "~/components/shared/EmptyState";
+import { FlashSaleSection } from "./FlashSaleSection";
+import { BestSellersSection } from "./BestSellersSection";
+import { CouponSection } from "./CouponSection";
+import { NewArrivalsSection } from "./NewArrivalsSection";
+import { TrendingSection } from "./TrendingSection";
+import { ReviewsSection } from "./ReviewsSection";
+import { FAQSection } from "./FAQSection";
 
 /** Architecture Cleanup & Source of Truth — filters the *live* Product Store list instead of pointing at a separately-curated array per source; membership itself is still the same seed-id-derived signal `~/lib/products`'s `isBestSeller`/etc. always used. */
 function productsForSource(source: Exclude<HomepageProductSource, "manual" | "collection" | "category">, products: Product[]): Product[] {
@@ -36,7 +43,7 @@ function resolveProductRefs(refs: PromotionPageProductRef[], catalog: ReturnType
   return catalog.getByIds(refs.map((ref) => ref.productId));
 }
 
-/** §22/§23 — the one renderer both the real storefront and the Admin Preview dialog use, so what Admin previews is byte-for-byte what ships. `hero` sections aren't handled here — `HeroBanner.tsx` reads those directly as its carousel slide list. */
+/** §22/§23 — the one renderer both the real storefront and the Admin Preview dialog use, so what Admin previews is byte-for-byte what ships. `hero` sections aren't handled here — `HeroBanner.tsx` reads those directly as its carousel slide list. Built-in types (Flash Sale ... FAQ) render their own home component. */
 export function HomepageSections(props: {
   sections: HomepageSection[];
   /** Caps every Product section at this many rows of 5 cards — set by the storefront Homepage only; Landing Pages/Admin previews leave it unset and show every product. */
@@ -113,6 +120,21 @@ function HomepageSectionBlock(props: { section: HomepageSection; productRows?: n
       return <ContentSectionBlock section={props.section} />;
     case "cta":
       return <CtaSectionBlock section={props.section} />;
+    // Built-in blocks: the existing components, pulling their own data; only the heading can be overridden.
+    case "flash_sale":
+      return <FlashSaleSection />;
+    case "best_sellers":
+      return <BestSellersSection title={props.section.title} />;
+    case "coupons":
+      return <CouponSection title={props.section.title} />;
+    case "new_arrivals":
+      return <NewArrivalsSection title={props.section.title} />;
+    case "trending":
+      return <TrendingSection title={props.section.title} />;
+    case "reviews":
+      return <ReviewsSection title={props.section.title} />;
+    case "faq":
+      return <FAQSection title={props.section.title} />;
     default:
       return null;
   }

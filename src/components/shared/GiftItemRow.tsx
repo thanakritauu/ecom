@@ -12,9 +12,8 @@ const GiftVariantSheet = clientOnly(() => import("./GiftVariantSheet").then((m) 
  * An unlocked free gift as a cart line, one per unlocked tier of every
  * active gift promo. Same image/text sizing as `CartItemRow` (drawer vs.
  * page), but no stepper / remove, since gifts follow the cart rather than
- * being `CartLine`s. A gift with several allowed options shows which one it
- * ships as and lets the customer pick (`GiftVariantSheet`); Checkout waits
- * until every such gift has a pick.
+ * being `CartLine`s. A gift with options ships as the first allowed one
+ * unless the customer picks another ("เปลี่ยน" opens `GiftVariantSheet`).
  */
 export function GiftItemRow(props: { gift: GiftLine; variant?: "drawer" | "page" }) {
   const layout = () => props.variant ?? "drawer";
@@ -44,12 +43,10 @@ export function GiftItemRow(props: { gift: GiftLine; variant?: "drawer" | "page"
         </p>
         <Show when={props.gift.options.length > 0}>
           <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-            <Show when={props.gift.variant} fallback={<span class="font-medium text-system-red">ยังไม่ได้เลือกตัวเลือก</span>}>
-              {(v) => <span class="text-ink-gray">ตัวเลือก {v().label}</span>}
-            </Show>
+            <Show when={props.gift.variant}>{(v) => <span class="text-ink-gray">ตัวเลือก {v().label}</span>}</Show>
             <Show when={canChoose()}>
               <button type="button" onClick={() => setPickerOpen(true)} aria-haspopup="dialog" class="text-sm font-medium text-brand-pink underline">
-                {props.gift.variant ? "เปลี่ยน" : "เลือกตัวเลือก"}
+                เปลี่ยน
               </button>
             </Show>
           </div>

@@ -5,7 +5,7 @@ import { ProductRail } from "../shared/ProductRail";
 import { isTrending } from "~/lib/products";
 import { useProductCatalog } from "~/lib/productCatalog";
 
-export function TrendingSection() {
+export function TrendingSection(props: { /** Heading override from the page's section settings; empty = the usual heading. */ title?: string }) {
   const catalog = useProductCatalog();
   const trendingProducts = () => catalog.products().filter(isTrending);
 
@@ -14,7 +14,7 @@ export function TrendingSection() {
     <Show when={trendingProducts().length > 0}>
       <section aria-labelledby="trending-heading" class="py-6 sm:py-8 lg:py-10">
         <Container width="wide" class="flex flex-col gap-2">
-          <SectionHeader title="กำลังฮิตสัปดาห์นี้" href="/promotion/trending" headingId="trending-heading" />
+          <SectionHeader title={props.title || "กำลังฮิตสัปดาห์นี้"} href="/promotion/trending" headingId="trending-heading" />
           <ProductRail products={trendingProducts()} rows={2} swipe />
         </Container>
       </section>

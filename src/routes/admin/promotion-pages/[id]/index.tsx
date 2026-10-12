@@ -318,7 +318,7 @@ export default function AdminLandingPageDetailPage() {
               when={p().sections.length > 0}
               fallback={<LandingPagePreviewDialog open={previewOpen()} onOpenChange={setPreviewOpen} banners={p().banners} title={p().title} description={p().description} products={p().products} />}
             >
-              <HomepagePreviewDialog open={previewOpen()} onOpenChange={setPreviewOpen} sections={p().sections} />
+              <HomepagePreviewDialog open={previewOpen()} onOpenChange={setPreviewOpen} sections={p().sections} homepage={p().isHomepage} />
             </Show>
           </div>
         );

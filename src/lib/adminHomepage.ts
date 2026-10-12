@@ -8,15 +8,14 @@ import heroJuicyCheekMobile from "~/assets/images/hero/hero-banner-2-mobile.webp
 import heroAcneBalanceDesktop from "~/assets/images/hero/hero-banner-3-desktop.webp";
 import heroAcneBalanceTablet from "~/assets/images/hero/hero-banner-3-tablet.webp";
 import heroAcneBalanceMobile from "~/assets/images/hero/hero-banner-3-mobile.webp";
-import { emptyBanners, emptyCta, type HeroAsset, type HomepageSection, type HomepageSectionType } from "./pageSections";
+import { BUILTIN_SECTION_TYPES, HOMEPAGE_SECTION_TYPE_META, emptyBanners, emptyCta, type HeroAsset, type HomepageSection, type HomepageSectionType } from "./pageSections";
 
 /**
- * Phase 10.2 — Content Management: Homepage. Five section types cover every
- * "flexible content area" the spec asks Admin to manage; the storefront's
- * existing bespoke sections (Flash Sale's countdown, Best Sellers' tab
- * filter, Coupon's claim flow, Category rail, Membership CTA, Reviews,
- * FAQ) stay exactly as they are today — none of those are in this list, so
- * none of them become admin-editable data, and none of their code changes.
+ * Phase 10.2 — Content Management: Homepage. The storefront's bespoke home
+ * blocks (Flash Sale, Best Sellers, coupons, New Arrivals, Trending, Reviews,
+ * FAQ) are built-in section types now (`BUILTIN_SECTION_TYPES`): they keep
+ * their own components and data, and the page's one ordered `sections` list
+ * decides where they sit and whether they show.
  * `hero` is the one exception to "rendered by the generic block renderer":
  * `HeroBanner.tsx` reads enabled `hero` sections directly (as the carousel's
  * slide list) instead of `HomepageSections.tsx` rendering them inline.
@@ -132,36 +131,19 @@ export function buildHomepageSectionBaseline(): HomepageSection[] {
       description: "แลกรับของรางวัล ส่วนลด และสิทธิพิเศษทุกการสั่งซื้อ",
       cta: { label: "สมัครฟรี", destination: { type: "internal", path: "/account" } },
     }),
+    ...buildBuiltinSections(),
   ];
 }
 
 /**
- * Storefront sync — the homepage sections `routes/index.tsx` renders as
- * fixed components (not from Admin data), in their real on-page order.
- * Admin's Homepage editor lists them as read-only "ส่วนคงที่" cards around
- * the editable sections so the page mirrors `/` top to bottom. `editable`
- * marks the one slot where this page's own `sections` are rendered
- * (Hero carousel first, then `HomepageSections`) — everything else is
- * hardcoded in its component and can only change in code.
+ * The homepage's built-in blocks in today's on-page order (after the editable
+ * sections), all shown. Fixed ids for the same purity reason as `makeSection`;
+ * the seed baseline ends with these and `upgradePromotionPageSeeds` (v5)
+ * appends them to a homepage saved before they became sections, so `/` keeps
+ * rendering exactly as it did when they were hardcoded in `routes/index.tsx`.
  */
-export type HomepageFixedSection = {
-  id: string;
-  label: string;
-  /** Short Thai description of what the live section shows / where its data comes from. */
-  note: string;
-  /** "ดูทั้งหมด" target on the storefront, when the section has one. */
-  href?: string;
-  editable?: boolean;
-};
-
-export const HOMEPAGE_FIXED_SECTIONS: HomepageFixedSection[] = [
-  { id: "hero", label: "แบนเนอร์สไลด์", note: "สไลด์ใหญ่บนสุด ตอนนี้หน้าร้านแสดง 3 สไลด์เริ่มต้น (Iconic Glow, Juicy Cheek, Acne Balance) เปิดส่วนแบนเนอร์สไลด์ของหน้านี้เมื่อต้องการเปลี่ยน", editable: true },
-  { id: "sections", label: "ส่วนที่แก้ไขได้", note: "ส่วนอื่นของหน้านี้ (เช่น คอลเลคชั่น Glow in motion) แสดงต่อจากแบนเนอร์สไลด์ตามลำดับด้านล่าง", editable: true },
-  { id: "flash-sale", label: "Flash Sale", note: "สินค้า Flash Sale พร้อมนับถอยหลัง ดึงจากสินค้าที่ตั้ง Flash Sale ไว้ ถ้าไม่มีสินค้าจะซ่อนเอง", href: "/promotion/flash-sale" },
-  { id: "best-sellers", label: "สินค้าขายดี", note: "สินค้าขายดีพร้อมแท็บกรองหมวด", href: "/promotion/best-sellers" },
-  { id: "coupon", label: "คูปองส่วนลด", note: "คูปองที่ตั้งให้แสดงหน้าแรก พร้อมปุ่มเก็บคูปองและเก็บทั้งหมด" },
-  { id: "new-arrivals", label: "มาใหม่", note: "สินค้ามาใหม่", href: "/promotion/new-arrivals" },
-  { id: "trending", label: "กำลังฮิตสัปดาห์นี้", note: "สินค้ากำลังฮิต", href: "/promotion/trending" },
-  { id: "reviews", label: "#CharmissReviews", note: "คะแนน 4.9 จากรีวิวจริง 10,000+ รีวิว พร้อมคลิปรีวิวจาก TikTok" },
-  { id: "faq", label: "คำถามที่พบบ่อย", note: "คำถามที่พบบ่อยตามรายการด้านล่าง" },
-];
+export function buildBuiltinSections(): HomepageSection[] {
+  return BUILTIN_SECTION_TYPES.map((type) =>
+    makeSection({ id: `home-sec-builtin-${type.replace(/_/g, "-")}`, type, name: HOMEPAGE_SECTION_TYPE_META[type].label }),
+  );
+}

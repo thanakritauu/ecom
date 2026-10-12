@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
 import { useCart } from "~/lib/cart";
-import type { ResolvedCartLine } from "~/lib/cartSelectors";
+import { flashLimitNote, type ResolvedCartLine } from "~/lib/cartSelectors";
 import { PriceDisplay } from "./PriceDisplay";
 import { getDiscountPercent } from "~/lib/products";
 import { QuantityStepper } from "./QuantityStepper";
@@ -23,7 +23,7 @@ export function CartItemRow(props: { entry: ResolvedCartLine; variant?: "drawer"
   const lowStock = () => !outOfStock() && product.stockLeft !== undefined && product.stockLeft <= storefrontLowStockThreshold(product);
   const image = () => variant?.image ?? product.image;
   // Same derived % as ProductCard/PDP, against the price this line is actually charged at.
-  const discountPercent = () => (product.showDiscountBadge === false ? undefined : getDiscountPercent({ price: props.entry.unitPrice, compareAtPrice: product.compareAtPrice }));
+  const discountPercent = () => (product.showDiscountBadge === false ? undefined : getDiscountPercent({ price: props.entry.unitPrice, compareAtPrice: props.entry.compareAtPrice }));
 
   const remove = () => {
     cart.removeLine(product.id, line.variantId);
@@ -59,7 +59,7 @@ export function CartItemRow(props: { entry: ResolvedCartLine; variant?: "drawer"
         </Show>
 
         <div class="flex flex-wrap items-center gap-2">
-          <PriceDisplay price={props.entry.unitPrice} compareAtPrice={product.compareAtPrice} size="sm" />
+          <PriceDisplay price={props.entry.unitPrice} compareAtPrice={props.entry.compareAtPrice} size="sm" />
           <Show
             when={lowStock()}
             fallback={
@@ -75,6 +75,10 @@ export function CartItemRow(props: { entry: ResolvedCartLine; variant?: "drawer"
             </span>
           </Show>
         </div>
+
+        <Show when={flashLimitNote(props.entry)}>
+          {(note) => <p class="text-xs leading-[1.75] text-system-red">{note()}</p>}
+        </Show>
 
         <div class="flex items-center justify-between gap-2">
           <QuantityStepper

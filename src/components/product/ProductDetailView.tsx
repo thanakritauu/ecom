@@ -19,6 +19,7 @@ import { useCategoryContent } from "~/lib/categoryContent";
 import { categoryListHref } from "~/lib/pageSections";
 import type { Product } from "~/lib/types";
 import { discountBadgePercent } from "~/lib/products";
+import { resolveVariantOption } from "~/lib/productVariants";
 import { richTextToPlain } from "~/lib/richText";
 import { useCart } from "~/lib/cart";
 import { pushToast } from "~/lib/toast";
@@ -54,6 +55,13 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
     props.product.variants?.find((v) => !v.soldOut)?.id,
   );
   const selectedVariant = createMemo(() => props.product.variants?.find((v) => v.id === selectedVariantId()));
+  // The picked option's own price (a flash sale may price options differently); no option = the product's.
+  const shownPrice = createMemo(() => {
+    const v = selectedVariant();
+    if (!v) return { price: props.product.price, compareAtPrice: props.product.compareAtPrice };
+    const o = resolveVariantOption(props.product, v);
+    return { price: o.price, compareAtPrice: o.compareAtPrice };
+  });
   const [shadeRequired, setShadeRequired] = createSignal(false);
   const [quantity, setQuantity] = createSignal(1);
   const [addStatus, setAddStatus] = createSignal<"idle" | "loading" | "error">("idle");
@@ -148,10 +156,10 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
 
               <div class="flex flex-col gap-2 rounded-card bg-surface-pink px-6 py-5">
                 <div class="flex flex-wrap items-center gap-2">
-                  <PriceDisplay price={props.product.price} compareAtPrice={props.product.compareAtPrice} />
-                  <Show when={discountBadgePercent(props.product)}>
+                  <PriceDisplay price={shownPrice().price} compareAtPrice={shownPrice().compareAtPrice} />
+                  <Show when={discountBadgePercent({ ...shownPrice(), showDiscountBadge: props.product.showDiscountBadge })}>
                     <span class="rounded-pill bg-danger-strong/90 px-1.5 py-0.5 text-xs font-semibold text-danger-soft">
-                      ลด {discountBadgePercent(props.product)}%
+                      ลด {discountBadgePercent({ ...shownPrice(), showDiscountBadge: props.product.showDiscountBadge })}%
                     </span>
                   </Show>
                 </div>

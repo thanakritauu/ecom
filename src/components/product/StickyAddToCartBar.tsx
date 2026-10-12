@@ -2,6 +2,7 @@ import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import { isServer } from "solid-js/web";
 import type { Product, ProductVariant } from "~/lib/types";
 import { PurchaseFooter } from "../shared/PurchaseFooter";
+import { resolveVariantOption } from "~/lib/productVariants";
 
 /**
  * Figma (node 134:6621) places this directly above the Footer, but a static
@@ -39,6 +40,12 @@ export function StickyAddToCartBar(props: {
   });
 
   const image = () => props.selectedVariant?.image ?? props.product.image;
+  // Same price as the PDP's main buy row: the picked option's (flash sale may differ per option).
+  const shown = () => {
+    if (!props.selectedVariant) return { price: props.product.price, compareAtPrice: props.product.compareAtPrice };
+    const o = resolveVariantOption(props.product, props.selectedVariant);
+    return { price: o.price, compareAtPrice: o.compareAtPrice };
+  };
 
   return (
     <Show when={visible()}>
@@ -55,8 +62,8 @@ export function StickyAddToCartBar(props: {
             layout="bar"
             image={image()}
             optionLabel={props.selectedVariant?.label}
-            price={props.product.price}
-            compareAtPrice={props.product.compareAtPrice}
+            price={shown().price}
+            compareAtPrice={shown().compareAtPrice}
             quantity={props.quantity}
             onQuantityChange={props.onQuantityChange}
             maxQuantity={props.maxQuantity}

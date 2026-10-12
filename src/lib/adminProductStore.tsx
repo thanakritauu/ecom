@@ -5,6 +5,7 @@ import type { Product, ProductVariant } from "./types";
 import { normalizeMedia, type MediaValue } from "./media";
 import { isRichTextEmpty } from "./richText";
 import { buildMockCategories } from "./adminCategories";
+import { migrateLegacyFlashSale, normalizeFlashSaleConfig, type FlashSaleConfig } from "./flashSalePricing";
 import categoryBrow from "~/assets/images/category/category-brow.png";
 import categoryCheek from "~/assets/images/category/category-cheek.png";
 import categoryEye from "~/assets/images/category/category-eye.png";
@@ -63,6 +64,8 @@ export type AdminProduct = Product & {
    * end time past midnight. Unset/false = a one-off end time set by Admin.
    */
   flashSaleDaily?: boolean;
+  /** The flash sale's own prices and limits (`~/lib/flashSalePricing`), managed on the Flash Sale page. Only used while the product is in the flash sale. */
+  flashSale?: FlashSaleConfig;
   /**
    * Admin Master Data Foundation — `categoryId` is the *real* relationship
    * into `~/lib/adminCategories` (empty string = unassigned), the one a
@@ -191,7 +194,7 @@ const SEED_STOCK_ROTATION = [40, 25, 60, 15, 32, 50, 18, 22, 45, 30];
 const seedStockOf = (product: Product, i: number) => product.stockLeft ?? SEED_STOCK_ROTATION[i % SEED_STOCK_ROTATION.length];
 
 export function buildAdminProductBaseline(): AdminProduct[] {
-  return allProducts.map((catalogProduct, i) => {
+  return allProducts.map((catalogProduct, i): AdminProduct => {
     const product: Product = { ...catalogProduct, stockLeft: seedStockOf(catalogProduct, i) };
     const sku = `CHM${String(i + 1).padStart(3, "0")}`;
     // Most of this catalog never sets `category` (only bestSellerProducts
@@ -212,7 +215,7 @@ export function buildAdminProductBaseline(): AdminProduct[] {
       updatedAt: TODAY_LABEL,
       adminVariants: seedAdminVariants(product, sku),
     };
-  });
+  }).map(migrateLegacyFlashSale);
 }
 
 /**
@@ -283,15 +286,6 @@ export function withDailyFlashSaleEnd(p: AdminProduct): AdminProduct {
   return p.flashSaleDaily ? { ...p, flashSaleEndsAt: flashSaleRoundEndsAt() } : p;
 }
 
-function flashSaleFields(
-  input: Pick<ProductFormValues, "flashSaleEndsAt" | "flashSaleStartsAt" | "flashSaleDaily">,
-): Pick<AdminProduct, "flashSaleEndsAt" | "flashSaleStartsAt" | "flashSaleDaily"> {
-  if (input.flashSaleEndsAt === undefined && !input.flashSaleDaily) return { flashSaleEndsAt: undefined, flashSaleStartsAt: undefined, flashSaleDaily: undefined };
-  return input.flashSaleDaily
-    ? { flashSaleEndsAt: flashSaleRoundEndsAt(), flashSaleStartsAt: undefined, flashSaleDaily: true }
-    : { flashSaleEndsAt: input.flashSaleEndsAt, flashSaleStartsAt: input.flashSaleStartsAt, flashSaleDaily: undefined };
-}
-
 export function normalizeAdminProduct(stored: AdminProduct): AdminProduct {
   // Products saved while the (now removed) Brand module existed still carry `brand`/`brandId` — dropped on read so they're never written back.
   const { brand: _brand, brandId: _brandId, ...p } = stored as AdminProduct & { brand?: unknown; brandId?: unknown };
@@ -309,6 +303,7 @@ export function normalizeAdminProduct(stored: AdminProduct): AdminProduct {
     flashSaleStartsAt: !p.flashSaleDaily && typeof p.flashSaleStartsAt === "number" && Number.isFinite(p.flashSaleStartsAt) ? p.flashSaleStartsAt : undefined,
     // Only `false` is stored; unset = badge shown.
     showDiscountBadge: p.showDiscountBadge === false ? false : undefined,
+    flashSale: normalizeFlashSaleConfig(p.flashSale),
   };
 }
 
@@ -511,7 +506,7 @@ export function readPersistedAdminProducts(): AdminProduct[] | null {
     // reaches a component.
     const stored = (JSON.parse(raw) as AdminProduct[]).map(normalizeAdminProduct);
     const version = Number(localStorage.getItem(SEED_VERSION_KEY) ?? 1);
-    return (version < SEED_VERSION ? migrateSeedFields(stored, version) : stored).map(withDailyFlashSaleEnd);
+    return (version < SEED_VERSION ? migrateSeedFields(stored, version) : stored).map(withDailyFlashSaleEnd).map(migrateLegacyFlashSale);
   } catch {
     return null;
   }
@@ -576,7 +571,6 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
       updatedAt: TODAY_LABEL,
       adminVariants: input.adminVariants,
       variants: deriveStorefrontVariants(input.adminVariants),
-      ...flashSaleFields(input),
       rating: input.rating,
       soldCount: input.soldCount,
       reviewCount: input.reviewCount,
@@ -614,7 +608,7 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
           media: input.media,
           adminVariants: input.adminVariants,
           variants: deriveStorefrontVariants(input.adminVariants, p.variants),
-          ...flashSaleFields(input),
+          // Flash sale (membership, timing, prices) is managed only on the Flash Sale page: kept as stored.
           rating: input.rating,
           soldCount: input.soldCount,
           reviewCount: input.reviewCount,

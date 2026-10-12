@@ -1,5 +1,6 @@
 import type { CartLine, Product, ProductVariant } from "./types";
 import { resolveVariantOption } from "./productVariants";
+import { flashDealFor } from "./flashSalePricing";
 import { getTier, type TierId } from "./membership";
 
 /** Matches the free-shipping copy already used in Home's Utility Bar — one real threshold, not a second number invented for the drawer. */
@@ -47,8 +48,17 @@ export type ResolvedCartLine = {
   line: CartLine;
   product: Product;
   variant?: ProductVariant;
-  /** Per-unit price for this line — the selected variant's own price when it has one, else `product.price` (see `productVariants.ts`). */
+  /** Per-unit price shown for this line: the flash price during a live flash sale, else the option's / product's own price (see `productVariants.ts`). */
   unitPrice: number;
+  /** Struck-through "ราคาก่อนลด" for this line. */
+  compareAtPrice?: number;
+  /** What this line costs: `unitPrice` x qty, except units over a flash sale limit, which are charged `normalUnitPrice`. */
+  lineTotal: number;
+  /** Flash sale only: units at the flash price (the rest of `line.qty` is at `normalUnitPrice`). */
+  flashQty?: number;
+  normalUnitPrice?: number;
+  /** Flash sale only: the most units this cart gets at the flash price (set when a limit applies). */
+  flashLimit?: number;
 };
 
 /**
@@ -59,21 +69,49 @@ export type ResolvedCartLine = {
  * state shouldn't need to import product data itself, and the Drawer/Cart
  * Page/Checkout all resolve and total their lines the exact same way by
  * calling these same two functions instead of re-deriving totals.
+ *
+ * Flash sale limits: a live flash sale's "จำกัดต่อลูกค้า" (and its
+ * "จำกัดการซื้อทั้งหมด") cap how many units of this cart get the flash price,
+ * counted per product (level ระดับสินค้า, across its options) or per option
+ * (ระดับตัวเลือกสินค้า), in cart order. Units over the cap stay in the cart
+ * and are charged the normal price; the line shows a note.
  */
 export function resolveCartLines(lines: CartLine[], products: Product[]): ResolvedCartLine[] {
+  const flashUsed = new Map<string, number>();
   return lines.flatMap((line): ResolvedCartLine[] => {
     const product = products.find((p) => p.id === line.productId);
     if (!product) return [];
     const found = line.variantId ? product.variants?.find((v) => v.id === line.variantId) : undefined;
-    if (!found) return [{ line, product, variant: found, unitPrice: product.price }];
     // Same resolver the Product Option Modal shows from, so the cart line's photo/price match the option the shopper picked.
-    const option = resolveVariantOption(product, found);
-    return [{ line, product, variant: { ...found, image: option.image }, unitPrice: option.price }];
+    const option = found ? resolveVariantOption(product, found) : undefined;
+    const variant = found && option ? { ...found, image: option.image } : found;
+    const unitPrice = option?.price ?? product.price;
+    const compareAtPrice = option ? option.compareAtPrice : product.compareAtPrice;
+    const deal = flashDealFor(product, found?.id);
+    if (!deal) return [{ line, product, variant, unitPrice, compareAtPrice, lineTotal: unitPrice * line.qty }];
+    const caps = [deal.customerLimit, deal.totalLimit].filter((n): n is number => n !== undefined);
+    const cap = caps.length > 0 ? Math.min(...caps) : undefined;
+    const used = flashUsed.get(deal.limitKey) ?? 0;
+    const flashQty = cap === undefined ? line.qty : Math.max(0, Math.min(line.qty, cap - used));
+    flashUsed.set(deal.limitKey, used + flashQty);
+    const lineTotal = flashQty * deal.flashPrice + (line.qty - flashQty) * deal.normalPrice;
+    // Nothing left at the flash price: the line reads as a normal-price line.
+    if (flashQty === 0) {
+      return [{ line, product, variant, unitPrice: deal.normalPrice, compareAtPrice: undefined, lineTotal, flashQty, normalUnitPrice: deal.normalPrice, flashLimit: cap }];
+    }
+    return [{ line, product, variant, unitPrice: deal.flashPrice, compareAtPrice: deal.normalPrice, lineTotal, flashQty, normalUnitPrice: deal.normalPrice, flashLimit: cap }];
   });
 }
 
+/** "ราคาแฟลชเซลสูงสุด 2 ชิ้น ชิ้นที่เกินคิดราคาปกติ ฿329": shown on a line with units over its flash sale limit. */
+export function flashLimitNote(entry: ResolvedCartLine): string | undefined {
+  if (entry.flashQty === undefined || entry.flashLimit === undefined || entry.flashQty >= entry.line.qty) return undefined;
+  const normal = `฿${(entry.normalUnitPrice ?? 0).toLocaleString("th-TH")}`;
+  return `ราคาแฟลชเซลสูงสุด ${entry.flashLimit.toLocaleString("th-TH")} ชิ้น ชิ้นที่เกินคิดราคาปกติ ${normal}`;
+}
+
 export function computeCartTotal(resolved: ResolvedCartLine[]): number {
-  return resolved.reduce((sum, { line, unitPrice }) => sum + unitPrice * line.qty, 0);
+  return resolved.reduce((sum, { lineTotal }) => sum + lineTotal, 0);
 }
 
 /**

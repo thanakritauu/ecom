@@ -6,7 +6,8 @@ import { HeroAssetsEditor } from "./HeroAssetsEditor";
 import { DestinationSelector, destinationError } from "./DestinationSelector";
 import { PromotionPageProductPicker } from "./PromotionPageProductPicker";
 import { HOMEPAGE_PRODUCT_SOURCE_META, type HomepageContentLayout, type HomepageProductSource, type HomepageSection } from "~/lib/adminHomepage";
-import { validateHeroAssets } from "~/lib/pageSections";
+import { BUILTIN_SECTION_META, isBuiltinSectionType, validateHeroAssets, type BuiltinSectionType } from "~/lib/pageSections";
+import { Toggle } from "~/components/admin/Toggle";
 import { mediaErrors } from "~/lib/media";
 import type { FormErrors } from "~/lib/adminFormValidation";
 import { useAdminCollections } from "~/lib/adminCollectionStore";
@@ -39,6 +40,8 @@ const CONTENT_LAYOUT_OPTIONS: { value: HomepageContentLayout; label: string }[] 
  */
 export function sectionFieldErrors(section: HomepageSection): FormErrors {
   const e: FormErrors = {};
+  // Built-in blocks pull their own data; the heading override is optional, so there is nothing to fill in.
+  if (isBuiltinSectionType(section.type)) return e;
   if (!section.name.trim()) e.name = "กรุณากรอกชื่อส่วน";
   if (section.type === "hero") {
     const slideErrors = validateHeroAssets(section.assets);
@@ -271,5 +274,35 @@ function FieldMessage(props: { message?: string }) {
     <Show when={props.message}>
       <p role="alert" class="text-sm text-system-red">{props.message}</p>
     </Show>
+  );
+}
+
+/**
+ * Built-in block (Flash Sale ... FAQ): it renders the storefront's own
+ * component with its own data, so the only settings are an optional heading
+ * override (empty = the component's usual heading) and on/off.
+ */
+export function BuiltinSectionForm(props: { section: HomepageSection; onChange: (next: HomepageSection) => void }) {
+  const s = () => props.section;
+  const meta = () => BUILTIN_SECTION_META[s().type as BuiltinSectionType];
+  return (
+    <div class="flex flex-col gap-4 border-t border-border p-4 sm:p-5">
+      <p class="rounded-card bg-surface-gray/60 px-3 py-2 text-sm text-ink-gray">{meta().note}</p>
+      <Show
+        when={meta().defaultTitle}
+        fallback={<p class="text-sm text-ink-gray">หัวข้อของส่วนนี้เป็นโลโก้ Flash Sale จึงเปลี่ยนข้อความไม่ได้</p>}
+      >
+        {(defaultTitle) => (
+          <div class="flex flex-col gap-1.5 sm:max-w-md">
+            <TextField label="หัวข้อ" placeholder={defaultTitle()} value={s().title} onInput={(e) => props.onChange({ ...s(), title: e.currentTarget.value })} />
+            <p class="text-xs text-ink-gray">เว้นว่างไว้เพื่อใช้หัวข้อเดิม "{defaultTitle()}"</p>
+          </div>
+        )}
+      </Show>
+      <div class="flex items-center gap-3">
+        <span class="text-sm font-medium text-ink">แสดงบนหน้าร้าน</span>
+        <Toggle checked={s().enabled} onChange={() => props.onChange({ ...s(), enabled: !s().enabled })} onLabel="แสดง" offLabel="ไม่แสดง" />
+      </div>
+    </div>
   );
 }

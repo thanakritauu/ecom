@@ -1,14 +1,20 @@
-import { For, Show } from "solid-js";
+import { For } from "solid-js";
 import type { GiftLine } from "~/lib/promotionEngine";
+import { resolveVariantOptions } from "~/lib/productVariants";
 import { SheetModal } from "./SheetModal";
-import { CheckIcon } from "./icons";
+import { OptionTile } from "./QuickAddSheet";
 
 /**
- * Pick which option (shade) a free gift ships as. Same modal frame as every
- * other storefront sheet (`SheetModal`); tapping an option picks it and closes.
- * Only the options Admin allows and that are in stock are listed.
+ * Pick which option (shade) a free gift ships as. Same frame and option
+ * tiles as the Product Option Modal (`QuickAddSheet`: SheetModal + OptionTile,
+ * "ตัวเลือก:" line above a 3-per-row grid); tapping an option picks it and
+ * closes. Only the options Admin allows and that are in stock are listed.
  */
 export function GiftVariantSheet(props: { open: boolean; onOpenChange: (open: boolean) => void; gift: GiftLine; onPick: (variantId: string) => void }) {
+  const options = () => {
+    const allowed = new Set(props.gift.options.map((v) => v.id));
+    return resolveVariantOptions(props.gift.product).filter((o) => allowed.has(o.id));
+  };
   return (
     <SheetModal
       open={props.open}
@@ -19,38 +25,26 @@ export function GiftVariantSheet(props: { open: boolean; onOpenChange: (open: bo
       title="เลือกตัวเลือกของแถม"
       description={props.gift.product.name}
     >
-      <ul class="grid grid-cols-3 gap-3 sm:grid-cols-4">
-        <For each={props.gift.options}>
-          {(v) => {
-            const selected = () => props.gift.variant?.id === v.id;
-            return (
-              <li>
-                <button
-                  type="button"
-                  aria-pressed={selected()}
-                  onClick={() => {
-                    props.onPick(v.id);
-                    props.onOpenChange(false);
-                  }}
-                  class="font-normal relative flex h-full w-full flex-col gap-1.5 rounded-card border-2 p-1.5 text-left transition-colors duration-150"
-                  classList={{ "border-brand-pink bg-surface-pink": selected(), "border-surface-gray bg-white lg:hover:border-brand-pink/40": !selected() }}
-                >
-                  <img src={v.image ?? props.gift.product.image} alt="" class="aspect-square w-full rounded-media object-cover" />
-                  <span class="flex items-center gap-1.5 px-0.5 pb-0.5 text-sm leading-[1.75] text-ink">
-                    <span class="size-3.5 shrink-0 rounded-full border border-border" style={{ "background-color": v.color }} aria-hidden="true" />
-                    <span class="line-clamp-2">{v.label}</span>
-                  </span>
-                  <Show when={selected()}>
-                    <span class="absolute right-2.5 top-2.5 flex size-5 items-center justify-center rounded-pill bg-brand-pink text-white" aria-hidden="true">
-                      <CheckIcon class="size-3" />
-                    </span>
-                  </Show>
-                </button>
-              </li>
-            );
-          }}
-        </For>
-      </ul>
+      <div class="flex flex-col gap-3">
+        <p class="flex min-h-[24px] flex-wrap items-center gap-x-2 text-sm font-medium">
+          <span class="text-black">ตัวเลือก:</span>
+          <span class="text-ink-gray">{props.gift.variant?.label ?? "-"}</span>
+        </p>
+        <div role="radiogroup" aria-label="ตัวเลือกของแถม" class="grid grid-cols-3 gap-3 sm:flex sm:flex-wrap">
+          <For each={options()}>
+            {(option) => (
+              <OptionTile
+                option={option}
+                selected={props.gift.variant?.id === option.id}
+                onSelect={() => {
+                  props.onPick(option.id);
+                  props.onOpenChange(false);
+                }}
+              />
+            )}
+          </For>
+        </div>
+      </div>
     </SheetModal>
   );
 }

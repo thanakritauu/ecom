@@ -1,6 +1,7 @@
 import type { Product, ProductVariant } from "./types";
 import type { AdminVariant } from "./adminProductStore";
 import { isVideoMedia, type MediaValue } from "./media";
+import type { FlashPricedProduct } from "./flashSalePricing";
 
 /**
  * Phase 02 §3/§4 — the one place a storefront variant is resolved into
@@ -28,6 +29,8 @@ export type VariantOption = {
   image: string;
   gallery: string[];
   price: number;
+  /** Struck-through "ราคาก่อนลด" for this option: its normal price while it's in a live flash sale, else the product's own. */
+  compareAtPrice?: number;
   /** Only known when Admin tracks per-variant stock. */
   stock?: number;
   soldOut: boolean;
@@ -57,6 +60,13 @@ function adminVariantsOf(product: Product): AdminVariant[] {
   return Array.isArray(list) ? (list as AdminVariant[]) : [];
 }
 
+/** During a live flash sale `product.compareAtPrice` belongs to the cheapest flash option; other options use their own. */
+function optionCompareAtPrice(product: Product, variantId: string): number | undefined {
+  const deal = (product as Product & FlashPricedProduct).flashDeal;
+  if (!deal) return product.compareAtPrice;
+  return deal.variants[variantId]?.normalPrice ?? deal.regularCompareAtPrice;
+}
+
 export function resolveVariantOption(product: Product, variant: ProductVariant): VariantOption {
   const admin = adminVariantsOf(product).find((a) => a.id === variant.id);
   // Option photos (the modal's square tile) — an admin variant's `images` are always its photos, independent of the card swatch.
@@ -71,6 +81,7 @@ export function resolveVariantOption(product: Product, variant: ProductVariant):
     image: gallery[0] ?? product.image,
     gallery,
     price: admin?.price ?? product.price,
+    compareAtPrice: optionCompareAtPrice(product, variant.id),
     stock,
     soldOut: !!variant.soldOut || (stock !== undefined && stock <= 0),
   };

@@ -11,6 +11,7 @@ import {
 } from "./adminProductStore";
 import type { Product } from "./types";
 import { isFlashSale } from "./products";
+import { applyFlashPricing } from "./flashSalePricing";
 import { HIDDEN_REVIEWS_CHANGED_EVENT, HIDDEN_REVIEWS_STORAGE_KEY, readHiddenReviewKeys, reviewKey } from "./adminProductReviews";
 
 /** Stock at or below this shows "เหลือ X ชิ้นสุดท้าย" in the cart: the product's own Admin setting (default 5). */
@@ -57,7 +58,12 @@ function readStoredProducts(): AdminProduct[] {
  * no rail, ribbon or countdown shows it anywhere.
  */
 function withLiveFlashSale(list: AdminProduct[], now = Date.now()): AdminProduct[] {
-  return list.map((p) => (p.flashSaleEndsAt !== undefined && !isFlashSale(p, now) ? { ...p, flashSaleEndsAt: undefined, flashSaleStartsAt: undefined } : p));
+  return list.map((p) => {
+    if (p.flashSaleEndsAt === undefined) return p;
+    // Outside the window: the stored (normal) prices, nothing flash. Inside: the flash sale's own prices (`flashSalePricing.ts`).
+    if (!isFlashSale(p, now)) return { ...p, flashSaleEndsAt: undefined, flashSaleStartsAt: undefined };
+    return applyFlashPricing(p);
+  });
 }
 
 /** The next moment a one-off flash sale starts or ends (to refresh right then), if any within a day. */
@@ -85,7 +91,7 @@ const ProductCatalogContext = createContext<ProductCatalogContextValue>();
 
 export function ProductCatalogProvider(props: { children: JSX.Element }) {
   // The baseline's flash sale is the daily round (always live), so SSR and the first client paint still agree.
-  const [products, setProducts] = createSignal<AdminProduct[]>(fallbackProducts().filter(isProductOnSale));
+  const [products, setProducts] = createSignal<AdminProduct[]>(withLiveFlashSale(fallbackProducts().filter(isProductOnSale)));
   const [ready, setReady] = createSignal(false);
 
   onMount(() => {

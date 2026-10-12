@@ -15,7 +15,7 @@ import { useNavigationContent } from "~/lib/navigationContent";
  * header's "ดูทั้งหมด" goes where the selected tab's menu item goes.
  * Categories with no product yet get no tab.
  */
-export function BestSellersSection() {
+export function BestSellersSection(props: { /** Heading override from the page's section settings; empty = the usual heading. */ title?: string }) {
   const catalog = useProductCatalog();
   const navigation = useNavigationContent();
   const [activeTab, setActiveTab] = createSignal<string>("all");
@@ -47,7 +47,7 @@ export function BestSellersSection() {
       <section aria-labelledby="best-sellers-heading" class="pb-8 pt-0 sm:pb-11 lg:pb-14">
         {/* Figma 124:6526 — 88px header (title + 34px tabs), 24px to the cards, 56px below them */}
         <Container width="wide" class="flex flex-col gap-4 sm:gap-5 lg:gap-6">
-          <SectionHeader title="สินค้าขายดี" href={current().href} headingId="best-sellers-heading">
+          <SectionHeader title={props.title || "สินค้าขายดี"} href={current().href} headingId="best-sellers-heading">
             <div class="scroll-rail !mx-0 !px-0" role="tablist" aria-label="กรองสินค้าขายดีตามหมวดหมู่">
               <For each={tabs()}>
                 {(tab) => (

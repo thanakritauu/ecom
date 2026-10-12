@@ -9,6 +9,7 @@ import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayou
 import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
 import { reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
 import { ProductSelector } from "./ProductSelector";
+import { ChoiceRadio } from "./ChoiceRadio";
 import { BundlePriceSummary, fromItemDrafts, itemDraftsValid, PromotionItemsBox, toItemDrafts, type PromotionItemDraft } from "./PromotionItems";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import {
@@ -115,6 +116,21 @@ export function PromotionForm(props: {
   };
   const [applyToAll, setApplyToAll] = createSignal((props.initial?.productIds.length ?? 0) === 0);
   const [productIds, setProductIds] = createSignal<string[]>(props.initial?.productIds ?? []);
+  // "ทั้งสินค้า" vs "เลือกตัวเลือกสินค้า": per picked product, the options that count (missing / empty = every option).
+  const [scopeLevel, setScopeLevel] = createSignal<"product" | "option">(
+    Object.values(props.initial?.productVariantIds ?? {}).some((ids) => ids.length > 0) ? "option" : "product",
+  );
+  const [variantPicks, setVariantPicks] = createSignal<Record<string, string[]>>(props.initial?.productVariantIds ?? {});
+  /** Saved form of the option picks: only picked products whose list is a real subset of their options. */
+  const savedVariantIds = (): Record<string, string[]> | undefined => {
+    if (scopeLevel() !== "option") return undefined;
+    const entries = productIds().flatMap((id): [string, string[]][] => {
+      const all = productStore.getById(id)?.variants?.map((v) => v.id) ?? [];
+      const picked = (variantPicks()[id] ?? []).filter((v) => all.includes(v));
+      return picked.length > 0 && picked.length < all.length ? [[id, picked]] : [];
+    });
+    return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+  };
   const [startDate, setStartDate] = createSignal(props.initial?.startDate ?? "");
   const [startTime, setStartTime] = createSignal(props.initial?.startTime ?? "00:00");
   const [endDate, setEndDate] = createSignal(props.initial?.endDate ?? "");
@@ -249,6 +265,7 @@ export function PromotionForm(props: {
     showInCart: runsInCart() ? showInCart() : undefined,
     badgeLabel: runsInCart() ? badgeLabel().trim() || undefined : undefined,
     productIds: promotionHasProductScope(type()) && !applyToAll() ? productIds() : [],
+    productVariantIds: promotionHasProductScope(type()) && !applyToAll() ? savedVariantIds() : undefined,
     startDate: startDate(),
     startTime: startTime(),
     endDate: endDate(),
@@ -559,6 +576,54 @@ export function PromotionForm(props: {
                 <Show when={errors().productIds}>
                   <p class="text-sm text-system-red">{errors().productIds}</p>
                 </Show>
+                <Show when={productIds().some((id) => productStore.getById(id)?.variants?.length)}>
+                  <span class="mt-2 text-sm font-medium text-ink">นับตัวเลือกสินค้า</span>
+                  <ChoiceRadio
+                    name="promotion-scope-level"
+                    value={scopeLevel()}
+                    onChange={setScopeLevel}
+                    disabled={saving()}
+                    options={[
+                      { value: "product", label: "ทั้งสินค้า", hint: "ทุกตัวเลือกของสินค้าที่เลือกนับเข้าโปร" },
+                      { value: "option", label: "เลือกตัวเลือกสินค้า", hint: "นับเฉพาะตัวเลือกที่ติ๊กไว้" },
+                    ]}
+                  />
+                  <Show when={scopeLevel() === "option"}>
+                    <div class="flex flex-col gap-3 rounded-card bg-surface-gray/60 p-3">
+                      <For each={productIds().map((id) => productStore.getById(id)).filter((p) => !!p?.variants?.length)}>
+                        {(product) => {
+                          const all = () => product!.variants ?? [];
+                          const picks = () => (variantPicks()[product!.id] ?? []).filter((id) => all().some((v) => v.id === id));
+                          // Nothing picked yet = every option counts.
+                          const counted = (id: string) => picks().length === 0 || picks().includes(id);
+                          const toggle = (id: string, on: boolean) => {
+                            const current = picks().length === 0 ? all().map((v) => v.id) : picks();
+                            const next = on ? [...new Set([...current, id])] : current.filter((x) => x !== id);
+                            if (next.length === 0) return; // at least one option must stay
+                            setVariantPicks((m) => ({ ...m, [product!.id]: next.length === all().length ? [] : next }));
+                          };
+                          return (
+                            <div class="flex flex-col gap-2">
+                              <p class="truncate text-sm font-medium text-ink">{product!.name}</p>
+                              <div class="flex flex-wrap gap-2">
+                                <For each={all()}>
+                                  {(v) => (
+                                    <label class="flex min-h-9 cursor-pointer items-center gap-2 rounded-pill border border-border bg-white px-3 text-sm text-ink">
+                                      <input type="checkbox" class="size-4 accent-brand-pink" checked={counted(v.id)} disabled={saving()} onChange={(e) => toggle(v.id, e.currentTarget.checked)} />
+                                      <span class="size-4 shrink-0 rounded-full border border-border" style={{ "background-color": v.color }} aria-hidden="true" />
+                                      {v.label}
+                                    </label>
+                                  )}
+                                </For>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      </For>
+                      <p class="text-xs text-ink-gray">สินค้าที่ไม่มีตัวเลือกนับทั้งสินค้าเสมอ</p>
+                    </div>
+                  </Show>
+                </Show>
               </div>
             </Show>
           </Section>
@@ -590,7 +655,7 @@ export function PromotionForm(props: {
                 <p class="text-ink-gray">{showInCart() ? "แสดงในตะกร้า" : "ไม่แสดงในตะกร้า"}</p>
               </Show>
               <Show when={promotionHasProductScope(type())}>
-                <p class="text-ink-gray">{applyToAll() ? "ทุกสินค้า" : `${productIds().length} สินค้าที่เลือก`}</p>
+                <p class="text-ink-gray">{applyToAll() ? "ทุกสินค้า" : `${productIds().length} สินค้าที่เลือก${savedVariantIds() ? " เฉพาะตัวเลือกที่ติ๊ก" : ""}`}</p>
               </Show>
               <Show when={startDate() && endDate()}>
                 <p class="text-ink-gray">
