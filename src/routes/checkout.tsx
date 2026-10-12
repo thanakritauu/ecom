@@ -158,6 +158,12 @@ export default function CheckoutPage() {
       setSubmitError("มีสินค้าในตะกร้าที่ไม่สามารถสั่งซื้อได้ กรุณากลับไปแก้ไขตะกร้าก่อน");
       return false;
     }
+    // A free gift with several options must have one picked (in the cart) before paying.
+    if (promos.giftLines().some((g) => g.needsChoice)) {
+      setSubmitError("กรุณาเลือกตัวเลือกของแถมในตะกร้าก่อนชำระเงิน");
+      cart.openDrawer();
+      return false;
+    }
     setSubmitError(undefined);
     return validate();
   };

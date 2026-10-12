@@ -121,7 +121,17 @@ export const PROMOTION_CONDITION_META: Record<PromotionCondition, { label: strin
 };
 
 /** One step of a "ซื้อครบรับของแถม" promo. One tier is a single gift; 2 to 5 make a ขั้นบันได promo. */
-export type GiftTier = { threshold: number; giftProductId: string; giftQty: number };
+export type GiftTier = {
+  threshold: number;
+  giftProductId: string;
+  giftQty: number;
+  /**
+   * For a gift product with options (shades): which ones the customer may pick
+   * in the cart. Unset / empty = every option in stock; exactly one = that
+   * option is given, no choice.
+   */
+  giftVariantIds?: string[];
+};
 
 export const MAX_GIFT_TIERS = 5;
 

@@ -33,8 +33,8 @@ import {
 export type PromotionFormValues = Omit<Promotion, "id" | "createdAt" | "updatedAt">;
 
 /** A gift tier as typed into the form (strings until saved). */
-type TierDraft = { threshold: string; giftProductId: string; giftQty: string };
-const emptyTier = (): TierDraft => ({ threshold: "", giftProductId: "", giftQty: "1" });
+type TierDraft = { threshold: string; giftProductId: string; giftQty: string; giftVariantIds: string[] };
+const emptyTier = (): TierDraft => ({ threshold: "", giftProductId: "", giftQty: "1", giftVariantIds: [] });
 
 const BASE_LABELS: Record<string, string> = {
   name: "ชื่อโปรโมชั่น",
@@ -94,7 +94,7 @@ export function PromotionForm(props: {
   const initialTiers = props.initial ? promotionGiftTiers(props.initial) : [];
   const [tiers, setTiers] = createSignal<TierDraft[]>(
     initialTiers.length > 0
-      ? initialTiers.map((t) => ({ threshold: String(t.threshold), giftProductId: t.giftProductId, giftQty: String(t.giftQty) }))
+      ? initialTiers.map((t) => ({ threshold: String(t.threshold), giftProductId: t.giftProductId, giftQty: String(t.giftQty), giftVariantIds: t.giftVariantIds ?? [] }))
       : [emptyTier()],
   );
   // Which tier's product picker is open (one at a time keeps the form short).
@@ -237,7 +237,12 @@ export function PromotionForm(props: {
     getItems: type() === "buy_x_get_y" ? fromItemDrafts(getItems()) : undefined,
     tiers:
       type() === "gift_with_purchase"
-        ? tiers().map((t) => ({ threshold: Number(t.threshold) || 0, giftProductId: t.giftProductId, giftQty: Number(t.giftQty) || 1 }))
+        ? tiers().map((t) => ({
+            threshold: Number(t.threshold) || 0,
+            giftProductId: t.giftProductId,
+            giftQty: Number(t.giftQty) || 1,
+            giftVariantIds: t.giftVariantIds.length > 0 ? t.giftVariantIds : undefined,
+          }))
         : undefined,
     giftProductId: undefined,
     giftQty: undefined,
@@ -442,12 +447,52 @@ export function PromotionForm(props: {
                         <Show when={errors()[`tier-${i}-gift`]}>
                           <p class="text-sm text-system-red">{errors()[`tier-${i}-gift`]}</p>
                         </Show>
+                        <Show when={productStore.getById(tier().giftProductId)?.variants?.length ? productStore.getById(tier().giftProductId) : undefined}>
+                          {(product) => {
+                            const all = () => product().variants ?? [];
+                            // Empty list = every option allowed.
+                            const allowed = (id: string) => tier().giftVariantIds.length === 0 || tier().giftVariantIds.includes(id);
+                            const toggle = (id: string, on: boolean) => {
+                              const current = tier().giftVariantIds.length === 0 ? all().map((v) => v.id) : tier().giftVariantIds;
+                              const next = on ? [...new Set([...current, id])] : current.filter((x) => x !== id);
+                              if (next.length === 0) return; // at least one option must stay
+                              updateTier(i, { giftVariantIds: next.length === all().length ? [] : next });
+                            };
+                            return (
+                              <div class="flex flex-col gap-2 rounded-card bg-surface-gray/60 p-3">
+                                <p class="text-sm font-medium text-ink">ตัวเลือกที่ลูกค้าเลือกได้ในตะกร้า</p>
+                                <p class="-mt-1 text-xs text-ink-gray">เลือกไว้ตัวเดียว ลูกค้าจะได้ตัวนั้นเลยโดยไม่ต้องเลือก ตัวเลือกที่สินค้าหมดจะไม่แสดงให้เลือก</p>
+                                <div class="flex flex-wrap gap-2">
+                                  <For each={all()}>
+                                    {(v) => (
+                                      <label class="flex min-h-9 cursor-pointer items-center gap-2 rounded-pill border border-border bg-white px-3 text-sm text-ink">
+                                        <input
+                                          type="checkbox"
+                                          class="size-4 accent-brand-pink"
+                                          checked={allowed(v.id)}
+                                          disabled={saving()}
+                                          onChange={(e) => toggle(v.id, e.currentTarget.checked)}
+                                        />
+                                        <span class="size-4 shrink-0 rounded-full border border-border" style={{ "background-color": v.color }} aria-hidden="true" />
+                                        {v.label}
+                                        <Show when={v.soldOut}>
+                                          <span class="text-xs text-ink-gray">(หมด)</span>
+                                        </Show>
+                                      </label>
+                                    )}
+                                  </For>
+                                </div>
+                              </div>
+                            );
+                          }}
+                        </Show>
                         <Show when={pickingTier() === i}>
                           <ProductSelector
                             single
                             selectedIds={tier().giftProductId ? [tier().giftProductId] : []}
                             onChange={(ids) => {
-                              updateTier(i, { giftProductId: ids[0] ?? "" });
+                              // A new gift product starts with all its options allowed.
+                              updateTier(i, { giftProductId: ids[0] ?? "", giftVariantIds: [] });
                               setPickingTier(null);
                             }}
                           />

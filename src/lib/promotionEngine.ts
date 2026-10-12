@@ -1,4 +1,4 @@
-import type { Product } from "./types";
+import type { Product, ProductVariant } from "./types";
 import type { ResolvedCartLine } from "./cartSelectors";
 import { SHIPPING_FEE } from "./cartSelectors";
 import { isMarketingLive, promotionCondition, promotionGiftTiers, type Promotion, type PromotionCondition } from "./adminMarketing";
@@ -39,6 +39,8 @@ export type GiftTierState = {
   qty: number;
   remaining: number;
   unlocked: boolean;
+  /** The gift's options the customer may pick from (in stock, allowed by Admin); empty = the product has no options. */
+  options: ProductVariant[];
 };
 
 export type GiftPromotionState = PromoProgress & {
@@ -52,7 +54,17 @@ export type GiftPromotionState = PromoProgress & {
 };
 
 /** A gift the shopper gets right now: one per unlocked tier of every active gift promo. */
-export type GiftLine = { key: string; product: Product; qty: number };
+export type GiftLine = {
+  key: string;
+  product: Product;
+  qty: number;
+  /** Options the customer may pick (see `GiftTierState.options`). More than one = a choice is needed. */
+  options: ProductVariant[];
+  /** The option this gift ships as: the only allowed one, or the customer's pick. */
+  variant?: ProductVariant;
+  /** The gift has several options and none is picked yet: Checkout won't go ahead until it is. */
+  needsChoice: boolean;
+};
 
 const isLive = (p: Promotion) => isMarketingLive(p);
 
@@ -95,7 +107,9 @@ export function resolveGiftPromotions(promotions: Promotion[], lines: ResolvedCa
         const product = products.find((x) => x.id === tier.giftProductId);
         if (!product) return [];
         const remaining = Math.max(0, tier.threshold - prog.current);
-        return [{ index, threshold: tier.threshold, product, qty: tier.giftQty, remaining, unlocked: remaining === 0 }];
+        const allowed = tier.giftVariantIds?.length ? new Set(tier.giftVariantIds) : undefined;
+        const options = (product.variants ?? []).filter((v) => !v.soldOut && (!allowed || allowed.has(v.id)));
+        return [{ index, threshold: tier.threshold, product, qty: tier.giftQty, remaining, unlocked: remaining === 0, options }];
       });
       if (tiers.length === 0) return [];
       const unlockedCount = tiers.filter((t) => t.unlocked).length;
@@ -103,8 +117,17 @@ export function resolveGiftPromotions(promotions: Promotion[], lines: ResolvedCa
     });
 }
 
-export function giftLinesOf(gifts: GiftPromotionState[]): GiftLine[] {
-  return gifts.flatMap((g) => g.tiers.filter((t) => t.unlocked).map((t) => ({ key: `${g.id}@${t.index}`, product: t.product, qty: t.qty })));
+/** Unlocked gifts as cart lines; `choices` = the customer's picked option per gift key (`CartContext.giftChoices`). */
+export function giftLinesOf(gifts: GiftPromotionState[], choices: Record<string, string> = {}): GiftLine[] {
+  return gifts.flatMap((g) =>
+    g.tiers
+      .filter((t) => t.unlocked)
+      .map((t): GiftLine => {
+        const key = `${g.id}@${t.index}`;
+        const variant = t.options.length === 1 ? t.options[0] : t.options.find((v) => v.id === choices[key]);
+        return { key, product: t.product, qty: t.qty, options: t.options, variant, needsChoice: t.options.length > 1 && !variant };
+      }),
+  );
 }
 
 /** "฿260.00" / "2 ชิ้น": same money format as the rest of the cart (`formatTHB`). */

@@ -106,14 +106,20 @@ export function CheckoutOrderSummary(props: {
             {(g) => (
               <li class="flex list-none items-center gap-2">
                 <img
-                  src={g.product.image}
+                  src={g.variant?.image ?? g.product.image}
                   alt={g.product.name}
                   loading="lazy"
                   class="size-[66px] shrink-0 rounded-media border border-surface-gray object-cover"
                 />
                 <div class="min-w-0 flex-1">
                   <p class="line-clamp-1 text-sm font-medium leading-[1.75] text-ink">{g.product.name}</p>
-                  <p class="text-xs text-ink-gray">ของแถมฟรี x{g.qty}</p>
+                  <p class="flex flex-wrap gap-x-2 text-xs text-ink-gray">
+                    <Show when={g.variant}>{(v) => <span>ตัวเลือกสินค้า {v().label}</span>}</Show>
+                    <Show when={g.needsChoice}>
+                      <span class="font-medium text-system-red">ยังไม่ได้เลือกตัวเลือก</span>
+                    </Show>
+                    <span>ของแถมฟรี x{g.qty}</span>
+                  </p>
                 </div>
                 <p class="shrink-0 text-base font-semibold text-system-red">ฟรี</p>
               </li>

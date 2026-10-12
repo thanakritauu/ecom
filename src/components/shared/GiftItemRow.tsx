@@ -1,16 +1,27 @@
+import { createSignal, Show } from "solid-js";
+import { clientOnly } from "@solidjs/start";
 import type { GiftLine } from "~/lib/promotionEngine";
+import { useCart } from "~/lib/cart";
 import { formatTHB } from "./PriceDisplay";
 import { GiftIcon } from "./icons";
+
+// Kobalte Dialog SSR/hydration issue (the cart page renders on the server): the picker mounts on the client only.
+const GiftVariantSheet = clientOnly(() => import("./GiftVariantSheet").then((m) => ({ default: m.GiftVariantSheet })));
 
 /**
  * An unlocked free gift as a cart line, one per unlocked tier of every
  * active gift promo. Same image/text sizing as `CartItemRow` (drawer vs.
- * page), but read-only: no stepper, no remove, since gifts follow the cart
- * rather than being `CartLine`s.
+ * page), but no stepper / remove, since gifts follow the cart rather than
+ * being `CartLine`s. A gift with several allowed options shows which one it
+ * ships as and lets the customer pick (`GiftVariantSheet`); Checkout waits
+ * until every such gift has a pick.
  */
 export function GiftItemRow(props: { gift: GiftLine; variant?: "drawer" | "page" }) {
   const layout = () => props.variant ?? "drawer";
   const product = () => props.gift.product;
+  const cart = useCart();
+  const [pickerOpen, setPickerOpen] = createSignal(false);
+  const canChoose = () => props.gift.options.length > 1;
 
   return (
     <li
@@ -21,7 +32,7 @@ export function GiftItemRow(props: { gift: GiftLine; variant?: "drawer" | "page"
         class="shrink-0 overflow-hidden rounded-media border border-surface-gray"
         classList={{ "size-20": layout() === "drawer", "size-24": layout() === "page" }}
       >
-        <img src={product().image} alt={product().name} class="size-full object-cover" />
+        <img src={props.gift.variant?.image ?? product().image} alt={product().name} class="size-full object-cover" />
       </div>
 
       <div class="flex min-w-0 flex-1 flex-col justify-between gap-1">
@@ -31,6 +42,18 @@ export function GiftItemRow(props: { gift: GiftLine; variant?: "drawer" | "page"
         <p class="line-clamp-2 font-medium leading-[1.75] text-ink" classList={{ "text-sm": layout() === "drawer", "text-base": layout() === "page" }}>
           {product().name}
         </p>
+        <Show when={props.gift.options.length > 0}>
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <Show when={props.gift.variant} fallback={<span class="font-medium text-system-red">ยังไม่ได้เลือกตัวเลือก</span>}>
+              {(v) => <span class="text-ink-gray">ตัวเลือก {v().label}</span>}
+            </Show>
+            <Show when={canChoose()}>
+              <button type="button" onClick={() => setPickerOpen(true)} aria-haspopup="dialog" class="text-sm font-medium text-brand-pink underline">
+                {props.gift.variant ? "เปลี่ยน" : "เลือกตัวเลือก"}
+              </button>
+            </Show>
+          </div>
+        </Show>
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <div class="flex items-baseline gap-3">
             <span class="text-base font-bold text-system-red">ฟรี</span>
@@ -39,6 +62,9 @@ export function GiftItemRow(props: { gift: GiftLine; variant?: "drawer" | "page"
           <span class="text-sm text-ink-gray">x{props.gift.qty}</span>
         </div>
       </div>
+      <Show when={canChoose()}>
+        <GiftVariantSheet open={pickerOpen()} onOpenChange={setPickerOpen} gift={props.gift} onPick={(id) => cart.setGiftChoice(props.gift.key, id)} />
+      </Show>
     </li>
   );
 }

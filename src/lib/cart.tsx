@@ -29,11 +29,15 @@ type CartContextValue = {
   drawerOpen: () => boolean;
   openDrawer: () => void;
   closeDrawer: () => void;
+  /** The option the customer picked for each free gift that has several (gift key -> variant id). */
+  giftChoices: () => Record<string, string>;
+  setGiftChoice: (giftKey: string, variantId: string) => void;
 };
 
 const CartContext = createContext<CartContextValue>();
 
 const STORAGE_KEY = "charmiss:cart";
+const GIFT_CHOICES_KEY = "charmiss:cart-gift-choices";
 
 function readInitial(): CartLine[] {
   if (isServer) return [];
@@ -135,7 +139,29 @@ export function CartProvider(props: { children: JSX.Element }) {
     persist(lines().filter((l) => !(l.productId === productId && l.variantId === variantId)));
   };
 
-  const clearCart = () => persist([]);
+  // Picked gift options live with the cart (survive reloads) and go when the cart does after an order.
+  const [giftChoices, setGiftChoices] = createSignal<Record<string, string>>({});
+  onMount(() => {
+    try {
+      setGiftChoices(JSON.parse(localStorage.getItem(GIFT_CHOICES_KEY) ?? "{}") as Record<string, string>);
+    } catch {
+      // unreadable: no saved picks.
+    }
+  });
+  const writeGiftChoices = (next: Record<string, string>) => {
+    setGiftChoices(next);
+    try {
+      localStorage.setItem(GIFT_CHOICES_KEY, JSON.stringify(next));
+    } catch {
+      // in-memory only for this tab.
+    }
+  };
+  const setGiftChoice = (giftKey: string, variantId: string) => writeGiftChoices({ ...giftChoices(), [giftKey]: variantId });
+
+  const clearCart = () => {
+    persist([]);
+    writeGiftChoices({});
+  };
 
   const count = createMemo(() => lines().reduce((sum, l) => sum + l.qty, 0));
   const [badgeCount, setBadgeCount] = createSignal(0);
@@ -157,6 +183,8 @@ export function CartProvider(props: { children: JSX.Element }) {
         drawerOpen,
         openDrawer,
         closeDrawer,
+        giftChoices,
+        setGiftChoice,
       }}
     >
       {props.children}

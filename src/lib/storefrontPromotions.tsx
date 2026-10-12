@@ -14,6 +14,7 @@ import {
 } from "./adminMarketing";
 import { buildCoupon, type Coupon, type ResolvedCartLine } from "./cartSelectors";
 import { useProductCatalog } from "./productCatalog";
+import { useCart } from "./cart";
 import { MOCK_ORDERS as ADMIN_MOCK_ORDERS } from "./adminOrders";
 import { giftLinesOf, resolveFreeShipping, resolveGiftPromotions, shippingFeeFor } from "./promotionEngine";
 
@@ -148,7 +149,8 @@ export function useCartPromotions(lines: Accessor<ResolvedCartLine[]>) {
   const catalog = useProductCatalog();
   const freeShipping = createMemo(() => resolveFreeShipping(promotions(), lines()));
   const gifts = createMemo(() => resolveGiftPromotions(promotions(), lines(), catalog.products()));
-  const giftLines = createMemo(() => giftLinesOf(gifts()));
+  const cart = useCart();
+  const giftLines = createMemo(() => giftLinesOf(gifts(), cart.giftChoices()));
   const shippingFee = createMemo(() => shippingFeeFor(freeShipping()));
   return { freeShipping, gifts, giftLines, shippingFee };
 }
