@@ -6,7 +6,8 @@ import { Toggle } from "~/components/admin/Toggle";
 import { CloseXIcon } from "~/components/admin/icons";
 import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
 import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
-import { ProductSelector } from "./ProductSelector";
+import { ProductSkuPicker } from "~/components/admin/ProductSkuPicker";
+import type { ProductSkuRef } from "~/lib/productSkuRef";
 
 export type FlashSaleTiming = { daily: true } | { daily: false; startsAt: number; endsAt: number };
 
@@ -32,9 +33,10 @@ export function FlashSaleDialog(props: {
   productIds?: string[];
   initial?: { daily: boolean; startsAt?: number; endsAt?: number };
   /** `percent` = starting flash price ("ลด %" of the normal price) for products being added; unset when editing timing. */
-  onSave: (productIds: string[], timing: FlashSaleTiming, percent?: number) => Promise<void>;
+  /** `skuPicks`: products added with "เลือก SKU" (product id to its picked options); they start at option level with only those options on. */
+  onSave: (productIds: string[], timing: FlashSaleTiming, percent?: number, skuPicks?: Record<string, string[]>) => Promise<void>;
 }) {
-  const [picked, setPicked] = createSignal<string[]>([]);
+  const [picked, setPicked] = createSignal<ProductSkuRef[]>([]);
   const [daily, setDaily] = createSignal(true);
   const [startsAt, setStartsAt] = createSignal("");
   const [endsAt, setEndsAt] = createSignal("");
@@ -60,7 +62,7 @@ export function FlashSaleDialog(props: {
   );
 
   const save = async () => {
-    const ids = props.productIds ?? picked();
+    const ids = props.productIds ?? picked().map((r) => r.productId);
     const next: FormErrors = {};
     if (ids.length === 0) next.products = "กรุณาเลือกสินค้าอย่างน้อย 1 รายการ";
     const pct = Number(percent());
@@ -77,7 +79,8 @@ export function FlashSaleDialog(props: {
     if (reportFormErrors(next, LABELS)) return;
     setSaving(true);
     try {
-      await props.onSave(ids, daily() ? { daily: true } : { daily: false, startsAt: start, endsAt: end }, editing() ? undefined : pct);
+      const skuPicks = editing() ? undefined : Object.fromEntries(picked().filter((r) => r.variantIds.length > 0).map((r) => [r.productId, r.variantIds]));
+      await props.onSave(ids, daily() ? { daily: true } : { daily: false, startsAt: start, endsAt: end }, editing() ? undefined : pct, skuPicks);
       props.onOpenChange(false);
     } finally {
       setSaving(false);
@@ -89,7 +92,7 @@ export function FlashSaleDialog(props: {
       <Dialog.Portal>
         <Dialog.Overlay class="fixed inset-0 z-40 bg-ink/40 motion-reduce:animate-none data-[expanded]:animate-overlay-in data-[closed]:animate-overlay-out" />
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <Dialog.Content class="flex max-h-[90dvh] w-full max-w-lg flex-col rounded-card bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
+          <Dialog.Content class="flex max-h-[90dvh] w-full max-w-3xl flex-col rounded-card bg-surface-card shadow-card outline-none motion-reduce:animate-none data-[expanded]:animate-modal-in data-[closed]:animate-modal-out">
             <div class="flex items-start justify-between gap-3 px-5 pt-5">
               <div class="min-w-0">
                 <Dialog.Title class="text-lg font-semibold text-ink">{editing() ? "ตั้งเวลาแฟลชเซล" : "เพิ่มสินค้าในแฟลชเซล"}</Dialog.Title>
@@ -109,16 +112,16 @@ export function FlashSaleDialog(props: {
                   <span class="text-sm font-medium text-ink">
                     สินค้า <span class="text-system-red">*</span>
                   </span>
-                  <ProductSelector
-                    selectedIds={picked()}
-                    onChange={(ids) => {
-                      setPicked(ids);
-                      if (ids.length > 0) fix("products");
+                  <ProductSkuPicker
+                    value={picked()}
+                    onChange={(next) => {
+                      setPicked(next);
+                      if (next.length > 0) fix("products");
                     }}
+                    disabled={saving()}
+                    error={errors().products}
                   />
-                  <Show when={errors().products}>
-                    <p class="text-sm text-system-red">{errors().products}</p>
-                  </Show>
+                  <p class="text-xs text-ink-gray">ระดับตัวเลือกสินค้า: สินค้าจะเข้าแฟลชเซลเฉพาะ SKU ที่เปิดไว้</p>
                 </div>
                 <div class="flex flex-col gap-1.5">
                   <TextField

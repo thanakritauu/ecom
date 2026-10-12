@@ -13,6 +13,7 @@ import {
   computeCartTotal,
   computeCheckoutTotals,
   computeCoinsEarned,
+  couponCartBlock,
   couponUsageBlock,
   maxRedeemableCoins,
   MOCK_COIN_BALANCE,
@@ -95,10 +96,11 @@ export default function CheckoutPage() {
   // Coupon "จำกัดต่อลูกค้า": the signed-in shopper's own non-cancelled orders that used the code (a guest has no history to count).
   const couponUsesByShopper = (code: string) =>
     auth.isAuthenticated() ? orderHistory.orders().filter((o) => o.status !== "cancelled" && o.payment.couponCode?.toUpperCase() === code.toUpperCase()).length : 0;
-  // A picked coupon stops counting the moment its usage limit is reached (e.g. order history loaded after it was picked).
+  // A picked coupon stops counting the moment its usage limit is reached (e.g. order history loaded after it was picked),
+  // or the cart no longer qualifies (its products removed, or under the minimum); it comes back if the cart qualifies again.
   const coupon = () => {
     const c = pickedCoupon();
-    return c && !couponUsageBlock(c, couponUsesByShopper(c.code)) ? c : undefined;
+    return c && !couponUsageBlock(c, couponUsesByShopper(c.code)) && !couponCartBlock(c, resolvedLines()) ? c : undefined;
   };
 
   // Coins the order can take — the coupon/cart can change after coins were picked, so the pick is capped (not reset).
@@ -106,12 +108,12 @@ export default function CheckoutPage() {
     maxRedeemableCoins({
       balance: MOCK_COIN_BALANCE,
       subtotal: subtotal(),
-      couponDiscount: computeCheckoutTotals({ subtotal: subtotal(), coupon: coupon(), shippingFee: 0 }).couponDiscount,
+      couponDiscount: computeCheckoutTotals({ subtotal: subtotal(), lines: resolvedLines(), coupon: coupon(), shippingFee: 0 }).couponDiscount,
     }),
   );
   const coinsRedeemed = () => Math.min(coinsPicked(), maxCoins());
   const totals = createMemo(() =>
-    computeCheckoutTotals({ subtotal: subtotal(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: promos.shippingFee() }),
+    computeCheckoutTotals({ subtotal: subtotal(), lines: resolvedLines(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: promos.shippingFee() }),
   );
 
   const tier = () => resolveTier(yearlySpend(orderHistory.orders())).current;
@@ -305,6 +307,7 @@ export default function CheckoutPage() {
                     afterMethods={
                       <CheckoutPerks
                         class="flex rounded-card lg:hidden"
+                        lines={resolvedLines()}
                         totals={totals()}
                         coupon={coupon()}
                         onApplyCoupon={setCoupon}

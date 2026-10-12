@@ -23,6 +23,9 @@ import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
 import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
 import { isRichTextEmpty } from "~/lib/richText";
 import { buildCoupon } from "~/lib/cartSelectors";
+import { ProductSkuPicker } from "~/components/admin/ProductSkuPicker";
+import { ChoiceRadio } from "./ChoiceRadio";
+import { normalizeSkuRefs, type ProductSkuRef } from "~/lib/productSkuRef";
 
 /** Field names for the "ยังกรอกข้อมูลไม่ครบ" toast and summary (`~/lib/adminFormValidation`). */
 const LABELS: Record<string, string> = {
@@ -31,6 +34,7 @@ const LABELS: Record<string, string> = {
   discount: "ส่วนลด",
   maxDiscount: "ลดสูงสุด",
   minSpend: "ยอดซื้อขั้นต่ำ",
+  productScope: "ใช้ได้กับสินค้า",
   usageLimit: "จำกัดจำนวนครั้ง",
   perCustomerLimit: "จำกัดต่อลูกค้า",
   startDate: "วันเริ่ม",
@@ -85,6 +89,9 @@ export function CouponForm(props: {
       setErrors((e) => ({ ...e, image: "อ่านไฟล์รูปไม่ได้ กรุณาเลือกไฟล์รูปภาพอื่น" }));
     }
   };
+  // "ใช้ได้กับสินค้า": undefined productScope = ทั้งร้าน.
+  const [scopeRefs, setScopeRefs] = createSignal<ProductSkuRef[]>(normalizeSkuRefs(props.initial?.productScope));
+  const [scopeMode, setScopeMode] = createSignal<"all" | "selected">(props.initial?.productScope !== undefined ? "selected" : "all");
   const [minSpend, setMinSpend] = createSignal(props.initial?.minSpend ? String(props.initial.minSpend) : "");
   /**
    * Draft-first rule: a new coupon, or one still in แบบร่าง, gets
@@ -137,6 +144,7 @@ export function CouponForm(props: {
       if (!Number.isInteger(each) || each < 1) next.perCustomerLimit = "กรุณากรอกจำนวนครั้งเป็นจำนวนเต็มอย่างน้อย 1";
       else if (usageLimit().trim() && each > total) next.perCustomerLimit = "ต้องไม่มากกว่าจำนวนครั้งทั้งหมด";
     }
+    if (scopeMode() === "selected" && scopeRefs().length === 0) next.productScope = "กรุณาเลือกสินค้าอย่างน้อย 1 รายการ";
     if (!startDate()) next.startDate = "กรุณาเลือกวันเริ่ม";
     if (!endDate()) next.endDate = "กรุณาเลือกวันสิ้นสุด";
     if (startDate() && endDate() && !dateRangeValid()) next.endDate = "วันสิ้นสุดต้องอยู่หลังวันเริ่ม";
@@ -167,6 +175,8 @@ export function CouponForm(props: {
     minSpend: Number(minSpend()) > 0 ? Number(minSpend()) : undefined,
     usageLimit: Number(usageLimit()) > 0 ? Number(usageLimit()) : undefined,
     perCustomerLimit: Number(perCustomerLimit()) > 0 ? Number(perCustomerLimit()) : undefined,
+    // ทั้งร้าน = unset; a draft may keep "เฉพาะสินค้าที่เลือก" with nothing picked yet ([]).
+    productScope: scopeMode() === "selected" ? scopeRefs() : undefined,
     image: image() || undefined,
     showOnHome: showOnHome(),
     showAtCheckout: showAtCheckout(),
@@ -336,6 +346,35 @@ export function CouponForm(props: {
               : "ลดจากยอดสินค้า ไม่รวมค่าจัดส่ง"}{" "}
             ใช้ได้ 1 คูปองต่อคำสั่งซื้อ เว้นยอดขั้นต่ำว่างไว้ถ้าไม่มีขั้นต่ำ
           </p>
+        </Section>
+
+        <Section title="ใช้ได้กับสินค้า">
+          <div data-field="productScope" class="flex flex-col gap-3">
+            <ChoiceRadio
+              name="coupon-product-scope"
+              value={scopeMode()}
+              disabled={saving()}
+              onChange={(mode) => {
+                setScopeMode(mode);
+                if (mode === "all") fix("productScope");
+              }}
+              options={[
+                { value: "all", label: "ทั้งร้าน", hint: "ใช้ได้กับทุกสินค้าในตะกร้า" },
+                { value: "selected", label: "เฉพาะสินค้าที่เลือก", hint: "ลดและนับยอดขั้นต่ำเฉพาะสินค้าหรือ SKU ที่เลือก" },
+              ]}
+            />
+            <Show when={scopeMode() === "selected"}>
+              <ProductSkuPicker
+                value={scopeRefs()}
+                onChange={(next) => {
+                  setScopeRefs(next);
+                  if (next.length > 0) fix("productScope");
+                }}
+                disabled={saving()}
+                error={errors().productScope}
+              />
+            </Show>
+          </div>
         </Section>
 
         <Section title="จำกัดการใช้">

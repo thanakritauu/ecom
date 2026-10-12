@@ -14,6 +14,8 @@ export function Pagination(props: {
   pageSize: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
+  /** Page-size choices (default 10 / 20 / 50). */
+  pageSizeOptions?: number[];
 }) {
   const pageNumbers = () => {
     const total = Math.max(props.totalPages, 1);
@@ -35,7 +37,7 @@ export function Pagination(props: {
             onChange={(e) => props.onPageSizeChange(Number(e.currentTarget.value))}
             class="h-9 w-full appearance-none rounded-card border border-border bg-surface-card py-1 pl-3 pr-8 text-sm text-ink outline-none focus:border-brand-pink"
           >
-            <For each={PAGE_SIZE_OPTIONS}>{(size) => <option value={size}>{size}</option>}</For>
+            <For each={props.pageSizeOptions ?? PAGE_SIZE_OPTIONS}>{(size) => <option value={size}>{size}</option>}</For>
           </select>
           <ChevronDownIcon class="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-gray" />
         </div>

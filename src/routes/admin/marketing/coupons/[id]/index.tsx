@@ -9,6 +9,7 @@ import { EmptyState } from "~/components/admin/EmptyState";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { MarketingRowActionsMenu } from "~/components/admin/marketing/MarketingRowActionsMenu";
 import { adminCouponTicket } from "~/components/admin/marketing/CouponQuickView";
+import { ProductSkuRefList } from "~/components/admin/ProductSkuPicker";
 import { CouponTicketIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import {
@@ -137,6 +138,12 @@ export default function AdminCouponDetailPage() {
                     <Row label="แสดงในหน้าชำระเงิน" value={c().showAtCheckout ? "แสดง" : "ไม่แสดง"} />
                   </dl>
                   <p class="text-xs text-ink-gray">ลูกค้ากรอกโค้ดนี้เองได้ที่หน้าชำระเงินเสมอเมื่อคูปองใช้งานอยู่</p>
+                </Section>
+
+                <Section title="ใช้ได้กับสินค้า">
+                  <Show when={c().productScope !== undefined} fallback={<p class="text-sm text-ink-gray">ทั้งร้าน ใช้ได้กับทุกสินค้าในตะกร้า</p>}>
+                    <ProductSkuRefList refs={c().productScope!} />
+                  </Show>
                 </Section>
 
                 <Section title="เงื่อนไขเพิ่มเติม">

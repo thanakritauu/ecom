@@ -325,7 +325,7 @@ export function ProductCard(props: { product: Product; variant?: "grid" | "list"
 
           <div class="flex flex-1 flex-col gap-2">
             {/* Small promo badges right above the name (one row, scrolls sideways when they don't fit). */}
-            <PromotionBadges product={props.product} variant="card" class="-mb-1" />
+            <PromotionBadges product={props.product} variant="card" class="-mb-1" reserveSpace />
             <A href={productDetailHref()} class="flex flex-col gap-2">
               {/* leading-7 (28px), not 24px: with line-clamp the hidden 3rd line still paints, and Thai
                   stacked marks (e.g. "ฉ่ำ", "ทิ้น") rise past a 24px line box into line 2 as a stray dot. */}

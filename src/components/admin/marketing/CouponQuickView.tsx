@@ -1,4 +1,6 @@
+import { Show } from "solid-js";
 import { StatusBadge } from "~/components/admin/StatusBadge";
+import { ProductSkuRefList } from "~/components/admin/ProductSkuPicker";
 import { CouponCard, type Coupon as TicketCoupon } from "~/components/shared/CouponCard";
 import {
   MARKETING_PHASE_META,
@@ -60,6 +62,13 @@ export function CouponQuickView(props: { coupon: Coupon; usageCount: number }) {
         <Field label="จำกัดต่อลูกค้า" value={formatCouponLimit(c().perCustomerLimit)} />
         <Field label="เริ่ม" value={formatMarketingDateTime(c().startDate, c().startTime)} />
         <Field label="สิ้นสุด" value={formatMarketingDateTime(c().endDate, c().endTime)} />
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <p class="text-sm font-semibold text-ink">ใช้ได้กับสินค้า</p>
+        <Show when={c().productScope !== undefined} fallback={<p class="text-sm text-ink-gray">ทั้งร้าน</p>}>
+          <ProductSkuRefList refs={c().productScope!} />
+        </Show>
       </div>
 
       <p class="text-xs text-ink-placeholder">แก้ไขล่าสุด {c().updatedAt}</p>

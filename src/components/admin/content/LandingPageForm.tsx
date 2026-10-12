@@ -8,7 +8,7 @@ import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { ChevronDownIcon, EyeIcon, LayersIcon, PlusIcon } from "~/components/admin/icons";
 import { BannerUploader } from "./BannerUploader";
-import { PromotionPageProductPicker } from "./PromotionPageProductPicker";
+import { ProductSkuPicker } from "~/components/admin/ProductSkuPicker";
 import { HomepageSectionCard } from "./HomepageSectionCard";
 import { sectionFieldErrors } from "./HomepageSectionForm";
 import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
@@ -546,8 +546,9 @@ export function LandingPageForm(props: {
 
           <Section title="เลือกสินค้า" required={sections().length === 0}>
             <div data-field="products" class="flex flex-col gap-2">
-              <PromotionPageProductPicker
-                selected={products()}
+              <ProductSkuPicker
+                reorderable
+                value={products()}
                 onChange={(next) => {
                   setProducts(next);
                   recheckField("products");

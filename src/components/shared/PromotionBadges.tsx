@@ -12,7 +12,13 @@ const BADGE = "shrink-0 whitespace-nowrap rounded-pill bg-danger-soft font-norma
  * - `card`: one row of badges; more than fits scrolls sideways.
  * - `pdp`: every promotion as a wrapping row above the product name.
  */
-export function PromotionBadges(props: { product: Product; variant: "card" | "pdp"; class?: string }) {
+export function PromotionBadges(props: {
+  product: Product;
+  variant: "card" | "pdp";
+  class?: string;
+  /** Grid cards: keep the badge row's height when there's no promo, so every card's name starts at the same line. */
+  reserveSpace?: boolean;
+}) {
   const store = useStorefrontPromotions();
   const promos = createMemo(() =>
     store
@@ -23,7 +29,7 @@ export function PromotionBadges(props: { product: Product; variant: "card" | "pd
   );
 
   return (
-    <Show when={promos().length > 0}>
+    <Show when={promos().length > 0} fallback={props.reserveSpace ? <div class={`h-4 ${props.class ?? ""}`} aria-hidden="true" /> : undefined}>
       <Show
         when={props.variant === "pdp"}
         fallback={

@@ -8,8 +8,8 @@ import { Toggle } from "~/components/admin/Toggle";
 import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
 import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
 import { reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
-import { ProductSelector } from "./ProductSelector";
-import { ChoiceRadio } from "./ChoiceRadio";
+import { ProductSkuPicker, skuRefsSummary } from "~/components/admin/ProductSkuPicker";
+import type { ProductSkuRef } from "~/lib/productSkuRef";
 import { BundlePriceSummary, fromItemDrafts, itemDraftsValid, PromotionItemsBox, toItemDrafts, type PromotionItemDraft } from "./PromotionItems";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import {
@@ -98,8 +98,6 @@ export function PromotionForm(props: {
       ? initialTiers.map((t) => ({ threshold: String(t.threshold), giftProductId: t.giftProductId, giftQty: String(t.giftQty), giftVariantIds: t.giftVariantIds ?? [] }))
       : [emptyTier()],
   );
-  // Which tier's product picker is open (one at a time keeps the form short).
-  const [pickingTier, setPickingTier] = createSignal<number | null>(initialTiers.length > 0 ? null : 0);
   const [showInCart, setShowInCart] = createSignal(props.initial?.showInCart ?? false);
   const [badgeLabel, setBadgeLabel] = createSignal(props.initial?.badgeLabel ?? "");
   const productStore = useAdminProducts();
@@ -108,27 +106,19 @@ export function PromotionForm(props: {
   const updateTier = (i: number, patch: Partial<TierDraft>) => setTiers((list) => list.map((t, j) => (j === i ? { ...t, ...patch } : t)));
   const addTier = () => {
     setTiers((list) => [...list, emptyTier()]);
-    setPickingTier(tiers().length - 1);
   };
   const removeTier = (i: number) => {
     setTiers((list) => list.filter((_, j) => j !== i));
-    setPickingTier(null);
   };
   const [applyToAll, setApplyToAll] = createSignal((props.initial?.productIds.length ?? 0) === 0);
-  const [productIds, setProductIds] = createSignal<string[]>(props.initial?.productIds ?? []);
-  // "ทั้งสินค้า" vs "เลือกตัวเลือกสินค้า": per picked product, the options that count (missing / empty = every option).
-  const [scopeLevel, setScopeLevel] = createSignal<"product" | "option">(
-    Object.values(props.initial?.productVariantIds ?? {}).some((ids) => ids.length > 0) ? "option" : "product",
+  // Picked products; per product `variantIds` empty = ทั้งสินค้า, else only those SKUs count (saved as productIds + productVariantIds).
+  const [scopeRefs, setScopeRefs] = createSignal<ProductSkuRef[]>(
+    (props.initial?.productIds ?? []).map((productId) => ({ productId, variantIds: props.initial?.productVariantIds?.[productId] ?? [] })),
   );
-  const [variantPicks, setVariantPicks] = createSignal<Record<string, string[]>>(props.initial?.productVariantIds ?? {});
-  /** Saved form of the option picks: only picked products whose list is a real subset of their options. */
+  const productIds = () => scopeRefs().map((r) => r.productId);
+  /** Saved form of the SKU picks: only products limited to some of their options. */
   const savedVariantIds = (): Record<string, string[]> | undefined => {
-    if (scopeLevel() !== "option") return undefined;
-    const entries = productIds().flatMap((id): [string, string[]][] => {
-      const all = productStore.getById(id)?.variants?.map((v) => v.id) ?? [];
-      const picked = (variantPicks()[id] ?? []).filter((v) => all.includes(v));
-      return picked.length > 0 && picked.length < all.length ? [[id, picked]] : [];
-    });
+    const entries = scopeRefs().flatMap((r): [string, string[]][] => (r.variantIds.length > 0 ? [[r.productId, r.variantIds]] : []));
     return entries.length > 0 ? Object.fromEntries(entries) : undefined;
   };
   const [startDate, setStartDate] = createSignal(props.initial?.startDate ?? "");
@@ -448,71 +438,15 @@ export function PromotionForm(props: {
                         <span class="text-sm font-medium text-ink">
                           สินค้าของแถม <span class="text-system-red">*</span>
                         </span>
-                        <div class="flex items-center gap-3">
-                          <Show when={productStore.getById(tier().giftProductId)} fallback={<p class="flex-1 text-sm text-ink-gray">ยังไม่ได้เลือกสินค้า</p>}>
-                            {(product) => (
-                              <>
-                                <img src={product().image} alt="" class="size-10 shrink-0 rounded-media object-cover" />
-                                <p class="min-w-0 flex-1 truncate text-sm text-ink">{product().name}</p>
-                              </>
-                            )}
-                          </Show>
-                          <Button type="button" variant="outline" size="sm" disabled={saving()} onClick={() => setPickingTier(pickingTier() === i ? null : i)}>
-                            {pickingTier() === i ? "ปิดรายการ" : tier().giftProductId ? "เปลี่ยนสินค้า" : "เลือกสินค้า"}
-                          </Button>
-                        </div>
-                        <Show when={errors()[`tier-${i}-gift`]}>
-                          <p class="text-sm text-system-red">{errors()[`tier-${i}-gift`]}</p>
-                        </Show>
-                        <Show when={productStore.getById(tier().giftProductId)?.variants?.length ? productStore.getById(tier().giftProductId) : undefined}>
-                          {(product) => {
-                            const all = () => product().variants ?? [];
-                            // Empty list = every option allowed.
-                            const allowed = (id: string) => tier().giftVariantIds.length === 0 || tier().giftVariantIds.includes(id);
-                            const toggle = (id: string, on: boolean) => {
-                              const current = tier().giftVariantIds.length === 0 ? all().map((v) => v.id) : tier().giftVariantIds;
-                              const next = on ? [...new Set([...current, id])] : current.filter((x) => x !== id);
-                              if (next.length === 0) return; // at least one option must stay
-                              updateTier(i, { giftVariantIds: next.length === all().length ? [] : next });
-                            };
-                            return (
-                              <div class="flex flex-col gap-2 rounded-card bg-surface-gray/60 p-3">
-                                <p class="text-sm font-medium text-ink">ตัวเลือกที่ลูกค้าเลือกได้ในตะกร้า</p>
-                                <p class="-mt-1 text-xs text-ink-gray">เลือกไว้ตัวเดียว ลูกค้าจะได้ตัวนั้นเลยโดยไม่ต้องเลือก ตัวเลือกที่สินค้าหมดจะไม่แสดงให้เลือก</p>
-                                <div class="flex flex-wrap gap-2">
-                                  <For each={all()}>
-                                    {(v) => (
-                                      <label class="flex min-h-9 cursor-pointer items-center gap-2 rounded-pill border border-border bg-white px-3 text-sm text-ink">
-                                        <input
-                                          type="checkbox"
-                                          class="size-4 accent-brand-pink"
-                                          checked={allowed(v.id)}
-                                          disabled={saving()}
-                                          onChange={(e) => toggle(v.id, e.currentTarget.checked)}
-                                        />
-                                        <span class="size-4 shrink-0 rounded-full border border-border" style={{ "background-color": v.color }} aria-hidden="true" />
-                                        {v.label}
-                                        <Show when={v.soldOut}>
-                                          <span class="text-xs text-ink-gray">(หมด)</span>
-                                        </Show>
-                                      </label>
-                                    )}
-                                  </For>
-                                </div>
-                              </div>
-                            );
-                          }}
-                        </Show>
-                        <Show when={pickingTier() === i}>
-                          <ProductSelector
-                            single
-                            selectedIds={tier().giftProductId ? [tier().giftProductId] : []}
-                            onChange={(ids) => {
-                              // A new gift product starts with all its options allowed.
-                              updateTier(i, { giftProductId: ids[0] ?? "", giftVariantIds: [] });
-                              setPickingTier(null);
-                            }}
-                          />
+                        <ProductSkuPicker
+                          single
+                          value={tier().giftProductId ? [{ productId: tier().giftProductId, variantIds: tier().giftVariantIds }] : []}
+                          onChange={(refs) => updateTier(i, { giftProductId: refs[0]?.productId ?? "", giftVariantIds: refs[0]?.variantIds ?? [] })}
+                          disabled={saving()}
+                          error={errors()[`tier-${i}-gift`]}
+                        />
+                        <Show when={tier().giftProductId}>
+                          <p class="text-xs text-ink-gray">ระดับสินค้า: ลูกค้าเลือกตัวเลือกไหนก็ได้ในตะกร้า ระดับตัวเลือกสินค้า: ลูกค้าเลือกได้เฉพาะ SKU ที่เปิดไว้ ถ้าเปิดไว้ตัวเดียว ลูกค้าจะได้ตัวนั้นเลย ตัวเลือกที่สินค้าหมดจะไม่แสดงให้เลือก</p>
                         </Show>
                       </div>
                     </div>
@@ -572,58 +506,7 @@ export function PromotionForm(props: {
                 <span class="text-sm font-medium text-ink">
                   สินค้าที่เลือก <span class="text-system-red">*</span>
                 </span>
-                <ProductSelector selectedIds={productIds()} onChange={setProductIds} />
-                <Show when={errors().productIds}>
-                  <p class="text-sm text-system-red">{errors().productIds}</p>
-                </Show>
-                <Show when={productIds().some((id) => productStore.getById(id)?.variants?.length)}>
-                  <span class="mt-2 text-sm font-medium text-ink">นับตัวเลือกสินค้า</span>
-                  <ChoiceRadio
-                    name="promotion-scope-level"
-                    value={scopeLevel()}
-                    onChange={setScopeLevel}
-                    disabled={saving()}
-                    options={[
-                      { value: "product", label: "ทั้งสินค้า", hint: "ทุกตัวเลือกของสินค้าที่เลือกนับเข้าโปร" },
-                      { value: "option", label: "เลือกตัวเลือกสินค้า", hint: "นับเฉพาะตัวเลือกที่ติ๊กไว้" },
-                    ]}
-                  />
-                  <Show when={scopeLevel() === "option"}>
-                    <div class="flex flex-col gap-3 rounded-card bg-surface-gray/60 p-3">
-                      <For each={productIds().map((id) => productStore.getById(id)).filter((p) => !!p?.variants?.length)}>
-                        {(product) => {
-                          const all = () => product!.variants ?? [];
-                          const picks = () => (variantPicks()[product!.id] ?? []).filter((id) => all().some((v) => v.id === id));
-                          // Nothing picked yet = every option counts.
-                          const counted = (id: string) => picks().length === 0 || picks().includes(id);
-                          const toggle = (id: string, on: boolean) => {
-                            const current = picks().length === 0 ? all().map((v) => v.id) : picks();
-                            const next = on ? [...new Set([...current, id])] : current.filter((x) => x !== id);
-                            if (next.length === 0) return; // at least one option must stay
-                            setVariantPicks((m) => ({ ...m, [product!.id]: next.length === all().length ? [] : next }));
-                          };
-                          return (
-                            <div class="flex flex-col gap-2">
-                              <p class="truncate text-sm font-medium text-ink">{product!.name}</p>
-                              <div class="flex flex-wrap gap-2">
-                                <For each={all()}>
-                                  {(v) => (
-                                    <label class="flex min-h-9 cursor-pointer items-center gap-2 rounded-pill border border-border bg-white px-3 text-sm text-ink">
-                                      <input type="checkbox" class="size-4 accent-brand-pink" checked={counted(v.id)} disabled={saving()} onChange={(e) => toggle(v.id, e.currentTarget.checked)} />
-                                      <span class="size-4 shrink-0 rounded-full border border-border" style={{ "background-color": v.color }} aria-hidden="true" />
-                                      {v.label}
-                                    </label>
-                                  )}
-                                </For>
-                              </div>
-                            </div>
-                          );
-                        }}
-                      </For>
-                      <p class="text-xs text-ink-gray">สินค้าที่ไม่มีตัวเลือกนับทั้งสินค้าเสมอ</p>
-                    </div>
-                  </Show>
-                </Show>
+                <ProductSkuPicker value={scopeRefs()} onChange={setScopeRefs} disabled={saving()} error={errors().productIds} />
               </div>
             </Show>
           </Section>
@@ -655,7 +538,7 @@ export function PromotionForm(props: {
                 <p class="text-ink-gray">{showInCart() ? "แสดงในตะกร้า" : "ไม่แสดงในตะกร้า"}</p>
               </Show>
               <Show when={promotionHasProductScope(type())}>
-                <p class="text-ink-gray">{applyToAll() ? "ทุกสินค้า" : `${productIds().length} สินค้าที่เลือก${savedVariantIds() ? " เฉพาะตัวเลือกที่ติ๊ก" : ""}`}</p>
+                <p class="text-ink-gray">{applyToAll() ? "ทุกสินค้า" : skuRefsSummary(scopeRefs())}</p>
               </Show>
               <Show when={startDate() && endDate()}>
                 <p class="text-ink-gray">

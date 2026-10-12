@@ -28,6 +28,8 @@ const CoinRedeemSheet = clientOnly(() => import("./CoinRedeemSheet").then((m) =>
  * the same totals Cart Page and the Drawer already share.
  */
 type PerksProps = {
+  /** Paid cart lines: a coupon limited to some products counts only those. */
+  lines: ResolvedCartLine[];
   totals: CheckoutTotals;
   coupon: Coupon | undefined;
   onApplyCoupon: (coupon: Coupon) => void;
@@ -228,7 +230,7 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
         onOpenChange={setCouponPickerOpen}
         coupons={storeCoupons.checkoutCoupons()}
         codeCoupons={storeCoupons.codeCoupons()}
-        subtotal={props.totals.subtotal}
+        lines={props.lines}
         usedByShopper={props.couponUsesByShopper}
         applied={props.coupon}
         onApply={props.onApplyCoupon}

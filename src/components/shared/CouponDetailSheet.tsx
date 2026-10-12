@@ -2,11 +2,30 @@ import { createSignal, createUniqueId, For, onCleanup, Show, type JSX } from "so
 import { SheetModal } from "./SheetModal";
 import { CheckIcon } from "./icons";
 import { pushToast } from "~/lib/toast";
-import type { Coupon } from "~/lib/cartSelectors";
+import { isCouponScoped, type Coupon } from "~/lib/cartSelectors";
+import { useProductCatalog } from "~/lib/productCatalog";
+import type { Product } from "~/lib/types";
+import type { ProductSkuRef } from "~/lib/productSkuRef";
 import { isRichTextEmpty } from "~/lib/richText";
 import { RichTextContent } from "./RichTextContent";
 
 const baht = (n: number) => `฿${n.toLocaleString("th-TH")}`;
+
+/** Most products named in the "ใช้ได้กับ" line before it says "และอีก N รายการ". */
+const SCOPE_NAMES_SHOWN = 5;
+
+/** "ใช้ได้กับ: ลิปทินท์ (01 Melody Pink, 02 Kuromi Purple), ลิปกลอส และอีก 2 รายการ": products the catalog no longer has are left out. */
+function scopeText(scope: ProductSkuRef[], products: Product[]): string {
+  const names = scope.flatMap((ref) => {
+    const product = products.find((p) => p.id === ref.productId);
+    if (!product) return [];
+    const options = ref.variantIds.map((id) => product.variants?.find((v) => v.id === id)?.label).filter((l): l is string => !!l);
+    return [options.length > 0 ? `${product.name} (${options.join(", ")})` : product.name];
+  });
+  if (names.length === 0) return "ใช้ได้กับสินค้าที่ร่วมรายการเท่านั้น";
+  const more = names.length - SCOPE_NAMES_SHOWN;
+  return `ใช้ได้กับ: ${names.slice(0, SCOPE_NAMES_SHOWN).join(", ")}${more > 0 ? ` และอีก ${more.toLocaleString("th-TH")} รายการ` : ""}`;
+}
 
 /** "31 ตุลาคม 2569 เวลา 23:59 น." — the coupon's real `expiresAt`, read in Bangkok time. */
 function expiryText(expiresAt: string) {
@@ -19,7 +38,8 @@ function expiryText(expiresAt: string) {
 
 /**
  * Coupon details + usage conditions, opened by tapping a `CouponCard`. The
- * conditions mirror how Checkout actually prices an order (`computeTotals`):
+ * conditions mirror how Checkout actually prices an order (`computeCheckoutTotals`;
+ * a coupon limited to some products counts only those lines):
  * one coupon per order, discount taken off the product subtotal (shipping
  * untouched, a % coupon capped by its max), min spend checked against that subtotal, and Charmiss Coin
  * redemption stacks on top. `ticket` is the same coupon ticket the shopper
@@ -56,13 +76,16 @@ export function CouponDetailBody(props: { coupon: Coupon; ticket?: JSX.Element }
     }
   };
 
+  const catalog = useProductCatalog();
   const conditions = () => {
     const c = props.coupon;
-    const what = c.discountType === "percent" ? `ส่วนลด ${c.discount}% ของยอดสินค้า${c.maxDiscount ? ` สูงสุด ${baht(c.maxDiscount)}` : ""}` : `ส่วนลด ${baht(c.discount)}`;
+    const scoped = isCouponScoped(c);
+    const base = scoped ? "ยอดสินค้าที่ร่วมรายการ" : "ยอดสินค้า";
+    const what = c.discountType === "percent" ? `ส่วนลด ${c.discount}% ของ${base}${c.maxDiscount ? ` สูงสุด ${baht(c.maxDiscount)}` : ""}` : `ส่วนลด ${baht(c.discount)}`;
     const list = [
-      c.minSpend > 0 ? `${what} เมื่อยอดสินค้าครบ ${baht(c.minSpend)} ขึ้นไป` : `${what} ไม่มียอดซื้อขั้นต่ำ`,
-      "คำนวณจากยอดสินค้า ไม่รวมค่าจัดส่ง",
-      "ใช้ได้กับสินค้าทุกรายการ",
+      c.minSpend > 0 ? `${what} เมื่อ${base}ครบ ${baht(c.minSpend)} ขึ้นไป` : `${what} ไม่มียอดซื้อขั้นต่ำ`,
+      `คำนวณจาก${base} ไม่รวมค่าจัดส่งและของแถม`,
+      scoped ? scopeText(c.productScope!, catalog.products()) : "ใช้ได้กับสินค้าทุกรายการ",
       "ใช้ได้ 1 คูปองต่อคำสั่งซื้อ ใช้ร่วมกับคูปองอื่นไม่ได้",
     ];
     if (c.perCustomerLimit) list.push(`ใช้ได้ ${c.perCustomerLimit.toLocaleString("th-TH")} ครั้งต่อบัญชี`);

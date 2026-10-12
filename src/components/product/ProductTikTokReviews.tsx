@@ -8,14 +8,15 @@ import { PlayIcon } from "~/components/shared/icons";
 
 /**
  * PDP — TikTok review clips on every product page, in the compact rail:
- * this product's own clips (`productIds`, set in Admin) first,
+ * this product's own clips (set in Admin) first: the picked option's, then
+ * the whole product's, then ones for its other options,
  * then the rest of the brand's clips. The subtitle only names the product
  * when at least one clip really reviews it. No clips at all: the heading
  * stays, over the shared empty state.
  */
-export function ProductTikTokReviews(props: { product: Product }) {
+export function ProductTikTokReviews(props: { product: Product; /** The option picked on the PDP: its own clips go first. */ variantId?: string }) {
   const allClips = useStorefrontTiktokClips();
-  const clips = () => tiktokClipsForProduct(props.product.id, allClips());
+  const clips = () => tiktokClipsForProduct(props.product.id, allClips(), props.variantId);
   const hasOwnClips = () => clips().some((clip) => isClipOfProduct(clip, props.product.id));
 
   return (

@@ -11,6 +11,7 @@ function readActiveClips(): TikTokReviewClip[] {
       author: c.author,
       title: c.title,
       productIds: c.productIds.length > 0 ? c.productIds : undefined,
+      products: c.products && c.products.length > 0 ? c.products : undefined,
       coverUrl: c.coverUrl,
     }));
 }

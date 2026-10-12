@@ -2,6 +2,7 @@ import type { CartLine, Product, ProductVariant } from "./types";
 import { resolveVariantOption } from "./productVariants";
 import { flashDealFor } from "./flashSalePricing";
 import { getTier, type TierId } from "./membership";
+import { skuRefsCover, type ProductSkuRef } from "./productSkuRef";
 
 /** Matches the free-shipping copy already used in Home's Utility Bar — one real threshold, not a second number invented for the drawer. */
 export const FREE_SHIPPING_THRESHOLD = 990;
@@ -168,6 +169,8 @@ export type Coupon = {
   expiresLabel: string;
   /** Admin's "เงื่อนไขเพิ่มเติม" (rich text HTML), shown under the automatic conditions. */
   extraConditions?: string;
+  /** Products / SKUs the coupon is limited to (`couponEligibleSubtotal`). Unset = ทั้งร้าน. */
+  productScope?: ProductSkuRef[];
 };
 
 const THAI_SHORT_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -200,6 +203,7 @@ export function buildCoupon(c: {
   endDate: string;
   endTime?: string;
   extraConditions?: string;
+  productScope?: ProductSkuRef[];
 }): Coupon {
   const [, month, day] = c.endDate.split("-").map(Number);
   const discountType = c.discountType ?? "baht";
@@ -222,6 +226,7 @@ export function buildCoupon(c: {
     expiresAt: `${c.endDate}T${c.endTime || "23:59"}:59+07:00`,
     expiresLabel: `หมดอายุ ${day} ${THAI_SHORT_MONTHS[month - 1]}`,
     extraConditions: c.extraConditions || undefined,
+    productScope: c.productScope && c.productScope.length > 0 ? c.productScope : undefined,
   };
 }
 
@@ -235,6 +240,37 @@ export function couponDiscountAmount(c: Pick<Coupon, "discountType" | "discount"
   let amount = c.discountType === "percent" ? Math.floor((subtotal * c.discount) / 100) : c.discount;
   if (c.discountType === "percent" && c.maxDiscount) amount = Math.min(amount, c.maxDiscount);
   return Math.max(0, Math.min(amount, subtotal));
+}
+
+/** A coupon limited to some products / SKUs (`productScope`); otherwise it counts the whole cart. */
+export const isCouponScoped = (c: Pick<Coupon, "productScope">): boolean => !!c.productScope && c.productScope.length > 0;
+
+/**
+ * The product total a coupon works on: every paid line for a store-wide
+ * coupon, else only the lines its `productScope` covers (product, or the
+ * picked SKUs). Uses each line's charged `lineTotal` (flash prices included).
+ * Free gifts are never `ResolvedCartLine`s, so they never count.
+ */
+export function couponEligibleSubtotal(c: Pick<Coupon, "productScope">, lines: ResolvedCartLine[]): number {
+  if (!isCouponScoped(c)) return computeCartTotal(lines);
+  const scope = c.productScope!;
+  return lines.reduce((sum, l) => (skuRefsCover(scope, l.product.id, l.line.variantId) ? sum + l.lineTotal : sum), 0);
+}
+
+/**
+ * Why this cart can't use the coupon yet, or undefined when it can: a scoped
+ * coupon with no item in the cart from its list, or the eligible total (all
+ * products for a store-wide coupon) under the minimum spend.
+ */
+export function couponCartBlock(c: Pick<Coupon, "productScope" | "minSpend">, lines: ResolvedCartLine[]): string | undefined {
+  const scoped = isCouponScoped(c);
+  const eligible = couponEligibleSubtotal(c, lines);
+  if (scoped && eligible <= 0) return "ใช้ได้กับสินค้าที่ร่วมรายการเท่านั้น";
+  if (eligible < c.minSpend) {
+    const short = `฿${(c.minSpend - eligible).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return scoped ? `ซื้อสินค้าที่ร่วมรายการเพิ่มอีก ${short} เพื่อใช้คูปองนี้` : `ซื้อเพิ่มอีก ${short} เพื่อใช้คูปองนี้`;
+  }
+  return undefined;
 }
 
 /**
@@ -318,13 +354,17 @@ export type CheckoutTotals = {
   total: number;
 };
 
+/** `lines` are the paid lines the subtotal came from; a scoped coupon (`productScope`) only discounts the ones it covers, and gets nothing without them. */
 export function computeCheckoutTotals(opts: {
   subtotal: number;
+  lines?: ResolvedCartLine[];
   coupon?: Coupon;
   coinsRedeemed?: number;
   shippingFee: number;
 }): CheckoutTotals {
-  const couponDiscount = opts.coupon && isCouponActive(opts.coupon) ? couponDiscountAmount(opts.coupon, opts.subtotal) : 0;
+  const c = opts.coupon;
+  const couponBase = !c ? 0 : opts.lines ? couponEligibleSubtotal(c, opts.lines) : isCouponScoped(c) ? 0 : opts.subtotal;
+  const couponDiscount = c && isCouponActive(c) ? couponDiscountAmount(c, Math.min(couponBase, opts.subtotal)) : 0;
   const coinDiscount = Math.round((opts.coinsRedeemed ?? 0) * COIN_TO_BAHT_RATE);
   const total = Math.max(0, opts.subtotal - couponDiscount - coinDiscount + opts.shippingFee);
   return { subtotal: opts.subtotal, couponDiscount, coinDiscount, shippingFee: opts.shippingFee, total };

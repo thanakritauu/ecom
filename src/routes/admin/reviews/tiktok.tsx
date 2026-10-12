@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, Show, type JSX } from "solid-js";
 import { Dialog } from "@kobalte/core/dialog";
 import { DropdownMenu } from "@kobalte/core/dropdown-menu";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
@@ -7,7 +7,6 @@ import { Button } from "~/components/shared/Button";
 import { TextField } from "~/components/shared/TextField";
 import { EmptyState } from "~/components/admin/EmptyState";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
-import { SearchInput } from "~/components/admin/SearchInput";
 import { SingleImageUploader } from "~/components/admin/SingleImageUploader";
 import { Toggle } from "~/components/admin/Toggle";
 import { StatusBadge } from "~/components/admin/StatusBadge";
@@ -15,6 +14,8 @@ import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
 import { ArrowDownIcon, ArrowUpIcon, CloseXIcon, MoreIcon, PlusIcon, ReviewsIcon } from "~/components/admin/icons";
 import { TiktokClipCover } from "~/components/admin/reviews/TiktokClipCover";
 import { useAdminProducts } from "~/lib/adminProductStore";
+import { ProductSkuPicker } from "~/components/admin/ProductSkuPicker";
+import { skuRefsFromProductIds, type ProductSkuRef } from "~/lib/productSkuRef";
 import { parseTiktokUrl, tiktokClipPublishProblems, tiktokClipUrl, useAdminTiktokClips, type AdminTiktokClip } from "~/lib/adminTiktokClips";
 import { pushToast } from "~/lib/toast";
 import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
@@ -205,29 +206,23 @@ export function ClipEditor(props: {
   onClose: () => void;
   onSave: (input: Omit<AdminTiktokClip, "id">) => Promise<void>;
 }) {
-  const productsStore = useAdminProducts();
   const clipsStore = useAdminTiktokClips();
   let bodyRef: HTMLDivElement | undefined;
   const [url, setUrl] = createSignal(props.clip ? tiktokClipUrl(props.clip) : "");
   const [title, setTitle] = createSignal(props.clip?.title ?? "");
   const [coverUrl, setCoverUrl] = createSignal(props.clip?.coverUrl ?? "");
-  const [productIds, setProductIds] = createSignal<string[]>(props.clip?.productIds ?? props.defaultProductIds ?? []);
+  const [products, setProducts] = createSignal<ProductSkuRef[]>(
+    props.clip ? (props.clip.products ?? skuRefsFromProductIds(props.clip.productIds)) : skuRefsFromProductIds(props.defaultProductIds),
+  );
   const [active, setActive] = createSignal(props.clip && !props.clip.draft ? props.clip.active : true);
   /** Creating, or the clip is still แบบร่าง. */
   const draftFlow = !props.clip || props.clip.draft === true;
-  const [productSearch, setProductSearch] = createSignal("");
   const [errors, setErrors] = createSignal<FormErrors>({});
   const clearError = (key: string) => setErrors((prev) => clearFieldError(prev, key));
   const [saving, setSaving] = createSignal(false);
   const [submitError, setSubmitError] = createSignal<string>();
 
   const parsed = () => parseTiktokUrl(url());
-  const matchingProducts = createMemo(() => {
-    const q = productSearch().trim().toLowerCase();
-    return productsStore.products().filter((p) => !q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.id.includes(q));
-  });
-  const toggleProduct = (id: string, on: boolean) =>
-    setProductIds((list) => (on ? (list.includes(id) ? list : [...list, id]) : list.filter((x) => x !== id)));
 
   /** draft = บันทึกแบบร่าง (title only; a typed link must still be a real TikTok link), publish = บันทึกและเผยแพร่, save = บันทึกการเปลี่ยนแปลง. */
   const submit = async (action: "draft" | "publish" | "save") => {
@@ -253,7 +248,8 @@ export function ClipEditor(props: {
         videoId: p?.videoId ?? "",
         title: title().trim(),
         coverUrl: coverUrl() || undefined,
-        productIds: productIds(),
+        products: products(),
+        productIds: products().map((r) => r.productId),
         active: action === "draft" ? false : action === "publish" ? true : active(),
         draft: action === "draft",
       });
@@ -325,39 +321,9 @@ export function ClipEditor(props: {
               </Show>
 
               <div class="flex flex-col gap-2">
-                <span class="text-sm font-medium text-ink">สินค้าที่ผูกกับคลิป ({productIds().length})</span>
-                <p class="text-xs text-ink-gray">ผูกเฉพาะสินค้าที่อยู่ในคลิปจริง แล้วหน้าสินค้านั้นจะแสดงคลิปนี้ก่อน</p>
-                <Show when={productIds().length > 0}>
-                  <div class="flex flex-wrap gap-1.5">
-                    <For each={productIds()}>
-                      {(id) => (
-                        <span class="inline-flex items-center gap-1 rounded-pill bg-surface-pink px-2.5 py-1 text-xs text-ink">
-                          <span class="max-w-[220px] truncate">{productsStore.getById(id)?.name ?? id}</span>
-                          <button type="button" aria-label="นำออก" onClick={() => toggleProduct(id, false)} class="text-ink-gray hover:text-system-red">
-                            <CloseXIcon class="size-3.5" />
-                          </button>
-                        </span>
-                      )}
-                    </For>
-                  </div>
-                </Show>
-                <SearchInput value={productSearch()} onInput={setProductSearch} placeholder="ค้นหาชื่อสินค้า, SKU..." />
-                <ul class="max-h-64 overflow-y-auto rounded-card border border-border">
-                  <For each={matchingProducts()}>
-                    {(p) => (
-                      <li class="border-b border-border last:border-0">
-                        <label class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-surface-pink/40">
-                          <input type="checkbox" checked={productIds().includes(p.id)} onChange={(e) => toggleProduct(p.id, e.currentTarget.checked)} class="size-4 shrink-0 rounded accent-brand-pink" />
-                          <img src={p.mainImage ?? p.image} alt="" class="size-9 shrink-0 rounded-media object-cover" />
-                          <span class="min-w-0 flex-1">
-                            <span class="line-clamp-1">{p.name}</span>
-                            <span class="block text-xs text-ink-gray">{p.sku}</span>
-                          </span>
-                        </label>
-                      </li>
-                    )}
-                  </For>
-                </ul>
+                <span class="text-sm font-medium text-ink">สินค้าที่ผูกกับคลิป</span>
+                <p class="text-xs text-ink-gray">ผูกเฉพาะสินค้าที่อยู่ในคลิปจริง แล้วหน้าสินค้านั้นจะแสดงคลิปนี้ก่อน เลือก SKU ได้ถ้าคลิปรีวิวเฉพาะบางเฉด</p>
+                <ProductSkuPicker value={products()} onChange={setProducts} disabled={saving()} />
               </div>
               <Show when={submitError()}>
                 <p role="alert" class="rounded-card bg-danger-soft px-4 py-3 text-sm font-medium text-danger-strong">

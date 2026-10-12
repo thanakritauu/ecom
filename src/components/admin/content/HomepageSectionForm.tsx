@@ -4,7 +4,7 @@ import { TextField } from "~/components/shared/TextField";
 import { BannerUploader } from "./BannerUploader";
 import { HeroAssetsEditor } from "./HeroAssetsEditor";
 import { DestinationSelector, destinationError } from "./DestinationSelector";
-import { PromotionPageProductPicker } from "./PromotionPageProductPicker";
+import { ProductSkuPicker } from "~/components/admin/ProductSkuPicker";
 import { HOMEPAGE_PRODUCT_SOURCE_META, type HomepageContentLayout, type HomepageProductSource, type HomepageSection } from "~/lib/adminHomepage";
 import { BUILTIN_SECTION_META, isBuiltinSectionType, validateHeroAssets, type BuiltinSectionType } from "~/lib/pageSections";
 import { Toggle } from "~/components/admin/Toggle";
@@ -241,7 +241,7 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
           <p class="text-sm font-semibold text-ink">
             สินค้าในส่วนนี้ <span class="text-system-red" aria-hidden="true">*</span>
           </p>
-          <PromotionPageProductPicker selected={s().products} onChange={(products) => patch({ products })} />
+          <ProductSkuPicker reorderable value={s().products} onChange={(products) => patch({ products })} />
           <FieldMessage message={err("products")} />
         </div>
       </Show>

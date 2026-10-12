@@ -1,4 +1,5 @@
 import { RAIL_ASSIGNMENTS } from "./watsonsCatalog";
+import type { ProductSkuRef } from "./productSkuRef";
 
 /**
  * TikTok review clips — embedded with TikTok's official player
@@ -17,6 +18,8 @@ export type TikTokReviewClip = {
   title: string;
   /** Catalog product ids this clip reviews — only those PDPs show it. Unset = Home only. */
   productIds?: string[];
+  /** Same links per SKU (Admin): empty `variantIds` = the whole product. Wins over `productIds` when set. */
+  products?: ProductSkuRef[];
   /** Cover uploaded in Admin; wins over the cover TikTok returns (`tiktokPosters.ts`). */
   coverUrl?: string;
 };
@@ -52,13 +55,29 @@ export const TIKTOK_REVIEW_CLIPS: TikTokReviewClip[] = [
   { videoId: "7411025043745967368", author: "ms.100cushions", title: "เปรียบเทียบคุชชั่น Charmiss 2 รุ่น" },
 ];
 
-export const isClipOfProduct = (clip: TikTokReviewClip, productId: string) => !!clip.productIds?.includes(productId);
+const clipRefs = (clip: TikTokReviewClip): ProductSkuRef[] => clip.products ?? (clip.productIds ?? []).map((productId) => ({ productId, variantIds: [] }));
 
-/** PDP order: this product's own clips first, then every other clip — so every PDP has clips. */
-export const tiktokClipsForProduct = (productId: string, clips: TikTokReviewClip[] = TIKTOK_REVIEW_CLIPS) => [
-  ...clips.filter((clip) => isClipOfProduct(clip, productId)),
-  ...clips.filter((clip) => !isClipOfProduct(clip, productId)),
-];
+/** Linked to this product at all: the whole product or any of its SKUs. */
+export const isClipOfProduct = (clip: TikTokReviewClip, productId: string) => clipRefs(clip).some((r) => r.productId === productId);
+
+/** 0 = linked to the selected SKU, 1 = the whole product, 2 = other SKUs of it, 3 = not this product. */
+function clipRank(clip: TikTokReviewClip, productId: string, variantId?: string): number {
+  const ref = clipRefs(clip).find((r) => r.productId === productId);
+  if (!ref) return 3;
+  if (ref.variantIds.length === 0) return 1;
+  return variantId && ref.variantIds.includes(variantId) ? 0 : 2;
+}
+
+/**
+ * PDP order: clips of the selected option (`variantId`) first, then the
+ * whole product's, then ones linked only to its other options, then every
+ * other clip, so every PDP has clips. Admin's order holds inside each group.
+ */
+export const tiktokClipsForProduct = (productId: string, clips: TikTokReviewClip[] = TIKTOK_REVIEW_CLIPS, variantId?: string) =>
+  clips
+    .map((clip, i) => ({ clip, i, rank: clipRank(clip, productId, variantId) }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .map((x) => x.clip);
 
 /** Only loaded after a tap (see TikTokReviewRail), so it starts playing straight away. */
 export const tiktokPlayerUrl = (videoId: string) =>

@@ -1,3 +1,4 @@
+import { Show } from "solid-js";
 import { Switch } from "@kobalte/core/switch";
 
 /**
@@ -16,16 +17,20 @@ export function Toggle(props: {
   onLabel?: string;
   offLabel?: string;
   disabled?: boolean;
+  /** Accessible name when the visible label is left empty (`onLabel=""` / `offLabel=""`), e.g. a switch inside a table row. */
+  ariaLabel?: string;
 }) {
   const label = () => (props.checked ? props.onLabel ?? "เปิดใช้งาน" : props.offLabel ?? "ปิดใช้งาน");
 
   return (
-    <Switch checked={props.checked} onChange={props.onChange} disabled={props.disabled} class="inline-flex items-center gap-2.5">
-      <Switch.Input class="peer sr-only" />
+    <Switch checked={props.checked} onChange={props.onChange} disabled={props.disabled} class="inline-flex items-center gap-2.5" aria-label={props.ariaLabel}>
+      <Switch.Input class="peer sr-only" aria-label={props.ariaLabel} />
       <Switch.Control class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-pill bg-surface-gray transition-colors duration-150 data-[checked]:bg-success peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-pink data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60">
         <Switch.Thumb class="block size-5 translate-x-0.5 rounded-full bg-surface-card shadow transition-transform duration-150 data-[checked]:translate-x-[22px]" />
       </Switch.Control>
-      <span class="select-none text-sm font-medium text-ink">{label()}</span>
+      <Show when={label()}>
+        <span class="select-none text-sm font-medium text-ink">{label()}</span>
+      </Show>
     </Switch>
   );
 }

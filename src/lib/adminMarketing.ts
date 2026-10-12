@@ -1,6 +1,7 @@
 import type { StatusTone } from "~/components/admin/StatusBadge";
 import { formatAdminCurrency } from "./adminDashboard";
 import { AVAILABLE_COUPONS, couponLabels } from "./cartSelectors";
+import { normalizeSkuRefs, type ProductSkuRef } from "./productSkuRef";
 
 /**
  * Marketing (promotions + coupons). What Admin stores is only an on/off
@@ -110,7 +111,7 @@ export const STOREFRONT_PROMOTION_TYPES: readonly PromotionType[] = ["free_shipp
 export const isStorefrontPromotion = (p: Pick<Promotion, "type">) => STOREFRONT_PROMOTION_TYPES.includes(p.type);
 
 /** One product + quantity of a bundle, or of either side of a buy X get Y. */
-export type PromotionItem = { productId: string; qty: number };
+export type PromotionItem = { productId: string; qty: number; /** Only these SKUs count; missing / empty = any option of the product. */ variantIds?: string[] };
 
 /** What a promo counts: the eligible lines' baht total (before coupon/coins) or their piece count. */
 export type PromotionCondition = "amount" | "qty";
@@ -327,8 +328,9 @@ const PROMOTION_SEEDS: Omit<Promotion, "id" | "createdAt" | "updatedAt">[] = [
  * coupons cut down to what the storefront uses, flash sale and bundles gone.
  * v7: % / baht / buy X get Y / bundle promos back (Admin only), coupons get
  * % with a cap, usage limits and a thumbnail; seeds for each.
+ * v8: a coupon limited to some products / SKUs (`productScope`).
  */
-export const MARKETING_SEED_VERSION = 7;
+export const MARKETING_SEED_VERSION = 8;
 
 // ---------------------------------------------------------------------------
 // Coupons: baht or % off the product subtotal, one per order
@@ -364,6 +366,8 @@ export type Coupon = {
   showOnHome: boolean;
   /** Listed in Checkout's coupon picker. Any live code can still be typed in at Checkout. */
   showAtCheckout: boolean;
+  /** Products / SKUs it's limited to (empty `variantIds` = every option). Unset or empty = ทั้งร้าน. Min spend and the discount count only these lines. */
+  productScope?: ProductSkuRef[];
   startDate: string;
   startTime: string;
   endDate: string;
@@ -432,6 +436,8 @@ export function normalizeCoupons(list: Coupon[]): Coupon[] {
       // The form stores a small data URL; an object URL from an older save no longer points at anything after a reload.
       image: c.image && !c.image.startsWith("blob:") ? c.image : undefined,
       extraConditions: typeof c.extraConditions === "string" && c.extraConditions.trim() ? c.extraConditions : undefined,
+      // An empty list reads as ทั้งร้าน (unset); a draft can keep it, `couponPublishProblems` stops it going live.
+      productScope: c.productScope === undefined ? undefined : normalizeSkuRefs(c.productScope),
       showOnHome: !!c.showOnHome,
       showAtCheckout: !!c.showAtCheckout,
       status: normalizeMarketingStatus(c.status),
@@ -443,8 +449,8 @@ export function normalizeCoupons(list: Coupon[]): Coupon[] {
  * The first three are the storefront's `AVAILABLE_COUPONS` (cartSelectors.ts),
  * same amount, min spend and last day, on Home and at Checkout, once per
  * customer. Then: a code that's only typed in (not listed anywhere), one that
- * starts later, one that has ended, one switched off, and (v7) a live % coupon
- * with a cap and a total usage limit.
+ * starts later, one that has ended, one switched off, (v7) a live % coupon
+ * with a cap and a total usage limit, and (v8) one limited to some products / SKUs.
  */
 const COUPON_SEEDS: Omit<Coupon, "id" | "createdAt" | "updatedAt">[] = [
   ...AVAILABLE_COUPONS.map((c): Omit<Coupon, "id" | "createdAt" | "updatedAt"> => ({
@@ -466,6 +472,8 @@ const COUPON_SEEDS: Omit<Coupon, "id" | "createdAt" | "updatedAt">[] = [
   { code: "FLASH50", discountType: "baht", discount: 50, showOnHome: false, showAtCheckout: false, startDate: "2026-08-15", startTime: "00:00", endDate: "2026-08-31", endTime: "23:59", status: "active" },
   { code: "OLDPROMO", discountType: "baht", discount: 30, showOnHome: false, showAtCheckout: false, startDate: "2026-08-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "disabled" },
   { code: "BEAUTY10", discountType: "percent", discount: 10, maxDiscount: 200, minSpend: 500, usageLimit: 300, perCustomerLimit: 2, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  // v8: limited to some products / SKUs (two lip serum shades, every shade of a lip gloss).
+  { code: "LIPLOVE15", discountType: "percent", discount: 15, maxDiscount: 100, minSpend: 300, perCustomerLimit: 1, productScope: [{ productId: "best-1", variantIds: ["lip-tint-01", "lip-tint-02"] }, { productId: "best-9", variantIds: [] }], showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
 ];
 
 const TODAY_LABEL = "17 ก.ย. 2569";
@@ -518,6 +526,8 @@ export function couponPublishProblems(c: Coupon): string[] {
   if (!c.code.trim()) missing.push("โค้ดคูปอง");
   const okDiscount = c.discountType === "percent" ? Number.isInteger(c.discount) && c.discount >= 1 && c.discount <= 100 : Number.isInteger(c.discount) && c.discount > 0;
   if (!okDiscount) missing.push("ส่วนลด");
+  // ทั้งร้าน is sent as unset; a set but empty list means "เฉพาะสินค้าที่เลือก" with nothing picked.
+  if (c.productScope !== undefined && c.productScope.length === 0) missing.push("สินค้าที่ร่วมรายการ");
   if (!c.startDate) missing.push("วันเริ่ม");
   if (!c.endDate) missing.push("วันสิ้นสุด");
   return missing;

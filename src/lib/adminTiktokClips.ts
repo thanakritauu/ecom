@@ -1,6 +1,7 @@
 import { createSignal, onMount } from "solid-js";
 import { isServer } from "solid-js/web";
 import { TIKTOK_REVIEW_CLIPS } from "./tiktokReviews";
+import { normalizeSkuRefs, skuRefsFromProductIds, type ProductSkuRef } from "./productSkuRef";
 
 /**
  * "คลิปรีวิว TikTok": the clips the PDP and Home's #CharmissReviews rail show.
@@ -20,8 +21,14 @@ export type AdminTiktokClip = {
   title: string;
   /** Uploaded cover. Unset = the cover TikTok returns for this video (seed clips only — see tiktokPosters.ts). */
   coverUrl?: string;
-  /** Products whose PDP shows this clip first. Empty = Home rail / other PDPs only. */
+  /** Products whose PDP shows this clip first. Empty = Home rail / other PDPs only. Kept equal to the ids in `products` (older readers). */
   productIds: string[];
+  /**
+   * The same links per SKU: empty `variantIds` = the whole product, else only
+   * those options (their PDP shows it first while that option is picked).
+   * Always set after normalizing; filled from `productIds` for older records.
+   */
+  products?: ProductSkuRef[];
   /** Off = hidden everywhere on the storefront. Always false while `draft`. */
   active: boolean;
   /**
@@ -39,6 +46,7 @@ export function buildMockTiktokClips(): AdminTiktokClip[] {
     author: clip.author,
     title: clip.title,
     productIds: clip.productIds ?? [],
+    products: skuRefsFromProductIds(clip.productIds),
     active: true,
   }));
 }
@@ -58,14 +66,21 @@ const SEED_VERSION = 1;
 /** Fired after every save so the storefront rails in the same tab refresh (other tabs get `storage`). */
 export const TIKTOK_CLIPS_CHANGED_EVENT = "charmiss:tiktok-clips-changed";
 
+/** `products` wins; a record without it reads its `productIds` as whole-product links. */
+function clipProducts(c: Partial<AdminTiktokClip>): ProductSkuRef[] {
+  return Array.isArray(c.products) ? normalizeSkuRefs(c.products) : skuRefsFromProductIds(Array.isArray(c.productIds) ? c.productIds.filter((x) => typeof x === "string") : []);
+}
+
 function normalizeClip(c: Partial<AdminTiktokClip> & { id: string }): AdminTiktokClip {
+  const products = clipProducts(c);
   return {
     id: c.id,
     videoId: c.videoId ?? "",
     author: c.author ?? "",
     title: c.title ?? "",
     coverUrl: c.coverUrl || undefined,
-    productIds: Array.isArray(c.productIds) ? c.productIds : [],
+    productIds: products.map((r) => r.productId),
+    products,
     draft: c.draft === true,
     // A draft is never live, whatever `active` says.
     active: c.draft === true ? false : c.active !== false,
@@ -132,11 +147,30 @@ export function setProductTiktokClips(productId: string, clipIds: string[]) {
   const want = new Set(clipIds);
   mutate((list) =>
     list.map((c) => {
-      const has = c.productIds.includes(productId);
+      const refs = c.products ?? skuRefsFromProductIds(c.productIds);
+      const has = refs.some((r) => r.productId === productId);
       if (want.has(c.id) === has) return c;
-      return { ...c, productIds: has ? c.productIds.filter((x) => x !== productId) : [...c.productIds, productId] };
+      // Linking from the product form = the whole product; unlinking drops that product's link (whatever SKUs it had).
+      const products = has ? refs.filter((r) => r.productId !== productId) : [...refs, { productId, variantIds: [] }];
+      return { ...c, products, productIds: products.map((r) => r.productId) };
     }),
   );
+}
+
+/**
+ * Keeps `products` and `productIds` in step for a save: an input with
+ * `products` wins (ids follow); one with only `productIds` (an editor that
+ * doesn't pick SKUs) keeps the SKU picks the clip already had for products
+ * still linked and adds the rest as whole products.
+ */
+function withProducts(input: TiktokClipInput, prev?: AdminTiktokClip): TiktokClipInput {
+  if (input.products) {
+    const products = normalizeSkuRefs(input.products);
+    return { ...input, products, productIds: products.map((r) => r.productId) };
+  }
+  const before = prev?.products ?? [];
+  const products = input.productIds.map((productId) => before.find((r) => r.productId === productId) ?? { productId, variantIds: [] });
+  return { ...input, products, productIds: products.map((r) => r.productId) };
 }
 
 export function useAdminTiktokClips() {
@@ -145,16 +179,16 @@ export function useAdminTiktokClips() {
     clips,
     getById: (id: string) => clips().find((c) => c.id === id),
     /** Clips linked to this product — the ones its PDP shows first (storefront: `tiktokClipsForProduct`). */
-    clipsForProduct: (productId: string) => clips().filter((c) => c.productIds.includes(productId)),
+    clipsForProduct: (productId: string) => clips().filter((c) => (c.products ?? skuRefsFromProductIds(c.productIds)).some((r) => r.productId === productId)),
     /** Resolves to the clip's id (the new id when adding). */
     saveClip: async (id: string | null, input: TiktokClipInput): Promise<string> => {
       await simulateDelay();
       if (id) {
-        mutate((list) => list.map((c) => (c.id === id ? { ...c, ...input } : c)));
+        mutate((list) => list.map((c) => (c.id === id ? { ...c, ...withProducts(input, c) } : c)));
         return id;
       }
       const newId = `clip-new-${Date.now()}-${nextId++}`;
-      mutate((list) => [...list, { ...input, id: newId }]);
+      mutate((list) => [...list, { ...withProducts(input), id: newId }]);
       return newId;
     },
     removeClip: async (id: string) => {

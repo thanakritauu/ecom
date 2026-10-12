@@ -6,7 +6,7 @@ import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayou
 import { Toggle } from "~/components/admin/Toggle";
 import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
 import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
-import { PromotionPageProductPicker } from "./PromotionPageProductPicker";
+import { ProductSkuPicker } from "~/components/admin/ProductSkuPicker";
 import { HomepageSections } from "~/components/home/HomepageSections";
 import { emptyBanners, emptyCta, type HomepageSection } from "~/lib/adminHomepage";
 import type { CollectionStatus, ProductCollection, ProductCollectionFormValues } from "~/lib/adminCollections";
@@ -149,8 +149,9 @@ export function ProductCollectionForm(props: {
 
       <Section title="สินค้าในกลุ่มสินค้าพิเศษ" required>
         <div data-field="products" class="flex flex-col gap-2">
-          <PromotionPageProductPicker
-            selected={products()}
+          <ProductSkuPicker
+            reorderable
+            value={products()}
             onChange={(next) => {
               setProducts(next);
               if (next.length > 0) clearError("products");

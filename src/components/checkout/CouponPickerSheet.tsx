@@ -1,5 +1,15 @@
 import { createEffect, createSignal, For, on, Show } from "solid-js";
-import { couponDiscountAmount, couponUsageBlock, isCouponActive, isCouponNotStarted, type Coupon } from "~/lib/cartSelectors";
+import {
+  couponCartBlock,
+  couponDiscountAmount,
+  couponEligibleSubtotal,
+  couponUsageBlock,
+  isCouponActive,
+  isCouponNotStarted,
+  isCouponScoped,
+  type Coupon,
+  type ResolvedCartLine,
+} from "~/lib/cartSelectors";
 import { SheetModal } from "../shared/SheetModal";
 import { CouponCard, couponTicket, type CouponCardAction } from "../shared/CouponCard";
 import { formatTHB } from "../shared/PriceDisplay";
@@ -19,7 +29,9 @@ import { pushToast } from "~/lib/toast";
  * `codeCoupons`, listed or not, same rules. A coupon outside its dates is
  * never listed, and its code is refused when typed. So is one whose usage
  * limit is used up (all customers, or this shopper's own share): listed but
- * not usable, with the reason under it.
+ * not usable, with the reason under it. A coupon limited to some products
+ * counts only those lines (`couponEligibleSubtotal`); with none of them in
+ * the cart, or too little of them, it says so the same way.
  */
 export function CouponPickerSheet(props: {
   open: boolean;
@@ -28,7 +40,8 @@ export function CouponPickerSheet(props: {
   coupons: Coupon[];
   /** Codes accepted when typed (defaults to `coupons`). */
   codeCoupons?: Coupon[];
-  subtotal: number;
+  /** The paid cart lines (free gifts never count toward a coupon). */
+  lines: ResolvedCartLine[];
   /** How many of this shopper's own (non-cancelled) orders used the code; 0 for a guest. */
   usedByShopper?: (code: string) => number;
   applied: Coupon | undefined;
@@ -43,7 +56,7 @@ export function CouponPickerSheet(props: {
     pushToast(
       via === "code" ? `ใช้โค้ด ${coupon.code} แล้ว` : "ใช้คูปองแล้ว",
       "success",
-      `ลด ${formatTHB(couponDiscountAmount(coupon, props.subtotal))} จากยอดสั่งซื้อนี้`,
+      `ลด ${formatTHB(couponDiscountAmount(coupon, couponEligibleSubtotal(coupon, props.lines)))} จากยอดสั่งซื้อนี้`,
     );
   };
 
@@ -63,8 +76,11 @@ export function CouponPickerSheet(props: {
     if (!isCouponActive(coupon)) return setCodeError("โค้ดส่วนลดนี้หมดอายุแล้ว");
     const blocked = blockOf(coupon);
     if (blocked) return setCodeError(blocked);
-    if (props.subtotal < coupon.minSpend)
-      return setCodeError(`โค้ดนี้ใช้ได้เมื่อซื้อครบ ฿${coupon.minSpend.toLocaleString("th-TH")} (ซื้อเพิ่มอีก ${formatTHB(coupon.minSpend - props.subtotal)})`);
+    const cartBlocked = couponCartBlock(coupon, props.lines);
+    if (cartBlocked && isCouponScoped(coupon)) return setCodeError(cartBlocked);
+    const eligible = couponEligibleSubtotal(coupon, props.lines);
+    if (eligible < coupon.minSpend)
+      return setCodeError(`โค้ดนี้ใช้ได้เมื่อซื้อครบ ฿${coupon.minSpend.toLocaleString("th-TH")} (ซื้อเพิ่มอีก ${formatTHB(coupon.minSpend - eligible)})`);
     apply(coupon, "code");
   };
 
@@ -73,7 +89,7 @@ export function CouponPickerSheet(props: {
     return {
       label: "ใช้เลย",
       variant: "primary",
-      disabled: props.subtotal < coupon.minSpend || !!blockOf(coupon),
+      disabled: !!couponCartBlock(coupon, props.lines) || !!blockOf(coupon),
       onClick: () => apply(coupon, "pick"),
     };
   };
@@ -126,12 +142,12 @@ export function CouponPickerSheet(props: {
         <ul class="flex flex-col gap-6 pt-1" aria-label="คูปองที่ใช้ได้">
           <For each={usable()}>
             {(coupon) => {
-              const shortfall = () => coupon.minSpend - props.subtotal;
+              const cartBlocked = () => couponCartBlock(coupon, props.lines);
               const applied = () => props.applied?.code === coupon.code;
               const blocked = () => blockOf(coupon);
               return (
                 <li class="flex list-none flex-col gap-4">
-                  <div classList={{ "opacity-50": (shortfall() > 0 || !!blocked()) && !applied() }}>
+                  <div classList={{ "opacity-50": (!!cartBlocked() || !!blocked()) && !applied() }}>
                     <CouponCard coupon={couponTicket(coupon)} action={action(coupon)} />
                   </div>
                   <Show when={applied()}>
@@ -140,8 +156,8 @@ export function CouponPickerSheet(props: {
                   <Show when={!applied() && blocked()}>
                     <p class="px-1 text-xs text-ink-gray">{blocked()}</p>
                   </Show>
-                  <Show when={!applied() && !blocked() && shortfall() > 0}>
-                    <p class="px-1 text-xs text-ink-gray">ซื้อเพิ่มอีก {formatTHB(shortfall())} เพื่อใช้คูปองนี้</p>
+                  <Show when={!applied() && !blocked() && cartBlocked()}>
+                    <p class="px-1 text-xs text-ink-gray">{cartBlocked()}</p>
                   </Show>
                 </li>
               );

@@ -216,7 +216,7 @@ export function ProductDetailView(props: { product: Product; forceOutOfStock?: b
           </div>
 
           {/* PDP order: TikTok clips (on every PDP, this product's own first) → #CharmissReviews → description + photos. */}
-          <ProductTikTokReviews product={props.product} />
+          <ProductTikTokReviews product={props.product} variantId={selectedVariantId()} />
           <ProductReviews product={props.product} />
           <ProductDetails product={props.product} />
 

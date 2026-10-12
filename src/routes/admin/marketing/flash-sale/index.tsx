@@ -188,13 +188,18 @@ export default function AdminFlashSalePage() {
     return results.filter((r) => r.status === "rejected").length;
   };
 
-  const saveTiming = async (ids: string[], timing: FlashSaleTiming, percent?: number) => {
+  const saveTiming = async (ids: string[], timing: FlashSaleTiming, percent?: number, skuPicks?: Record<string, string[]>) => {
     const timingFields: FlashFields = timing.daily
       ? { flashSaleDaily: true, flashSaleEndsAt: flashSaleRoundEndsAt(), flashSaleStartsAt: undefined }
       : { flashSaleDaily: undefined, flashSaleStartsAt: timing.startsAt, flashSaleEndsAt: timing.endsAt };
-    // Products being added start at "ลด X%" (level product); one already in the flash sale keeps its own prices.
+    // Products being added start at "ลด X%" (level product, or level option with only the picked SKUs on); one already in the flash sale keeps its own prices.
+    const startConfig = (id: string, pct: number): FlashSaleConfig => {
+      const skus = skuPicks?.[id];
+      if (!skus?.length) return defaultFlashSaleConfig(pct);
+      return { ...defaultFlashSaleConfig(pct), level: "option", options: skus.map((variantId) => ({ variantId, enabled: true, mode: "percent", value: pct })) };
+    };
     const failed = await writeFlashSale(ids, (p) =>
-      percent !== undefined && !(p && inFlashSale(p) && p.flashSale) ? { ...timingFields, flashSale: defaultFlashSaleConfig(percent) } : timingFields,
+      percent !== undefined && p && !(inFlashSale(p) && p.flashSale) ? { ...timingFields, flashSale: startConfig(p.id, percent) } : timingFields,
     );
     const adding = dialog()?.productIds === undefined;
     if (failed === 0) pushToast(adding ? `เพิ่ม ${ids.length} สินค้าในแฟลชเซลแล้ว` : "บันทึกเวลาแฟลชเซลเรียบร้อยแล้ว", "success");
