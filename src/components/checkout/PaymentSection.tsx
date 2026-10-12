@@ -102,7 +102,15 @@ export function PaymentSection(props: {
           </For>
         </div>
 
-        <Show when={p.waiting()}>
+        {/* What happens after "ชำระเงิน" for the picked method; yellow notice box (same as the site's other notices). */}
+        <Show
+          when={p.waiting()}
+          fallback={
+            <p class="rounded-card bg-warning-soft px-4 py-3 text-sm leading-[1.75] text-ink">
+              กด <span class="font-semibold">"ชำระเงิน"</span> ระบบจะเปิดหน้าชำระเงินในหน้าต่างใหม่ เพื่อ{METHOD_HINT[p.method()]} {formatTHB(props.amount)}
+            </p>
+          }
+        >
           <WaitingPanel windowClosed={p.windowClosed()} onReopen={p.reopen} onCancel={p.cancelWaiting} />
         </Show>
       </Show>
@@ -228,6 +236,14 @@ function MethodMark(props: { id: PaymentMethodId }) {
 
 /** Allows a line break only between the two words of "โมบายล์แบงก์กิ้ง" (paired with `word-break: keep-all`). */
 const breakableLabel = (label: string) => label.replace("โมบายล์แบงก์กิ้ง", "โมบายล์\u200Bแบงก์กิ้ง");
+
+/** What happens on the payment page for each method; completes "...เพื่อ" in the notice under the selector. */
+const METHOD_HINT: Record<PaymentMethodId, string> = {
+  card: "กรอกข้อมูลบัตรและชำระ",
+  promptpay: "สแกน QR พร้อมเพย์ผ่านแอปธนาคารและชำระ",
+  mobilebanking: "เลือกธนาคารและยืนยันการโอนเงินในแอปธนาคาร",
+  truemoney: "ยืนยันการชำระผ่าน TrueMoney Wallet",
+};
 
 /** Beam is open in another window — this page waits for its result (or the shopper re-opens / cancels it). */
 function WaitingPanel(props: { windowClosed: boolean; onReopen: () => void; onCancel: () => void }) {
