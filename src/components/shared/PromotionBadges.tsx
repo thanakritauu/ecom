@@ -23,7 +23,7 @@ export function PromotionBadges(props: {
   const promos = createMemo(() =>
     store
       .promotions()
-      .filter((p) => p.productIds.length === 0 || p.productIds.includes(props.product.id))
+      .filter((p) => p.showBadge !== false && (p.productIds.length === 0 || p.productIds.includes(props.product.id)))
       // Product-specific first, so the card's one badge is the most relevant.
       .sort((a, b) => Number(b.productIds.length > 0) - Number(a.productIds.length > 0)),
   );

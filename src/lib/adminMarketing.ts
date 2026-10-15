@@ -175,6 +175,8 @@ export type Promotion = {
   showInCart?: boolean;
   /** Text on the storefront promo badge (product card / PDP). Empty = `promotionBadgeLabel` builds it from the conditions. */
   badgeLabel?: string;
+  /** Show this promo's badge on product cards and the PDP. Unset = on. */
+  showBadge?: boolean;
   /** Empty applies to every product (`free_shipping`, `gift_with_purchase`, `percent_off`, `baht_off`). */
   productIds: string[];
   /**
@@ -291,8 +293,9 @@ export function normalizePromotions(list: Promotion[]): Promotion[] {
  * seeds go at the END: ids are positions.
  */
 const PROMOTION_SEEDS: Omit<Promotion, "id" | "createdAt" | "updatedAt">[] = [
-  { name: "ซื้อครบ ฿590 รับของแถมฟรี", type: "gift_with_purchase", conditionType: "amount", tiers: [{ threshold: 590, giftProductId: "feature-9", giftQty: 1 }], showInCart: true, productIds: [], startDate: "2026-09-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
-  { name: "ส่งฟรีทั่วไทย", type: "free_shipping", conditionType: "amount", minSpend: 990, showInCart: true, productIds: [], startDate: "2026-09-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  // Store-wide promos: badge off, so it isn't on every card. The gift has options, so the cart shows the option picker.
+  { name: "ซื้อครบ ฿590 รับของแถมฟรี", type: "gift_with_purchase", conditionType: "amount", tiers: [{ threshold: 590, giftProductId: "flash-1", giftQty: 1 }], showInCart: true, showBadge: false, productIds: [], startDate: "2026-09-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  { name: "ส่งฟรีทั่วไทย", type: "free_shipping", conditionType: "amount", minSpend: 990, showInCart: true, showBadge: false, productIds: [], startDate: "2026-09-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
   {
     name: "ช้อปครบรับของแถมขั้นบันได",
     type: "gift_with_purchase",
@@ -312,13 +315,16 @@ const PROMOTION_SEEDS: Omit<Promotion, "id" | "createdAt" | "updatedAt">[] = [
     endTime: "23:59",
     status: "disabled",
   },
-  { name: "ซื้อครบ 3 ชิ้น รับฟรีลิปออยล์", type: "gift_with_purchase", conditionType: "qty", tiers: [{ threshold: 3, giftProductId: "new-10", giftQty: 1 }], showInCart: true, productIds: [], startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "disabled" },
+  // Product-specific promos with badges: some cards get one badge, some two (in both), the rest none.
+  { name: "ซื้อครบ 3 ชิ้น รับฟรีลิปออยล์", type: "gift_with_purchase", conditionType: "qty", tiers: [{ threshold: 3, giftProductId: "new-10", giftQty: 1 }], showInCart: true, showBadge: true, productIds: ["flash-1", "flash-2", "flash-3", "flash-4", "flash-5", "flash-6", "best-1", "best-2", "best-3", "best-4"], startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
   { name: "9.9 ส่งฟรีไม่มีขั้นต่ำ", type: "free_shipping", conditionType: "amount", showInCart: true, productIds: [], startDate: "2026-09-09", startTime: "00:00", endDate: "2026-09-09", endTime: "23:59", status: "active" },
   // v7: one of each type set up ahead of time (Admin only for now).
   { name: "ลด 15% ทั้งร้าน สูงสุด ฿200", type: "percent_off", discountPercent: 15, maxDiscount: 200, minSpend: 800, productIds: [], startDate: "2026-11-11", startTime: "00:00", endDate: "2026-11-11", endTime: "23:59", status: "disabled" },
   { name: "ลด ฿100 คุชชั่นขายดี", type: "baht_off", discountAmount: 100, minSpend: 500, productIds: ["feature-1", "feature-2"], startDate: "2026-11-01", startTime: "00:00", endDate: "2026-11-30", endTime: "23:59", status: "disabled" },
   { name: "ซื้อลิป 2 แถม 1", type: "buy_x_get_y", buyItems: [{ productId: "best-1", qty: 2 }], getItems: [{ productId: "best-1", qty: 1 }], productIds: [], startDate: "2026-11-01", startTime: "00:00", endDate: "2026-11-15", endTime: "23:59", status: "disabled" },
   { name: "เซ็ตแต่งหน้าครบชุด", type: "bundle", bundleItems: [{ productId: "best-1", qty: 1 }, { productId: "feature-1", qty: 1 }, { productId: "best-3", qty: 1 }], bundlePrice: 529, productIds: [], startDate: "2026-12-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "disabled" },
+  // v9: second product-specific gift promo (overlaps the 3-piece one, so those cards show two badges).
+  { name: "ลิปและบลัชครบ ฿500 รับของแถม", type: "gift_with_purchase", conditionType: "amount", tiers: [{ threshold: 500, giftProductId: "flash-1", giftQty: 1 }], showInCart: true, showBadge: true, badgeLabel: "ครบ ฿500 รับของแถม", productIds: ["flash-1", "flash-3", "flash-5", "best-2", "best-6", "best-8"], startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
 ];
 
 /**
@@ -329,8 +335,9 @@ const PROMOTION_SEEDS: Omit<Promotion, "id" | "createdAt" | "updatedAt">[] = [
  * v7: % / baht / buy X get Y / bundle promos back (Admin only), coupons get
  * % with a cap, usage limits and a thumbnail; seeds for each.
  * v8: a coupon limited to some products / SKUs (`productScope`).
+ * v9: promo badges can be switched off (`showBadge`); seeds show cards with 0, 1 and 2 badges.
  */
-export const MARKETING_SEED_VERSION = 8;
+export const MARKETING_SEED_VERSION = 9;
 
 // ---------------------------------------------------------------------------
 // Coupons: baht or % off the product subtotal, one per order

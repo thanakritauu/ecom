@@ -100,6 +100,7 @@ export function PromotionForm(props: {
   );
   const [showInCart, setShowInCart] = createSignal(props.initial?.showInCart ?? false);
   const [badgeLabel, setBadgeLabel] = createSignal(props.initial?.badgeLabel ?? "");
+  const [showBadge, setShowBadge] = createSignal(props.initial?.showBadge !== false);
   const productStore = useAdminProducts();
   const productName = (id: string) => productStore.getById(id)?.name;
   const unitLabel = () => (conditionType() === "qty" ? "ชิ้น" : "฿");
@@ -253,7 +254,8 @@ export function PromotionForm(props: {
     giftProductId: undefined,
     giftQty: undefined,
     showInCart: runsInCart() ? showInCart() : undefined,
-    badgeLabel: runsInCart() ? badgeLabel().trim() || undefined : undefined,
+    badgeLabel: runsInCart() && showBadge() ? badgeLabel().trim() || undefined : undefined,
+    showBadge: runsInCart() ? showBadge() : undefined,
     productIds: promotionHasProductScope(type()) && !applyToAll() ? productIds() : [],
     productVariantIds: promotionHasProductScope(type()) && !applyToAll() ? savedVariantIds() : undefined,
     startDate: startDate(),
@@ -471,6 +473,14 @@ export function PromotionForm(props: {
               </div>
               <Toggle checked={showInCart()} onChange={setShowInCart} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
             </div>
+            <div class="flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-ink">แสดงป้ายโปรโมชั่น</p>
+                <p class="text-xs text-ink-gray">ป้ายสีแดงบนการ์ดสินค้าและหน้าสินค้าที่ร่วมโปรนี้ ปิดได้ถ้าเป็นโปรทั้งร้านที่ไม่อยากให้ขึ้นทุกการ์ด</p>
+              </div>
+              <Toggle checked={showBadge()} onChange={setShowBadge} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
+            </div>
+            <Show when={showBadge()}>
             <TextField
               label="ข้อความบนป้ายโปรโมชั่น"
               placeholder={promotionBadgeLabel({ ...previewValues(), badgeLabel: undefined })}
@@ -479,9 +489,8 @@ export function PromotionForm(props: {
               disabled={saving()}
               onInput={(e) => setBadgeLabel(e.currentTarget.value)}
             />
-            <p class="-mt-2 text-xs text-ink-gray">
-              ป้ายแสดงบนการ์ดสินค้า (เฉพาะโปรที่เลือกสินค้า) และหน้าสินค้า เว้นว่างจะใช้ข้อความตามเงื่อนไขของโปร
-            </p>
+            <p class="-mt-2 text-xs text-ink-gray">เว้นว่างจะใช้ข้อความตามเงื่อนไขของโปร</p>
+            </Show>
           </Section>
           </Show>
 
