@@ -1,7 +1,7 @@
 import { Dialog } from "@kobalte/core/dialog";
 import { For } from "solid-js";
-import { A } from "@solidjs/router";
-import { adminNavGroups } from "~/lib/adminNav";
+import { A, useLocation } from "@solidjs/router";
+import { adminNavGroups, isNavItemActive } from "~/lib/adminNav";
 import { CloseXIcon } from "./icons";
 import logo from "~/assets/icons/logo-charmiss-pink.svg";
 
@@ -11,6 +11,7 @@ import logo from "~/assets/icons/logo-charmiss-pink.svg";
  * Kobalte's `onOpenChange`), and on navigating to any enabled item.
  */
 export function AdminMobileDrawer(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const location = useLocation();
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
@@ -48,6 +49,7 @@ export function AdminMobileDrawer(props: { open: boolean; onOpenChange: (open: b
                             <A
                               href={item.href}
                               end={item.end}
+                              classList={item.activePrefixes ? { active: isNavItemActive(item, location.pathname) } : undefined}
                               onClick={() => props.onOpenChange(false)}
                               class="flex min-h-11 items-center gap-3 rounded-card px-3 text-sm font-medium text-ink-gray transition-colors duration-150 hover:bg-surface-pink [&.active]:bg-brand-pink [&.active]:text-white"
                             >

@@ -1,6 +1,6 @@
 import { createEffect, createSignal, For, Show } from "solid-js";
 import { A, useLocation } from "@solidjs/router";
-import { adminNavGroups, type AdminNavGroup } from "~/lib/adminNav";
+import { adminNavGroups, isNavItemActive, type AdminNavGroup } from "~/lib/adminNav";
 import { useAdminUI } from "~/lib/adminUI";
 import { ChevronRightIcon } from "./icons";
 import { ChevronIcon } from "~/components/shared/ChevronIcon";
@@ -9,8 +9,7 @@ import logo from "~/assets/icons/logo-charmiss-pink.svg";
 /** Only a group with more than one item has anything worth hiding — Dashboard/Sales/Customers stay a single plain link with no header to click. */
 const isCollapsibleGroup = (group: AdminNavGroup) => group.items.length > 1;
 
-const isPathInGroup = (group: AdminNavGroup, pathname: string) =>
-  group.items.some((item) => item.href && (item.end ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`)));
+const isPathInGroup = (group: AdminNavGroup, pathname: string) => group.items.some((item) => isNavItemActive(item, pathname));
 
 /**
  * Desktop-only persistent sidebar (see AdminMobileDrawer for the mobile
@@ -140,6 +139,7 @@ export function AdminSidebar() {
                         <A
                           href={item.href}
                           end={item.end}
+                          classList={item.activePrefixes ? { active: isNavItemActive(item, location.pathname) } : undefined}
                           title={ui.sidebarCollapsed() ? item.label : undefined}
                           class={`flex min-h-11 items-center gap-3 rounded-card text-sm font-medium text-ink-gray transition-colors duration-150 hover:bg-surface-pink hover:text-brand-pink [&.active]:bg-brand-pink [&.active]:text-white ${
                             ui.sidebarCollapsed() ? "justify-center px-0" : "px-3"

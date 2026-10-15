@@ -1,10 +1,11 @@
 import { For, Show } from "solid-js";
+import { formatAudience } from "~/lib/marketingAudience";
+import { formatCombinable, MARKETING_TOOL_META, promotionTool } from "~/lib/adminMarketing";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import {
   MARKETING_PHASE_META,
   PROMOTION_CONDITION_META,
-  PROMOTION_TYPE_META,
   formatMarketingDateTime,
   formatPromotionDiscount,
   marketingPhase,
@@ -29,7 +30,7 @@ export function PromotionQuickView(props: { promotion: Promotion }) {
       <div>
         <p class="text-base font-semibold text-ink">{p().name}</p>
         <p class="mt-1 text-xl font-bold text-ink">{formatPromotionDiscount(p(), productName)}</p>
-        <p class="text-sm text-ink-gray">{PROMOTION_TYPE_META[p().type].label}</p>
+        <p class="text-sm text-ink-gray">{MARKETING_TOOL_META[promotionTool(p())].label}</p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
@@ -44,8 +45,10 @@ export function PromotionQuickView(props: { promotion: Promotion }) {
           <Field label="นับจาก" value={PROMOTION_CONDITION_META[promotionCondition(p())].label} />
         </Show>
         <Show when={promotionHasProductScope(p().type)}>
-          <Field label="สินค้าที่เข้าร่วม" value={p().productIds.length === 0 ? "ทุกสินค้า" : `${p().productIds.length} สินค้า`} />
+          <Field label="สินค้าที่เข้าร่วม" value={p().productIds.length === 0 ? "ทั้งร้าน" : `${p().productIds.length} สินค้า`} />
         </Show>
+        <Field label="กลุ่มลูกค้า" value={formatAudience(p().audience)} />
+        <Field label="ใช้ร่วมกับโปรอื่น" value={formatCombinable(p().combinableWith)} />
         <Field label="เริ่ม" value={formatMarketingDateTime(p().startDate, p().startTime)} />
         <Field label="สิ้นสุด" value={formatMarketingDateTime(p().endDate, p().endTime)} />
       </div>

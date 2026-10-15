@@ -24,6 +24,8 @@ import {
   couponPublishProblems,
 } from "~/lib/adminMarketing";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
+import { MARKETING_TOOL_META, formatCombinable, marketingHubListHref, couponTool } from "~/lib/adminMarketing";
+import { formatAudience } from "~/lib/marketingAudience";
 import { useAdminOrders } from "~/lib/adminOrderStore";
 import { formatOrderDateLabel } from "~/lib/adminOrders";
 import { pushToast } from "~/lib/toast";
@@ -76,7 +78,7 @@ export default function AdminCouponDetailPage() {
     setActionLoading(false);
     setConfirmDelete(false);
     pushToast(`ลบ "${current.code}" เรียบร้อยแล้ว`, "error");
-    navigate("/admin/marketing/coupons");
+    navigate(marketingHubListHref());
   };
 
   return (
@@ -84,8 +86,8 @@ export default function AdminCouponDetailPage() {
       when={coupon()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "คูปอง", href: "/admin/marketing/coupons" }]} />
-          <EmptyState icon={<CouponTicketIcon />} title="ไม่พบคูปองนี้" description="คูปองอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าคูปอง" onAction={() => navigate("/admin/marketing/coupons")} class="bg-surface-card shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "โปรโมชั่น", href: marketingHubListHref() }]} />
+          <EmptyState icon={<CouponTicketIcon />} title="ไม่พบคูปองนี้" description="คูปองอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าโปรโมชั่น" onAction={() => navigate(marketingHubListHref())} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -93,7 +95,7 @@ export default function AdminCouponDetailPage() {
         const phase = () => MARKETING_PHASE_META[marketingPhase(c())];
         return (
           <div class="flex flex-col gap-6">
-            <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "คูปอง", href: "/admin/marketing/coupons" }, { label: c().code }]} />
+            <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "โปรโมชั่น", href: marketingHubListHref() }, { label: c().code }]} />
             <PageHeader
               title={c().code}
               description={`${formatCouponDiscount(c())} ${formatCouponMinSpend(c())}`}
@@ -213,6 +215,9 @@ export default function AdminCouponDetailPage() {
 
                 <Section title="ระยะเวลา">
                   <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="เครื่องมือ" value={MARKETING_TOOL_META[couponTool(c())].label} />
+                    <Row label="กลุ่มลูกค้า" value={formatAudience(c().audience)} />
+                    <Row label="ใช้ร่วมกับโปรอื่น" value={formatCombinable(c().combinableWith)} />
                     <Row label="เริ่ม" value={formatMarketingDateTime(c().startDate, c().startTime)} />
                     <Row label="สิ้นสุด" value={formatMarketingDateTime(c().endDate, c().endTime)} />
                   </dl>

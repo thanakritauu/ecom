@@ -171,6 +171,8 @@ export type Coupon = {
   extraConditions?: string;
   /** Products / SKUs the coupon is limited to (`couponEligibleSubtotal`). Unset = ทั้งร้าน. */
   productScope?: ProductSkuRef[];
+  /** Set when this shopper is outside the coupon's กลุ่มลูกค้า: the reason a typed code is refused ("คูปองนี้สำหรับลูกค้าใหม่เท่านั้น"). */
+  audienceBlock?: string;
 };
 
 const THAI_SHORT_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];

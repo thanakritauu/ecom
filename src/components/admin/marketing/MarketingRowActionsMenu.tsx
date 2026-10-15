@@ -19,6 +19,8 @@ export function MarketingRowActionsMenu(props: {
   isDraft?: boolean;
   onDuplicate: () => void;
   onToggleStatus: () => void;
+  /** "สิ้นสุดตอนนี้" (only while it's running). */
+  onEndNow?: () => void;
   onDelete: () => void;
   hideView?: boolean;
   triggerClass?: string;
@@ -62,6 +64,14 @@ export function MarketingRowActionsMenu(props: {
           >
             {props.isDraft ? "เผยแพร่" : props.isDisabled ? "เปิดใช้งาน" : "ปิดใช้งาน"}
           </DropdownMenu.Item>
+          <Show when={props.onEndNow}>
+            <DropdownMenu.Item
+              onSelect={() => props.onEndNow?.()}
+              class="flex min-h-11 cursor-pointer items-center rounded-card px-3 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface-pink data-[highlighted]:bg-surface-pink"
+            >
+              สิ้นสุดตอนนี้
+            </DropdownMenu.Item>
+          </Show>
           <DropdownMenu.Separator class="my-1 h-px bg-border" />
           <DropdownMenu.Item
             onSelect={props.onDelete}

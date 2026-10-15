@@ -2,6 +2,9 @@ import type { StatusTone } from "~/components/admin/StatusBadge";
 import { formatAdminCurrency } from "./adminDashboard";
 import { AVAILABLE_COUPONS, couponLabels } from "./cartSelectors";
 import { normalizeSkuRefs, type ProductSkuRef } from "./productSkuRef";
+import { normalizeAudience, type Audience } from "./marketingAudience";
+
+export type { Audience } from "./marketingAudience";
 
 /**
  * Marketing (promotions + coupons). What Admin stores is only an on/off
@@ -19,14 +22,15 @@ export type MarketingStatus = "active" | "disabled" | "draft";
 export type MarketingPhase = "scheduled" | "live" | "expired" | "disabled" | "draft";
 
 export const MARKETING_PHASE_META: Record<MarketingPhase, { label: string; tone: StatusTone }> = {
-  live: { label: "กำลังใช้งาน", tone: "success" },
-  scheduled: { label: "ตั้งเวลาไว้", tone: "info" },
-  expired: { label: "หมดอายุ", tone: "warning" },
+  live: { label: "กำลังดำเนินการ", tone: "success" },
+  scheduled: { label: "กำลังจะมาถึง", tone: "info" },
+  expired: { label: "สิ้นสุดแล้ว", tone: "warning" },
   disabled: { label: "ปิดใช้งาน", tone: "neutral" },
   draft: { label: "แบบร่าง", tone: "neutral" },
 };
 
-export const MARKETING_PHASES: MarketingPhase[] = ["live", "scheduled", "expired", "disabled", "draft"];
+/** Hub status tab order: ทั้งหมด / กำลังดำเนินการ / กำลังจะมาถึง / แบบร่าง / สิ้นสุดแล้ว / ปิดใช้งาน. */
+export const MARKETING_PHASES: MarketingPhase[] = ["live", "scheduled", "draft", "expired", "disabled"];
 
 /** Stored status as-is (active / disabled / draft); older values (scheduled / expired) read as on, the dates decide. */
 export function normalizeMarketingStatus(status: string | undefined): MarketingStatus {
@@ -90,10 +94,10 @@ export function isValidDateRange(startDate: string, startTime: string, endDate: 
 // `STOREFRONT_PROMOTION_TYPES`; the rest are stored and shown in Admin only.
 // ---------------------------------------------------------------------------
 
-export type PromotionType = "free_shipping" | "gift_with_purchase" | "percent_off" | "baht_off" | "buy_x_get_y" | "bundle";
+export type PromotionType = "free_shipping" | "gift_with_purchase" | "percent_off" | "baht_off" | "buy_x_get_y" | "bundle" | "tiered_discount";
 
-/** Dropdown order in the form and the list filter. */
-export const PROMOTION_TYPES: PromotionType[] = ["gift_with_purchase", "free_shipping", "percent_off", "baht_off", "buy_x_get_y", "bundle"];
+/** Every stored promotion type (the tool gallery decides what's offered). */
+export const PROMOTION_TYPES: PromotionType[] = ["gift_with_purchase", "free_shipping", "percent_off", "baht_off", "buy_x_get_y", "bundle", "tiered_discount"];
 
 export const PROMOTION_TYPE_META: Record<PromotionType, { label: string }> = {
   free_shipping: { label: "ส่งฟรี" },
@@ -102,6 +106,7 @@ export const PROMOTION_TYPE_META: Record<PromotionType, { label: string }> = {
   baht_off: { label: "ลดเป็นเงิน" },
   buy_x_get_y: { label: "ซื้อ X แถม Y" },
   bundle: { label: "ชุดสินค้า (จัดเซ็ต)" },
+  tiered_discount: { label: "ยิ่งซื้อยิ่งคุ้ม" },
 };
 
 export const isPromotionType = (t: string): t is PromotionType => (PROMOTION_TYPES as string[]).includes(t);
@@ -135,6 +140,44 @@ export type GiftTier = {
 };
 
 export const MAX_GIFT_TIERS = 5;
+
+/** One step of a "ยิ่งซื้อยิ่งคุ้ม" promo: reach `threshold` (baht or pieces) and get `value` (% or baht, per `tierDiscountType`) off. */
+export type DiscountTier = { threshold: number; value: number };
+export const MAX_DISCOUNT_TIERS = 5;
+
+/** % or baht off (ส่วนลดสินค้า, ยิ่งซื้อยิ่งคุ้ม). */
+export type DiscountKind = "percent" | "baht";
+
+/**
+ * "การใช้ร่วมกับโปรอื่น": what this promo / coupon may stack with. Unset =
+ * all of them. Stored only for now (enforcement comes with the storefront
+ * applying every tool).
+ */
+export type CombinableKind = "flash_sale" | "product_discount" | "cart_deal" | "gift_shipping" | "coupon";
+export const COMBINABLE_KINDS: CombinableKind[] = ["flash_sale", "product_discount", "cart_deal", "gift_shipping", "coupon"];
+export const COMBINABLE_META: Record<CombinableKind, { label: string; hint?: string }> = {
+  flash_sale: { label: "แฟลชเซล" },
+  product_discount: { label: "ส่วนลดสินค้า" },
+  cart_deal: { label: "โปรระดับตะกร้า", hint: "ยิ่งซื้อยิ่งคุ้ม บันเดิลดีล ซื้อ X แถม Y" },
+  gift_shipping: { label: "ของขวัญและส่งฟรี" },
+  coupon: { label: "คูปอง" },
+};
+
+/** Reads any stored value: every kind ticked (or nothing valid stored) is unset. */
+export function normalizeCombinable(list: CombinableKind[] | undefined): CombinableKind[] | undefined {
+  if (!Array.isArray(list)) return undefined;
+  const picked = COMBINABLE_KINDS.filter((k) => list.includes(k));
+  return picked.length === COMBINABLE_KINDS.length ? undefined : picked;
+}
+
+/** "ใช้ร่วมได้ทุกโปร" / "ใช้ร่วมไม่ได้กับ แฟลชเซล, คูปอง" / "ใช้ร่วมกับโปรอื่นไม่ได้": the list's one-line summary. */
+export function formatCombinable(list: CombinableKind[] | undefined): string {
+  const picked = normalizeCombinable(list);
+  if (!picked) return "ใช้ร่วมได้ทุกโปร";
+  if (picked.length === 0) return "ใช้ร่วมกับโปรอื่นไม่ได้";
+  const excluded = COMBINABLE_KINDS.filter((k) => !picked.includes(k));
+  return `ใช้ร่วมไม่ได้กับ ${excluded.map((k) => COMBINABLE_META[k].label).join(", ")}`;
+}
 
 /** "฿590" or "3 ชิ้น". */
 export function formatPromotionThreshold(condition: PromotionCondition, value: number): string {
@@ -171,6 +214,14 @@ export type Promotion = {
   /** `buy_x_get_y` only: buy every line of `buyItems`, get every line of `getItems` free. */
   buyItems?: PromotionItem[];
   getItems?: PromotionItem[];
+  /** `tiered_discount` only: 1 to 5 ascending steps, counted in `conditionType` units; the highest one reached applies. */
+  discountTiers?: DiscountTier[];
+  /** `tiered_discount` only: every step is % off (missing reads as "percent") or baht off. */
+  tierDiscountType?: DiscountKind;
+  /** กลุ่มลูกค้า. Unset = everyone. */
+  audience?: Audience;
+  /** การใช้ร่วมกับโปรอื่น. Unset = stacks with all. */
+  combinableWith?: CombinableKind[];
   /** "แสดงในตะกร้า": whether the Cart Drawer / Cart Page shows this promo's own progress banner. A hidden promo still applies. */
   showInCart?: boolean;
   /** Text on the storefront promo badge (product card / PDP). Empty = `promotionBadgeLabel` builds it from the conditions. */
@@ -204,7 +255,14 @@ export function promotionCoversLine(p: Pick<Promotion, "productIds" | "productVa
 }
 
 /** Types whose form has a "สินค้าที่เข้าร่วม" scope (all products or picked ones). */
-export const promotionHasProductScope = (type: PromotionType) => type === "free_shipping" || type === "gift_with_purchase" || type === "percent_off" || type === "baht_off";
+export const promotionHasProductScope = (type: PromotionType) =>
+  type === "free_shipping" || type === "gift_with_purchase" || type === "percent_off" || type === "baht_off" || type === "tiered_discount";
+
+/** "ลด 10%" / "ลด ฿50". */
+export const formatDiscountValue = (kind: DiscountKind | undefined, value: number) => (kind === "baht" ? `ลด ${formatBaht(value)}` : `ลด ${value}%`);
+
+/** Steps of a `tiered_discount` promo, ascending. */
+export const promotionDiscountTiers = (p: Pick<Promotion, "discountTiers">): DiscountTier[] => [...(p.discountTiers ?? [])].sort((a, b) => a.threshold - b.threshold);
 
 /** Sum of the items' normal prices (the "ราคาปกติ" a bundle is compared with). Unknown products count as ฿0. */
 export function promotionItemsTotal(items: PromotionItem[], price: (id: string) => number | undefined): number {
@@ -224,7 +282,7 @@ export const promotionCondition = (p: Pick<Promotion, "conditionType">): Promoti
 
 /** One-line summary for the list, Quick View, detail page and form preview. `productName` looks a gift product's name up. */
 export function formatPromotionDiscount(
-  p: Pick<Promotion, "type" | "minSpend" | "giftProductId" | "giftQty" | "tiers" | "conditionType" | "discountPercent" | "maxDiscount" | "discountAmount" | "bundleItems" | "bundlePrice" | "buyItems" | "getItems">,
+  p: Pick<Promotion, "type" | "minSpend" | "giftProductId" | "giftQty" | "tiers" | "conditionType" | "discountPercent" | "maxDiscount" | "discountAmount" | "bundleItems" | "bundlePrice" | "buyItems" | "getItems" | "discountTiers" | "tierDiscountType">,
   productName?: (id: string) => string | undefined,
 ): string {
   const condition = promotionCondition(p);
@@ -247,6 +305,14 @@ export function formatPromotionDiscount(
       if (buy.length === 0 || get.length === 0) return "ยังไม่ได้เลือกสินค้า";
       if (buy.length === 1 && get.length === 1 && buy[0].productId === get[0].productId) return `ซื้อ ${buy[0].qty} แถม ${get[0].qty}`;
       return `ซื้อ ${itemsPieces(buy)} ชิ้น แถม ${itemsPieces(get)} ชิ้น`;
+    }
+    case "tiered_discount": {
+      const steps = promotionDiscountTiers(p);
+      if (steps.length === 0) return "ยังไม่ได้ตั้งขั้นส่วนลด";
+      const first = `ซื้อครบ ${formatPromotionThreshold(condition, steps[0].threshold)} ${formatDiscountValue(p.tierDiscountType, steps[0].value)}`;
+      if (steps.length === 1) return first;
+      const last = steps[steps.length - 1];
+      return `${steps.length} ขั้น เริ่มที่${first} สูงสุด${formatDiscountValue(p.tierDiscountType, last.value)}`;
     }
     case "gift_with_purchase": {
       const tiers = promotionGiftTiers(p);
@@ -280,7 +346,17 @@ export function normalizePromotions(list: Promotion[]): Promotion[] {
       extra.productIds = [];
     }
     if (!isPromotionType(type)) return [];
-    return [{ ...p, ...extra, type, productIds: extra.productIds ?? p.productIds ?? [], status: normalizeMarketingStatus(p.status) } as Promotion];
+    return [
+      {
+        ...p,
+        ...extra,
+        type,
+        productIds: extra.productIds ?? p.productIds ?? [],
+        audience: normalizeAudience(p.audience),
+        combinableWith: normalizeCombinable(p.combinableWith),
+        status: normalizeMarketingStatus(p.status),
+      } as Promotion,
+    ];
   });
 }
 
@@ -325,6 +401,24 @@ const PROMOTION_SEEDS: Omit<Promotion, "id" | "createdAt" | "updatedAt">[] = [
   { name: "เซ็ตแต่งหน้าครบชุด", type: "bundle", bundleItems: [{ productId: "best-1", qty: 1 }, { productId: "feature-1", qty: 1 }, { productId: "best-3", qty: 1 }], bundlePrice: 529, productIds: [], startDate: "2026-12-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "disabled" },
   // v9: second product-specific gift promo (overlaps the 3-piece one, so those cards show two badges).
   { name: "ลิปและบลัชครบ ฿500 รับของแถม", type: "gift_with_purchase", conditionType: "amount", tiers: [{ threshold: 500, giftProductId: "flash-1", giftQty: 1 }], showInCart: true, showBadge: true, badgeLabel: "ครบ ฿500 รับของแถม", productIds: ["flash-1", "flash-3", "flash-5", "best-2", "best-6", "best-8"], startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  // v10: ยิ่งซื้อยิ่งคุ้ม (Admin only for now), 3 steps by piece count on lip products.
+  {
+    name: "ยิ่งซื้อยิ่งคุ้ม ลิปทุกเฉด",
+    type: "tiered_discount",
+    conditionType: "qty",
+    tierDiscountType: "percent",
+    discountTiers: [
+      { threshold: 2, value: 5 },
+      { threshold: 3, value: 10 },
+      { threshold: 5, value: 15 },
+    ],
+    productIds: ["best-1", "best-2", "best-9"],
+    startDate: "2026-11-01",
+    startTime: "00:00",
+    endDate: "2026-11-30",
+    endTime: "23:59",
+    status: "disabled",
+  },
 ];
 
 /**
@@ -336,8 +430,9 @@ const PROMOTION_SEEDS: Omit<Promotion, "id" | "createdAt" | "updatedAt">[] = [
  * % with a cap, usage limits and a thumbnail; seeds for each.
  * v8: a coupon limited to some products / SKUs (`productScope`).
  * v9: promo badges can be switched off (`showBadge`); seeds show cards with 0, 1 and 2 badges.
+ * v10: กลุ่มลูกค้า (`audience`), การใช้ร่วมกับโปรอื่น (`combinableWith`), ยิ่งซื้อยิ่งคุ้ม; seeds NEW100 (ลูกค้าใหม่) and a tiered promo.
  */
-export const MARKETING_SEED_VERSION = 9;
+export const MARKETING_SEED_VERSION = 10;
 
 // ---------------------------------------------------------------------------
 // Coupons: baht or % off the product subtotal, one per order
@@ -375,6 +470,12 @@ export type Coupon = {
   showAtCheckout: boolean;
   /** Products / SKUs it's limited to (empty `variantIds` = every option). Unset or empty = ทั้งร้าน. Min spend and the discount count only these lines. */
   productScope?: ProductSkuRef[];
+  /** กลุ่มลูกค้า. Unset = everyone. The storefront hides it from (and refuses its code for) shoppers outside it. */
+  audience?: Audience;
+  /** การใช้ร่วมกับโปรอื่น. Unset = stacks with all. */
+  combinableWith?: CombinableKind[];
+  /** Which coupon tool created it. Missing (older records) is read from the data, `couponTool`. */
+  tool?: CouponTool;
   startDate: string;
   startTime: string;
   endDate: string;
@@ -447,6 +548,9 @@ export function normalizeCoupons(list: Coupon[]): Coupon[] {
       productScope: c.productScope === undefined ? undefined : normalizeSkuRefs(c.productScope),
       showOnHome: !!c.showOnHome,
       showAtCheckout: !!c.showAtCheckout,
+      audience: normalizeAudience(c.audience),
+      combinableWith: normalizeCombinable(c.combinableWith),
+      tool: c.tool && COUPON_TOOLS.includes(c.tool) ? c.tool : undefined,
       status: normalizeMarketingStatus(c.status),
     };
   });
@@ -481,6 +585,8 @@ const COUPON_SEEDS: Omit<Coupon, "id" | "createdAt" | "updatedAt">[] = [
   { code: "BEAUTY10", discountType: "percent", discount: 10, maxDiscount: 200, minSpend: 500, usageLimit: 300, perCustomerLimit: 2, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
   // v8: limited to some products / SKUs (two lip serum shades, every shade of a lip gloss).
   { code: "LIPLOVE15", discountType: "percent", discount: 15, maxDiscount: 100, minSpend: 300, perCustomerLimit: 1, productScope: [{ productId: "best-1", variantIds: ["lip-tint-01", "lip-tint-02"] }, { productId: "best-9", variantIds: [] }], showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  // v10: คูปองลูกค้าใหม่, only for shoppers with no paid order yet (guests included).
+  { code: "NEW100", tool: "coupon_new", audience: { kind: "new" }, discountType: "baht", discount: 100, minSpend: 500, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
 ];
 
 const TODAY_LABEL = "17 ก.ย. 2569";
@@ -523,6 +629,8 @@ export function promotionPublishProblems(p: Promotion): string[] {
     if (!p.buyItems?.length) missing.push("สินค้าที่ต้องซื้อ");
     if (!p.getItems?.length) missing.push("สินค้าที่แถม");
   }
+  if (p.type === "tiered_discount" && (!p.discountTiers?.length || p.discountTiers.some((t) => !(t.threshold > 0) || !(t.value > 0)))) missing.push("ขั้นส่วนลด");
+  if (p.audience?.kind === "tiers" && !p.audience.tiers?.length) missing.push("กลุ่มลูกค้า");
   if (!p.startDate) missing.push("วันเริ่ม");
   if (!p.endDate) missing.push("วันสิ้นสุด");
   return missing;
@@ -535,6 +643,7 @@ export function couponPublishProblems(c: Coupon): string[] {
   if (!okDiscount) missing.push("ส่วนลด");
   // ทั้งร้าน is sent as unset; a set but empty list means "เฉพาะสินค้าที่เลือก" with nothing picked.
   if (c.productScope !== undefined && c.productScope.length === 0) missing.push("สินค้าที่ร่วมรายการ");
+  if (c.audience?.kind === "tiers" && !c.audience.tiers?.length) missing.push("กลุ่มลูกค้า");
   if (!c.startDate) missing.push("วันเริ่ม");
   if (!c.endDate) missing.push("วันสิ้นสุด");
   return missing;
@@ -544,9 +653,18 @@ export function couponPublishProblems(c: Coupon): string[] {
  * The storefront promo badge text: the admin's own `badgeLabel`, else a short
  * label from the conditions ("ส่งฟรี", "ซื้อครบ ฿590 รับของแถม").
  */
-export function promotionBadgeLabel(p: Pick<Promotion, "type" | "badgeLabel" | "minSpend" | "conditionType" | "tiers" | "giftProductId" | "giftQty">): string {
+export function promotionBadgeLabel(
+  p: Pick<Promotion, "type" | "badgeLabel" | "minSpend" | "conditionType" | "tiers" | "giftProductId" | "giftQty"> &
+    Partial<Pick<Promotion, "discountPercent" | "discountAmount" | "discountTiers" | "tierDiscountType">>,
+): string {
   if (p.badgeLabel?.trim()) return p.badgeLabel.trim();
   const condition = promotionCondition(p);
+  if (p.type === "percent_off" && p.discountPercent) return `ลด ${p.discountPercent}%`;
+  if (p.type === "baht_off" && p.discountAmount) return `ลด ${formatBaht(p.discountAmount)}`;
+  if (p.type === "tiered_discount") {
+    const first = promotionDiscountTiers(p)[0];
+    if (first?.threshold && first.value) return `ซื้อครบ ${formatPromotionThreshold(condition, first.threshold)} ${formatDiscountValue(p.tierDiscountType, first.value)}`;
+  }
   if (p.type === "free_shipping") return p.minSpend ? `ส่งฟรีเมื่อซื้อครบ ${formatPromotionThreshold(condition, p.minSpend)}` : "ส่งฟรี";
   if (p.type === "gift_with_purchase") {
     const first = promotionGiftTiers(p)[0];
@@ -554,3 +672,68 @@ export function promotionBadgeLabel(p: Pick<Promotion, "type" | "badgeLabel" | "
   }
   return PROMOTION_TYPE_META[p.type].label;
 }
+
+// ---------------------------------------------------------------------------
+// Promotion tools: the hub's gallery (grouped like TikTok Shop's tools). Every
+// promotion and coupon reads as one tool, so it opens in that tool's form.
+// ---------------------------------------------------------------------------
+
+export type CouponTool = "coupon" | "coupon_new" | "coupon_code";
+export const COUPON_TOOLS: CouponTool[] = ["coupon", "coupon_new", "coupon_code"];
+
+export type PromotionTool = "product_discount" | "gift_with_purchase" | "free_shipping" | "tiered_discount" | "bundle" | "buy_x_get_y";
+
+export type MarketingTool = PromotionTool | CouponTool | "flash_sale";
+
+export type MarketingToolGroup = "discount" | "coupon" | "incentive";
+
+export const MARKETING_TOOL_GROUPS: { id: MarketingToolGroup; label: string; description: string }[] = [
+  { id: "discount", label: "ส่วนลด", description: "ตั้งราคาพิเศษให้สินค้าเพื่อดึงดูดลูกค้าและเพิ่มยอดขาย" },
+  { id: "coupon", label: "คูปอง", description: "มอบคูปองให้ลูกค้าใช้ลดราคาตอนชำระเงิน" },
+  { id: "incentive", label: "สิ่งจูงใจ", description: "มอบสิทธิพิเศษเพื่อให้ลูกค้าซื้อมากขึ้นในแต่ละคำสั่งซื้อ" },
+];
+
+export const MARKETING_TOOL_META: Record<MarketingTool, { label: string; description: string; group: MarketingToolGroup }> = {
+  product_discount: { label: "ส่วนลดสินค้า", description: "ลดราคาเป็น % หรือเป็นเงิน ให้สินค้าหรือ SKU ที่เลือก", group: "discount" },
+  flash_sale: { label: "แฟลชเซล", description: "ราคาพิเศษในเวลาจำกัด เร่งให้ลูกค้าตัดสินใจซื้อเร็วขึ้น", group: "discount" },
+  coupon: { label: "คูปอง", description: "คูปองส่วนลดให้ลูกค้าเก็บที่หน้าแรกและใช้ตอนชำระเงิน", group: "coupon" },
+  coupon_new: { label: "คูปองลูกค้าใหม่", description: "คูปองสำหรับลูกค้าที่ยังไม่เคยซื้อ ช่วยปิดการขายครั้งแรก", group: "coupon" },
+  coupon_code: { label: "โค้ดส่วนลด", description: "โค้ดที่ไม่แสดงหน้าร้าน แจกผ่านโซเชียลหรือแชท ลูกค้ากรอกเอง", group: "coupon" },
+  gift_with_purchase: { label: "ของขวัญจากการซื้อ", description: "ซื้อครบตามเงื่อนไขรับของแถมฟรี ตั้งได้สูงสุด 5 ขั้น", group: "incentive" },
+  free_shipping: { label: "ส่วนลดค่าจัดส่ง", description: "ส่งฟรีทุกออเดอร์ หรือเมื่อซื้อครบตามยอดที่ตั้งไว้", group: "incentive" },
+  tiered_discount: { label: "ยิ่งซื้อยิ่งคุ้ม", description: "ซื้อมากชิ้นหรือยอดสูงขึ้น ได้ส่วนลดมากขึ้นเป็นขั้น", group: "incentive" },
+  bundle: { label: "บันเดิลดีล", description: "จัดเซ็ตสินค้าหลายรายการขายในราคาพิเศษ", group: "incentive" },
+  buy_x_get_y: { label: "ซื้อ X แถม Y", description: "ซื้อสินค้าที่กำหนดครบจำนวน รับสินค้าอีกรายการฟรี", group: "incentive" },
+};
+
+/** Gallery order inside each group. */
+export const MARKETING_TOOLS: MarketingTool[] = ["product_discount", "flash_sale", "coupon", "coupon_new", "coupon_code", "gift_with_purchase", "free_shipping", "tiered_discount", "bundle", "buy_x_get_y"];
+
+export const isMarketingTool = (t: string | undefined): t is MarketingTool => !!t && (MARKETING_TOOLS as string[]).includes(t);
+export const isCouponTool = (t: string | undefined): t is CouponTool => !!t && (COUPON_TOOLS as string[]).includes(t);
+export const isPromotionTool = (t: string | undefined): t is PromotionTool => isMarketingTool(t) && !isCouponTool(t) && t !== "flash_sale";
+
+/** The tool a promotion belongs to: % and baht off are both ส่วนลดสินค้า. */
+export const promotionTool = (p: Pick<Promotion, "type">): PromotionTool => (p.type === "percent_off" || p.type === "baht_off" ? "product_discount" : p.type);
+
+/** The type a new promotion of this tool starts as (ส่วนลดสินค้า starts as %, the form switches to baht). */
+export const promotionTypeForTool = (tool: PromotionTool): PromotionType => (tool === "product_discount" ? "percent_off" : tool);
+
+/** The tool a coupon belongs to: its saved tool, else read from the data (code-only = โค้ดส่วนลด, new customers = คูปองลูกค้าใหม่). */
+export function couponTool(c: Pick<Coupon, "tool" | "showOnHome" | "showAtCheckout" | "audience">): CouponTool {
+  if (c.tool) return c.tool;
+  if (!c.showOnHome && !c.showAtCheckout) return "coupon_code";
+  if (c.audience?.kind === "new") return "coupon_new";
+  return "coupon";
+}
+
+/** Where a tool card's "สร้าง" goes. */
+export function marketingToolCreateHref(tool: MarketingTool): string {
+  if (tool === "flash_sale") return "/admin/marketing/flash-sale";
+  if (isCouponTool(tool)) return `/admin/marketing/coupons/new?tool=${tool}`;
+  return `/admin/marketing/promotions/new?tool=${tool}`;
+}
+
+/** The hub's two tabs. */
+export const MARKETING_HUB_PATH = "/admin/marketing/promotions";
+export const marketingHubListHref = (tool?: string) => `${MARKETING_HUB_PATH}?tab=manage${tool ? `&tool=${tool}` : ""}`;

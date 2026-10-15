@@ -360,7 +360,7 @@ export default function AdminFlashSalePage() {
 
   return (
     <div class="flex flex-col gap-6" classList={{ "pb-20": selectedIds().size > 0 }}>
-      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "แฟลชเซล" }]} />
+      <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "โปรโมชั่น", href: "/admin/marketing/promotions?tab=manage" }, { label: "แฟลชเซล" }]} />
       <PageHeader
         title="แฟลชเซล"
         description="เลือกสินค้า ตั้งราคาแฟลชเซล จำนวนจำกัด และเวลาเริ่มและจบ ราคาขายปกติของสินค้าไม่เปลี่ยน"

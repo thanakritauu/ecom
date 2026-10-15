@@ -3,7 +3,6 @@ import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
-import { SelectField } from "~/components/admin/SelectField";
 import { Toggle } from "~/components/admin/Toggle";
 import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
 import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
@@ -12,7 +11,30 @@ import { ProductSkuPicker, skuRefsSummary } from "~/components/admin/ProductSkuP
 import type { ProductSkuRef } from "~/lib/productSkuRef";
 import { BundlePriceSummary, fromItemDrafts, itemDraftsValid, PromotionItemsBox, toItemDrafts, type PromotionItemDraft } from "./PromotionItems";
 import { useAdminProducts } from "~/lib/adminProductStore";
+import { ChoiceRadio } from "./ChoiceRadio";
 import {
+  AudienceField,
+  CombinableField,
+  FormSection,
+  PeriodFields,
+  SettingRow,
+  audienceError,
+  fromAudienceDraft,
+  fromCombinableDraft,
+  toAudienceDraft,
+  toCombinableDraft,
+  type AudienceDraft,
+} from "./MarketingFormBlocks";
+import { formatAudience } from "~/lib/marketingAudience";
+import {
+  MAX_DISCOUNT_TIERS,
+  MARKETING_TOOL_META,
+  formatCombinable,
+  formatDiscountValue,
+  promotionDiscountTiers,
+  promotionTypeForTool,
+  type DiscountKind,
+  type PromotionTool,
   MAX_GIFT_TIERS,
   PROMOTION_CONDITION_META,
   formatPromotionThreshold,
@@ -21,8 +43,6 @@ import {
   isValidDateRange,
   formatMarketingDateTime,
   formatPromotionDiscount,
-  PROMOTION_TYPES,
-  PROMOTION_TYPE_META,
   STOREFRONT_PROMOTION_TYPES,
   promotionHasProductScope,
   promotionItemsTotal,
@@ -36,6 +56,8 @@ export type PromotionFormValues = Omit<Promotion, "id" | "createdAt" | "updatedA
 /** A gift tier as typed into the form (strings until saved). */
 type TierDraft = { threshold: string; giftProductId: string; giftQty: string; giftVariantIds: string[] };
 const emptyTier = (): TierDraft => ({ threshold: "", giftProductId: "", giftQty: "1", giftVariantIds: [] });
+/** A ยิ่งซื้อยิ่งคุ้ม step as typed. */
+type DiscountTierDraft = { threshold: string; value: string };
 
 const BASE_LABELS: Record<string, string> = {
   name: "ชื่อโปรโมชั่น",
@@ -50,9 +72,12 @@ const BASE_LABELS: Record<string, string> = {
   startDate: "วันเริ่ม",
   endDate: "วันสิ้นสุด",
   productIds: "สินค้าที่เข้าร่วม",
+  audience: "กลุ่มลูกค้า",
 };
-/** `tier-0-threshold` etc. read as "ขั้นที่ 1 ซื้อครบ". */
+/** `tier-0-threshold` etc. read as "ขั้นที่ 1 ซื้อครบ"; `dtier-0-value` as "ขั้นที่ 1 ส่วนลด". */
 function promotionLabel(key: string): string {
+  const step = /^dtier-(\d+)-(threshold|value)$/.exec(key);
+  if (step) return `ขั้นที่ ${Number(step[1]) + 1} ${step[2] === "threshold" ? "ซื้อครบ" : "ส่วนลด"}`;
   const tier = /^tier-(\d+)-(threshold|giftQty|gift)$/.exec(key);
   if (!tier) return BASE_LABELS[key] ?? key;
   const field = tier[2] === "threshold" ? "ซื้อครบ" : tier[2] === "giftQty" ? "จำนวนของแถม" : "สินค้าของแถม";
@@ -61,18 +86,29 @@ function promotionLabel(key: string): string {
 
 /**
  * Shared Create/Edit form, same "one form, two routes" shape as
- * `ProductForm.tsx`. The type dropdown decides the rest of the form: free
- * shipping and ซื้อครบรับของแถม (1 to 5 tiers), which the cart runs, plus
- * % off, baht off, buy X get Y and bundle, set up ahead of time.
+ * `ProductForm.tsx`. The tool (picked on the hub's gallery, or read from the
+ * record) decides the สิทธิประโยชน์ block; every tool has the same block
+ * order (`MarketingFormBlocks`). The cart runs free shipping and
+ * ซื้อครบรับของแถม; ส่วนลดสินค้า, ยิ่งซื้อยิ่งคุ้ม, buy X get Y and bundle
+ * are set up ahead of time.
  */
 export function PromotionForm(props: {
+  tool: PromotionTool;
   initial?: Promotion;
   submitLabel: string;
   onSubmit: (values: PromotionFormValues) => Promise<void>;
   onCancel: () => void;
 }) {
   const [name, setName] = createSignal(props.initial?.name ?? "");
-  const [type, setType] = createSignal<PromotionType>(props.initial?.type ?? "gift_with_purchase");
+  const [type, setType] = createSignal<PromotionType>(props.initial?.type ?? promotionTypeForTool(props.tool));
+  const [audience, setAudience] = createSignal<AudienceDraft>(toAudienceDraft(props.initial?.audience));
+  const [combinable, setCombinable] = createSignal(toCombinableDraft(props.initial?.combinableWith));
+  const [tierDiscountType, setTierDiscountType] = createSignal<DiscountKind>(props.initial?.tierDiscountType ?? "percent");
+  const initialSteps = props.initial ? promotionDiscountTiers(props.initial) : [];
+  const [discountTiers, setDiscountTiers] = createSignal<DiscountTierDraft[]>(
+    initialSteps.length > 0 ? initialSteps.map((t) => ({ threshold: String(t.threshold), value: String(t.value) })) : [{ threshold: "", value: "" }],
+  );
+  const updateStep = (i: number, patch: Partial<DiscountTierDraft>) => setDiscountTiers((list) => list.map((t, j) => (j === i ? { ...t, ...patch } : t)));
   /**
    * Draft-first rule: a new promotion, or one still in แบบร่าง, gets
    * "บันทึกแบบร่าง" (name only, never runs in the cart) and "บันทึกและเผยแพร่"
@@ -90,6 +126,9 @@ export function PromotionForm(props: {
   const [buyItems, setBuyItems] = createSignal<PromotionItemDraft[]>(toItemDrafts(props.initial?.buyItems));
   const [getItems, setGetItems] = createSignal<PromotionItemDraft[]>(toItemDrafts(props.initial?.getItems));
   const runsInCart = () => STOREFRONT_PROMOTION_TYPES.includes(type());
+  /** Types counted in baht or pieces ("นับจาก"). */
+  const usesCondition = () => runsInCart() || type() === "tiered_discount";
+  const isProductDiscount = () => type() === "percent_off" || type() === "baht_off";
   const bundleNormalTotal = () => promotionItemsTotal(fromItemDrafts(bundleItems()), (id) => productStore.getById(id)?.price);
   const [conditionType, setConditionType] = createSignal<PromotionCondition>(props.initial?.conditionType ?? "amount");
   const initialTiers = props.initial ? promotionGiftTiers(props.initial) : [];
@@ -181,7 +220,25 @@ export function PromotionForm(props: {
       else if (!itemDraftsValid(getItems())) next.getItems = "จำนวนต้องเป็นจำนวนเต็มอย่างน้อย 1";
     }
     // "เฉพาะสินค้าที่เลือก" with nothing picked would apply to no product at all.
+    if (type() === "tiered_discount") {
+      let prevThreshold = 0;
+      let prevValue = 0;
+      discountTiers().forEach((t, i) => {
+        const threshold = Number(t.threshold);
+        if (!t.threshold.trim() || Number.isNaN(threshold) || threshold <= 0) next[`dtier-${i}-threshold`] = "กรุณากรอกเงื่อนไขของขั้นนี้";
+        else if (conditionType() === "qty" && !Number.isInteger(threshold)) next[`dtier-${i}-threshold`] = "จำนวนชิ้นต้องเป็นจำนวนเต็ม";
+        else if (threshold <= prevThreshold) next[`dtier-${i}-threshold`] = "ต้องมากกว่าขั้นก่อนหน้า";
+        if (!Number.isNaN(threshold)) prevThreshold = Math.max(prevThreshold, threshold);
+        const value = Number(t.value);
+        if (tierDiscountType() === "percent" && (!t.value.trim() || !Number.isInteger(value) || value < 1 || value > 100)) next[`dtier-${i}-value`] = "กรุณากรอกเปอร์เซ็นต์เป็นจำนวนเต็ม 1-100";
+        else if (tierDiscountType() === "baht" && (!t.value.trim() || Number.isNaN(value) || value <= 0)) next[`dtier-${i}-value`] = "กรุณากรอกจำนวนเงินที่ลด";
+        else if (value <= prevValue) next[`dtier-${i}-value`] = "ส่วนลดต้องมากกว่าขั้นก่อนหน้า";
+        if (!Number.isNaN(value)) prevValue = Math.max(prevValue, value);
+      });
+    }
     if (promotionHasProductScope(type()) && !applyToAll() && productIds().length === 0) next.productIds = "กรุณาเลือกสินค้าอย่างน้อย 1 รายการ";
+    const audienceProblem = audienceError(audience());
+    if (audienceProblem) next.audience = audienceProblem;
     if (!startDate()) next.startDate = "กรุณาเลือกวันเริ่ม";
     if (!endDate()) next.endDate = "กรุณาเลือกวันสิ้นสุด";
     if (startDate() && endDate() && !dateRangeValid()) next.endDate = "วันสิ้นสุดต้องอยู่หลังวันเริ่ม";
@@ -192,6 +249,11 @@ export function PromotionForm(props: {
   const validateDraft = (): Record<string, string> => {
     const full = validate();
     const typed = (key: string): boolean => {
+      const step = /^dtier-(\d+)-(threshold|value)$/.exec(key);
+      if (step) {
+        const t = discountTiers()[Number(step[1])];
+        return step[2] === "threshold" ? !!t?.threshold.trim() : !!t?.value.trim();
+      }
       const tier = /^tier-(\d+)-(threshold|giftQty|gift)$/.exec(key);
       if (tier) {
         const t = tiers()[Number(tier[1])];
@@ -234,7 +296,11 @@ export function PromotionForm(props: {
     name: name().trim(),
     type: type(),
     minSpend: (type() === "free_shipping" || type() === "percent_off" || type() === "baht_off") && Number(minSpend()) > 0 ? Number(minSpend()) : undefined,
-    conditionType: runsInCart() ? conditionType() : undefined,
+    conditionType: usesCondition() ? conditionType() : undefined,
+    discountTiers: type() === "tiered_discount" ? discountTiers().map((t) => ({ threshold: Number(t.threshold) || 0, value: Number(t.value) || 0 })) : undefined,
+    tierDiscountType: type() === "tiered_discount" ? tierDiscountType() : undefined,
+    audience: fromAudienceDraft(audience()),
+    combinableWith: fromCombinableDraft(combinable()),
     discountPercent: type() === "percent_off" ? Number(discountPercent()) || 0 : undefined,
     maxDiscount: type() === "percent_off" && Number(maxDiscount()) > 0 ? Number(maxDiscount()) : undefined,
     discountAmount: type() === "baht_off" ? Number(discountAmount()) || 0 : undefined,
@@ -254,8 +320,8 @@ export function PromotionForm(props: {
     giftProductId: undefined,
     giftQty: undefined,
     showInCart: runsInCart() ? showInCart() : undefined,
-    badgeLabel: runsInCart() && showBadge() ? badgeLabel().trim() || undefined : undefined,
-    showBadge: runsInCart() ? showBadge() : undefined,
+    badgeLabel: showBadge() ? badgeLabel().trim() || undefined : undefined,
+    showBadge: showBadge(),
     productIds: promotionHasProductScope(type()) && !applyToAll() ? productIds() : [],
     productVariantIds: promotionHasProductScope(type()) && !applyToAll() ? savedVariantIds() : undefined,
     startDate: startDate(),
@@ -287,6 +353,33 @@ export function PromotionForm(props: {
     }
   };
 
+  const discountUnit = () => (tierDiscountType() === "baht" ? "บาท" : "%");
+
+  const conditionPicker = (
+    <fieldset class="flex flex-col gap-2">
+      <legend class="mb-2 text-sm font-medium text-ink">นับจาก</legend>
+      <div class="flex flex-wrap gap-2" role="radiogroup">
+        <For each={Object.entries(PROMOTION_CONDITION_META) as [PromotionCondition, { label: string }][]}>
+          {([value, meta]) => (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={conditionType() === value}
+              disabled={saving()}
+              onClick={() => setConditionType(value)}
+              class={`min-h-11 rounded-pill border px-4 text-sm font-medium transition-colors duration-150 ${
+                conditionType() === value ? "border-brand-pink bg-surface-pink text-brand-pink" : "border-border bg-surface-card text-ink hover:bg-surface-gray"
+              }`}
+            >
+              {meta.label}
+            </button>
+          )}
+        </For>
+      </div>
+      <p class="text-xs text-ink-gray">นับเฉพาะสินค้าที่เข้าร่วม ราคาก่อนหักคูปองและคอยน์ ไม่นับของแถม</p>
+    </fieldset>
+  );
+
   return (
     <form onSubmit={handleSubmit} noValidate class="flex flex-col gap-6">
       <AdminFormPreviewLayout
@@ -294,77 +387,150 @@ export function PromotionForm(props: {
         form={
         <>
           <FormErrorSummary errors={errors()} labels={labels()} />
-          <Section title="ข้อมูลพื้นฐาน">
+
+          {/* 1) ข้อมูลพื้นฐาน */}
+          <FormSection title="ข้อมูลพื้นฐาน">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <TextField label="ชื่อโปรโมชั่น" required value={name()} onInput={(e) => setName(e.currentTarget.value)} data-field="name" error={errors().name} disabled={saving()} class="sm:col-span-2" />
-              <SelectField
-                label="ประเภทโปรโมชั่น"
-                required
-                value={type()}
-                options={PROMOTION_TYPES.map((t) => ({ value: t, label: PROMOTION_TYPE_META[t].label }))}
-                onChange={(v) => {
-                  setType(v as PromotionType);
-                  setErrors({});
-                  setSubmitted(false);
-                }}
-                disabled={saving()}
-              />
               <Show
                 when={!draftFlow}
                 fallback={
-                  <p class="self-end text-xs text-ink-gray">
-                    {props.initial ? "โปรโมชั่นนี้ยังเป็นแบบร่าง ยังไม่มีผลในตะกร้า" : "บันทึกแบบร่างไว้ก่อนได้ แล้วกด บันทึกและเผยแพร่ เมื่อข้อมูลครบ"}
+                  <p class="text-xs text-ink-gray sm:col-span-2">
+                    {props.initial ? "โปรโมชั่นนี้ยังเป็นแบบร่าง ยังไม่มีผลที่หน้าร้าน" : "บันทึกแบบร่างไว้ก่อนได้ แล้วกด ตกลงและเผยแพร่ เมื่อข้อมูลครบ"}
                   </p>
                 }
               >
-              <label class="flex flex-col gap-1.5">
-                <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
-                <Toggle checked={enabled()} onChange={setEnabled} disabled={saving()} />
-                <span class="text-xs text-ink-gray">{enabled() ? "เปิดใช้ตามช่วงเวลาที่ตั้งไว้" : "ปิดอยู่ ยังไม่มีผล"}</span>
-              </label>
+                <label class="flex flex-col gap-1.5">
+                  <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
+                  <Toggle checked={enabled()} onChange={setEnabled} disabled={saving()} />
+                  <span class="text-xs text-ink-gray">{enabled() ? "เปิดใช้ตามช่วงเวลาที่ตั้งไว้" : "ปิดอยู่ ยังไม่มีผล"}</span>
+                </label>
               </Show>
             </div>
-          </Section>
+            <PeriodFields
+              value={{ startDate: startDate(), startTime: startTime(), endDate: endDate(), endTime: endTime() }}
+              onChange={(patch) => {
+                if (patch.startDate !== undefined) setStartDate(patch.startDate);
+                if (patch.startTime !== undefined) setStartTime(patch.startTime);
+                if (patch.endDate !== undefined) setEndDate(patch.endDate);
+                if (patch.endTime !== undefined) setEndTime(patch.endTime);
+              }}
+              errors={errors()}
+              disabled={saving()}
+              hint="เวลาประเทศไทย โปรเริ่มและหยุดเองตามเวลาที่ตั้งไว้"
+            />
+            <AudienceField value={audience()} onChange={setAudience} error={errors().audience} disabled={saving()} />
+          </FormSection>
 
-          <Section title="เงื่อนไข">
-            <Show when={runsInCart()}>
-            <fieldset class="flex flex-col gap-2">
-                <legend class="mb-2 text-sm font-medium text-ink">นับจาก</legend>
-                <div class="flex flex-wrap gap-2" role="radiogroup">
-                  <For each={Object.entries(PROMOTION_CONDITION_META) as [PromotionCondition, { label: string }][]}>
-                    {([value, meta]) => (
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={conditionType() === value}
-                        disabled={saving()}
-                        onClick={() => setConditionType(value)}
-                        class={`min-h-11 rounded-pill border px-4 text-sm font-medium transition-colors duration-150 ${
-                          conditionType() === value ? "border-brand-pink bg-surface-pink text-brand-pink" : "border-border bg-surface-card text-ink hover:bg-surface-gray"
-                        }`}
-                      >
-                        {meta.label}
-                      </button>
-                    )}
-                  </For>
-                </div>
-                <p class="text-xs text-ink-gray">นับเฉพาะสินค้าที่เข้าร่วม ราคาก่อนหักคูปองและคอยน์ ไม่นับของแถม</p>
-              </fieldset>
+          {/* 2) สิทธิประโยชน์ */}
+          <FormSection title="สิทธิประโยชน์">
+            <Show when={usesCondition()}>{conditionPicker}</Show>
+            <Show when={isProductDiscount()}>
+              <div class="flex flex-col gap-2">
+                <span class="text-sm font-medium text-ink">ประเภทส่วนลด</span>
+                <ChoiceRadio
+                  name="product-discount-kind"
+                  value={type() === "baht_off" ? "baht" : "percent"}
+                  disabled={saving()}
+                  onChange={(kind) => {
+                    setType(kind === "baht" ? "baht_off" : "percent_off");
+                    setErrors(({ discountPercent: _p, discountAmount: _a, maxDiscount: _m, minSpend: _s, ...rest }) => rest);
+                  }}
+                  options={[
+                    { value: "percent", label: "ลดเป็น %", hint: "ลดเป็นเปอร์เซ็นต์ ตั้งลดสูงสุดได้" },
+                    { value: "baht", label: "ลดเป็นเงิน (฿)", hint: "ลดเป็นจำนวนเงินจากยอดสินค้าที่เข้าร่วม" },
+                  ]}
+                />
+              </div>
             </Show>
             <Show when={type() === "percent_off"}>
-              <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <TextField label="ส่วนลด (%)" required type="number" min="1" max="100" step="1" value={discountPercent()} onInput={(e) => setDiscountPercent(e.currentTarget.value)} data-field="discountPercent" error={errors().discountPercent} disabled={saving()} />
                 <TextField label="ลดสูงสุด (บาท)" type="number" min="1" step="1" value={maxDiscount()} onInput={(e) => setMaxDiscount(e.currentTarget.value)} data-field="maxDiscount" error={errors().maxDiscount} disabled={saving()} placeholder="ไม่จำกัด" />
-                <TextField label="ยอดซื้อขั้นต่ำ (บาท)" type="number" min="0" step="1" value={minSpend()} onInput={(e) => setMinSpend(e.currentTarget.value)} data-field="minSpend" error={errors().minSpend} disabled={saving()} placeholder="ไม่มีขั้นต่ำ" />
               </div>
-              <p class="text-xs text-ink-gray">ลดเป็นเปอร์เซ็นต์จากราคาสินค้าที่เข้าร่วม เว้นลดสูงสุดและยอดขั้นต่ำว่างไว้ถ้าไม่จำกัด</p>
+              <p class="text-xs text-ink-gray">ลดเป็นเปอร์เซ็นต์จากราคาสินค้าที่เข้าร่วม เว้นลดสูงสุดว่างไว้ถ้าไม่จำกัด</p>
             </Show>
             <Show when={type() === "baht_off"}>
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <TextField label="ส่วนลด (บาท)" required type="number" min="1" step="1" value={discountAmount()} onInput={(e) => setDiscountAmount(e.currentTarget.value)} data-field="discountAmount" error={errors().discountAmount} disabled={saving()} />
-                <TextField label="ยอดซื้อขั้นต่ำ (บาท)" type="number" min="0" step="1" value={minSpend()} onInput={(e) => setMinSpend(e.currentTarget.value)} data-field="minSpend" error={errors().minSpend} disabled={saving()} placeholder="ไม่มีขั้นต่ำ" />
               </div>
-              <p class="text-xs text-ink-gray">ลดเป็นจำนวนเงินจากยอดสินค้าที่เข้าร่วม เว้นยอดขั้นต่ำว่างไว้ถ้าไม่มีขั้นต่ำ</p>
+              <p class="text-xs text-ink-gray">ลดเป็นจำนวนเงินจากยอดสินค้าที่เข้าร่วม</p>
+            </Show>
+            <Show when={type() === "tiered_discount"}>
+              <div class="flex flex-col gap-2">
+                <span class="text-sm font-medium text-ink">ประเภทส่วนลด</span>
+                <ChoiceRadio
+                  name="tier-discount-kind"
+                  value={tierDiscountType()}
+                  disabled={saving()}
+                  onChange={(kind) => {
+                    setTierDiscountType(kind);
+                    setErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !/^dtier-\d+-value$/.test(k))));
+                  }}
+                  options={[
+                    { value: "percent", label: "ลดเป็น %" },
+                    { value: "baht", label: "ลดเป็นเงิน (฿)" },
+                  ]}
+                />
+              </div>
+              <div class="flex flex-col gap-3">
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                  <span class="text-sm font-medium text-ink">ขั้นส่วนลด</span>
+                  <span class="text-sm text-ink-gray">ตั้งได้สูงสุด {MAX_DISCOUNT_TIERS} ขั้น</span>
+                </div>
+                <Index each={discountTiers()}>
+                  {(step, i) => (
+                    <div class="flex flex-col gap-3 rounded-card border border-border p-4">
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="text-sm font-semibold text-ink">ขั้นที่ {i + 1}</span>
+                        <Show when={discountTiers().length > 1}>
+                          <button
+                            type="button"
+                            onClick={() => setDiscountTiers((list) => list.filter((_, j) => j !== i))}
+                            disabled={saving()}
+                            class="min-h-11 px-2 text-sm font-medium text-danger-strong hover:underline"
+                          >
+                            ลบขั้นนี้
+                          </button>
+                        </Show>
+                      </div>
+                      <div class="grid grid-cols-2 gap-4">
+                        <TextField
+                          label={`ซื้อครบ (${unitLabel()})`}
+                          required
+                          type="number"
+                          min="0"
+                          step={conditionType() === "qty" ? "1" : "0.01"}
+                          value={step().threshold}
+                          onInput={(e) => updateStep(i, { threshold: e.currentTarget.value })}
+                          data-field={`dtier-${i}-threshold`}
+                          error={errors()[`dtier-${i}-threshold`]}
+                          disabled={saving()}
+                        />
+                        <TextField
+                          label={`ส่วนลด (${discountUnit()})`}
+                          required
+                          type="number"
+                          min="1"
+                          max={tierDiscountType() === "percent" ? "100" : undefined}
+                          step="1"
+                          value={step().value}
+                          onInput={(e) => updateStep(i, { value: e.currentTarget.value })}
+                          data-field={`dtier-${i}-value`}
+                          error={errors()[`dtier-${i}-value`]}
+                          disabled={saving()}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </Index>
+                <Show when={discountTiers().length < MAX_DISCOUNT_TIERS}>
+                  <Button type="button" variant="outline" disabled={saving()} onClick={() => setDiscountTiers((list) => [...list, { threshold: "", value: "" }])} class="self-start">
+                    เพิ่มขั้นส่วนลด
+                  </Button>
+                </Show>
+              </div>
+              <p class="text-xs text-ink-gray">ลูกค้าได้ส่วนลดของขั้นสูงสุดที่ซื้อถึง ไม่รวมกันหลายขั้น</p>
             </Show>
             <Show when={type() === "buy_x_get_y"}>
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -387,7 +553,8 @@ export function PromotionForm(props: {
                 step={conditionType() === "qty" ? "1" : "0.01"}
                 value={minSpend()}
                 onInput={(e) => setMinSpend(e.currentTarget.value)}
-                data-field="minSpend" error={errors().minSpend}
+                data-field="minSpend"
+                error={errors().minSpend}
                 disabled={saving()}
               />
               <p class="text-xs text-ink-gray">เว้นว่างไว้ถ้าต้องการส่งฟรีทุกออเดอร์</p>
@@ -462,64 +629,72 @@ export function PromotionForm(props: {
               </div>
               <p class="text-xs text-ink-gray">ลูกค้าได้ของแถมทุกขั้นที่ซื้อถึงแบบสะสม ของแถมไม่นับเป็นสินค้าในตะกร้า ไม่คิดราคา และหายไปเองเมื่อยอดต่ำกว่าขั้น</p>
             </Show>
-          </Section>
+          </FormSection>
 
-          <Show when={runsInCart()}>
-          <Section title="การแสดงผลหน้าร้าน">
-            <div class="flex items-center justify-between gap-4">
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-ink">แสดงในตะกร้า</p>
-                <p class="text-xs text-ink-gray">แสดงแถบความคืบหน้าของโปรนี้ในตะกร้าและหน้าตะกร้าสินค้า ถ้าไม่แสดง โปรยังมีผลตามเงื่อนไขเหมือนเดิม</p>
+          {/* 3) สินค้า */}
+          <FormSection title="สินค้า">
+            <Show
+              when={promotionHasProductScope(type())}
+              fallback={<p class="text-sm text-ink-gray">{type() === "bundle" ? "สินค้าในเซ็ตเลือกไว้ในส่วนสิทธิประโยชน์ด้านบน" : "สินค้าที่ต้องซื้อและสินค้าที่แถมเลือกไว้ในส่วนสิทธิประโยชน์ด้านบน"}</p>}
+            >
+              <div data-field="productIds" class="flex flex-col gap-3">
+                <ChoiceRadio
+                  name="promotion-product-scope"
+                  value={applyToAll() ? "all" : "selected"}
+                  disabled={saving()}
+                  onChange={(mode) => setApplyToAll(mode === "all")}
+                  options={[
+                    { value: "all", label: "ทั้งร้าน", hint: "ใช้กับทุกสินค้าในตะกร้า" },
+                    { value: "selected", label: "เฉพาะสินค้าที่เลือก", hint: "นับเฉพาะสินค้าหรือ SKU ที่เลือก" },
+                  ]}
+                />
+                <Show when={!applyToAll()}>
+                  <ProductSkuPicker value={scopeRefs()} onChange={setScopeRefs} disabled={saving()} error={errors().productIds} />
+                </Show>
               </div>
-              <Toggle checked={showInCart()} onChange={setShowInCart} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
-            </div>
-            <div class="flex items-center justify-between gap-4">
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-ink">แสดงป้ายโปรโมชั่น</p>
-                <p class="text-xs text-ink-gray">ป้ายสีแดงบนการ์ดสินค้าและหน้าสินค้าที่ร่วมโปรนี้ ปิดได้ถ้าเป็นโปรทั้งร้านที่ไม่อยากให้ขึ้นทุกการ์ด</p>
+            </Show>
+          </FormSection>
+
+          {/* 4) จำกัดการใช้ */}
+          <FormSection title="จำกัดการใช้">
+            <Show
+              when={isProductDiscount()}
+              fallback={<p class="text-sm text-ink-gray">ลูกค้าได้รับสิทธิ์ทุกคำสั่งซื้อที่ถึงเงื่อนไข ตามกลุ่มลูกค้าและช่วงเวลาที่ตั้งไว้</p>}
+            >
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <TextField label="ยอดซื้อขั้นต่ำ (บาท)" type="number" min="0" step="1" value={minSpend()} onInput={(e) => setMinSpend(e.currentTarget.value)} data-field="minSpend" error={errors().minSpend} disabled={saving()} placeholder="ไม่มีขั้นต่ำ" />
               </div>
+              <p class="text-xs text-ink-gray">นับจากยอดสินค้าที่เข้าร่วม เว้นว่างไว้ถ้าไม่มีขั้นต่ำ</p>
+            </Show>
+          </FormSection>
+
+          {/* 5) การแสดงผล */}
+          <FormSection title="การแสดงผล">
+            <Show when={runsInCart()}>
+              <SettingRow title="แสดงในตะกร้า" hint="แสดงแถบความคืบหน้าของโปรนี้ในตะกร้าและหน้าตะกร้าสินค้า ถ้าไม่แสดง โปรยังมีผลตามเงื่อนไขเหมือนเดิม">
+                <Toggle checked={showInCart()} onChange={setShowInCart} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
+              </SettingRow>
+            </Show>
+            <SettingRow title="แสดงป้ายโปรโมชั่น" hint="ป้ายสีแดงบนการ์ดสินค้าและหน้าสินค้าที่ร่วมโปรนี้ ปิดได้ถ้าเป็นโปรทั้งร้านที่ไม่อยากให้ขึ้นทุกการ์ด">
               <Toggle checked={showBadge()} onChange={setShowBadge} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
-            </div>
+            </SettingRow>
             <Show when={showBadge()}>
-            <TextField
-              label="ข้อความบนป้ายโปรโมชั่น"
-              placeholder={promotionBadgeLabel({ ...previewValues(), badgeLabel: undefined })}
-              value={badgeLabel()}
-              maxLength={40}
-              disabled={saving()}
-              onInput={(e) => setBadgeLabel(e.currentTarget.value)}
-            />
-            <p class="-mt-2 text-xs text-ink-gray">เว้นว่างจะใช้ข้อความตามเงื่อนไขของโปร</p>
+              <TextField
+                label="ข้อความบนป้ายโปรโมชั่น"
+                placeholder={promotionBadgeLabel({ ...previewValues(), badgeLabel: undefined })}
+                value={badgeLabel()}
+                maxLength={40}
+                disabled={saving()}
+                onInput={(e) => setBadgeLabel(e.currentTarget.value)}
+              />
+              <p class="-mt-2 text-xs text-ink-gray">เว้นว่างจะใช้ข้อความตามเงื่อนไขของโปร</p>
             </Show>
-          </Section>
-          </Show>
+          </FormSection>
 
-          <Section title="ระยะเวลา">
-            <p class="text-xs text-ink-gray">เวลาประเทศไทย โปรเริ่มและหยุดเองตามเวลาที่ตั้งไว้</p>
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <TextField label="วันเริ่ม" required type="date" value={startDate()} onInput={(e) => setStartDate(e.currentTarget.value)} data-field="startDate" error={errors().startDate} disabled={saving()} />
-              <TextField label="เวลาเริ่ม" type="time" value={startTime()} onInput={(e) => setStartTime(e.currentTarget.value)} disabled={saving()} />
-              <TextField label="วันสิ้นสุด" required type="date" value={endDate()} onInput={(e) => setEndDate(e.currentTarget.value)} data-field="endDate" error={errors().endDate} disabled={saving()} />
-              <TextField label="เวลาสิ้นสุด" type="time" value={endTime()} onInput={(e) => setEndTime(e.currentTarget.value)} disabled={saving()} />
-            </div>
-          </Section>
-
-          <Show when={promotionHasProductScope(type())}>
-          <Section title="สินค้าที่เข้าร่วม">
-            <label class="flex flex-col gap-1.5">
-              <span class="text-sm font-medium text-ink">ใช้กับสินค้าทั้งหมด</span>
-              <Toggle checked={applyToAll()} onChange={setApplyToAll} onLabel="ทุกสินค้า" offLabel="เฉพาะสินค้าที่เลือก" disabled={saving()} />
-            </label>
-            <Show when={!applyToAll()}>
-              <div data-field="productIds" class="flex flex-col gap-2">
-                <span class="text-sm font-medium text-ink">
-                  สินค้าที่เลือก <span class="text-system-red">*</span>
-                </span>
-                <ProductSkuPicker value={scopeRefs()} onChange={setScopeRefs} disabled={saving()} error={errors().productIds} />
-              </div>
-            </Show>
-          </Section>
-          </Show>
+          {/* 6) การใช้ร่วมกับโปรอื่น */}
+          <FormSection title="การใช้ร่วมกับโปรอื่น" description="โปรนี้ใช้ร่วมกับโปรประเภทไหนได้บ้างในคำสั่งซื้อเดียวกัน">
+            <CombinableField value={combinable()} onChange={setCombinable} disabled={saving()} />
+          </FormSection>
 
           <Show when={submitError()}>
             <p role="alert" class="rounded-card bg-danger-soft px-4 py-3 text-sm font-medium text-danger-strong">
@@ -530,6 +705,7 @@ export function PromotionForm(props: {
         }
         preview={
             <div class="flex flex-col gap-2 p-4 text-sm sm:p-5">
+              <p class="text-xs font-medium text-ink-gray">{MARKETING_TOOL_META[props.tool].label}</p>
               <p class="text-base font-semibold text-ink">{name() || "ชื่อโปรโมชั่น"}</p>
               <p class="font-medium text-brand-pink">{formatPromotionDiscount(previewValues(), productName)}</p>
               <Show when={type() === "gift_with_purchase" && tiers().length > 1}>
@@ -543,17 +719,33 @@ export function PromotionForm(props: {
                   </For>
                 </ol>
               </Show>
-              <Show when={runsInCart()}>
-                <p class="text-ink-gray">{showInCart() ? "แสดงในตะกร้า" : "ไม่แสดงในตะกร้า"}</p>
+              <Show when={type() === "tiered_discount" && discountTiers().length > 1}>
+                <ol class="flex flex-col gap-1 text-ink-gray">
+                  <For each={discountTiers()}>
+                    {(t, i) => (
+                      <li class="truncate">
+                        ขั้นที่ {i() + 1} ซื้อครบ {t.threshold ? formatPromotionThreshold(conditionType(), Number(t.threshold)) : "-"} {t.value ? formatDiscountValue(tierDiscountType(), Number(t.value)) : ""}
+                      </li>
+                    )}
+                  </For>
+                </ol>
               </Show>
               <Show when={promotionHasProductScope(type())}>
-                <p class="text-ink-gray">{applyToAll() ? "ทุกสินค้า" : skuRefsSummary(scopeRefs())}</p>
+                <p class="text-ink-gray">สินค้า: {applyToAll() ? "ทั้งร้าน" : skuRefsSummary(scopeRefs())}</p>
               </Show>
+              <p class="text-ink-gray">กลุ่มลูกค้า: {formatAudience(fromAudienceDraft(audience()))}</p>
               <Show when={startDate() && endDate()}>
                 <p class="text-ink-gray">
                   {formatMarketingDateTime(startDate(), startTime())} - {formatMarketingDateTime(endDate(), endTime())}
                 </p>
               </Show>
+              <Show when={runsInCart()}>
+                <p class="text-ink-gray">{showInCart() ? "แสดงในตะกร้า" : "ไม่แสดงในตะกร้า"}</p>
+              </Show>
+              <Show when={showBadge()}>
+                <p class="self-start rounded-pill bg-danger-soft px-2.5 py-0.5 text-xs text-danger-strong">{promotionBadgeLabel(previewValues())}</p>
+              </Show>
+              <p class="text-ink-gray">{formatCombinable(fromCombinableDraft(combinable()))}</p>
               <p class="text-ink-gray">{draftFlow ? "แบบร่าง" : enabled() ? "เปิดใช้งาน" : "ปิดใช้งาน"}</p>
               <Show when={startDate() && endDate() && !dateRangeValid()}>
                 <p class="text-system-red">ช่วงวันที่ไม่ถูกต้อง</p>
@@ -566,6 +758,7 @@ export function PromotionForm(props: {
         <DraftPublishActions
           draft={draftFlow}
           saving={saving()}
+          publishLabel="ตกลงและเผยแพร่"
           onCancel={props.onCancel}
           onSaveDraft={() => void save("draft")}
           onPublish={() => void save("active")}
@@ -574,14 +767,5 @@ export function PromotionForm(props: {
       </AdminFloatingBar>
       <div class="h-16" aria-hidden="true" />
     </form>
-  );
-}
-
-function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
-  return (
-    <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-      <h2 class="text-base font-semibold text-ink">{props.title}</h2>
-      {props.children}
-    </div>
   );
 }

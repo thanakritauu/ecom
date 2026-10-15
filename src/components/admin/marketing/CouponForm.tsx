@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show, type JSX } from "solid-js";
+import { createMemo, createSignal, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
@@ -7,6 +7,20 @@ import { Toggle } from "~/components/admin/Toggle";
 import { SelectField } from "~/components/admin/SelectField";
 import { SingleImageUploader } from "~/components/admin/SingleImageUploader";
 import {
+  AudienceField,
+  CombinableField,
+  FormSection as Section,
+  PeriodFields,
+  SettingRow as ToggleRow,
+  audienceError,
+  fromAudienceDraft,
+  fromCombinableDraft,
+  toAudienceDraft,
+  toCombinableDraft,
+  type AudienceDraft,
+} from "./MarketingFormBlocks";
+import {
+  type CouponTool,
   COUPON_DISCOUNT_TYPE_META,
   isValidDateRange,
   formatMarketingDateShort,
@@ -39,6 +53,7 @@ const LABELS: Record<string, string> = {
   perCustomerLimit: "จำกัดต่อลูกค้า",
   startDate: "วันเริ่ม",
   endDate: "วันสิ้นสุด",
+  audience: "กลุ่มลูกค้า",
 };
 
 export type CouponFormValues = Omit<Coupon, "id" | "createdAt" | "updatedAt">;
@@ -64,6 +79,8 @@ async function toThumbnailDataUrl(src: string): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 export function CouponForm(props: {
+  /** The coupon tool: คูปอง, คูปองลูกค้าใหม่ (audience fixed to new customers) or โค้ดส่วนลด (never listed, typed only). */
+  tool: CouponTool;
   initial?: Coupon;
   submitLabel: string;
   /** Codes already used by other coupons (upper case). */
@@ -72,11 +89,16 @@ export function CouponForm(props: {
   onCancel: () => void;
 }) {
   const [code, setCode] = createSignal(props.initial?.code ?? "");
+  const isNewCustomerTool = props.tool === "coupon_new";
+  const isCodeTool = props.tool === "coupon_code";
+  const [audience, setAudience] = createSignal<AudienceDraft>(isNewCustomerTool ? { kind: "new", tiers: [] } : toAudienceDraft(props.initial?.audience));
+  const [combinable, setCombinable] = createSignal(toCombinableDraft(props.initial?.combinableWith));
   const [discountType, setDiscountType] = createSignal<CouponDiscountType>(props.initial?.discountType ?? "baht");
   const [discount, setDiscount] = createSignal(props.initial ? String(props.initial.discount) : "");
   const [maxDiscount, setMaxDiscount] = createSignal(props.initial?.maxDiscount ? String(props.initial.maxDiscount) : "");
   const [usageLimit, setUsageLimit] = createSignal(props.initial?.usageLimit ? String(props.initial.usageLimit) : "");
-  const [perCustomerLimit, setPerCustomerLimit] = createSignal(props.initial?.perCustomerLimit ? String(props.initial.perCustomerLimit) : "");
+  // คูปองลูกค้าใหม่ starts at once per customer.
+  const [perCustomerLimit, setPerCustomerLimit] = createSignal(props.initial ? (props.initial.perCustomerLimit ? String(props.initial.perCustomerLimit) : "") : isNewCustomerTool ? "1" : "");
   const [image, setImage] = createSignal(props.initial?.image ?? "");
   const pickImage = async (url: string) => {
     setImage(url);
@@ -101,8 +123,8 @@ export function CouponForm(props: {
    */
   const draftFlow = !props.initial || props.initial.status === "draft";
   const [enabled, setEnabled] = createSignal(props.initial ? props.initial.status === "active" : false);
-  const [showOnHome, setShowOnHome] = createSignal(props.initial?.showOnHome ?? true);
-  const [showAtCheckout, setShowAtCheckout] = createSignal(props.initial?.showAtCheckout ?? true);
+  const [showOnHome, setShowOnHome] = createSignal(isCodeTool ? false : (props.initial?.showOnHome ?? true));
+  const [showAtCheckout, setShowAtCheckout] = createSignal(isCodeTool ? false : (props.initial?.showAtCheckout ?? true));
   const [startDate, setStartDate] = createSignal(props.initial?.startDate ?? "");
   const [startTime, setStartTime] = createSignal(props.initial?.startTime ?? "00:00");
   const [endDate, setEndDate] = createSignal(props.initial?.endDate ?? "");
@@ -148,6 +170,8 @@ export function CouponForm(props: {
     if (!startDate()) next.startDate = "กรุณาเลือกวันเริ่ม";
     if (!endDate()) next.endDate = "กรุณาเลือกวันสิ้นสุด";
     if (startDate() && endDate() && !dateRangeValid()) next.endDate = "วันสิ้นสุดต้องอยู่หลังวันเริ่ม";
+    const audienceProblem = audienceError(audience());
+    if (audienceProblem) next.audience = audienceProblem;
     return next;
   };
 
@@ -178,8 +202,11 @@ export function CouponForm(props: {
     // ทั้งร้าน = unset; a draft may keep "เฉพาะสินค้าที่เลือก" with nothing picked yet ([]).
     productScope: scopeMode() === "selected" ? scopeRefs() : undefined,
     image: image() || undefined,
-    showOnHome: showOnHome(),
-    showAtCheckout: showAtCheckout(),
+    showOnHome: isCodeTool ? false : showOnHome(),
+    showAtCheckout: isCodeTool ? false : showAtCheckout(),
+    audience: fromAudienceDraft(audience()),
+    combinableWith: fromCombinableDraft(combinable()),
+    tool: props.tool,
     startDate: startDate(),
     startTime: startTime(),
     endDate: endDate(),
@@ -232,7 +259,8 @@ export function CouponForm(props: {
     <>
       <FormErrorSummary errors={errors()} labels={LABELS} />
       <div class="flex flex-col gap-6">
-        <Section title="ข้อมูลคูปอง">
+        {/* 1) ข้อมูลพื้นฐาน */}
+        <Section title="ข้อมูลพื้นฐาน">
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextField
               label="โค้ดคูปอง"
@@ -245,40 +273,51 @@ export function CouponForm(props: {
               }}
               error={errors().code}
               disabled={saving()}
-              placeholder="เช่น SAVE100"
+              placeholder={isNewCustomerTool ? "เช่น NEW100" : "เช่น SAVE100"}
             />
             <Show
               when={!draftFlow}
               fallback={
                 <p class="self-end text-xs text-ink-gray">
-                  {props.initial ? "คูปองนี้ยังเป็นแบบร่าง ลูกค้ายังใช้ไม่ได้" : "บันทึกแบบร่างไว้ก่อนได้ แล้วกด บันทึกและเผยแพร่ เมื่อข้อมูลครบ"}
+                  {props.initial ? "คูปองนี้ยังเป็นแบบร่าง ลูกค้ายังใช้ไม่ได้" : "บันทึกแบบร่างไว้ก่อนได้ แล้วกด ตกลงและเผยแพร่ เมื่อข้อมูลครบ"}
                 </p>
               }
             >
-            <label class="flex flex-col gap-1.5">
-              <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
-              <Toggle checked={enabled()} onChange={setEnabled} disabled={saving()} />
-              <span class="text-xs text-ink-gray">{enabled() ? "ใช้ได้ที่หน้าร้านตามช่วงเวลาที่ตั้งไว้" : "ลูกค้ายังใช้คูปองนี้ไม่ได้"}</span>
-            </label>
+              <label class="flex flex-col gap-1.5">
+                <span class="text-sm font-medium text-ink">สถานะการใช้งาน</span>
+                <Toggle checked={enabled()} onChange={setEnabled} disabled={saving()} />
+                <span class="text-xs text-ink-gray">{enabled() ? "ใช้ได้ที่หน้าร้านตามช่วงเวลาที่ตั้งไว้" : "ลูกค้ายังใช้คูปองนี้ไม่ได้"}</span>
+              </label>
             </Show>
           </div>
-          <div class="flex flex-col gap-1.5" data-field="image">
-            <SingleImageUploader
-              label="รูปคูปอง"
-              hint="รูปสี่เหลี่ยมจัตุรัส แสดงที่ด้านซ้ายของคูปองแทนไอคอน % ถ้าไม่ใส่จะใช้ไอคอนเดิม"
-              value={image()}
-              onChange={(url) => {
-                setErrors(({ image: _i, ...rest }) => rest);
-                void pickImage(url);
-              }}
-            />
-            <Show when={errors().image}>
-              <p class="text-sm text-system-red">{errors().image}</p>
-            </Show>
-          </div>
+          <PeriodFields
+            value={{ startDate: startDate(), startTime: startTime(), endDate: endDate(), endTime: endTime() }}
+            onChange={(patch) => {
+              if (patch.startDate !== undefined) setStartDate(patch.startDate);
+              if (patch.startTime !== undefined) setStartTime(patch.startTime);
+              if (patch.endDate !== undefined) setEndDate(patch.endDate);
+              if (patch.endTime !== undefined) setEndTime(patch.endTime);
+              if (patch.startDate !== undefined) fix("startDate");
+              fix("endDate");
+            }}
+            errors={errors()}
+            disabled={saving()}
+            hint="เวลาประเทศไทย คูปองเริ่มและหมดอายุเองตามเวลาที่ตั้งไว้"
+          />
+          <AudienceField
+            value={audience()}
+            onChange={(next) => {
+              setAudience(next);
+              fix("audience");
+            }}
+            locked={isNewCustomerTool}
+            error={errors().audience}
+            disabled={saving()}
+          />
         </Section>
 
-        <Section title="ส่วนลด">
+        {/* 2) สิทธิประโยชน์ */}
+        <Section title="สิทธิประโยชน์">
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <SelectField
               label="ประเภทส่วนลด"
@@ -348,7 +387,8 @@ export function CouponForm(props: {
           </p>
         </Section>
 
-        <Section title="ใช้ได้กับสินค้า">
+        {/* 3) สินค้า */}
+        <Section title="สินค้า">
           <div data-field="productScope" class="flex flex-col gap-3">
             <ChoiceRadio
               name="coupon-product-scope"
@@ -377,6 +417,7 @@ export function CouponForm(props: {
           </div>
         </Section>
 
+        {/* 4) จำกัดการใช้ */}
         <Section title="จำกัดการใช้">
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextField
@@ -413,80 +454,51 @@ export function CouponForm(props: {
           <p class="text-xs text-ink-gray">จำกัดจำนวนครั้งนับรวมทุกคำสั่งซื้อของลูกค้าทุกคน ไม่นับคำสั่งซื้อที่ยกเลิก เมื่อครบแล้วลูกค้าจะใช้คูปองนี้ไม่ได้ เว้นว่างไว้ถ้าไม่จำกัด</p>
         </Section>
 
-        <Section title="การแสดงผลหน้าร้าน">
-          <div class="flex flex-col gap-4">
-            <ToggleRow title="แสดงในหน้าแรก" hint='แสดงเป็นคูปองให้กดเก็บในส่วน "คูปองส่วนลด" ของหน้าแรก'>
-              <Toggle checked={showOnHome()} onChange={setShowOnHome} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
-            </ToggleRow>
-            <ToggleRow title="แสดงในหน้าชำระเงิน" hint="แสดงในรายการคูปองที่ลูกค้าเลือกใช้ได้ตอนชำระเงิน">
-              <Toggle checked={showAtCheckout()} onChange={setShowAtCheckout} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
-            </ToggleRow>
-            <p class="text-xs text-ink-gray">ถ้าไม่แสดงทั้งสองที่ ลูกค้ายังกรอกโค้ดนี้เองได้ที่หน้าชำระเงิน</p>
+        {/* 5) การแสดงผล */}
+        <Section title="การแสดงผล">
+          <Show
+            when={!isCodeTool}
+            fallback={<p class="text-sm text-ink-gray">โค้ดส่วนลดไม่แสดงที่หน้าแรกและหน้าชำระเงิน ลูกค้ากรอกโค้ดเองที่หน้าชำระเงิน</p>}
+          >
+            <div class="flex flex-col gap-4">
+              <ToggleRow title="แสดงในหน้าแรก" hint='แสดงเป็นคูปองให้กดเก็บในส่วน "คูปองส่วนลด" ของหน้าแรก'>
+                <Toggle checked={showOnHome()} onChange={setShowOnHome} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
+              </ToggleRow>
+              <ToggleRow title="แสดงในหน้าชำระเงิน" hint="แสดงในรายการคูปองที่ลูกค้าเลือกใช้ได้ตอนชำระเงิน">
+                <Toggle checked={showAtCheckout()} onChange={setShowAtCheckout} onLabel="แสดง" offLabel="ไม่แสดง" disabled={saving()} />
+              </ToggleRow>
+              <p class="text-xs text-ink-gray">ถ้าไม่แสดงทั้งสองที่ ลูกค้ายังกรอกโค้ดนี้เองได้ที่หน้าชำระเงิน</p>
+            </div>
+          </Show>
+          <div class="flex flex-col gap-1.5" data-field="image">
+            <SingleImageUploader
+              label="รูปคูปอง"
+              hint="รูปสี่เหลี่ยมจัตุรัส แสดงที่ด้านซ้ายของคูปองแทนไอคอน % ถ้าไม่ใส่จะใช้ไอคอนเดิม"
+              value={image()}
+              onChange={(url) => {
+                setErrors(({ image: _i, ...rest }) => rest);
+                void pickImage(url);
+              }}
+            />
+            <Show when={errors().image}>
+              <p class="text-sm text-system-red">{errors().image}</p>
+            </Show>
           </div>
-        </Section>
-
-        <Section title="ระยะเวลา">
-          <p class="text-xs text-ink-gray">เวลาประเทศไทย คูปองเริ่มและหมดอายุเองตามเวลาที่ตั้งไว้</p>
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextField
-              label="วันเริ่ม"
-              required
-              type="date"
-              data-field="startDate"
-              value={startDate()}
-              onInput={(e) => {
-                setStartDate(e.currentTarget.value);
-                fix("startDate", "endDate");
-              }}
-              error={errors().startDate}
-              disabled={saving()}
-            />
-            <TextField
-              label="เวลาเริ่ม"
-              type="time"
-              value={startTime()}
-              onInput={(e) => {
-                setStartTime(e.currentTarget.value);
-                fix("endDate");
-              }}
-              disabled={saving()}
-            />
-            <TextField
-              label="วันสิ้นสุด"
-              required
-              type="date"
-              data-field="endDate"
-              value={endDate()}
-              onInput={(e) => {
-                setEndDate(e.currentTarget.value);
-                fix("endDate");
-              }}
-              error={errors().endDate}
-              disabled={saving()}
-            />
-            <TextField
-              label="เวลาสิ้นสุด"
-              type="time"
-              value={endTime()}
-              onInput={(e) => {
-                setEndTime(e.currentTarget.value);
-                fix("endDate");
-              }}
-              disabled={saving()}
-            />
-          </div>
-        </Section>
-
-        <Section title="เงื่อนไขเพิ่มเติม">
           <RichTextEditor
             field="extraConditions"
+            label="เงื่อนไขเพิ่มเติม"
             value={extraConditions()}
             onChange={setExtraConditions}
             disabled={saving()}
-            placeholder="เช่น ใช้ได้เฉพาะสมาชิกใหม่ หรือรายละเอียดอื่นที่ลูกค้าควรรู้"
+            placeholder="เช่น รายละเอียดอื่นที่ลูกค้าควรรู้"
             hint='ไม่บังคับ แสดงต่อท้ายเงื่อนไขการใช้งานในหน้าต่าง "รายละเอียดคูปอง" เงื่อนไขหลักด้านบนระบบสร้างให้เองจากข้อมูลคูปอง'
             minHeightClass="min-h-[140px]"
           />
+        </Section>
+
+        {/* 6) การใช้ร่วมกับโปรอื่น */}
+        <Section title="การใช้ร่วมกับโปรอื่น" description="คูปองนี้ใช้ร่วมกับโปรประเภทไหนได้บ้างในคำสั่งซื้อเดียวกัน">
+          <CombinableField value={combinable()} onChange={setCombinable} disabled={saving()} />
         </Section>
       </div>
 
@@ -523,30 +535,10 @@ export function CouponForm(props: {
           onSaveDraft={() => void save("draft")}
           onPublish={() => void save("active")}
           onSave={() => void save(enabled() ? "active" : "disabled")}
+          publishLabel="ตกลงและเผยแพร่"
         />
       </AdminFloatingBar>
       <div class="h-16" aria-hidden="true" />
     </form>
-  );
-}
-
-function Section(props: { title: string; children: JSX.Element }) {
-  return (
-    <div class="flex flex-col gap-4 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-      <h2 class="text-base font-semibold text-ink">{props.title}</h2>
-      {props.children}
-    </div>
-  );
-}
-
-function ToggleRow(props: { title: string; hint: string; children: JSX.Element }) {
-  return (
-    <div class="flex items-center justify-between gap-4">
-      <div class="min-w-0">
-        <p class="text-sm font-medium text-ink">{props.title}</p>
-        <p class="text-xs text-ink-gray">{props.hint}</p>
-      </div>
-      {props.children}
-    </div>
   );
 }

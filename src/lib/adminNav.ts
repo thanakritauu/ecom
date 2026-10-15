@@ -14,8 +14,6 @@ import {
   ProductBoxIcon,
   CategoryGridIcon,
   PromotionTagIcon,
-  CouponTicketIcon,
-  FlashBoltIcon,
   PointsCoinIcon,
   PagesPanelIcon,
   ImageIcon,
@@ -36,7 +34,16 @@ export type AdminNavItem = {
   end?: boolean;
   /** CMS Backoffice Polish §18 — every item's own icon; falls back to the group's icon only when omitted (the group's "overview"/single item). No two items in the whole sidebar share an icon. */
   icon?: Component<{ class?: string }>;
+  /** Extra paths that also light this item up (any route under them), e.g. the marketing hub for coupon and flash-sale pages. */
+  activePrefixes?: string[];
 };
+
+/** Whether `pathname` is this item's page (its own href, by `end` rules, or one of its `activePrefixes`). */
+export function isNavItemActive(item: AdminNavItem, pathname: string): boolean {
+  if (!item.href) return false;
+  if (item.end ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`)) return true;
+  return (item.activePrefixes ?? []).some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
 
 export type AdminNavGroup = {
   id: string;
@@ -85,9 +92,8 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "การตลาด",
     icon: MarketingIcon,
     items: [
-      { label: "โปรโมชั่น", href: "/admin/marketing/promotions", icon: PromotionTagIcon },
-      { label: "คูปอง", href: "/admin/marketing/coupons", icon: CouponTicketIcon },
-      { label: "แฟลชเซล", href: "/admin/marketing/flash-sale", icon: FlashBoltIcon },
+      // One hub (เครื่องมือโปรโมชั่น + จัดการโปรโมชั่น); coupons and flash sale open from it, so it stays lit on every /admin/marketing page.
+      { label: "โปรโมชั่น", href: "/admin/marketing/promotions", icon: PromotionTagIcon, activePrefixes: ["/admin/marketing"] },
     ],
   },
   {

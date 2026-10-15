@@ -18,6 +18,8 @@ export function DraftPublishActions(props: {
   onSaveDraft: () => void;
   onPublish: () => void;
   onSave: () => void;
+  /** Primary label while drafting; default "บันทึกและเผยแพร่" (marketing forms use "ตกลงและเผยแพร่"). */
+  publishLabel?: string;
 }) {
   return (
     <div class="flex w-full flex-wrap justify-end gap-3">
@@ -36,7 +38,7 @@ export function DraftPublishActions(props: {
           บันทึกแบบร่าง
         </Button>
         <Button type="button" variant="primary" onClick={props.onPublish} loading={props.saving}>
-          {props.saving ? "กำลังบันทึก..." : "บันทึกและเผยแพร่"}
+          {props.saving ? "กำลังบันทึก..." : props.publishLabel ?? "บันทึกและเผยแพร่"}
         </Button>
       </Show>
     </div>

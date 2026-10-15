@@ -17,6 +17,8 @@ import { Breadcrumb, type BreadcrumbItem } from "./Breadcrumb";
 export function PageHeader(props: {
   title: string;
   description?: string;
+  /** Shown before the title (e.g. a marketing tool's icon). */
+  icon?: JSX.Element;
   breadcrumb?: BreadcrumbItem[];
   /** A small badge/status element rendered next to the title (e.g. a `StatusBadge`). */
   status?: JSX.Element;
@@ -31,12 +33,15 @@ export function PageHeader(props: {
     <div class="flex flex-col gap-3">
       <Show when={props.breadcrumb}>{(items) => <Breadcrumb items={items()} />}</Show>
       <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div class="flex flex-col gap-1">
-          <div class="flex flex-wrap items-center gap-2">
-            <h1 class="text-2xl font-bold text-ink">{props.title}</h1>
-            {props.status}
+        <div class="flex min-w-0 items-start gap-3">
+          {props.icon}
+          <div class="flex min-w-0 flex-col gap-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <h1 class="text-2xl font-bold text-ink">{props.title}</h1>
+              {props.status}
+            </div>
+            {props.description ? <p class="text-sm text-ink-gray">{props.description}</p> : null}
           </div>
-          {props.description ? <p class="text-sm text-ink-gray">{props.description}</p> : null}
         </div>
         <Show when={hasActions()}>
           <div class="flex shrink-0 flex-wrap items-center gap-3">

@@ -4,7 +4,7 @@ import { PlusIcon, MarketingIcon, OrdersIcon, InventoryIcon } from "~/components
 
 const ACTIONS = [
   { label: "เพิ่มสินค้า", href: "/admin/products/new", icon: PlusIcon },
-  { label: "เพิ่มโปรโมชั่น", href: "/admin/marketing/promotions/new", icon: MarketingIcon },
+  { label: "เพิ่มโปรโมชั่น", href: "/admin/marketing/promotions?tab=tools", icon: MarketingIcon },
   { label: "เพิ่มคูปอง", href: "/admin/marketing/coupons/new", icon: MarketingIcon },
   { label: "ดูคำสั่งซื้อ", href: "/admin/orders", icon: OrdersIcon },
   { label: "จัดการสต๊อก", href: "/admin/inventory", icon: InventoryIcon },

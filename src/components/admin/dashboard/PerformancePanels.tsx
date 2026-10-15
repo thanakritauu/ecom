@@ -39,7 +39,7 @@ export function PerformancePanels() {
       <Panel title="ยอดขายตามหน้าแคมเปญ" href="/admin/promotion-pages">
         <HBarChart data={promotionData()} formatValue={formatAdminCurrency} emptyLabel="ยังไม่มีข้อมูลยอดขายจากหน้าแคมเปญ" />
       </Panel>
-      <Panel title="คูปองที่ถูกใช้ในคำสั่งซื้อ" href="/admin/marketing/coupons">
+      <Panel title="คูปองที่ถูกใช้ในคำสั่งซื้อ" href="/admin/marketing/promotions?tab=manage&tool=coupons">
         <HBarChart data={couponData()} formatValue={(v) => `${v.toLocaleString("th-TH")} ครั้ง`} emptyLabel="ยังไม่มีคำสั่งซื้อที่ใช้คูปอง" />
       </Panel>
     </div>

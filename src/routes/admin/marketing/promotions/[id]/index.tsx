@@ -13,7 +13,6 @@ import { PromotionBuyGetView, PromotionBundleView } from "~/components/admin/mar
 import { useAdminProducts } from "~/lib/adminProductStore";
 import {
   MARKETING_PHASE_META,
-  PROMOTION_TYPE_META,
   formatMarketingDateTime,
   formatPromotionDiscount,
   marketingPhase,
@@ -25,6 +24,8 @@ import {
   isStorefrontPromotion,
 } from "~/lib/adminMarketing";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
+import { MARKETING_TOOL_META, formatCombinable, formatDiscountValue, formatPromotionThreshold, marketingHubListHref, promotionDiscountTiers, promotionTool } from "~/lib/adminMarketing";
+import { formatAudience } from "~/lib/marketingAudience";
 import { pushToast } from "~/lib/toast";
 
 export default function AdminPromotionDetailPage() {
@@ -65,7 +66,7 @@ export default function AdminPromotionDetailPage() {
     setActionLoading(false);
     setConfirmDelete(false);
     pushToast(`ลบ "${current.name}" เรียบร้อยแล้ว`, "error");
-    navigate("/admin/marketing/promotions");
+    navigate(marketingHubListHref());
   };
 
   return (
@@ -73,8 +74,8 @@ export default function AdminPromotionDetailPage() {
       when={promotion()}
       fallback={
         <div class="flex flex-col gap-6">
-          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "โปรโมชั่น", href: "/admin/marketing/promotions" }]} />
-          <EmptyState icon={<PromotionTagIcon />} title="ไม่พบโปรโมชั่นนี้" description="โปรโมชั่นอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าโปรโมชั่น" onAction={() => navigate("/admin/marketing/promotions")} class="bg-surface-card shadow-card" />
+          <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "การตลาด" }, { label: "โปรโมชั่น", href: marketingHubListHref() }]} />
+          <EmptyState icon={<PromotionTagIcon />} title="ไม่พบโปรโมชั่นนี้" description="โปรโมชั่นอาจถูกลบไปแล้ว หรือลิงก์ไม่ถูกต้อง" actionLabel="กลับไปหน้าโปรโมชั่น" onAction={() => navigate(marketingHubListHref())} class="bg-surface-card shadow-card" />
         </div>
       }
     >
@@ -90,13 +91,13 @@ export default function AdminPromotionDetailPage() {
               items={[
                 { label: "แดชบอร์ด", href: "/admin" },
                 { label: "การตลาด" },
-                { label: "โปรโมชั่น", href: "/admin/marketing/promotions" },
+                { label: "โปรโมชั่น", href: marketingHubListHref() },
                 { label: p().name },
               ]}
             />
             <PageHeader
               title={p().name}
-              description={PROMOTION_TYPE_META[p().type].label}
+              description={MARKETING_TOOL_META[promotionTool(p())].label}
               actions={
                 <div class="flex items-center gap-2">
                   <Button variant="primary" href={`/admin/marketing/promotions/${p().id}/edit`}>
@@ -140,6 +141,21 @@ export default function AdminPromotionDetailPage() {
                   </Section>
                 </Show>
 
+                <Show when={p().type === "tiered_discount"}>
+                  <Section title={`ยิ่งซื้อยิ่งคุ้ม ${promotionDiscountTiers(p()).length} ขั้น`}>
+                    <ol class="flex flex-col gap-2 text-sm text-ink">
+                      <For each={promotionDiscountTiers(p())}>
+                        {(t, i) => (
+                          <li>
+                            ขั้นที่ {i() + 1} ซื้อครบ {formatPromotionThreshold(promotionCondition(p()), t.threshold)} {formatDiscountValue(p().tierDiscountType, t.value)}
+                          </li>
+                        )}
+                      </For>
+                    </ol>
+                    <p class="text-sm text-ink-gray">ลูกค้าได้ส่วนลดของขั้นสูงสุดที่ซื้อถึง</p>
+                  </Section>
+                </Show>
+
                 <Show when={p().type === "bundle"}>
                   <Section title="สินค้าในเซ็ต">
                     <PromotionBundleView promotion={p()} />
@@ -148,7 +164,7 @@ export default function AdminPromotionDetailPage() {
 
                 <Show when={promotionHasProductScope(p().type)}>
                 <Section title="สินค้าที่เข้าร่วม">
-                  <Show when={p().productIds.length > 0} fallback={<p class="text-sm text-ink-gray">ใช้กับสินค้าทั้งหมด</p>}>
+                  <Show when={p().productIds.length > 0} fallback={<p class="text-sm text-ink-gray">ทั้งร้าน</p>}>
                     <div class="flex flex-col gap-3">
                       <For each={scopeProducts()}>
                         {(product) => (
@@ -190,6 +206,9 @@ export default function AdminPromotionDetailPage() {
 
                 <Section title="ระยะเวลา">
                   <dl class="flex flex-col gap-1.5 text-sm">
+                    <Row label="เครื่องมือ" value={MARKETING_TOOL_META[promotionTool(p())].label} />
+                    <Row label="กลุ่มลูกค้า" value={formatAudience(p().audience)} />
+                    <Row label="ใช้ร่วมกับโปรอื่น" value={formatCombinable(p().combinableWith)} />
                     <Row label="เริ่ม" value={formatMarketingDateTime(p().startDate, p().startTime)} />
                     <Row label="สิ้นสุด" value={formatMarketingDateTime(p().endDate, p().endTime)} />
                   </dl>

@@ -17,6 +17,10 @@ import { useProductCatalog } from "./productCatalog";
 import { useCart } from "./cart";
 import { MOCK_ORDERS as ADMIN_MOCK_ORDERS } from "./adminOrders";
 import { giftLinesOf, resolveFreeShipping, resolveGiftPromotions, shippingFeeFor } from "./promotionEngine";
+import { useAuth } from "./auth";
+import { createMockOrderRepository, createOrderHistory } from "./orderHistory";
+import { resolveTier, yearlySpend } from "./membership";
+import { couponAudienceBlock, GUEST_SHOPPER, matchesAudience, type Shopper } from "./marketingAudience";
 
 /** Same keys (+ `:seed-version`) `adminMarketingStore` persists to. Read-only here; the customer side never writes them. */
 export const PROMOTIONS_STORAGE_KEY = "charmiss:admin:marketing:promotions";
@@ -59,8 +63,8 @@ function readOrdersForUsage(): UsageOrder[] {
 }
 
 /** A switched-on Admin coupon as the storefront's coupon (its window is checked again where it's offered or used). */
-function toStorefrontCoupon(c: AdminCoupon, orders: UsageOrder[]): Coupon {
-  return buildCoupon({
+function toStorefrontCoupon(c: AdminCoupon, orders: UsageOrder[], shopper: Shopper): Coupon {
+  const coupon = buildCoupon({
     code: c.code,
     discountType: c.discountType,
     discount: c.discount,
@@ -77,6 +81,7 @@ function toStorefrontCoupon(c: AdminCoupon, orders: UsageOrder[]): Coupon {
     extraConditions: c.extraConditions,
     productScope: c.productScope,
   });
+  return { ...coupon, audienceBlock: couponAudienceBlock(c.audience, shopper) };
 }
 
 type StorefrontPromotionsValue = {
@@ -88,6 +93,8 @@ type StorefrontPromotionsValue = {
   checkoutCoupons: Accessor<Coupon[]>;
   /** Every switched-on coupon, for typed codes (the picker tells "not started" / "expired" apart from "not found"). */
   codeCoupons: Accessor<Coupon[]>;
+  /** Who is shopping (guest / new / returning, member tier): decides which promotions and coupons apply (`matchesAudience`). */
+  shopper: Accessor<Shopper>;
 };
 
 const StorefrontPromotionsContext = createContext<StorefrontPromotionsValue>();
@@ -104,6 +111,23 @@ export function StorefrontPromotionsProvider(props: { children: JSX.Element }) {
   const [allCoupons, setAllCoupons] = createSignal<AdminCoupon[]>(buildMockCoupons());
   const [now, setNow] = createSignal(Date.now());
   const [usageOrders, setUsageOrders] = createSignal<UsageOrder[]>(ADMIN_MOCK_ORDERS);
+
+  /**
+   * กลุ่มลูกค้า: a guest is a new customer with no tier. A signed-in member
+   * is returning once they have a paid (not cancelled, not awaiting payment)
+   * order; a member who just signed up (`memberSource: "new"`) has none yet.
+   * Their tier comes from this year's paid spend, same as Checkout and
+   * /account/points.
+   */
+  const auth = useAuth();
+  const orderHistory = createOrderHistory(() => createMockOrderRepository());
+  const shopper = createMemo((): Shopper => {
+    const user = auth.user();
+    if (!user) return GUEST_SHOPPER;
+    const orders = user.memberSource === "new" ? [] : orderHistory.orders();
+    const hasPaidOrder = orders.some((o) => o.status !== "cancelled" && o.status !== "pending_payment");
+    return { signedIn: true, hasPaidOrder, tier: resolveTier(yearlySpend(orders)).current.id };
+  });
 
   onMount(() => {
     const refresh = () => {
@@ -127,14 +151,16 @@ export function StorefrontPromotionsProvider(props: { children: JSX.Element }) {
   });
 
   // Only the types the cart runs; the others (bundle, % / baht off, buy X get Y) are Admin-only for now.
-  const promotions = createMemo(() => allPromotions().filter((p) => isStorefrontPromotion(p) && isMarketingLive(p, now())));
-  const liveCoupons = createMemo(() => allCoupons().filter((c) => isMarketingLive(c, now())));
-  const homeCoupons = createMemo(() => liveCoupons().filter((c) => c.showOnHome).map((c) => toStorefrontCoupon(c, usageOrders())));
-  const checkoutCoupons = createMemo(() => liveCoupons().filter((c) => c.showAtCheckout).map((c) => toStorefrontCoupon(c, usageOrders())));
-  const codeCoupons = createMemo(() => allCoupons().filter((c) => c.status === "active").map((c) => toStorefrontCoupon(c, usageOrders())));
+  // Promotions and listed coupons outside the shopper's กลุ่มลูกค้า don't apply and aren't shown (no badge, no cart banner, no ticket).
+  const promotions = createMemo(() => allPromotions().filter((p) => isStorefrontPromotion(p) && isMarketingLive(p, now()) && matchesAudience(p.audience, shopper())));
+  const liveCoupons = createMemo(() => allCoupons().filter((c) => isMarketingLive(c, now()) && matchesAudience(c.audience, shopper())));
+  const homeCoupons = createMemo(() => liveCoupons().filter((c) => c.showOnHome).map((c) => toStorefrontCoupon(c, usageOrders(), shopper())));
+  const checkoutCoupons = createMemo(() => liveCoupons().filter((c) => c.showAtCheckout).map((c) => toStorefrontCoupon(c, usageOrders(), shopper())));
+  // Typed codes: every switched-on coupon, so one outside the shopper's group is refused with its reason (`audienceBlock`) instead of "not found".
+  const codeCoupons = createMemo(() => allCoupons().filter((c) => c.status === "active").map((c) => toStorefrontCoupon(c, usageOrders(), shopper())));
 
   return (
-    <StorefrontPromotionsContext.Provider value={{ promotions, homeCoupons, checkoutCoupons, codeCoupons }}>{props.children}</StorefrontPromotionsContext.Provider>
+    <StorefrontPromotionsContext.Provider value={{ promotions, homeCoupons, checkoutCoupons, codeCoupons, shopper }}>{props.children}</StorefrontPromotionsContext.Provider>
   );
 }
 

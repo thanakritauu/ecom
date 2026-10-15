@@ -23,7 +23,7 @@ import { createAddressBook, createLocalAddressRepository, type AddressMockState 
 import { createMockOrderRepository, createOrderHistory } from "~/lib/orderHistory";
 import { resolveTier, yearlySpend } from "~/lib/membership";
 import { useProductCatalog } from "~/lib/productCatalog";
-import { useCartPromotions } from "~/lib/storefrontPromotions";
+import { useCartPromotions, useStorefrontPromotions } from "~/lib/storefrontPromotions";
 import { formatTHB } from "~/components/shared/PriceDisplay";
 import { AddressSection } from "~/components/checkout/AddressSection";
 import { PaymentSection } from "~/components/checkout/PaymentSection";
@@ -93,6 +93,7 @@ export default function CheckoutPage() {
 
   // The shopper's member tier (this year's paid spend, same as `/account/points`) sets the coin multiplier.
   const orderHistory = createOrderHistory(() => createMockOrderRepository());
+  const storefrontMarketing = useStorefrontPromotions();
   // Coupon "จำกัดต่อลูกค้า": the signed-in shopper's own non-cancelled orders that used the code (a guest has no history to count).
   const couponUsesByShopper = (code: string) =>
     auth.isAuthenticated() ? orderHistory.orders().filter((o) => o.status !== "cancelled" && o.payment.couponCode?.toUpperCase() === code.toUpperCase()).length : 0;
@@ -100,7 +101,9 @@ export default function CheckoutPage() {
   // or the cart no longer qualifies (its products removed, or under the minimum); it comes back if the cart qualifies again.
   const coupon = () => {
     const c = pickedCoupon();
-    return c && !couponUsageBlock(c, couponUsesByShopper(c.code)) && !couponCartBlock(c, resolvedLines()) ? c : undefined;
+    // กลุ่มลูกค้า is checked against the current shopper (e.g. a guest who picked a new-customer coupon, then signed in as a returning member).
+    const outsideAudience = c && storefrontMarketing.codeCoupons().find((x) => x.code === c.code)?.audienceBlock;
+    return c && !outsideAudience && !couponUsageBlock(c, couponUsesByShopper(c.code)) && !couponCartBlock(c, resolvedLines()) ? c : undefined;
   };
 
   // Coins the order can take — the coupon/cart can change after coins were picked, so the pick is capped (not reset).

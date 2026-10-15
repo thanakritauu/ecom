@@ -15,7 +15,13 @@ import { COUPONS_STORAGE_KEY, MARKETING_CHANGED_EVENT, PROMOTIONS_STORAGE_KEY } 
 const TODAY_LABEL = "17 ก.ย. 2569";
 let nextId = 1000;
 
-type WithId = { id: string; status: MarketingStatus; createdAt: string; updatedAt: string };
+type WithId = { id: string; status: MarketingStatus; createdAt: string; updatedAt: string; startDate: string; startTime: string; endDate: string; endTime: string };
+
+/** Bangkok "now" as the stored date + time (YYYY-MM-DD, HH:mm), one minute back so the window has closed by the next minute tick. */
+function bangkokNowMinusMinute(): { date: string; time: string } {
+  const iso = new Date(Date.now() + 7 * 3600_000 - 60_000).toISOString();
+  return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
+}
 
 export type EntityCrud<T extends WithId> = {
   items: Accessor<T[]>;
@@ -25,6 +31,8 @@ export type EntityCrud<T extends WithId> = {
   remove: (id: string) => Promise<void>;
   duplicate: (id: string) => Promise<T>;
   setStatus: (id: string, status: MarketingStatus) => Promise<void>;
+  /** "สิ้นสุดตอนนี้": the end date-time becomes now (Bangkok), so it stops running right away. */
+  endNow: (id: string) => Promise<void>;
 };
 
 /**
@@ -124,7 +132,13 @@ function createEntityStore<T extends WithId>(storageKey: string, baseline: () =>
     mutate((list) => list.map((item) => (item.id === id ? { ...item, status, updatedAt: TODAY_LABEL } : item)));
   };
 
-  return { items, getById, add, update, remove, duplicate, setStatus };
+  const endNow: EntityCrud<T>["endNow"] = async (id) => {
+    await simulateDelay();
+    const { date, time } = bangkokNowMinusMinute();
+    mutate((list) => list.map((item) => (item.id === id ? { ...item, endDate: date, endTime: time, updatedAt: TODAY_LABEL } : item)));
+  };
+
+  return { items, getById, add, update, remove, duplicate, setStatus, endNow };
 }
 
 type AdminMarketingContextValue = {

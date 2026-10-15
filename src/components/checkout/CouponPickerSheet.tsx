@@ -74,6 +74,7 @@ export function CouponPickerSheet(props: {
     if (!coupon) return setCodeError("ไม่พบโค้ดส่วนลดนี้ กรุณาตรวจสอบอีกครั้ง");
     if (isCouponNotStarted(coupon)) return setCodeError("โค้ดส่วนลดนี้ยังไม่เริ่มใช้งาน");
     if (!isCouponActive(coupon)) return setCodeError("โค้ดส่วนลดนี้หมดอายุแล้ว");
+    if (coupon.audienceBlock) return setCodeError(coupon.audienceBlock);
     const blocked = blockOf(coupon);
     if (blocked) return setCodeError(blocked);
     const cartBlocked = couponCartBlock(coupon, props.lines);
