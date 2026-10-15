@@ -43,7 +43,7 @@ import {
   isValidDateRange,
   formatMarketingDateTime,
   formatPromotionDiscount,
-  STOREFRONT_PROMOTION_TYPES,
+  promotionUsesCondition,
   promotionHasProductScope,
   promotionItemsTotal,
   type Promotion,
@@ -125,9 +125,9 @@ export function PromotionForm(props: {
   const [bundlePrice, setBundlePrice] = createSignal(props.initial?.bundlePrice ? String(props.initial.bundlePrice) : "");
   const [buyItems, setBuyItems] = createSignal<PromotionItemDraft[]>(toItemDrafts(props.initial?.buyItems));
   const [getItems, setGetItems] = createSignal<PromotionItemDraft[]>(toItemDrafts(props.initial?.getItems));
-  const runsInCart = () => STOREFRONT_PROMOTION_TYPES.includes(type());
-  /** Types counted in baht or pieces ("นับจาก"). */
-  const usesCondition = () => runsInCart() || type() === "tiered_discount";
+  /** Types counted in baht or pieces ("นับจาก"), with a progress banner in the cart ("แสดงในตะกร้า"). */
+  const usesCondition = () => promotionUsesCondition(type());
+  const runsInCart = usesCondition;
   const isProductDiscount = () => type() === "percent_off" || type() === "baht_off";
   const bundleNormalTotal = () => promotionItemsTotal(fromItemDrafts(bundleItems()), (id) => productStore.getById(id)?.price);
   const [conditionType, setConditionType] = createSignal<PromotionCondition>(props.initial?.conditionType ?? "amount");
@@ -137,7 +137,8 @@ export function PromotionForm(props: {
       ? initialTiers.map((t) => ({ threshold: String(t.threshold), giftProductId: t.giftProductId, giftQty: String(t.giftQty), giftVariantIds: t.giftVariantIds ?? [] }))
       : [emptyTier()],
   );
-  const [showInCart, setShowInCart] = createSignal(props.initial?.showInCart ?? false);
+  // ยิ่งซื้อยิ่งคุ้ม shows its banner unless switched off (older records have no value).
+  const [showInCart, setShowInCart] = createSignal(props.initial?.showInCart ?? (props.initial?.type ?? promotionTypeForTool(props.tool)) === "tiered_discount");
   const [badgeLabel, setBadgeLabel] = createSignal(props.initial?.badgeLabel ?? "");
   const [showBadge, setShowBadge] = createSignal(props.initial?.showBadge !== false);
   const productStore = useAdminProducts();
@@ -664,7 +665,9 @@ export function PromotionForm(props: {
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <TextField label="ยอดซื้อขั้นต่ำ (บาท)" type="number" min="0" step="1" value={minSpend()} onInput={(e) => setMinSpend(e.currentTarget.value)} data-field="minSpend" error={errors().minSpend} disabled={saving()} placeholder="ไม่มีขั้นต่ำ" />
               </div>
-              <p class="text-xs text-ink-gray">นับจากยอดสินค้าที่เข้าร่วม เว้นว่างไว้ถ้าไม่มีขั้นต่ำ</p>
+              <p class="text-xs text-ink-gray">
+                ไม่มีขั้นต่ำและไม่จำกัดลดสูงสุด: ลดที่ราคาสินค้าโดยตรง หน้าร้านแสดงเป็นราคาลดบนการ์ดและหน้าสินค้า ถ้าตั้งขั้นต่ำหรือลดสูงสุด: ลดจากยอดสินค้าที่เข้าร่วมในตะกร้าเมื่อถึงเงื่อนไข และแสดงเป็นรายการส่วนลดในสรุปคำสั่งซื้อ
+              </p>
             </Show>
           </FormSection>
 

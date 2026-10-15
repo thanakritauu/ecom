@@ -5,9 +5,11 @@ import {
   type FreeShippingState,
   type GiftPromotionState,
   type GiftTierState,
+  type TieredDiscountState,
 } from "~/lib/promotionEngine";
-import { createPromoCelebration, freeShippingKey, giftTierKey, type CelebrationTarget } from "~/lib/promoCelebration";
-import { CheckBadge, CheckIcon, GiftIcon, TruckIcon } from "./icons";
+import { formatDiscountValue } from "~/lib/adminMarketing";
+import { createPromoCelebration, discountTierKey, freeShippingKey, giftTierKey, type CelebrationTarget } from "~/lib/promoCelebration";
+import { CheckBadge, CheckIcon, GiftIcon, TagIcon, TruckIcon } from "./icons";
 
 /**
  * Cart promo banners (Cart Drawer + Cart Page). Each promo Admin switched
@@ -17,10 +19,12 @@ import { CheckBadge, CheckIcon, GiftIcon, TruckIcon } from "./icons";
  * `showAmounts` is the Cart Page's roomier layout (amount line, tier labels
  * and the tier list); the Drawer gets the compact one.
  */
-export function CartPromoBanners(props: { freeShipping?: FreeShippingState; gifts: GiftPromotionState[]; showAmounts?: boolean }) {
+export function CartPromoBanners(props: { freeShipping?: FreeShippingState; gifts: GiftPromotionState[]; tiered?: TieredDiscountState[]; showAmounts?: boolean }) {
   const visibleGifts = createMemo(() => props.gifts.filter((g) => g.showInCart));
+  const visibleTiered = createMemo(() => (props.tiered ?? []).filter((t) => t.showInCart));
   return (
     <>
+      <For each={visibleTiered()}>{(state) => <TieredDiscountBanner state={state} showAmounts={props.showAmounts} />}</For>
       <For each={visibleGifts()}>
         {(gift) => (
           <Show when={gift.tiers.length > 1} fallback={<GiftPromotionBanner gift={gift} showAmounts={props.showAmounts} />}>
@@ -34,10 +38,13 @@ export function CartPromoBanners(props: { freeShipping?: FreeShippingState; gift
 }
 
 /** Every unlock the cart can celebrate, for `rearmPromoCelebrations`. */
-export function promoCelebrationTargets(freeShipping: FreeShippingState | undefined, gifts: GiftPromotionState[]): CelebrationTarget[] {
+export function promoCelebrationTargets(freeShipping: FreeShippingState | undefined, gifts: GiftPromotionState[], tiered: TieredDiscountState[] = []): CelebrationTarget[] {
   const ship = freeShipping ? [{ key: freeShippingKey(freeShipping), unlocked: freeShipping.unlocked }] : [];
-  return [...ship, ...gifts.flatMap((g) => g.tiers.map((t) => ({ key: giftTierKey(g.id, t, g.unit), unlocked: t.unlocked })))];
+  return [...ship, ...gifts.flatMap((g) => g.tiers.map((t) => ({ key: giftTierKey(g.id, t, g.unit), unlocked: t.unlocked }))), ...tieredTargets(tiered)];
 }
+
+const tieredTargets = (list: TieredDiscountState[]): CelebrationTarget[] =>
+  list.flatMap((s) => s.steps.map((step, index) => ({ key: discountTierKey(s.id, { index, ...step }, s.unit), unlocked: index <= s.reachedIndex })));
 
 const CARD = "rounded-card bg-gradient-to-r from-[#7650FF] to-[#27CD97] p-4 text-white";
 
@@ -268,6 +275,98 @@ export function TieredGiftBanner(props: { gift: GiftPromotionState; showAmounts?
           </For>
         </ul>
       </Show>
+    </div>
+  );
+}
+
+/**
+ * ยิ่งซื้อยิ่งคุ้ม: the next step leads ("ซื้อเพิ่มอีก 1 ชิ้น ลด 15%"), with
+ * the step already reached under it; one bar with a marker per step (evenly
+ * spaced, like the ขั้นบันได gift banner). The discount itself is a row in
+ * the order summary.
+ */
+export function TieredDiscountBanner(props: { state: TieredDiscountState; showAmounts?: boolean }) {
+  let ref: HTMLDivElement | undefined;
+  createPromoCelebration(() => ref, () => tieredTargets([props.state]));
+
+  const steps = () => props.state.steps;
+  const position = (i: number) => ((i + 1) / steps().length) * 100;
+  const reached = () => (props.state.reachedIndex >= 0 ? steps()[props.state.reachedIndex] : undefined);
+  const percent = createMemo(() => {
+    const k = props.state.reachedIndex + 1;
+    if (k >= steps().length) return 100;
+    const prev = k === 0 ? 0 : steps()[k - 1].threshold;
+    const frac = Math.max(0, Math.min(1, (props.state.current - prev) / (steps()[k].threshold - prev)));
+    return ((k + frac) / steps().length) * 100;
+  });
+
+  return (
+    <div ref={ref} class={`flex flex-col gap-3 ${CARD}`}>
+      <div class="flex items-center gap-3">
+        <span class="flex size-12 shrink-0 items-center justify-center rounded-media border-2 border-white/70 bg-white text-[#7650FF]">
+          <TagIcon class="size-7" />
+        </span>
+        <Show
+          when={props.state.next}
+          fallback={
+            <div class="flex min-w-0 flex-1 items-center gap-2">
+              <div class="flex min-w-0 flex-1 flex-col text-sm leading-[1.75]">
+                <p class="font-semibold">คุณได้รับส่วนลดขั้นสูงสุดแล้ว!</p>
+                <p class="truncate">
+                  {props.state.name} {reached() ? formatDiscountValue(props.state.kind, reached()!.value) : ""}
+                </p>
+              </div>
+              <CheckBadge class="size-6 bg-white !text-[#27CD97]" />
+            </div>
+          }
+        >
+          {(next) => (
+            <div class="flex min-w-0 flex-1 flex-col text-sm leading-[1.75]">
+              <p class="font-semibold">
+                ซื้อเพิ่มอีก {formatPromoValue(props.state.unit, next().remaining)} {formatDiscountValue(props.state.kind, next().value)}
+              </p>
+              <p class="truncate">{reached() ? `ตอนนี้ได้${formatDiscountValue(props.state.kind, reached()!.value)} แล้ว` : props.state.name}</p>
+            </div>
+          )}
+        </Show>
+      </div>
+
+      <div class="px-3">
+        <div class="relative h-6">
+          <div class="absolute inset-x-0 top-1/2 -translate-y-1/2">
+            <ProgressBar percent={percent()} />
+          </div>
+          <For each={steps()}>
+            {(_, i) => (
+              <span
+                class="absolute top-1/2 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-pill transition-colors duration-300"
+                classList={{
+                  "border-2 border-white bg-[#27CD97] text-white": i() <= props.state.reachedIndex,
+                  "bg-white text-[#7650FF]": i() > props.state.reachedIndex,
+                }}
+                style={{ left: `${position(i())}%` }}
+                aria-hidden="true"
+              >
+                <Show when={i() <= props.state.reachedIndex} fallback={<TagIcon class="size-3.5" />}>
+                  <CheckIcon class="size-3.5" />
+                </Show>
+              </span>
+            )}
+          </For>
+        </div>
+        <Show when={props.showAmounts}>
+          <div class="relative mt-1 h-10">
+            <For each={steps()}>
+              {(step, i) => (
+                <span class="absolute flex -translate-x-1/2 flex-col items-center whitespace-nowrap text-xs font-medium leading-5" style={{ left: `${position(i())}%` }}>
+                  <span>{formatPromoShort(props.state.unit, step.threshold)}</span>
+                  <span class="text-white/90">{formatDiscountValue(props.state.kind, step.value)}</span>
+                </span>
+              )}
+            </For>
+          </div>
+        </Show>
+      </div>
     </div>
   );
 }

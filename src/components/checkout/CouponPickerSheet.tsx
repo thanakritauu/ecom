@@ -3,6 +3,7 @@ import {
   couponCartBlock,
   couponDiscountAmount,
   couponEligibleSubtotal,
+  couponStackBlocked,
   couponUsageBlock,
   isCouponActive,
   isCouponNotStarted,
@@ -40,7 +41,7 @@ export function CouponPickerSheet(props: {
   coupons: Coupon[];
   /** Codes accepted when typed (defaults to `coupons`). */
   codeCoupons?: Coupon[];
-  /** The paid cart lines (free gifts never count toward a coupon). */
+  /** The paid cart lines after every promo (`CartPricing.pricedLines`; free gifts never count toward a coupon). */
   lines: ResolvedCartLine[];
   /** How many of this shopper's own (non-cancelled) orders used the code; 0 for a guest. */
   usedByShopper?: (code: string) => number;
@@ -78,7 +79,7 @@ export function CouponPickerSheet(props: {
     const blocked = blockOf(coupon);
     if (blocked) return setCodeError(blocked);
     const cartBlocked = couponCartBlock(coupon, props.lines);
-    if (cartBlocked && isCouponScoped(coupon)) return setCodeError(cartBlocked);
+    if (cartBlocked && (isCouponScoped(coupon) || couponStackBlocked(coupon, props.lines))) return setCodeError(cartBlocked);
     const eligible = couponEligibleSubtotal(coupon, props.lines);
     if (eligible < coupon.minSpend)
       return setCodeError(`โค้ดนี้ใช้ได้เมื่อซื้อครบ ฿${coupon.minSpend.toLocaleString("th-TH")} (ซื้อเพิ่มอีก ${formatTHB(coupon.minSpend - eligible)})`);

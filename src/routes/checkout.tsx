@@ -10,7 +10,6 @@ import { useCart } from "~/lib/cart";
 import { useAuth } from "~/lib/auth";
 import {
   resolveCartLines,
-  computeCartTotal,
   computeCheckoutTotals,
   computeCoinsEarned,
   couponCartBlock,
@@ -46,8 +45,11 @@ export default function CheckoutPage() {
   const auth = useAuth();
   const catalog = useProductCatalog();
   const resolvedLines = createMemo(() => resolveCartLines(cart.lines(), catalog.products()));
-  const subtotal = createMemo(() => computeCartTotal(resolvedLines()));
   const promos = useCartPromotions(resolvedLines);
+  // Same `priceCart` as the mini cart and cart page: lines' total, cart-level promo rows, and the priced lines the coupon works on.
+  const subtotal = () => promos.pricing().subtotal;
+  const promoDiscount = () => promos.pricing().promoDiscount;
+  const pricedLines = () => promos.pricing().pricedLines;
   const hasUnavailableItem = createMemo(() => resolvedLines().some(({ product }) => product.stockLeft !== undefined && product.stockLeft <= 0));
 
   // Phase 04 — saved addresses come through the address book (repository
@@ -103,20 +105,20 @@ export default function CheckoutPage() {
     const c = pickedCoupon();
     // กลุ่มลูกค้า is checked against the current shopper (e.g. a guest who picked a new-customer coupon, then signed in as a returning member).
     const outsideAudience = c && storefrontMarketing.codeCoupons().find((x) => x.code === c.code)?.audienceBlock;
-    return c && !outsideAudience && !couponUsageBlock(c, couponUsesByShopper(c.code)) && !couponCartBlock(c, resolvedLines()) ? c : undefined;
+    return c && !outsideAudience && !couponUsageBlock(c, couponUsesByShopper(c.code)) && !couponCartBlock(c, pricedLines()) ? c : undefined;
   };
 
   // Coins the order can take — the coupon/cart can change after coins were picked, so the pick is capped (not reset).
   const maxCoins = createMemo(() =>
     maxRedeemableCoins({
       balance: MOCK_COIN_BALANCE,
-      subtotal: subtotal(),
-      couponDiscount: computeCheckoutTotals({ subtotal: subtotal(), lines: resolvedLines(), coupon: coupon(), shippingFee: 0 }).couponDiscount,
+      subtotal: promos.pricing().total,
+      couponDiscount: computeCheckoutTotals({ subtotal: subtotal(), promoDiscount: promoDiscount(), lines: pricedLines(), coupon: coupon(), shippingFee: 0 }).couponDiscount,
     }),
   );
   const coinsRedeemed = () => Math.min(coinsPicked(), maxCoins());
   const totals = createMemo(() =>
-    computeCheckoutTotals({ subtotal: subtotal(), lines: resolvedLines(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: promos.shippingFee() }),
+    computeCheckoutTotals({ subtotal: subtotal(), promoDiscount: promoDiscount(), lines: pricedLines(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: promos.shippingFee() }),
   );
 
   const tier = () => resolveTier(yearlySpend(orderHistory.orders())).current;
@@ -310,7 +312,7 @@ export default function CheckoutPage() {
                     afterMethods={
                       <CheckoutPerks
                         class="flex rounded-card lg:hidden"
-                        lines={resolvedLines()}
+                        lines={pricedLines()}
                         totals={totals()}
                         coupon={coupon()}
                         onApplyCoupon={setCoupon}
@@ -337,6 +339,8 @@ export default function CheckoutPage() {
 
                 <CheckoutOrderSummary
                   lines={resolvedLines()}
+                  pricedLines={pricedLines()}
+                  promoRows={promos.pricing().rows}
                   gifts={promos.giftLines()}
                   totals={totals()}
                   coupon={coupon()}
@@ -356,7 +360,7 @@ export default function CheckoutPage() {
       <Show when={showFloatingBar()}>
         <FloatingOrderSummary
           itemCount={resolvedLines().reduce((n, l) => n + l.line.qty, 0)}
-          discount={totals().couponDiscount + totals().coinDiscount}
+          discount={totals().promoDiscount + totals().couponDiscount + totals().coinDiscount}
           shippingFee={totals().shippingFee}
           total={totals().total}
           ctaLabel={payment.ctaLabel()}

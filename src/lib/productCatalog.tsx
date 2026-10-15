@@ -20,6 +20,9 @@ import { useAuth } from "./auth";
 import { createMockOrderRepository, createOrderHistory } from "./orderHistory";
 import { resolveTier, yearlySpend } from "./membership";
 import { HIDDEN_REVIEWS_CHANGED_EVENT, HIDDEN_REVIEWS_STORAGE_KEY, readHiddenReviewKeys, reviewKey } from "./adminProductReviews";
+import { buildMockPromotions, isMarketingLive, marketingWindow, type Promotion } from "./adminMarketing";
+import { applyProductDiscounts, isPriceLevelDiscount } from "./productDiscountPricing";
+import { PROMOTIONS_STORAGE_KEY, readStoredPromotions } from "./storefrontMarketingStore";
 
 /** Stock at or below this shows "เหลือ X ชิ้นสุดท้าย" in the cart: the product's own Admin setting (default 5). */
 export const storefrontLowStockThreshold = (product: Product) => lowStockThresholdOf(product as Partial<AdminProduct>);
@@ -84,7 +87,7 @@ export function withLiveFlashSale(list: AdminProduct[], campaigns: FlashSaleCamp
     .filter((x): x is { c: FlashSaleCampaign; round: { startsAt: number; endsAt: number } } => !!x.round);
   if (live.length === 0) return list;
   return list.map((p) => {
-    let best: { priced: AdminProduct & FlashPricedProduct; endsAt: number } | undefined;
+    let best: { priced: AdminProduct & FlashPricedProduct; endsAt: number; campaign: FlashSaleCampaign } | undefined;
     for (const { c, round } of live) {
       const item = c.items.find((i) => i.productId === p.id);
       if (!item) continue;
@@ -94,15 +97,38 @@ export function withLiveFlashSale(list: AdminProduct[], campaigns: FlashSaleCamp
         !best ||
         priced.price < best.priced.price ||
         (priced.price === best.priced.price && (!!priced.flashDeal > !!best.priced.flashDeal || (!!priced.flashDeal === !!best.priced.flashDeal && round.endsAt < best.endsAt)));
-      if (better) best = { priced, endsAt: round.endsAt };
+      if (better) best = { priced, endsAt: round.endsAt, campaign: c };
     }
-    return best ? { ...best.priced, flashSaleEndsAt: best.endsAt, flashSaleStartsAt: undefined } : p;
+    if (!best) return p;
+    // The campaign's "การใช้ร่วมกับโปรอื่น" rides on the deal, so the cart knows what may stack on the flash units.
+    const priced = best.priced.flashDeal ? { ...best.priced, flashDeal: { ...best.priced.flashDeal, combinableWith: best.campaign.combinableWith } } : best.priced;
+    return { ...priced, flashSaleEndsAt: best.endsAt, flashSaleStartsAt: undefined };
   });
 }
 
-/** The next moment a campaign round starts or ends (to refresh right then), if any within a day. */
-function nextFlashSaleBoundary(campaigns: FlashSaleCampaign[], now = Date.now()): number | undefined {
-  const times = campaigns.flatMap((c) => flashCampaignBoundaries(c, now));
+/**
+ * Layer 1 of the storefront pricing, after the flash sale: sale-price
+ * ส่วนลดสินค้า (no minimum, no cap) that are live for this shopper lower the
+ * covered SKUs' prices (`applyProductDiscounts`), so cards, the PDP and the
+ * cart show the same discounted price. Ones with a minimum or cap are applied
+ * by the cart (`priceCart`).
+ */
+export function withProductDiscounts(list: AdminProduct[], promotions: Promotion[], shopper: Shopper, now = Date.now()): AdminProduct[] {
+  const live = promotions.filter((p) => isPriceLevelDiscount(p) && isMarketingLive(p, now) && matchesAudience(p.audience, shopper));
+  if (live.length === 0) return list;
+  return list.map((p) => applyProductDiscounts(p, live));
+}
+
+/** The next moment a campaign round or a sale-price product discount starts or ends (to refresh right then), if any within a day. */
+function nextPriceBoundary(campaigns: FlashSaleCampaign[], promotions: Promotion[], now = Date.now()): number | undefined {
+  const promoTimes = promotions
+    .filter((p) => p.status === "active" && isPriceLevelDiscount(p))
+    .flatMap((p) => {
+      const { startsAt, endsAt } = marketingWindow(p);
+      return [startsAt, endsAt + 1];
+    })
+    .filter((t) => Number.isFinite(t) && t > now && t - now < 24 * 3600_000);
+  const times = [...campaigns.flatMap((c) => flashCampaignBoundaries(c, now)), ...promoTimes];
   return times.length > 0 ? Math.min(...times) : undefined;
 }
 
@@ -143,23 +169,26 @@ export function ProductCatalogProvider(props: { children: JSX.Element }) {
   // The seed's flash sale is the daily round (always live), so SSR and the first client paint still agree.
   const [baseProducts, setBaseProducts] = createSignal<AdminProduct[]>(fallbackProducts().filter(isProductOnSale));
   const [campaigns, setCampaigns] = createSignal<FlashSaleCampaign[]>(seedCampaigns());
+  const [promotions, setPromotions] = createSignal<Promotion[]>(buildMockPromotions());
   const [now, setNow] = createSignal(Date.now());
   const [ready, setReady] = createSignal(false);
-  const products = createMemo(() => withLiveFlashSale(baseProducts(), campaigns(), shopper(), now()));
+  const products = createMemo(() => withProductDiscounts(withLiveFlashSale(baseProducts(), campaigns(), shopper(), now()), promotions(), shopper(), now()));
 
   onMount(() => {
     let boundaryTimer: ReturnType<typeof setTimeout> | undefined;
     const refresh = () => {
       const list = readCampaigns();
+      const promos = readStoredPromotions();
       setBaseProducts(readStoredProducts());
       setCampaigns(list);
+      setPromotions(promos);
       setNow(Date.now());
       clearTimeout(boundaryTimer);
-      const next = nextFlashSaleBoundary(list);
+      const next = nextPriceBoundary(list, promos);
       if (next !== undefined) boundaryTimer = setTimeout(refresh, next - Date.now() + 500);
     };
     const onStorage = (e: StorageEvent) => {
-      if (e.key === null || e.key.startsWith(PRODUCTS_STORAGE_KEY) || e.key === HIDDEN_REVIEWS_STORAGE_KEY || e.key === FLASH_CAMPAIGNS_STORAGE_KEY) refresh();
+      if (e.key === null || e.key.startsWith(PRODUCTS_STORAGE_KEY) || e.key === HIDDEN_REVIEWS_STORAGE_KEY || e.key === FLASH_CAMPAIGNS_STORAGE_KEY || e.key.startsWith(PROMOTIONS_STORAGE_KEY)) refresh();
     };
     refresh();
     setReady(true);

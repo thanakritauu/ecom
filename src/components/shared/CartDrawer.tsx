@@ -1,7 +1,7 @@
 import { Dialog } from "@kobalte/core/dialog";
 import { For, Show, createMemo } from "solid-js";
 import { useCart } from "~/lib/cart";
-import { resolveCartLines, computeCartTotal } from "~/lib/cartSelectors";
+import { resolveCartLines } from "~/lib/cartSelectors";
 import { useCartPromotions } from "~/lib/storefrontPromotions";
 import { rearmPromoCelebrations } from "~/lib/promoCelebration";
 import { useProductCatalog } from "~/lib/productCatalog";
@@ -12,6 +12,7 @@ import { CartPromoBanners, promoCelebrationTargets } from "./CartPromoBanners";
 import { GiftItemRow } from "./GiftItemRow";
 import { CartIcon, CloseMark } from "./icons";
 import { EmptyState } from "./EmptyState";
+import { PromoDiscountRows } from "./PromoDiscountRows";
 
 /**
  * Figma node 153:19197. Global — opened from the Header cart icon, from
@@ -24,10 +25,11 @@ export function CartDrawer() {
   const cart = useCart();
   const catalog = useProductCatalog();
   const resolvedLines = createMemo(() => resolveCartLines(cart.lines(), catalog.products()));
-  const total = createMemo(() => computeCartTotal(resolvedLines()));
   const promos = useCartPromotions(resolvedLines);
+  // Same `priceCart` total as the cart page and checkout (before coupon, coins and shipping).
+  const total = () => promos.pricing().total;
   // Always mounted (Header renders the drawer on every page), so it sees every unlocked to locked drop.
-  rearmPromoCelebrations(() => promoCelebrationTargets(promos.freeShipping(), promos.gifts()));
+  rearmPromoCelebrations(() => promoCelebrationTargets(promos.freeShipping(), promos.gifts(), promos.tiered()));
 
   return (
     <Dialog open={cart.drawerOpen()} onOpenChange={(open) => (open ? cart.openDrawer() : cart.closeDrawer())}>
@@ -47,7 +49,7 @@ export function CartDrawer() {
 
             <Show when={resolvedLines().length > 0} fallback={<EmptyCart />}>
               <div class="flex flex-1 flex-col gap-4 overflow-y-auto p-6">
-                <CartPromoBanners freeShipping={promos.freeShipping()} gifts={promos.gifts()} />
+                <CartPromoBanners freeShipping={promos.freeShipping()} gifts={promos.gifts()} tiered={promos.tiered()} />
 
                 <ul class="flex flex-col gap-4">
                   <For each={resolvedLines()}>
@@ -72,6 +74,15 @@ export function CartDrawer() {
               </div>
 
               <div class="flex shrink-0 flex-col gap-4 rounded-t-card bg-brand-pink p-6">
+                <Show when={promos.pricing().rows.length > 0}>
+                  <div class="flex flex-col gap-1.5">
+                    <div class="flex items-center justify-between gap-3 text-sm text-white/90">
+                      <span>ยอดรวมสินค้า</span>
+                      <span class="font-bold text-white">{formatTHB(promos.pricing().subtotal)}</span>
+                    </div>
+                    <PromoDiscountRows rows={promos.pricing().rows} onPink />
+                  </div>
+                </Show>
                 {/* Label and amount the same size. */}
                 <div class="flex items-center justify-between text-xl font-semibold text-white sm:text-[22px]">
                   <span>ยอดรวม</span>

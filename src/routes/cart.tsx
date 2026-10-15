@@ -10,9 +10,10 @@ import { CartItemRow } from "~/components/shared/CartItemRow";
 import { CartPromoBanners } from "~/components/shared/CartPromoBanners";
 import { GiftItemRow } from "~/components/shared/GiftItemRow";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
+import { PromoDiscountRows } from "~/components/shared/PromoDiscountRows";
 import { formatTHB } from "~/components/shared/PriceDisplay";
 import { useCart } from "~/lib/cart";
-import { resolveCartLines, computeCartTotal } from "~/lib/cartSelectors";
+import { resolveCartLines } from "~/lib/cartSelectors";
 import { useCartPromotions } from "~/lib/storefrontPromotions";
 import { useProductCatalog } from "~/lib/productCatalog";
 
@@ -23,18 +24,19 @@ import { useProductCatalog } from "~/lib/productCatalog";
  * `cart.lines()` directly, so the Drawer and the Header count reflect it the
  * next time either is opened/read, with nothing to keep in sync manually.
  *
- * Figma's own Order Summary card has no coupon field and no separate
- * shipping/discount line — just one "ยอดรวมสินค้า" total (discount is
- * already reflected in each line's struck-through price) — so neither is
- * invented here. There's also no breadcrumb on this node (unlike Product
+ * Figma's own Order Summary card has no coupon field and no shipping line
+ * (both come at Checkout). Sale / flash prices show in each line's struck
+ * price; cart-level promos (ยิ่งซื้อยิ่งคุ้ม, บันเดิลดีล, ซื้อ X แถม Y, ส่วนลด
+ * with a minimum) are one row each under "ยอดรวมสินค้า" (`priceCart`). There's also no breadcrumb on this node (unlike Product
  * Detail's), so this page doesn't have one either.
  */
 export default function CartPage() {
   const cart = useCart();
   const catalog = useProductCatalog();
   const resolvedLines = createMemo(() => resolveCartLines(cart.lines(), catalog.products()));
-  const total = createMemo(() => computeCartTotal(resolvedLines()));
   const promos = useCartPromotions(resolvedLines);
+  // `priceCart`: the lines' total minus every cart-level promo row, same number as the mini cart and checkout.
+  const total = () => promos.pricing().total;
   const hasUnavailableItem = createMemo(() => resolvedLines().some(({ product }) => product.stockLeft !== undefined && product.stockLeft <= 0));
 
   const recommended = createMemo(() => {
@@ -51,7 +53,7 @@ export default function CartPage() {
             <h1 class="text-2xl font-bold text-ink lg:text-[31px]">ตะกร้าสินค้า</h1>
 
             <Show when={resolvedLines().length > 0} fallback={<EmptyCartPage />}>
-              <CartPromoBanners freeShipping={promos.freeShipping()} gifts={promos.gifts()} showAmounts />
+              <CartPromoBanners freeShipping={promos.freeShipping()} gifts={promos.gifts()} tiered={promos.tiered()} showAmounts />
 
               <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
                 <ul class="flex min-w-0 flex-1 flex-col gap-4 rounded-card bg-white p-4 lg:p-6">
@@ -65,14 +67,17 @@ export default function CartPage() {
                     <p class="text-sm text-ink-gray">สินค้าทั้งหมด {cart.count()} ชิ้น</p>
                   </div>
                   <div class="h-px bg-surface-gray" />
-                  <div class="flex items-center justify-between p-4 text-sm">
-                    <span class="text-ink-gray">ยอดรวมสินค้า</span>
-                    <span class="font-bold text-ink">{formatTHB(total())}</span>
+                  <div class="flex flex-col gap-2 p-4 text-sm">
+                    <div class="flex items-center justify-between">
+                      <span class="text-ink-gray">ยอดรวมสินค้า</span>
+                      <span class="font-bold text-ink">{formatTHB(promos.pricing().subtotal)}</span>
+                    </div>
+                    <PromoDiscountRows rows={promos.pricing().rows} />
                   </div>
                   <div class="mx-4 h-px bg-surface-gray" />
                   <div class="flex flex-col gap-2 p-4">
                     <div class="flex items-center justify-between">
-                      <span class="text-lg font-semibold text-ink">ยอดรวมสินค้า</span>
+                      <span class="text-lg font-semibold text-ink">{promos.pricing().rows.length > 0 ? "ยอดรวมหลังหักส่วนลด" : "ยอดรวมสินค้า"}</span>
                       <span class="text-2xl font-bold text-brand-pink">{formatTHB(total())}</span>
                     </div>
 
@@ -125,6 +130,7 @@ export default function CartPage() {
       <Show when={resolvedLines().length > 0}>
         <FloatingOrderSummary
           itemCount={cart.count()}
+          discount={promos.pricing().promoDiscount}
           total={total()}
           ctaLabel="ชำระเงิน"
           ctaHref="/checkout"

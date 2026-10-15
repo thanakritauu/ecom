@@ -1,11 +1,12 @@
 import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
 import type { ResolvedCartLine, CheckoutTotals, Coupon } from "~/lib/cartSelectors";
-import type { GiftLine } from "~/lib/promotionEngine";
+import type { GiftLine, PromoDiscountRow } from "~/lib/promotionEngine";
 import { MOCK_COIN_BALANCE, SHIPPING_FEE, flashLimitNote } from "~/lib/cartSelectors";
 import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
 import { formatTHB } from "../shared/PriceDisplay";
 import { ChevronIcon } from "../shared/ChevronIcon";
 import { CheckIcon } from "../shared/icons";
+import { PromoDiscountRows } from "../shared/PromoDiscountRows";
 import coinMark from "~/assets/icons/charmiss-coin.png";
 import blurShape from "~/assets/images/coupon/blur-shape.png";
 import ticketDeco1 from "~/assets/images/coupon/coupon-ticket-deco-1.svg";
@@ -43,7 +44,12 @@ type PerksProps = {
 };
 
 export function CheckoutOrderSummary(props: {
+  /** The cart lines as shown (their own price). */
   lines: ResolvedCartLine[];
+  /** The same lines after every promo (`CartPricing.pricedLines`): what the coupon picker counts. */
+  pricedLines: ResolvedCartLine[];
+  /** Cart-level promos the order got, one row each (`priceCart`). */
+  promoRows: PromoDiscountRow[];
   /** Unlocked free gifts (one per unlocked tier of every active gift promo), shown as ฿0 lines, never added to the totals. */
   gifts: GiftLine[];
   totals: CheckoutTotals;
@@ -141,7 +147,7 @@ export function CheckoutOrderSummary(props: {
       </Show>
 
       {/* Desktop only: below `lg` the same box sits in the form column, right after the payment methods (checkout.tsx). */}
-      <CheckoutPerks {...props} class="hidden rounded-t-card lg:flex" />
+      <CheckoutPerks {...props} lines={props.pricedLines} class="hidden rounded-t-card lg:flex" />
 
       <div class="h-px bg-surface-gray" />
       <div class="flex flex-col gap-2 p-4 text-sm">
@@ -149,9 +155,12 @@ export function CheckoutOrderSummary(props: {
           <span class="text-ink-gray">ยอดรวมสินค้า</span>
           <span class="font-bold text-ink">{formatTHB(props.totals.subtotal)}</span>
         </div>
+        <PromoDiscountRows rows={props.promoRows} />
         <div class="flex items-center justify-between">
-          <span class="text-ink-gray">ส่วนลด</span>
-          <span class="font-bold text-ink">{props.totals.couponDiscount > 0 ? `-${formatTHB(props.totals.couponDiscount)}` : formatTHB(0)}</span>
+          <span class="text-ink-gray">{props.coupon ? `คูปอง ${props.coupon.code}` : "คูปอง"}</span>
+          <span class="font-bold" classList={{ "text-success": props.totals.couponDiscount > 0, "text-ink": props.totals.couponDiscount <= 0 }}>
+            {props.totals.couponDiscount > 0 ? `-${formatTHB(props.totals.couponDiscount)}` : formatTHB(0)}
+          </span>
         </div>
         <Show when={props.totals.coinDiscount > 0}>
           <div class="flex items-center justify-between">
@@ -169,9 +178,9 @@ export function CheckoutOrderSummary(props: {
             </span>
           </Show>
         </div>
-        <Show when={props.totals.couponDiscount + props.totals.coinDiscount > 0}>
+        <Show when={props.totals.promoDiscount + props.totals.couponDiscount + props.totals.coinDiscount > 0}>
           <div class="flex items-center gap-2 rounded-card bg-success-soft px-3 py-2 text-xs font-medium text-success">
-            <CheckIcon class="size-4 shrink-0" /> คุณประหยัดไป {formatTHB(props.totals.couponDiscount + props.totals.coinDiscount)} จากออเดอร์นี้
+            <CheckIcon class="size-4 shrink-0" /> คุณประหยัดไป {formatTHB(props.totals.promoDiscount + props.totals.couponDiscount + props.totals.coinDiscount)} จากออเดอร์นี้
           </div>
         </Show>
       </div>

@@ -1,14 +1,14 @@
 import { createMemo, For, Show } from "solid-js";
 import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
-import { promotionBadgeLabel } from "~/lib/adminMarketing";
+import { promotionBadgeLabel, promotionIsStoreWide, promotionTouchesProduct } from "~/lib/adminMarketing";
 import type { Product } from "~/lib/types";
 
 /** One promo badge look for card and PDP: red text on the soft red fill, regular weight. On cards the text is 11px, the size of the rating / sold line (`ProductMeta`). */
 const BADGE = "shrink-0 whitespace-nowrap rounded-pill bg-danger-soft font-normal text-danger-strong";
 
 /**
- * Which live promotions this product takes part in (product-specific ones
- * first, then store-wide).
+ * Which live promotions this product takes part in, any tool (product-specific
+ * ones first, then store-wide).
  * - `card`: one row of badges; more than fits scrolls sideways.
  * - `pdp`: every promotion as a wrapping row above the product name.
  */
@@ -23,9 +23,10 @@ export function PromotionBadges(props: {
   const promos = createMemo(() =>
     store
       .promotions()
-      .filter((p) => p.showBadge !== false && (p.productIds.length === 0 || p.productIds.includes(props.product.id)))
+      // Every tool: a bundle / buy X get Y by its items, the rest by their product scope (`promotions()` is already live + in this shopper's กลุ่มลูกค้า).
+      .filter((p) => p.showBadge !== false && promotionTouchesProduct(p, props.product.id))
       // Product-specific first, so the card's one badge is the most relevant.
-      .sort((a, b) => Number(b.productIds.length > 0) - Number(a.productIds.length > 0)),
+      .sort((a, b) => Number(!promotionIsStoreWide(b)) - Number(!promotionIsStoreWide(a))),
   );
 
   return (

@@ -21,7 +21,7 @@ import {
   promotionCondition,
   promotionGiftTiers,
   promotionHasProductScope,
-  isStorefrontPromotion,
+  promotionUsesCondition,
 } from "~/lib/adminMarketing";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
 import { MARKETING_TOOL_META, formatCombinable, formatDiscountValue, formatPromotionThreshold, marketingHubListHref, promotionDiscountTiers, promotionTool } from "~/lib/adminMarketing";
@@ -188,17 +188,17 @@ export default function AdminPromotionDetailPage() {
                   <StatusBadge tone={phase().tone} class="w-fit">
                     {phase().label}
                   </StatusBadge>
-                  <p class="text-sm text-ink-gray">{p().status === "draft" ? "แบบร่าง ยังไม่มีผลในตะกร้า" : p().status === "active" ? "เปิดใช้งานอยู่ มีผลตามช่วงเวลา" : "ปิดใช้งานอยู่ ยังไม่มีผล"}</p>
+                  <p class="text-sm text-ink-gray">{p().status === "draft" ? "แบบร่าง ยังไม่มีผลที่หน้าร้าน" : p().status === "active" ? "เปิดใช้งานอยู่ มีผลตามช่วงเวลา" : "ปิดใช้งานอยู่ ยังไม่มีผล"}</p>
                 </Section>
 
                 <Section title="เงื่อนไข">
                   <p class="text-2xl font-bold text-ink">{formatPromotionDiscount(p(), productName)}</p>
                 </Section>
 
-                <Show when={isStorefrontPromotion(p())}>
+                <Show when={promotionUsesCondition(p().type)}>
                   <Section title="การแสดงผลหน้าร้าน">
                     <dl class="flex flex-col gap-1.5 text-sm">
-                      <Row label="แสดงในตะกร้า" value={p().showInCart ? "แสดง" : "ไม่แสดง"} />
+                      <Row label="แสดงในตะกร้า" value={(p().showInCart ?? p().type === "tiered_discount") ? "แสดง" : "ไม่แสดง"} />
                       <Row label="นับจาก" value={PROMOTION_CONDITION_META[promotionCondition(p())].label} />
                     </dl>
                   </Section>

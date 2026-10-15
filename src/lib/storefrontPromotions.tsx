@@ -6,9 +6,7 @@ import {
   couponUsageCount,
   isMarketingLive,
   isStorefrontPromotion,
-  MARKETING_SEED_VERSION,
   normalizeCoupons,
-  normalizePromotions,
   type Coupon as AdminCoupon,
   type Promotion,
 } from "./adminMarketing";
@@ -16,32 +14,12 @@ import { buildCoupon, type Coupon, type ResolvedCartLine } from "./cartSelectors
 import { useProductCatalog } from "./productCatalog";
 import { useCart } from "./cart";
 import { MOCK_ORDERS as ADMIN_MOCK_ORDERS } from "./adminOrders";
-import { giftLinesOf, resolveFreeShipping, resolveGiftPromotions, shippingFeeFor } from "./promotionEngine";
+import { priceCart } from "./promotionEngine";
 import { couponAudienceBlock, matchesAudience, type Shopper } from "./marketingAudience";
 
-/** Same keys (+ `:seed-version`) `adminMarketingStore` persists to. Read-only here; the customer side never writes them. */
-export const PROMOTIONS_STORAGE_KEY = "charmiss:admin:marketing:promotions";
-export const COUPONS_STORAGE_KEY = "charmiss:admin:marketing:coupons";
 import { MARKETING_CHANGED_EVENT } from "./marketingEvents";
-export { MARKETING_CHANGED_EVENT };
-
-const idNumber = (id: string) => Number(id.match(/-(\d+)$/)?.[1] ?? 0);
-
-/** The stored Admin copy, upgraded the same way Admin would if it hasn't been opened since a seed bump (in memory only). */
-function readStored<T extends { id: string }>(key: string, seeds: () => T[], normalize: (list: T[]) => T[]): T[] {
-  if (isServer) return seeds();
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return seeds();
-    const stored = normalize(JSON.parse(raw) as T[]);
-    if (Number(localStorage.getItem(`${key}:seed-version`) ?? 1) < MARKETING_SEED_VERSION) {
-      return [...stored.filter((p) => idNumber(p.id) >= 1000), ...seeds()];
-    }
-    return stored;
-  } catch {
-    return seeds();
-  }
-}
+import { COUPONS_STORAGE_KEY, PROMOTIONS_STORAGE_KEY, readStoredMarketing, readStoredPromotions } from "./storefrontMarketingStore";
+export { MARKETING_CHANGED_EVENT, COUPONS_STORAGE_KEY, PROMOTIONS_STORAGE_KEY };
 
 /** Where `adminOrderStore` keeps the order list (`{ version, orders }`). Read-only here. */
 const ADMIN_ORDERS_STORAGE_KEY = "charmiss:admin:orders";
@@ -78,7 +56,7 @@ function toStorefrontCoupon(c: AdminCoupon, orders: UsageOrder[], shopper: Shopp
     extraConditions: c.extraConditions,
     productScope: c.productScope,
   });
-  return { ...coupon, audienceBlock: couponAudienceBlock(c.audience, shopper) };
+  return { ...coupon, audienceBlock: couponAudienceBlock(c.audience, shopper), combinableWith: c.combinableWith };
 }
 
 type StorefrontPromotionsValue = {
@@ -114,8 +92,8 @@ export function StorefrontPromotionsProvider(props: { children: JSX.Element }) {
 
   onMount(() => {
     const refresh = () => {
-      setAllPromotions(readStored(PROMOTIONS_STORAGE_KEY, buildMockPromotions, normalizePromotions));
-      setAllCoupons(readStored(COUPONS_STORAGE_KEY, buildMockCoupons, normalizeCoupons));
+      setAllPromotions(readStoredPromotions());
+      setAllCoupons(readStoredMarketing(COUPONS_STORAGE_KEY, buildMockCoupons, normalizeCoupons));
       setUsageOrders(readOrdersForUsage());
       setNow(Date.now());
     };
@@ -133,7 +111,7 @@ export function StorefrontPromotionsProvider(props: { children: JSX.Element }) {
     });
   });
 
-  // Only the types the cart runs; the others (bundle, % / baht off, buy X get Y) are Admin-only for now.
+  // Every promotion type runs on the storefront (`priceCart`).
   // Promotions and listed coupons outside the shopper's กลุ่มลูกค้า don't apply and aren't shown (no badge, no cart banner, no ticket).
   const promotions = createMemo(() => allPromotions().filter((p) => isStorefrontPromotion(p) && isMarketingLive(p, now()) && matchesAudience(p.audience, shopper())));
   const liveCoupons = createMemo(() => allCoupons().filter((c) => isMarketingLive(c, now()) && matchesAudience(c.audience, shopper())));
@@ -153,14 +131,23 @@ export function useStorefrontPromotions() {
   return ctx;
 }
 
-/** The cart's promo state for one set of resolved lines: the Drawer, Cart Page and Checkout each call this with their own lines. */
+/**
+ * The cart's promo state for one set of resolved lines: the Drawer, Cart Page
+ * and Checkout each call this with their own (identical) lines and get the
+ * same `CartPricing` (`priceCart`: product discounts with a minimum, cart
+ * deals, gifts, free shipping), so the three totals always agree.
+ */
 export function useCartPromotions(lines: Accessor<ResolvedCartLine[]>) {
   const { promotions } = useStorefrontPromotions();
   const catalog = useProductCatalog();
-  const freeShipping = createMemo(() => resolveFreeShipping(promotions(), lines()));
-  const gifts = createMemo(() => resolveGiftPromotions(promotions(), lines(), catalog.products()));
   const cart = useCart();
-  const giftLines = createMemo(() => giftLinesOf(gifts(), cart.giftChoices()));
-  const shippingFee = createMemo(() => shippingFeeFor(freeShipping()));
-  return { freeShipping, gifts, giftLines, shippingFee };
+  const pricing = createMemo(() => priceCart({ lines: lines(), promotions: promotions(), products: catalog.products(), giftChoices: cart.giftChoices() }));
+  return {
+    pricing,
+    freeShipping: () => pricing().freeShipping,
+    gifts: () => pricing().gifts,
+    giftLines: () => pricing().giftLines,
+    shippingFee: () => pricing().shippingFee,
+    tiered: () => pricing().tiered,
+  };
 }

@@ -84,3 +84,4 @@ export function rearmPromoCelebrations(targets: Accessor<CelebrationTarget[]>) {
 export const freeShippingKey = (s: { id: string; threshold: number; unit: string }) => `ship:${s.id}@${s.unit}${s.threshold}`;
 export const giftTierKey = (promoId: string, t: { index: number; threshold: number; product: { id: string } }, unit: string) =>
   `gift:${promoId}@${t.index}:${unit}${t.threshold}:${t.product.id}`;
+export const discountTierKey = (promoId: string, step: { index: number; threshold: number; value: number }, unit: string) => `tier:${promoId}@${step.index}:${unit}${step.threshold}:${step.value}`;

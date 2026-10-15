@@ -11,7 +11,7 @@ import {
   marketingPhase,
   promotionCondition,
   promotionHasProductScope,
-  isStorefrontPromotion,
+  promotionUsesCondition,
   type Promotion,
 } from "~/lib/adminMarketing";
 import { PromotionGiftTiers } from "./PromotionGiftTiers";
@@ -41,7 +41,7 @@ export function PromotionQuickView(props: { promotion: Promotion }) {
       </div>
 
       <div class="grid grid-cols-2 gap-3 rounded-card bg-surface-gray/60 p-3 text-sm">
-        <Show when={isStorefrontPromotion(p())}>
+        <Show when={promotionUsesCondition(p().type)}>
           <Field label="นับจาก" value={PROMOTION_CONDITION_META[promotionCondition(p())].label} />
         </Show>
         <Show when={promotionHasProductScope(p().type)}>

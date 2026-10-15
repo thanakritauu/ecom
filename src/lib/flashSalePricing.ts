@@ -1,6 +1,7 @@
 import type { Product } from "./types";
 import type { AdminProduct, AdminVariant } from "./adminProductStore";
 import { getDiscountPercent } from "./products";
+import type { CombinableKind } from "./adminMarketing";
 
 /**
  * Flash Sale pricing: each flash sale campaign (`flashSaleCampaigns.ts`) has
@@ -51,6 +52,8 @@ export type FlashDealPrice = {
   limitKey: string;
   customerLimit?: number;
   totalLimit?: number;
+  /** The option's own normal price ("ราคาก่อนลด"), set once a ส่วนลดสินค้า lowered `normalPrice` / `flashPrice` (`productDiscountPricing.ts`). */
+  regularPrice?: number;
 };
 
 export type FlashDeal = {
@@ -59,6 +62,8 @@ export type FlashDeal = {
   variants: Record<string, FlashDealPrice>;
   /** The product's own ราคาก่อนลด before the flash sale (what an option outside the flash sale still shows). */
   regularCompareAtPrice?: number;
+  /** The live campaign's "การใช้ร่วมกับโปรอื่น" (unset = stacks with all), see `promoStacking.ts`. */
+  combinableWith?: CombinableKind[];
 };
 
 export type FlashPricedProduct = { flashDeal?: FlashDeal };

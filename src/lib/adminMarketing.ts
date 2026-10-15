@@ -88,10 +88,9 @@ export function isValidDateRange(startDate: string, startTime: string, endDate: 
 }
 
 // ---------------------------------------------------------------------------
-// Promotions: the two cart-threshold types the storefront cart runs (free
-// shipping, ซื้อครบรับของแถม) plus four types Admin can set up ahead of time
-// (bundle, % off, baht off, buy X get Y). The storefront only applies
-// `STOREFRONT_PROMOTION_TYPES`; the rest are stored and shown in Admin only.
+// Promotions: every type runs on the storefront (`promotionEngine.ts`
+// `priceCart`, `productDiscountPricing.ts`): ส่วนลดสินค้า (% / baht), cart deals
+// (ยิ่งซื้อยิ่งคุ้ม, บันเดิลดีล, ซื้อ X แถม Y), ซื้อครบรับของแถม and ส่งฟรี.
 // ---------------------------------------------------------------------------
 
 export type PromotionType = "free_shipping" | "gift_with_purchase" | "percent_off" | "baht_off" | "buy_x_get_y" | "bundle" | "tiered_discount";
@@ -111,9 +110,22 @@ export const PROMOTION_TYPE_META: Record<PromotionType, { label: string }> = {
 
 export const isPromotionType = (t: string): t is PromotionType => (PROMOTION_TYPES as string[]).includes(t);
 
-/** The types the storefront cart actually runs today. Everything else is ignored by `promotionEngine`. */
-export const STOREFRONT_PROMOTION_TYPES: readonly PromotionType[] = ["free_shipping", "gift_with_purchase"];
+/** The types the storefront runs: all of them. */
+export const STOREFRONT_PROMOTION_TYPES: readonly PromotionType[] = PROMOTION_TYPES;
 export const isStorefrontPromotion = (p: Pick<Promotion, "type">) => STOREFRONT_PROMOTION_TYPES.includes(p.type);
+
+/** Types counted in baht or pieces ("นับจาก"), which also get a progress banner in the cart ("แสดงในตะกร้า"). */
+export const promotionUsesCondition = (type: PromotionType) => type === "free_shipping" || type === "gift_with_purchase" || type === "tiered_discount";
+
+/** Whether a product takes part (badge on its card / PDP): a bundle or buy X get Y by its items, the rest by their product scope. */
+export function promotionTouchesProduct(p: Pick<Promotion, "type" | "productIds" | "bundleItems" | "buyItems" | "getItems">, productId: string): boolean {
+  if (p.type === "bundle") return (p.bundleItems ?? []).some((i) => i.productId === productId);
+  if (p.type === "buy_x_get_y") return [...(p.buyItems ?? []), ...(p.getItems ?? [])].some((i) => i.productId === productId);
+  return p.productIds.length === 0 || p.productIds.includes(productId);
+}
+
+/** Store-wide (every product) rather than limited to some. */
+export const promotionIsStoreWide = (p: Pick<Promotion, "type" | "productIds">) => p.type !== "bundle" && p.type !== "buy_x_get_y" && p.productIds.length === 0;
 
 /** One product + quantity of a bundle, or of either side of a buy X get Y. */
 export type PromotionItem = { productId: string; qty: number; /** Only these SKUs count; missing / empty = any option of the product. */ variantIds?: string[] };
@@ -150,8 +162,7 @@ export type DiscountKind = "percent" | "baht";
 
 /**
  * "การใช้ร่วมกับโปรอื่น": what this promo / coupon may stack with. Unset =
- * all of them. Stored only for now (enforcement comes with the storefront
- * applying every tool).
+ * all of them. Enforced per cart line on the storefront (`promoStacking.ts`).
  */
 export type CombinableKind = "flash_sale" | "product_discount" | "cart_deal" | "gift_shipping" | "coupon";
 export const COMBINABLE_KINDS: CombinableKind[] = ["flash_sale", "product_discount", "cart_deal", "gift_shipping", "coupon"];
@@ -394,18 +405,19 @@ const PROMOTION_SEEDS: Omit<Promotion, "id" | "createdAt" | "updatedAt">[] = [
   // Product-specific promos with badges: some cards get one badge, some two (in both), the rest none.
   { name: "ซื้อครบ 3 ชิ้น รับฟรีลิปออยล์", type: "gift_with_purchase", conditionType: "qty", tiers: [{ threshold: 3, giftProductId: "new-10", giftQty: 1 }], showInCart: true, showBadge: true, productIds: ["flash-1", "flash-2", "flash-3", "flash-4", "flash-5", "flash-6", "best-1", "best-2", "best-3", "best-4"], startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
   { name: "9.9 ส่งฟรีไม่มีขั้นต่ำ", type: "free_shipping", conditionType: "amount", showInCart: true, productIds: [], startDate: "2026-09-09", startTime: "00:00", endDate: "2026-09-09", endTime: "23:59", status: "active" },
-  // v7: one of each type set up ahead of time (Admin only for now).
+  // v7: one of each type set up ahead of time (switched off; Admin turns them on to run them).
   { name: "ลด 15% ทั้งร้าน สูงสุด ฿200", type: "percent_off", discountPercent: 15, maxDiscount: 200, minSpend: 800, productIds: [], startDate: "2026-11-11", startTime: "00:00", endDate: "2026-11-11", endTime: "23:59", status: "disabled" },
   { name: "ลด ฿100 คุชชั่นขายดี", type: "baht_off", discountAmount: 100, minSpend: 500, productIds: ["feature-1", "feature-2"], startDate: "2026-11-01", startTime: "00:00", endDate: "2026-11-30", endTime: "23:59", status: "disabled" },
   { name: "ซื้อลิป 2 แถม 1", type: "buy_x_get_y", buyItems: [{ productId: "best-1", qty: 2 }], getItems: [{ productId: "best-1", qty: 1 }], productIds: [], startDate: "2026-11-01", startTime: "00:00", endDate: "2026-11-15", endTime: "23:59", status: "disabled" },
   { name: "เซ็ตแต่งหน้าครบชุด", type: "bundle", bundleItems: [{ productId: "best-1", qty: 1 }, { productId: "feature-1", qty: 1 }, { productId: "best-3", qty: 1 }], bundlePrice: 529, productIds: [], startDate: "2026-12-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "disabled" },
   // v9: second product-specific gift promo (overlaps the 3-piece one, so those cards show two badges).
   { name: "ลิปและบลัชครบ ฿500 รับของแถม", type: "gift_with_purchase", conditionType: "amount", tiers: [{ threshold: 500, giftProductId: "flash-1", giftQty: 1 }], showInCart: true, showBadge: true, badgeLabel: "ครบ ฿500 รับของแถม", productIds: ["flash-1", "flash-3", "flash-5", "best-2", "best-6", "best-8"], startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
-  // v10: ยิ่งซื้อยิ่งคุ้ม (Admin only for now), 3 steps by piece count on lip products.
+  // v10: ยิ่งซื้อยิ่งคุ้ม (switched off), 3 steps by piece count on lip products.
   {
     name: "ยิ่งซื้อยิ่งคุ้ม ลิปทุกเฉด",
     type: "tiered_discount",
     conditionType: "qty",
+    showInCart: true,
     tierDiscountType: "percent",
     discountTiers: [
       { threshold: 2, value: 5 },
@@ -655,16 +667,16 @@ export function couponPublishProblems(c: Coupon): string[] {
  */
 export function promotionBadgeLabel(
   p: Pick<Promotion, "type" | "badgeLabel" | "minSpend" | "conditionType" | "tiers" | "giftProductId" | "giftQty"> &
-    Partial<Pick<Promotion, "discountPercent" | "discountAmount" | "discountTiers" | "tierDiscountType">>,
+    Partial<Pick<Promotion, "discountPercent" | "discountAmount" | "discountTiers" | "tierDiscountType" | "bundleItems" | "bundlePrice" | "buyItems" | "getItems" | "maxDiscount">>,
 ): string {
   if (p.badgeLabel?.trim()) return p.badgeLabel.trim();
   const condition = promotionCondition(p);
-  if (p.type === "percent_off" && p.discountPercent) return `ลด ${p.discountPercent}%`;
-  if (p.type === "baht_off" && p.discountAmount) return `ลด ${formatBaht(p.discountAmount)}`;
-  if (p.type === "tiered_discount") {
-    const first = promotionDiscountTiers(p)[0];
-    if (first?.threshold && first.value) return `ซื้อครบ ${formatPromotionThreshold(condition, first.threshold)} ${formatDiscountValue(p.tierDiscountType, first.value)}`;
-  }
+  const minText = p.minSpend ? ` เมื่อซื้อครบ ${formatBaht(p.minSpend)}` : "";
+  if (p.type === "percent_off" && p.discountPercent) return `ลด ${p.discountPercent}%${minText}`;
+  if (p.type === "baht_off" && p.discountAmount) return `ลด ${formatBaht(p.discountAmount)}${minText}`;
+  if (p.type === "tiered_discount") return "ยิ่งซื้อยิ่งคุ้ม";
+  if (p.type === "bundle" && p.bundlePrice) return `เซ็ตสุดคุ้ม ${formatBaht(p.bundlePrice)}`;
+  if (p.type === "buy_x_get_y" && p.buyItems?.length && p.getItems?.length) return formatPromotionDiscount({ ...p, type: "buy_x_get_y" });
   if (p.type === "free_shipping") return p.minSpend ? `ส่งฟรีเมื่อซื้อครบ ${formatPromotionThreshold(condition, p.minSpend)}` : "ส่งฟรี";
   if (p.type === "gift_with_purchase") {
     const first = promotionGiftTiers(p)[0];

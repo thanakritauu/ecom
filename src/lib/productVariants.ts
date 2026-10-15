@@ -2,6 +2,7 @@ import type { Product, ProductVariant } from "./types";
 import type { AdminVariant } from "./adminProductStore";
 import { isVideoMedia, type MediaValue } from "./media";
 import type { FlashPricedProduct } from "./flashSalePricing";
+import { skuPricingOf } from "./promoStacking";
 
 /**
  * Phase 02 §3/§4 — the one place a storefront variant is resolved into
@@ -62,9 +63,13 @@ function adminVariantsOf(product: Product): AdminVariant[] {
 
 /** During a live flash sale `product.compareAtPrice` belongs to the cheapest flash option; other options use their own. */
 function optionCompareAtPrice(product: Product, variantId: string): number | undefined {
+  // A ส่วนลดสินค้า priced this option (`productDiscountPricing.ts`): its own struck price.
+  const discounted = skuPricingOf(product, variantId);
+  if (discounted) return discounted.compareAtPrice;
   const deal = (product as Product & FlashPricedProduct).flashDeal;
   if (!deal) return product.compareAtPrice;
-  return deal.variants[variantId]?.normalPrice ?? deal.regularCompareAtPrice;
+  const flash = deal.variants[variantId];
+  return flash ? (flash.regularPrice ?? flash.normalPrice) : deal.regularCompareAtPrice;
 }
 
 export function resolveVariantOption(product: Product, variant: ProductVariant): VariantOption {

@@ -3,6 +3,9 @@ import { resolveVariantOption } from "./productVariants";
 import { flashDealFor } from "./flashSalePricing";
 import { getTier, type TierId } from "./membership";
 import { skuRefsCover, type ProductSkuRef } from "./productSkuRef";
+import type { CombinableKind } from "./adminMarketing";
+import type { FlashPricedProduct } from "./flashSalePricing";
+import { canStack, flashTagOf, mergeTags, skuPricingOf, type PromoTag } from "./promoStacking";
 
 /** Matches the free-shipping copy already used in Home's Utility Bar — one real threshold, not a second number invented for the drawer. */
 export const FREE_SHIPPING_THRESHOLD = 990;
@@ -60,6 +63,12 @@ export type ResolvedCartLine = {
   normalUnitPrice?: number;
   /** Flash sale only: the most units this cart gets at the flash price (set when a limit applies). */
   flashLimit?: number;
+  /**
+   * Every promo that already gave this line something (flash sale, ส่วนลดสินค้า,
+   * then cart deals and gift / free shipping once the cart is priced): later
+   * promos check it before they apply ("การใช้ร่วมกับโปรอื่น", `promoStacking.ts`).
+   */
+  promoTags?: PromoTag[];
 };
 
 /**
@@ -89,18 +98,24 @@ export function resolveCartLines(lines: CartLine[], products: Product[]): Resolv
     const unitPrice = option?.price ?? product.price;
     const compareAtPrice = option ? option.compareAtPrice : product.compareAtPrice;
     const deal = flashDealFor(product, found?.id);
-    if (!deal) return [{ line, product, variant, unitPrice, compareAtPrice, lineTotal: unitPrice * line.qty }];
+    const sku = skuPricingOf(product, found?.id);
+    if (!deal) return [{ line, product, variant, unitPrice, compareAtPrice, lineTotal: unitPrice * line.qty, promoTags: sku?.normalTags ?? [] }];
     const caps = [deal.customerLimit, deal.totalLimit].filter((n): n is number => n !== undefined);
     const cap = caps.length > 0 ? Math.min(...caps) : undefined;
     const used = flashUsed.get(deal.limitKey) ?? 0;
     const flashQty = cap === undefined ? line.qty : Math.max(0, Math.min(line.qty, cap - used));
     flashUsed.set(deal.limitKey, used + flashQty);
     const lineTotal = flashQty * deal.flashPrice + (line.qty - flashQty) * deal.normalPrice;
-    // Nothing left at the flash price: the line reads as a normal-price line.
+    // The flash sale (and any product discount stacked on it) on the flash units; the normal-price units carry their own.
+    const flashTags = sku?.flashTags ?? [flashTagOf((product as Product & FlashPricedProduct).flashDeal)];
+    const promoTags = mergeTags(flashQty > 0 ? flashTags : [], flashQty < line.qty ? sku?.normalTags : []);
+    const regular = deal.regularPrice ?? deal.normalPrice;
+    // Nothing left at the flash price: the line reads as a normal-price line (struck only when a product discount lowered it).
     if (flashQty === 0) {
-      return [{ line, product, variant, unitPrice: deal.normalPrice, compareAtPrice: undefined, lineTotal, flashQty, normalUnitPrice: deal.normalPrice, flashLimit: cap }];
+      const struck = regular > deal.normalPrice ? regular : undefined;
+      return [{ line, product, variant, unitPrice: deal.normalPrice, compareAtPrice: struck, lineTotal, flashQty, normalUnitPrice: deal.normalPrice, flashLimit: cap, promoTags }];
     }
-    return [{ line, product, variant, unitPrice: deal.flashPrice, compareAtPrice: deal.normalPrice, lineTotal, flashQty, normalUnitPrice: deal.normalPrice, flashLimit: cap }];
+    return [{ line, product, variant, unitPrice: deal.flashPrice, compareAtPrice: regular, lineTotal, flashQty, normalUnitPrice: deal.normalPrice, flashLimit: cap, promoTags }];
   });
 }
 
@@ -173,6 +188,8 @@ export type Coupon = {
   productScope?: ProductSkuRef[];
   /** Set when this shopper is outside the coupon's กลุ่มลูกค้า: the reason a typed code is refused ("คูปองนี้สำหรับลูกค้าใหม่เท่านั้น"). */
   audienceBlock?: string;
+  /** "การใช้ร่วมกับโปรอื่น" (unset = stacks with all): lines that got a promo it can't stack with don't count (`couponEligibleSubtotal`). */
+  combinableWith?: CombinableKind[];
 };
 
 const THAI_SHORT_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -253,10 +270,23 @@ export const isCouponScoped = (c: Pick<Coupon, "productScope">): boolean => !!c.
  * picked SKUs). Uses each line's charged `lineTotal` (flash prices included).
  * Free gifts are never `ResolvedCartLine`s, so they never count.
  */
-export function couponEligibleSubtotal(c: Pick<Coupon, "productScope">, lines: ResolvedCartLine[]): number {
-  if (!isCouponScoped(c)) return computeCartTotal(lines);
-  const scope = c.productScope!;
-  return lines.reduce((sum, l) => (skuRefsCover(scope, l.product.id, l.line.variantId) ? sum + l.lineTotal : sum), 0);
+export function couponEligibleSubtotal(c: Pick<Coupon, "productScope" | "combinableWith">, lines: ResolvedCartLine[]): number {
+  return couponScopeLines(c, lines)
+    .filter((l) => couponStacksOn(c, l))
+    .reduce((sum, l) => sum + l.lineTotal, 0);
+}
+
+/** Lines inside the coupon's product scope (every line for a store-wide coupon), before any stacking check. */
+const couponScopeLines = (c: Pick<Coupon, "productScope">, lines: ResolvedCartLine[]) =>
+  isCouponScoped(c) ? lines.filter((l) => skuRefsCover(c.productScope!, l.product.id, l.line.variantId)) : lines;
+
+/** Whether the coupon may add its discount on this line, given the promos already on it (`promoStacking.ts`). */
+export const couponStacksOn = (c: Pick<Coupon, "combinableWith">, line: ResolvedCartLine) => canStack({ kind: "coupon", combinableWith: c.combinableWith }, line.promoTags);
+
+/** In-scope lines exist, but every one of them got a promo this coupon can't be used with. */
+export function couponStackBlocked(c: Pick<Coupon, "productScope" | "combinableWith">, lines: ResolvedCartLine[]): boolean {
+  const inScope = couponScopeLines(c, lines);
+  return inScope.length > 0 && !inScope.some((l) => couponStacksOn(c, l));
 }
 
 /**
@@ -264,8 +294,9 @@ export function couponEligibleSubtotal(c: Pick<Coupon, "productScope">, lines: R
  * coupon with no item in the cart from its list, or the eligible total (all
  * products for a store-wide coupon) under the minimum spend.
  */
-export function couponCartBlock(c: Pick<Coupon, "productScope" | "minSpend">, lines: ResolvedCartLine[]): string | undefined {
+export function couponCartBlock(c: Pick<Coupon, "productScope" | "minSpend" | "combinableWith">, lines: ResolvedCartLine[]): string | undefined {
   const scoped = isCouponScoped(c);
+  if (couponStackBlocked(c, lines)) return "คูปองนี้ใช้ร่วมกับโปรโมชั่นของสินค้าในตะกร้าไม่ได้";
   const eligible = couponEligibleSubtotal(c, lines);
   if (scoped && eligible <= 0) return "ใช้ได้กับสินค้าที่ร่วมรายการเท่านั้น";
   if (eligible < c.minSpend) {
@@ -349,25 +380,37 @@ export function computeCoinsEarned(amountPaid: number, tier: TierId = "glow"): n
 }
 
 export type CheckoutTotals = {
+  /** The lines' own total (sale / flash prices included): "ยอดรวมสินค้า". */
   subtotal: number;
+  /** Cart-level promos (ส่วนลดสินค้า with a minimum or cap, ยิ่งซื้อยิ่งคุ้ม, บันเดิลดีล, ซื้อ X แถม Y), each shown as its own row. */
+  promoDiscount: number;
   couponDiscount: number;
   coinDiscount: number;
   shippingFee: number;
   total: number;
 };
 
-/** `lines` are the paid lines the subtotal came from; a scoped coupon (`productScope`) only discounts the ones it covers, and gets nothing without them. */
+/**
+ * Layer 4 and the bill. `subtotal` = the lines' own total, `promoDiscount` =
+ * the cart-level promo rows (`priceCart`), `lines` = the priced lines
+ * (`CartPricing.pricedLines`: each line's total after every promo, with its
+ * tags) the coupon works on: a scoped coupon only discounts the ones it
+ * covers, and no coupon counts a line that got a promo it can't stack with.
+ */
 export function computeCheckoutTotals(opts: {
   subtotal: number;
+  promoDiscount?: number;
   lines?: ResolvedCartLine[];
   coupon?: Coupon;
   coinsRedeemed?: number;
   shippingFee: number;
 }): CheckoutTotals {
   const c = opts.coupon;
-  const couponBase = !c ? 0 : opts.lines ? couponEligibleSubtotal(c, opts.lines) : isCouponScoped(c) ? 0 : opts.subtotal;
-  const couponDiscount = c && isCouponActive(c) ? couponDiscountAmount(c, Math.min(couponBase, opts.subtotal)) : 0;
+  const promoDiscount = Math.min(Math.max(0, opts.promoDiscount ?? 0), opts.subtotal);
+  const afterPromos = opts.subtotal - promoDiscount;
+  const couponBase = !c ? 0 : opts.lines ? couponEligibleSubtotal(c, opts.lines) : isCouponScoped(c) ? 0 : afterPromos;
+  const couponDiscount = c && isCouponActive(c) ? couponDiscountAmount(c, Math.min(couponBase, afterPromos)) : 0;
   const coinDiscount = Math.round((opts.coinsRedeemed ?? 0) * COIN_TO_BAHT_RATE);
-  const total = Math.max(0, opts.subtotal - couponDiscount - coinDiscount + opts.shippingFee);
-  return { subtotal: opts.subtotal, couponDiscount, coinDiscount, shippingFee: opts.shippingFee, total };
+  const total = Math.max(0, afterPromos - couponDiscount - coinDiscount + opts.shippingFee);
+  return { subtotal: opts.subtotal, promoDiscount, couponDiscount, coinDiscount, shippingFee: opts.shippingFee, total };
 }
