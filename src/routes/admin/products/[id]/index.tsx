@@ -27,7 +27,10 @@ import { useAdminNavigation } from "~/lib/adminNavigationStore";
 import { findNavigationReferences, describeNavigationReference } from "~/lib/adminNavigation";
 import { collectionsContainingProduct, findProductReferencesInPromotionPages } from "~/lib/masterDataRelations";
 import { pushToast } from "~/lib/toast";
-import { getDiscountPercent, isFlashSaleUpcoming } from "~/lib/products";
+import { getDiscountPercent } from "~/lib/products";
+import { useAdminMarketing } from "~/lib/adminMarketingStore";
+import { MARKETING_PHASE_META } from "~/lib/adminMarketing";
+import { flashCampaignPhase } from "~/lib/flashSaleCampaigns";
 import { isRichTextEmpty } from "~/lib/richText";
 import { RichTextContent } from "~/components/shared/RichTextContent";
 import { useAdminTiktokClips } from "~/lib/adminTiktokClips";
@@ -52,6 +55,12 @@ export default function AdminProductDetailPage() {
   const contentStore = useAdminContent();
   const navigation = useAdminNavigation();
   const tiktokClips = useAdminTiktokClips();
+  const marketing = useAdminMarketing();
+  /** "แฟลชเซลเที่ยงวัน (กำลังดำเนินการ)": the flash sale campaigns holding this product, or "-". */
+  const flashSaleText = (id: string) => {
+    const list = marketing.flashSales.items().filter((c) => c.items.some((i) => i.productId === id));
+    return list.length > 0 ? list.map((c) => `${c.name} (${MARKETING_PHASE_META[flashCampaignPhase(c)].label})`).join(", ") : "-";
+  };
   const navigate = useNavigate();
 
   const product = createMemo(() => store.getById(params.id));
@@ -288,7 +297,7 @@ export default function AdminProductDetailPage() {
                   <Show when={selectedVariant()}>{(v) => <p class="text-xs text-ink-placeholder">ตัวเลือก: {v().label}</p>}</Show>
                   <dl class="flex flex-col gap-1.5 text-sm">
                     <Row label="ป้ายลดราคา" value={!getDiscountPercent(p()) ? "-" : p().showDiscountBadge === false ? "ไม่แสดง" : `ลด ${getDiscountPercent(p())}%`} />
-                    <Row label="แฟลชเซล" value={flashSaleText(p())} />
+                    <Row label="แฟลชเซล" value={flashSaleText(p().id)} />
                   </dl>
                 </div>
 
@@ -383,17 +392,6 @@ export default function AdminProductDetailPage() {
       }}
     </Show>
   );
-}
-
-const flashTimeFormatter = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
-
-/** "รายวัน" / "รอเริ่ม 12 ต.ค. 10:00 น." / "ถึง 31 ต.ค. 23:59 น." / "หมดเวลา" / "-". */
-function flashSaleText(p: AdminProduct): string {
-  if (p.flashSaleDaily) return "รอบรายวัน";
-  if (!p.flashSaleEndsAt) return "-";
-  if (isFlashSaleUpcoming(p)) return `รอเริ่ม ${flashTimeFormatter.format(p.flashSaleStartsAt!)} น.`;
-  if (p.flashSaleEndsAt <= Date.now()) return "หมดเวลา";
-  return `ถึง ${flashTimeFormatter.format(p.flashSaleEndsAt)} น.`;
 }
 
 function Row(props: { label: string; value: string }) {

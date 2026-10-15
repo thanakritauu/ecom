@@ -1,5 +1,5 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js";
-import { A, useNavigate } from "@solidjs/router";
+import { useNavigate } from "@solidjs/router";
 import { FilterBar } from "~/components/admin/FilterBar";
 import { Pagination } from "~/components/admin/Pagination";
 import { DataTable, type DataTableColumn } from "~/components/admin/DataTable";
@@ -45,19 +45,20 @@ import { formatAudience } from "~/lib/marketingAudience";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
 import { useAdminProducts } from "~/lib/adminProductStore";
 import { useAdminOrders } from "~/lib/adminOrderStore";
-import { isInFlashSale } from "~/lib/flashSalePricing";
-import { isFlashSaleUpcoming } from "~/lib/products";
+import { flashPricesOf } from "~/lib/flashSalePricing";
+import { flashCampaignPhase, flashCampaignPublishProblems, formatFlashSchedule, type FlashSaleCampaign } from "~/lib/flashSaleCampaigns";
+import { getDiscountPercent } from "~/lib/products";
 import type { ExportColumn } from "~/lib/adminExport";
 import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
 
-/** One row of "จัดการโปรโมชั่น": a promotion, a coupon, or the one flash-sale entry (its products are managed on their own page). */
+/** One row of "จัดการโปรโมชั่น": a promotion, a coupon, or a flash sale campaign. */
 type Row =
   | { key: string; kind: "promotion"; tool: PromotionTool; item: Promotion }
   | { key: string; kind: "coupon"; tool: CouponTool; item: Coupon }
-  | { key: string; kind: "flash_sale"; tool: "flash_sale"; count: number; phase: MarketingPhase };
+  | { key: string; kind: "flash_sale"; tool: "flash_sale"; item: FlashSaleCampaign };
 
-type ItemRow = Exclude<Row, { kind: "flash_sale" }>;
+type ItemRow = Row;
 
 /** Tool filter: every tool, plus "คูปองทั้งหมด". */
 export type ToolFilter = "all" | "coupons" | MarketingTool;
@@ -112,47 +113,47 @@ export function MarketingManageList(props: { tool: ToolFilter; onToolChange: (to
 
   // ---- rows ---------------------------------------------------------------
 
-  /** The flash-sale entry's state, from its products: any running = กำลังดำเนินการ, else any waiting = กำลังจะมาถึง. */
-  const flashRow = createMemo((): Row => {
-    const now = Date.now();
-    const items = productStore.products().filter(isInFlashSale);
-    const shown = items.filter((p) => p.status === "active");
-    const running = shown.filter((p) => !isFlashSaleUpcoming(p, now) && (p.flashSaleDaily || (p.flashSaleEndsAt ?? 0) > now));
-    const phase: MarketingPhase = running.length > 0 ? "live" : shown.some((p) => isFlashSaleUpcoming(p, now)) ? "scheduled" : shown.length > 0 ? "expired" : "disabled";
-    return { key: "flash-sale", kind: "flash_sale", tool: "flash_sale", count: items.length, phase };
-  });
-
   const rows = createMemo((): Row[] => [
-    flashRow(),
+    ...marketing.flashSales.items().map((item): Row => ({ key: `flash_sale:${item.id}`, kind: "flash_sale", tool: "flash_sale", item })),
     ...marketing.promotions.items().map((item): Row => ({ key: `promotion:${item.id}`, kind: "promotion", tool: promotionTool(item), item })),
     ...marketing.coupons.items().map((item): Row => ({ key: `coupon:${item.id}`, kind: "coupon", tool: couponTool(item), item })),
   ]);
-  const itemRows = createMemo(() => rows().filter((r): r is ItemRow => r.kind !== "flash_sale"));
+  const itemRows = rows;
   const rowByKey = (key: string) => rows().find((r) => r.key === key);
 
-  const phaseOf = (r: Row): MarketingPhase => (r.kind === "flash_sale" ? r.phase : marketingPhase(r.item));
-  const nameOf = (r: Row) => (r.kind === "promotion" ? r.item.name : r.kind === "coupon" ? r.item.code : "แฟลชเซล");
+  const phaseOf = (r: Row): MarketingPhase => (r.kind === "flash_sale" ? flashCampaignPhase(r.item) : marketingPhase(r.item));
+  const nameOf = (r: Row) => (r.kind === "coupon" ? r.item.code : r.item.name);
+  /** "ราคาแฟลชเซล ลดสูงสุด 40%": the deepest discount among the campaign's products. */
+  const flashSummary = (c: FlashSaleCampaign) => {
+    let best = 0;
+    for (const i of c.items) {
+      const p = productStore.getById(i.productId);
+      if (!p) continue;
+      for (const r of flashPricesOf(p, i.flash)) best = Math.max(best, getDiscountPercent({ price: r.flash, compareAtPrice: r.normal }) ?? 0);
+    }
+    return best > 0 ? `ราคาแฟลชเซล ลดสูงสุด ${best}%` : "ยังไม่ได้ตั้งราคาแฟลชเซล";
+  };
   const usageOf = (r: Row) => (r.kind === "coupon" ? couponUsageCount(r.item.code, orderStore.orders()) : 0);
   const summaryOf = (r: Row) => {
     if (r.kind === "promotion") return formatPromotionDiscount(r.item, productName);
     if (r.kind === "coupon") return `${formatCouponDiscount(r.item)} ${formatCouponMinSpend(r.item)}`;
-    return "ราคาพิเศษตามรอบเวลาของแต่ละสินค้า";
+    return flashSummary(r.item);
   };
   const productsOf = (r: Row) => {
-    if (r.kind === "flash_sale") return `${r.count.toLocaleString("th-TH")} สินค้า`;
+    if (r.kind === "flash_sale") return `${r.item.items.length.toLocaleString("th-TH")} สินค้า`;
     if (r.kind === "coupon") return r.item.productScope?.length ? `${r.item.productScope.length} สินค้า` : "ทั้งร้าน";
     const p = r.item;
     if (p.type === "bundle") return `${p.bundleItems?.length ?? 0} สินค้าในเซ็ต`;
     if (p.type === "buy_x_get_y") return `ซื้อ ${p.buyItems?.length ?? 0} แถม ${p.getItems?.length ?? 0} สินค้า`;
     return p.productIds.length === 0 ? "ทั้งร้าน" : `${p.productIds.length} สินค้า`;
   };
-  const audienceOf = (r: Row) => (r.kind === "flash_sale" ? "ทุกคน" : formatAudience(r.item.audience));
+  const audienceOf = (r: Row) => formatAudience(r.item.audience);
   const periodOf = (r: Row) =>
-    r.kind === "flash_sale" ? "ตามรอบของสินค้า" : `${formatMarketingDate(r.item.startDate)} - ${formatMarketingDate(r.item.endDate)}`;
-  const combinableOf = (r: Row) => (r.kind === "flash_sale" ? "" : formatCombinable(r.item.combinableWith));
-  const startOf = (r: Row) => (r.kind === "flash_sale" ? "" : r.item.startDate);
-  const endOf = (r: Row) => (r.kind === "flash_sale" ? "9999" : r.item.endDate);
-  const basePath = (r: ItemRow) => (r.kind === "promotion" ? "/admin/marketing/promotions" : "/admin/marketing/coupons");
+    r.kind === "flash_sale" ? formatFlashSchedule(r.item) : `${formatMarketingDate(r.item.startDate)} - ${formatMarketingDate(r.item.endDate)}`;
+  const combinableOf = (r: Row) => formatCombinable(r.item.combinableWith);
+  const startOf = (r: Row) => r.item.startDate;
+  const endOf = (r: Row) => r.item.endDate || "9999";
+  const basePath = (r: ItemRow) => (r.kind === "promotion" ? "/admin/marketing/promotions" : r.kind === "coupon" ? "/admin/marketing/coupons" : FLASH_SALE_PATH);
 
   const matchesTool = (r: Row, t: ToolFilter) => t === "all" || (t === "coupons" ? r.kind === "coupon" : r.tool === t);
 
@@ -178,7 +179,7 @@ export function MarketingManageList(props: { tool: ToolFilter; onToolChange: (to
     return toolScoped().filter((r) => {
       if (phase !== "all" && phaseOf(r) !== phase) return false;
       if (q) {
-        const hay = r.kind === "flash_sale" ? "แฟลชเซล flash sale" : `${nameOf(r)} ${r.item.id}`;
+        const hay = `${nameOf(r)} ${r.item.id}${r.kind === "flash_sale" ? " แฟลชเซล flash sale" : ""}`;
         if (!hay.toLowerCase().includes(q)) return false;
       }
       return true;
@@ -204,7 +205,7 @@ export function MarketingManageList(props: { tool: ToolFilter; onToolChange: (to
   const totalPages = createMemo(() => Math.max(1, Math.ceil(sorted().length / pageSize())));
   const currentPage = createMemo(() => Math.min(page(), totalPages()));
   const pageItems = createMemo(() => sorted().slice((currentPage() - 1) * pageSize(), currentPage() * pageSize()));
-  const selectablePageItems = createMemo(() => pageItems().filter((r) => r.kind !== "flash_sale"));
+  const selectablePageItems = pageItems;
 
   // ---- selection ----------------------------------------------------------
 
@@ -227,9 +228,15 @@ export function MarketingManageList(props: { tool: ToolFilter; onToolChange: (to
 
   // ---- actions ------------------------------------------------------------
 
-  const storeOf = (r: ItemRow) => (r.kind === "promotion" ? marketing.promotions : marketing.coupons);
-  const nounOf = (r: ItemRow) => (r.kind === "promotion" ? "โปรโมชั่น" : "คูปอง");
-  const publishProblems = (r: ItemRow) => (r.kind === "promotion" ? promotionPublishProblems(r.item) : couponPublishProblems(r.item));
+  // One store per kind; the casts only join their item types (each row's item belongs to its own store).
+  const storeOf = (r: ItemRow) =>
+    (r.kind === "promotion" ? marketing.promotions : r.kind === "coupon" ? marketing.coupons : marketing.flashSales) as unknown as Pick<
+      typeof marketing.promotions,
+      "setStatus" | "endNow" | "remove" | "duplicate"
+    >;
+  const nounOf = (r: ItemRow) => (r.kind === "promotion" ? "โปรโมชั่น" : r.kind === "coupon" ? "คูปอง" : "แฟลชเซล");
+  const publishProblems = (r: ItemRow) =>
+    r.kind === "promotion" ? promotionPublishProblems(r.item) : r.kind === "coupon" ? couponPublishProblems(r.item) : flashCampaignPublishProblems(r.item, productStore.getById);
 
   /** A แบบร่าง is published (full check first, names what's missing); never switched off. */
   const publishBlocked = (r: ItemRow): boolean => {
@@ -312,7 +319,7 @@ export function MarketingManageList(props: { tool: ToolFilter; onToolChange: (to
       );
   };
 
-  const openRow = (r: Row) => (r.kind === "flash_sale" ? navigate(FLASH_SALE_PATH) : setQuickViewKey(r.key));
+  const openRow = (r: Row) => (r.kind === "flash_sale" ? navigate(`${FLASH_SALE_PATH}/${r.item.id}/edit`) : setQuickViewKey(r.key));
 
   // ---- cells --------------------------------------------------------------
 
@@ -329,50 +336,38 @@ export function MarketingManageList(props: { tool: ToolFilter; onToolChange: (to
   );
 
   const RowMenu = (p: { row: Row; triggerClass?: string }) => (
-    <Show
-      when={p.row.kind !== "flash_sale" ? (p.row as ItemRow) : undefined}
-      fallback={
-        <A href={FLASH_SALE_PATH} onClick={(e) => e.stopPropagation()} class="whitespace-nowrap text-sm font-medium text-brand-pink hover:underline">
-          จัดการ
-        </A>
-      }
-    >
-      {(r) => (
-        <MarketingRowActionsMenu
-          id={r().item.id}
-          name={nameOf(r())}
-          entity=""
-          basePath={basePath(r())}
-          isDisabled={r().item.status === "disabled"}
-          isDraft={r().item.status === "draft"}
-          onDuplicate={() => handleDuplicate(r())}
-          onToggleStatus={() => requestToggle(r())}
-          onEndNow={phaseOf(r()) === "live" ? () => setConfirmEndNow(r()) : undefined}
-          onDelete={() => setConfirmDelete(r())}
-          triggerClass={p.triggerClass}
-        />
-      )}
-    </Show>
+    <MarketingRowActionsMenu
+      id={p.row.item.id}
+      name={nameOf(p.row)}
+      entity=""
+      basePath={basePath(p.row)}
+      isDisabled={p.row.item.status === "disabled"}
+      isDraft={p.row.item.status === "draft"}
+      hideView={p.row.kind === "flash_sale"}
+      onDuplicate={() => handleDuplicate(p.row)}
+      onToggleStatus={() => requestToggle(p.row)}
+      onEndNow={phaseOf(p.row) === "live" ? () => setConfirmEndNow(p.row) : undefined}
+      onDelete={() => setConfirmDelete(p.row)}
+      triggerClass={p.triggerClass}
+    />
   );
 
   const SelectBox = (p: { row: Row; class?: string }) => (
-    <Show when={p.row.kind !== "flash_sale"} fallback={<span class={`inline-block size-4 ${p.class ?? ""}`} aria-hidden="true" />}>
-      <input
-        type="checkbox"
-        aria-label={`เลือก ${nameOf(p.row)}`}
-        checked={selectedKeys().has(p.row.key)}
-        onClick={(e) => e.stopPropagation()}
-        onChange={() => toggleSelect(p.row.key)}
-        class={`size-4 rounded accent-brand-pink ${p.class ?? ""}`}
-      />
-    </Show>
+    <input
+      type="checkbox"
+      aria-label={`เลือก ${nameOf(p.row)}`}
+      checked={selectedKeys().has(p.row.key)}
+      onClick={(e) => e.stopPropagation()}
+      onChange={() => toggleSelect(p.row.key)}
+      class={`size-4 rounded accent-brand-pink ${p.class ?? ""}`}
+    />
   );
 
   const exportColumns: ExportColumn<Row>[] = [
     { header: "ชื่อ / โค้ด", value: nameOf },
     { header: "เครื่องมือ", value: (r) => MARKETING_TOOL_META[r.tool].label },
     { header: "เงื่อนไข", value: summaryOf },
-    { header: "เริ่ม", value: (r) => (r.kind === "flash_sale" ? "-" : formatMarketingDateTime(r.item.startDate, r.item.startTime)) },
+    { header: "เริ่ม", value: (r) => (r.kind === "flash_sale" ? formatFlashSchedule(r.item) : formatMarketingDateTime(r.item.startDate, r.item.startTime)) },
     { header: "สิ้นสุด", value: (r) => (r.kind === "flash_sale" ? "-" : formatMarketingDateTime(r.item.endDate, r.item.endTime)) },
     { header: "สินค้า", value: productsOf },
     { header: "กลุ่มลูกค้า", value: audienceOf },
@@ -532,7 +527,7 @@ export function MarketingManageList(props: { tool: ToolFilter; onToolChange: (to
         onViewFull={() => {
           const r = quickRow();
           setQuickViewKey(null);
-          if (r && r.kind !== "flash_sale") navigate(`${basePath(r)}/${r.item.id}`);
+          if (r) navigate(`${basePath(r)}/${r.item.id}`);
         }}
       >
         <Show when={quickPromotion()}>{(p) => <PromotionQuickView promotion={p()} />}</Show>

@@ -17,7 +17,11 @@ import rays from "~/assets/images/home/flash-sale-rays.png";
 export function FlashSaleSection() {
   const catalog = useProductCatalog();
   const flashSaleProducts = () => catalog.products().filter(isFlashSale);
-  const endsAt = () => flashSaleProducts()[0]?.flashSaleEndsAt;
+  // The live campaign's round end (the soonest, when several campaigns run at once).
+  const endsAt = () => {
+    const ends = flashSaleProducts().map((p) => p.flashSaleEndsAt).filter((t): t is number => typeof t === "number");
+    return ends.length > 0 ? Math.min(...ends) : undefined;
+  };
 
   return (
     <Show when={flashSaleProducts().length > 0}>

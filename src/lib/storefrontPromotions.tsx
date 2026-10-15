@@ -17,16 +17,13 @@ import { useProductCatalog } from "./productCatalog";
 import { useCart } from "./cart";
 import { MOCK_ORDERS as ADMIN_MOCK_ORDERS } from "./adminOrders";
 import { giftLinesOf, resolveFreeShipping, resolveGiftPromotions, shippingFeeFor } from "./promotionEngine";
-import { useAuth } from "./auth";
-import { createMockOrderRepository, createOrderHistory } from "./orderHistory";
-import { resolveTier, yearlySpend } from "./membership";
-import { couponAudienceBlock, GUEST_SHOPPER, matchesAudience, type Shopper } from "./marketingAudience";
+import { couponAudienceBlock, matchesAudience, type Shopper } from "./marketingAudience";
 
 /** Same keys (+ `:seed-version`) `adminMarketingStore` persists to. Read-only here; the customer side never writes them. */
 export const PROMOTIONS_STORAGE_KEY = "charmiss:admin:marketing:promotions";
 export const COUPONS_STORAGE_KEY = "charmiss:admin:marketing:coupons";
-/** Fired by `adminMarketingStore` after it saves, so a storefront page in the same tab picks the change up (the `storage` event only reaches other tabs). */
-export const MARKETING_CHANGED_EVENT = "charmiss:marketing-changed";
+import { MARKETING_CHANGED_EVENT } from "./marketingEvents";
+export { MARKETING_CHANGED_EVENT };
 
 const idNumber = (id: string) => Number(id.match(/-(\d+)$/)?.[1] ?? 0);
 
@@ -112,22 +109,8 @@ export function StorefrontPromotionsProvider(props: { children: JSX.Element }) {
   const [now, setNow] = createSignal(Date.now());
   const [usageOrders, setUsageOrders] = createSignal<UsageOrder[]>(ADMIN_MOCK_ORDERS);
 
-  /**
-   * กลุ่มลูกค้า: a guest is a new customer with no tier. A signed-in member
-   * is returning once they have a paid (not cancelled, not awaiting payment)
-   * order; a member who just signed up (`memberSource: "new"`) has none yet.
-   * Their tier comes from this year's paid spend, same as Checkout and
-   * /account/points.
-   */
-  const auth = useAuth();
-  const orderHistory = createOrderHistory(() => createMockOrderRepository());
-  const shopper = createMemo((): Shopper => {
-    const user = auth.user();
-    if (!user) return GUEST_SHOPPER;
-    const orders = user.memberSource === "new" ? [] : orderHistory.orders();
-    const hasPaidOrder = orders.some((o) => o.status !== "cancelled" && o.status !== "pending_payment");
-    return { signedIn: true, hasPaidOrder, tier: resolveTier(yearlySpend(orders)).current.id };
-  });
+  // กลุ่มลูกค้า: the same shopper the catalog prices flash sales for.
+  const { shopper } = useProductCatalog();
 
   onMount(() => {
     const refresh = () => {

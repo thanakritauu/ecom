@@ -11,6 +11,8 @@ import {
   MARKETING_SEED_VERSION,
 } from "./adminMarketing";
 import { COUPONS_STORAGE_KEY, MARKETING_CHANGED_EVENT, PROMOTIONS_STORAGE_KEY } from "./storefrontPromotions";
+import { FLASH_CAMPAIGNS_STORAGE_KEY, migrateFlashCampaigns, normalizeFlashCampaigns, readStoredFlashCampaigns, type FlashSaleCampaign } from "./flashSaleCampaigns";
+import { buildLegacyAdminProductBaseline, ensureFlashCampaignsFromProducts } from "./adminProductStore";
 
 const TODAY_LABEL = "17 ก.ย. 2569";
 let nextId = 1000;
@@ -46,12 +48,30 @@ export type EntityCrud<T extends WithId> = {
  */
 const idNumber = (id: string) => Number(id.match(/-(\d+)$/)?.[1] ?? 0);
 
-function createEntityStore<T extends WithId>(storageKey: string, baseline: () => T[], idPrefix: string, normalize: (list: T[]) => T[]): EntityCrud<T> {
+/**
+ * `fromStorage`: the store reads its stored copy through this instead (e.g.
+ * flash sale campaigns, which migrate from the products on first read and
+ * never re-seed).
+ */
+function createEntityStore<T extends WithId>(
+  storageKey: string,
+  baseline: () => T[],
+  idPrefix: string,
+  normalize: (list: T[]) => T[],
+  fromStorage?: () => T[] | null,
+): EntityCrud<T> {
   const versionKey = `${storageKey}:seed-version`;
   const [items, setItems] = createSignal<T[]>(baseline());
 
   onMount(() => {
     try {
+      if (fromStorage) {
+        const stored = fromStorage();
+        if (!stored) return;
+        nextId = Math.max(nextId, ...stored.map((item) => idNumber(item.id) + 1));
+        setItems(stored);
+        return;
+      }
       const raw = localStorage.getItem(storageKey);
       if (!raw) return;
       let stored = normalize(JSON.parse(raw) as T[]);
@@ -144,12 +164,14 @@ function createEntityStore<T extends WithId>(storageKey: string, baseline: () =>
 type AdminMarketingContextValue = {
   promotions: EntityCrud<Promotion>;
   coupons: EntityCrud<Coupon>;
+  /** Flash sale campaigns (`~/lib/flashSaleCampaigns`). */
+  flashSales: EntityCrud<FlashSaleCampaign>;
 };
 
 const AdminMarketingContext = createContext<AdminMarketingContextValue>();
 
 export function AdminMarketingProvider(props: { children: JSX.Element }) {
-  // Flash sale now lives on the products themselves and bundles are gone; drop their old stored copies.
+  // The first flash sale store (before it moved to products, then to campaigns) and bundles are gone; drop their old stored copies.
   onMount(() => {
     try {
       for (const key of ["charmiss:admin:marketing:flashsales", "charmiss:admin:marketing:bundles"]) {
@@ -161,6 +183,16 @@ export function AdminMarketingProvider(props: { children: JSX.Element }) {
   const value: AdminMarketingContextValue = {
     promotions: createEntityStore(PROMOTIONS_STORAGE_KEY, buildMockPromotions, "promo", normalizePromotions),
     coupons: createEntityStore(COUPONS_STORAGE_KEY, buildMockCoupons, "coupon", normalizeCoupons),
+    flashSales: createEntityStore(
+      FLASH_CAMPAIGNS_STORAGE_KEY,
+      () => migrateFlashCampaigns(buildLegacyAdminProductBaseline()),
+      "flashsale",
+      normalizeFlashCampaigns,
+      () => {
+        ensureFlashCampaignsFromProducts();
+        return readStoredFlashCampaigns();
+      },
+    ),
   };
   return <AdminMarketingContext.Provider value={value}>{props.children}</AdminMarketingContext.Provider>;
 }

@@ -5,7 +5,8 @@ import type { Product, ProductVariant } from "./types";
 import { normalizeMedia, type MediaValue } from "./media";
 import { isRichTextEmpty } from "./richText";
 import { buildMockCategories } from "./adminCategories";
-import { migrateLegacyFlashSale, normalizeFlashSaleConfig, type FlashSaleConfig } from "./flashSalePricing";
+import { migrateLegacyFlashSale, normalizeFlashSaleConfig, stripLegacyFlashFields, type LegacyFlashProduct } from "./flashSalePricing";
+import { ensureFlashCampaignsMigrated } from "./flashSaleMigration";
 import categoryBrow from "~/assets/images/category/category-brow.png";
 import categoryCheek from "~/assets/images/category/category-cheek.png";
 import categoryEye from "~/assets/images/category/category-eye.png";
@@ -57,15 +58,10 @@ export type AdminVariant = {
  */
 export type AdminProduct = Product & {
   sku: string;
-  /**
-   * Flash Sale runs in the storefront's daily round (ends at the next Bangkok
-   * midnight, `flashSaleRoundEndsAt`). `flashSaleEndsAt` is then re-derived
-   * every time products are read, so a saved product never carries a stale
-   * end time past midnight. Unset/false = a one-off end time set by Admin.
-   */
-  flashSaleDaily?: boolean;
-  /** The flash sale's own prices and limits (`~/lib/flashSalePricing`), managed on the Flash Sale page. Only used while the product is in the flash sale. */
-  flashSale?: FlashSaleConfig;
+  // Flash sale is no longer stored on the product: it lives in flash sale
+  // campaigns (`~/lib/flashSaleCampaigns`). `flashSaleEndsAt` / `flashSaleStartsAt`
+  // (from `Product`) are only set on the storefront's derived copy while a
+  // campaign holding the product is live (`productCatalog.tsx`).
   /**
    * Admin Master Data Foundation — `categoryId` is the *real* relationship
    * into `~/lib/adminCategories` (empty string = unassigned), the one a
@@ -193,8 +189,9 @@ const CATEGORY_SLUG_TO_ID: Record<string, string> = Object.fromEntries(buildMock
 const SEED_STOCK_ROTATION = [40, 25, 60, 15, 32, 50, 18, 22, 45, 30];
 const seedStockOf = (product: Product, i: number) => product.stockLeft ?? SEED_STOCK_ROTATION[i % SEED_STOCK_ROTATION.length];
 
-export function buildAdminProductBaseline(): AdminProduct[] {
-  return allProducts.map((catalogProduct, i): AdminProduct => {
+/** The seed catalog as stored before flash sale campaigns (with the old per-product flash fields), for the migration. */
+export function buildLegacyAdminProductBaseline(): LegacyFlashProduct[] {
+  return allProducts.map((catalogProduct, i): LegacyFlashProduct => {
     const product: Product = { ...catalogProduct, stockLeft: seedStockOf(catalogProduct, i) };
     const sku = `CHM${String(i + 1).padStart(3, "0")}`;
     // Most of this catalog never sets `category` (only bestSellerProducts
@@ -216,6 +213,10 @@ export function buildAdminProductBaseline(): AdminProduct[] {
       adminVariants: seedAdminVariants(product, sku),
     };
   }).map(migrateLegacyFlashSale);
+}
+
+export function buildAdminProductBaseline(): AdminProduct[] {
+  return buildLegacyAdminProductBaseline().map(stripLegacyFlashFields);
 }
 
 /**
@@ -281,14 +282,19 @@ function storefrontCategoryOf(categoryId: string): Product["category"] {
 }
 
 /** Exported for the same reason as `buildAdminProductBaseline` — `productCatalog.tsx` reads the same `localStorage` key and must guard against the identical stale-shape landmine this store already guards against. */
-/** Daily-round products get today's end time (next Bangkok midnight) on every read — see `AdminProduct.flashSaleDaily`. */
-export function withDailyFlashSaleEnd(p: AdminProduct): AdminProduct {
+/** Legacy daily-round products get today's end time (next Bangkok midnight), as they did before campaigns. */
+function withDailyFlashSaleEnd(p: LegacyFlashProduct): LegacyFlashProduct {
   return p.flashSaleDaily ? { ...p, flashSaleEndsAt: flashSaleRoundEndsAt() } : p;
 }
 
 export function normalizeAdminProduct(stored: AdminProduct): AdminProduct {
+  return stripLegacyFlashFields(normalizeLegacyAdminProduct(stored));
+}
+
+/** Same guards, keeping the old per-product flash fields (read once to migrate them into campaigns). */
+function normalizeLegacyAdminProduct(stored: LegacyFlashProduct): LegacyFlashProduct {
   // Products saved while the (now removed) Brand module existed still carry `brand`/`brandId` — dropped on read so they're never written back.
-  const { brand: _brand, brandId: _brandId, ...p } = stored as AdminProduct & { brand?: unknown; brandId?: unknown };
+  const { brand: _brand, brandId: _brandId, ...p } = stored as LegacyFlashProduct & { brand?: unknown; brandId?: unknown };
   return {
     ...p,
     // Same root-cause guard as `adminVariants` below — a product persisted
@@ -324,12 +330,6 @@ export type ProductFormValues = {
   /** Gallery in order, images and videos (`~/lib/media`). `images` is always its still-image twin (video = poster). */
   media?: MediaValue[];
   adminVariants: AdminVariant[];
-  /** REAL-TIME LIVE PREVIEW SYSTEM §4/§8 — epoch ms; unset/undefined = no Flash Sale. */
-  flashSaleEndsAt?: number;
-  /** One-off flash sale start (epoch ms); required with `flashSaleEndsAt` when not daily. */
-  flashSaleStartsAt?: number;
-  /** See `AdminProduct.flashSaleDaily` — when true, `flashSaleEndsAt` is ignored and re-derived on read. */
-  flashSaleDaily?: boolean;
   /** "แสดงป้ายลดราคา": `false` hides the "ลด X%" badge on the storefront. */
   showDiscountBadge?: boolean;
   /** Form only (not stored on the product): TikTok clips to link to this product; the routes apply it with `setProductTiktokClips`. */
@@ -352,7 +352,7 @@ type AdminProductContextValue = {
   setStatus: (id: string, status: AdminProductStatus) => Promise<void>;
   /** Stock edit from the Inventory page: product stock plus, optionally, each option's stock (by variant id). Keeps `variants[].soldOut` in step. */
   updateStock: (id: string, stockLeft: number, variantStock?: Record<string, number>) => Promise<AdminProduct>;
-  /** Partial write for pages that own one slice of a product (e.g. the Flash Sale page: `flashSaleEndsAt`/`flashSaleDaily`/`stockTotal`). */
+  /** Partial write for pages that own one slice of a product (e.g. `stockTotal`). */
   patchProduct: (id: string, patch: Partial<Omit<AdminProduct, "id">>) => Promise<AdminProduct>;
 };
 
@@ -384,6 +384,8 @@ let nextId = 1000;
 
 function persist(products: AdminProduct[]) {
   if (isServer) return;
+  // The old flash fields must reach the campaigns before a save drops them.
+  ensureFlashCampaignsFromProducts();
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
     localStorage.setItem(SEED_VERSION_KEY, String(SEED_VERSION));
@@ -405,7 +407,7 @@ const SEED_REMOVED_FIELDS: Record<string, readonly (keyof AdminProduct)[]> = { "
  * replaces the review data with the seed's (Admin never edits reviews, so
  * there's nothing of Admin's to preserve there).
  */
-function migrateSeedFields(list: AdminProduct[], fromVersion: number): AdminProduct[] {
+function migrateSeedFields(list: LegacyFlashProduct[], fromVersion: number): LegacyFlashProduct[] {
   const seedById = new Map(allProducts.map((p) => [p.id, p]));
   const seedIndex = new Map(allProducts.map((p, i) => [p.id, i]));
   return list.map((p) => {
@@ -467,7 +469,7 @@ function migrateSeedFields(list: AdminProduct[], fromVersion: number): AdminProd
  * none keeps its `variants` as they are, since an empty list here can't tell
  * "Admin removed every option" from "never had per-option rows".
  */
-function syncStorefrontVariants(p: AdminProduct): AdminProduct {
+function syncStorefrontVariants<T extends AdminProduct>(p: T): T {
   if (p.adminVariants.length === 0) return p;
   return { ...p, variants: deriveStorefrontVariants(p.adminVariants, p.variants), discountPercent: getDiscountPercent(p) };
 }
@@ -479,7 +481,7 @@ function syncStorefrontVariants(p: AdminProduct): AdminProduct {
  * Admin-created variant in Image mode keeps its look by using its first
  * photo as the new, separate `swatchImage`.
  */
-function splitSwatchFromPhotos(p: AdminProduct, seed: Product | undefined): AdminProduct {
+function splitSwatchFromPhotos<T extends AdminProduct>(p: T, seed: Product | undefined): T {
   return {
     ...p,
     adminVariants: p.adminVariants.map((v) => {
@@ -495,7 +497,7 @@ function splitSwatchFromPhotos(p: AdminProduct, seed: Product | undefined): Admi
  * `productCatalog.tsx` (which reads the same key) so both see identical data.
  * `null` when nothing is stored (callers fall back to the baseline).
  */
-export function readPersistedAdminProducts(): AdminProduct[] | null {
+function readPersistedLegacyProducts(): LegacyFlashProduct[] | null {
   if (isServer) return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -504,12 +506,28 @@ export function readPersistedAdminProducts(): AdminProduct[] | null {
     // predate fields the current `AdminVariant` contract relies on (see
     // `normalizeAdminProduct`'s own comment) — normalize before it ever
     // reaches a component.
-    const stored = (JSON.parse(raw) as AdminProduct[]).map(normalizeAdminProduct);
+    const stored = (JSON.parse(raw) as LegacyFlashProduct[]).map(normalizeLegacyAdminProduct);
     const version = Number(localStorage.getItem(SEED_VERSION_KEY) ?? 1);
     return (version < SEED_VERSION ? migrateSeedFields(stored, version) : stored).map(withDailyFlashSaleEnd).map(migrateLegacyFlashSale);
   } catch {
     return null;
   }
+}
+
+/**
+ * Moves the old per-product flash sale into flash sale campaigns once,
+ * before anything stores products without those fields: from the stored
+ * products when there are any, else from the seed catalog.
+ */
+export function ensureFlashCampaignsFromProducts() {
+  ensureFlashCampaignsMigrated(() => readPersistedLegacyProducts() ?? buildLegacyAdminProductBaseline());
+}
+
+export function readPersistedAdminProducts(): AdminProduct[] | null {
+  const legacy = readPersistedLegacyProducts();
+  if (!legacy) return null;
+  ensureFlashCampaignsMigrated(() => legacy);
+  return legacy.map(stripLegacyFlashFields);
 }
 
 /**
@@ -608,7 +626,7 @@ export function AdminProductProvider(props: { children: JSX.Element }) {
           media: input.media,
           adminVariants: input.adminVariants,
           variants: deriveStorefrontVariants(input.adminVariants, p.variants),
-          // Flash sale (membership, timing, prices) is managed only on the Flash Sale page: kept as stored.
+          // Flash sale lives in flash sale campaigns (Marketing), not on the product.
           rating: input.rating,
           soldCount: input.soldCount,
           reviewCount: input.reviewCount,

@@ -31,7 +31,7 @@ export type ProductSkuColumn = {
   product?: (productId: string) => JSX.Element;
   sku?: (productId: string, variantId: string) => JSX.Element;
   /** Card layout only: skip this column on the product card (e.g. values set per SKU below it). */
-  hideOnProductCard?: () => boolean;
+  hideOnProductCard?: (productId: string) => boolean;
 };
 
 const PAGE_SIZES = [20, 50, 100];
@@ -406,7 +406,7 @@ export function ProductSkuPicker(props: {
           </div>
           <For each={columns().filter((c) => c.product)}>
             {(c) => (
-              <Show when={!c.hideOnProductCard?.()}>
+              <Show when={!c.hideOnProductCard?.(p.id)}>
                 <Cell label={c.label} required={c.required}>{untrack(() => c.product!(p.id))}</Cell>
               </Show>
             )}

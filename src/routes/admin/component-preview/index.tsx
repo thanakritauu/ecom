@@ -1,3 +1,4 @@
+import { useProductCatalog } from "~/lib/productCatalog";
 import { createMemo, createSignal, For, Show, type JSX } from "solid-js";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
@@ -36,6 +37,7 @@ import { pushToast } from "~/lib/toast";
  */
 export default function AdminComponentPreviewPage() {
   const productStore = useAdminProducts();
+  const catalog = useProductCatalog();
   const marketing = useAdminMarketing();
   const contentStore = useAdminContent();
   const collectionStore = useAdminCollections();
@@ -52,11 +54,15 @@ export default function AdminComponentPreviewPage() {
   const homepageSection = (type: HomepageSection["type"]) => homepage()?.sections.find((s) => s.type === type);
 
   // Product Card swatches — real Product records, chosen for the states each swatch demonstrates.
-  const normalProduct = createMemo(() => productStore.products().find((p) => !p.discountPercent && !p.flashSaleEndsAt) ?? productStore.products()[0]);
+  const normalProduct = createMemo(() => productStore.products().find((p) => !p.discountPercent && !p.id.startsWith("flash-")) ?? productStore.products()[0]);
   const discountProduct = createMemo(() => productStore.getById("best-1") ?? productStore.products().find((p) => p.discountPercent) ?? productStore.products()[0]);
   // "flash-2" is deliberately the catalog's one sold-out flash-sale demo card (see products.ts) — picked on purpose elsewhere to exercise "สินค้าหมด", but wrong for demonstrating the ribbon/countdown here, so this prefers an in-stock flash-sale product instead.
+  // Flash prices come from the live flash sale campaigns, so this reads the storefront catalog's priced copy.
   const flashSaleProduct = createMemo(
-    () => productStore.getById("flash-1") ?? productStore.products().find((p) => p.flashSaleEndsAt && (p.stockLeft ?? 1) > 0) ?? discountProduct(),
+    () =>
+      catalog.products().find((p) => p.id === "flash-1" && p.flashSaleEndsAt) ??
+      catalog.products().find((p) => p.flashSaleEndsAt && (p.stockLeft ?? 1) > 0) ??
+      discountProduct(),
   );
 
   // Coupon — a real Admin coupon record reshaped into CouponCard's `{amountLabel, minSpendLabel, expiryLabel}` shape (a Preview Adapter step, not new copy).

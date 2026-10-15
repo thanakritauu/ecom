@@ -1,6 +1,8 @@
-import { createContext, createSignal, onCleanup, onMount, useContext, type Accessor, type JSX } from "solid-js";
+import { createContext, createMemo, createSignal, onCleanup, onMount, useContext, type Accessor, type JSX } from "solid-js";
 import {
   buildAdminProductBaseline,
+  buildLegacyAdminProductBaseline,
+  ensureFlashCampaignsFromProducts,
   isProductOnSale,
   lowStockThresholdOf,
   normalizeAdminProduct,
@@ -10,8 +12,13 @@ import {
   type AdminProduct,
 } from "./adminProductStore";
 import type { Product } from "./types";
-import { isFlashSale } from "./products";
-import { applyFlashPricing } from "./flashSalePricing";
+import { applyFlashPricing, type FlashPricedProduct } from "./flashSalePricing";
+import { flashCampaignBoundaries, flashCampaignRoundAt, FLASH_CAMPAIGNS_STORAGE_KEY, migrateFlashCampaigns, readStoredFlashCampaigns, type FlashSaleCampaign } from "./flashSaleCampaigns";
+import { MARKETING_CHANGED_EVENT } from "./marketingEvents";
+import { GUEST_SHOPPER, matchesAudience, type Shopper } from "./marketingAudience";
+import { useAuth } from "./auth";
+import { createMockOrderRepository, createOrderHistory } from "./orderHistory";
+import { resolveTier, yearlySpend } from "./membership";
 import { HIDDEN_REVIEWS_CHANGED_EVENT, HIDDEN_REVIEWS_STORAGE_KEY, readHiddenReviewKeys, reviewKey } from "./adminProductReviews";
 
 /** Stock at or below this shows "เหลือ X ชิ้นสุดท้าย" in the cart: the product's own Admin setting (default 5). */
@@ -52,26 +59,50 @@ function readStoredProducts(): AdminProduct[] {
     .map((p) => (hidden.size > 0 && p.reviews?.length ? { ...p, reviews: p.reviews.filter((r) => !hidden.has(reviewKey(p.id, r.id))) } : p));
 }
 
+/** The seed campaigns (the seed catalog's flash sale, migrated): what SSR and the first client paint use. */
+const seedCampaigns = () => migrateFlashCampaigns(buildLegacyAdminProductBaseline());
+
+/** Stored campaigns (migrating the old per-product flash sale first, once). */
+function readCampaigns(): FlashSaleCampaign[] {
+  ensureFlashCampaignsFromProducts();
+  return readStoredFlashCampaigns() ?? seedCampaigns();
+}
+
 /**
- * Flash sale only while now is inside the product's window: before a one-off
- * sale starts (or after it ends) the product carries no flash-sale fields, so
- * no rail, ribbon or countdown shows it anywhere.
+ * Each product's flash sale from the LIVE campaigns (switched on, inside a
+ * round, shopper in its กลุ่มลูกค้า): price = the campaign's flash price,
+ * `compareAtPrice` = the normal price, `flashDeal` = the cart limits and
+ * `flashSaleEndsAt` = the end of the round (card / PDP / Home countdown).
+ * When two live campaigns hold the same product, the lower flash price wins
+ * (same price: the one with a flash price, then the one ending first).
+ * Products in no live campaign are as stored.
  */
-function withLiveFlashSale(list: AdminProduct[], now = Date.now()): AdminProduct[] {
+export function withLiveFlashSale(list: AdminProduct[], campaigns: FlashSaleCampaign[], shopper: Shopper, now = Date.now()): AdminProduct[] {
+  const live = campaigns
+    .filter((c) => matchesAudience(c.audience, shopper))
+    .map((c) => ({ c, round: flashCampaignRoundAt(c, now) }))
+    .filter((x): x is { c: FlashSaleCampaign; round: { startsAt: number; endsAt: number } } => !!x.round);
+  if (live.length === 0) return list;
   return list.map((p) => {
-    if (p.flashSaleEndsAt === undefined) return p;
-    // Outside the window: the stored (normal) prices, nothing flash. Inside: the flash sale's own prices (`flashSalePricing.ts`).
-    if (!isFlashSale(p, now)) return { ...p, flashSaleEndsAt: undefined, flashSaleStartsAt: undefined };
-    return applyFlashPricing(p);
+    let best: { priced: AdminProduct & FlashPricedProduct; endsAt: number } | undefined;
+    for (const { c, round } of live) {
+      const item = c.items.find((i) => i.productId === p.id);
+      if (!item) continue;
+      // A config with no price below normal (older data) still shows the product in the flash sale at its normal price, as before campaigns.
+      const priced = applyFlashPricing(p, item.flash);
+      const better =
+        !best ||
+        priced.price < best.priced.price ||
+        (priced.price === best.priced.price && (!!priced.flashDeal > !!best.priced.flashDeal || (!!priced.flashDeal === !!best.priced.flashDeal && round.endsAt < best.endsAt)));
+      if (better) best = { priced, endsAt: round.endsAt };
+    }
+    return best ? { ...best.priced, flashSaleEndsAt: best.endsAt, flashSaleStartsAt: undefined } : p;
   });
 }
 
-/** The next moment a one-off flash sale starts or ends (to refresh right then), if any within a day. */
-function nextFlashSaleBoundary(list: AdminProduct[], now = Date.now()): number | undefined {
-  const times = list
-    .filter((p) => p.flashSaleEndsAt !== undefined && !p.flashSaleDaily)
-    .flatMap((p) => [p.flashSaleStartsAt, p.flashSaleEndsAt])
-    .filter((t): t is number => typeof t === "number" && t > now && t - now <= 24 * 60 * 60 * 1000);
+/** The next moment a campaign round starts or ends (to refresh right then), if any within a day. */
+function nextFlashSaleBoundary(campaigns: FlashSaleCampaign[], now = Date.now()): number | undefined {
+  const times = campaigns.flatMap((c) => flashCampaignBoundaries(c, now));
   return times.length > 0 ? Math.min(...times) : undefined;
 }
 
@@ -85,37 +116,63 @@ type ProductCatalogContextValue = {
   getByCategory: (categoryId: string) => AdminProduct[];
   /** Resolves an ordered list of product ids (e.g. a Collection's own `productId[]`) against the live catalog — the one place "reference → real Product" resolution happens, reused by Homepage/Landing Page Product sections alike. */
   getByIds: (ids: string[]) => AdminProduct[];
+  /** Who is shopping (guest / new / returning, member tier): decides which flash sales, promotions and coupons apply (`matchesAudience`). */
+  shopper: Accessor<Shopper>;
 };
 
 const ProductCatalogContext = createContext<ProductCatalogContextValue>();
 
 export function ProductCatalogProvider(props: { children: JSX.Element }) {
-  // The baseline's flash sale is the daily round (always live), so SSR and the first client paint still agree.
-  const [products, setProducts] = createSignal<AdminProduct[]>(withLiveFlashSale(fallbackProducts().filter(isProductOnSale)));
+  /**
+   * กลุ่มลูกค้า: a guest is a new customer with no tier. A signed-in member
+   * is returning once they have a paid (not cancelled, not awaiting payment)
+   * order; a member who just signed up (`memberSource: "new"`) has none yet.
+   * Their tier comes from this year's paid spend, same as Checkout and
+   * /account/points.
+   */
+  const auth = useAuth();
+  const orderHistory = createOrderHistory(() => createMockOrderRepository());
+  const shopper = createMemo((): Shopper => {
+    const user = auth.user();
+    if (!user) return GUEST_SHOPPER;
+    const orders = user.memberSource === "new" ? [] : orderHistory.orders();
+    const hasPaidOrder = orders.some((o) => o.status !== "cancelled" && o.status !== "pending_payment");
+    return { signedIn: true, hasPaidOrder, tier: resolveTier(yearlySpend(orders)).current.id };
+  });
+
+  // The seed's flash sale is the daily round (always live), so SSR and the first client paint still agree.
+  const [baseProducts, setBaseProducts] = createSignal<AdminProduct[]>(fallbackProducts().filter(isProductOnSale));
+  const [campaigns, setCampaigns] = createSignal<FlashSaleCampaign[]>(seedCampaigns());
+  const [now, setNow] = createSignal(Date.now());
   const [ready, setReady] = createSignal(false);
+  const products = createMemo(() => withLiveFlashSale(baseProducts(), campaigns(), shopper(), now()));
 
   onMount(() => {
     let boundaryTimer: ReturnType<typeof setTimeout> | undefined;
     const refresh = () => {
-      const stored = readStoredProducts();
-      setProducts(withLiveFlashSale(stored));
+      const list = readCampaigns();
+      setBaseProducts(readStoredProducts());
+      setCampaigns(list);
+      setNow(Date.now());
       clearTimeout(boundaryTimer);
-      const next = nextFlashSaleBoundary(stored);
+      const next = nextFlashSaleBoundary(list);
       if (next !== undefined) boundaryTimer = setTimeout(refresh, next - Date.now() + 500);
     };
     const onStorage = (e: StorageEvent) => {
-      if (e.key === null || e.key.startsWith(PRODUCTS_STORAGE_KEY) || e.key === HIDDEN_REVIEWS_STORAGE_KEY) refresh();
+      if (e.key === null || e.key.startsWith(PRODUCTS_STORAGE_KEY) || e.key === HIDDEN_REVIEWS_STORAGE_KEY || e.key === FLASH_CAMPAIGNS_STORAGE_KEY) refresh();
     };
     refresh();
     setReady(true);
     window.addEventListener("storage", onStorage);
     window.addEventListener(PRODUCTS_CHANGED_EVENT, refresh);
     window.addEventListener(HIDDEN_REVIEWS_CHANGED_EVENT, refresh);
+    window.addEventListener(MARKETING_CHANGED_EVENT, refresh);
     onCleanup(() => {
       clearTimeout(boundaryTimer);
       window.removeEventListener("storage", onStorage);
       window.removeEventListener(PRODUCTS_CHANGED_EVENT, refresh);
       window.removeEventListener(HIDDEN_REVIEWS_CHANGED_EVENT, refresh);
+      window.removeEventListener(MARKETING_CHANGED_EVENT, refresh);
     });
   });
 
@@ -125,7 +182,7 @@ export function ProductCatalogProvider(props: { children: JSX.Element }) {
   const getByIds = (ids: string[]) => ids.map(getById).filter((p): p is AdminProduct => p !== undefined);
 
   return (
-    <ProductCatalogContext.Provider value={{ ready, products, getById, getBySlug, getByCategory, getByIds }}>
+    <ProductCatalogContext.Provider value={{ ready, products, getById, getBySlug, getByCategory, getByIds, shopper }}>
       {props.children}
     </ProductCatalogContext.Provider>
   );

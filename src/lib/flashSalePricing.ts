@@ -3,12 +3,12 @@ import type { AdminProduct, AdminVariant } from "./adminProductStore";
 import { getDiscountPercent } from "./products";
 
 /**
- * Flash Sale pricing: the flash sale has its OWN prices, kept in
- * `AdminProduct.flashSale`, separate from the product's normal price. The
- * stored `price` / option prices are never overwritten: the storefront
- * catalog (`productCatalog.tsx`) applies `applyFlashPricing` only while the
- * product is inside its flash window, so outside it everything is back to the
- * normal price automatically.
+ * Flash Sale pricing: each flash sale campaign (`flashSaleCampaigns.ts`) has
+ * its OWN prices per product (a `FlashSaleConfig`), separate from the
+ * product's normal price. The stored `price` / option prices are never
+ * overwritten: the storefront catalog (`productCatalog.tsx`) applies
+ * `applyFlashPricing` only while a campaign holding the product is live, so
+ * outside it everything is back to the normal price automatically.
  *
  * Level "product" (ระดับสินค้า): one flash price for every option (baht, or
  * "ลด %" of each option's normal price) and one set of limits shared by all
@@ -71,7 +71,21 @@ export function flashPriceFrom(normal: number, mode: FlashPriceMode, value: numb
 
 export const optionNormalPrice = (product: Pick<Product, "price">, v: Pick<AdminVariant, "price"> | undefined) => v?.price ?? product.price;
 
-export const isInFlashSale = (p: Pick<AdminProduct, "flashSaleEndsAt" | "flashSaleDaily">) => p.flashSaleEndsAt !== undefined || !!p.flashSaleDaily;
+/**
+ * Before campaigns, a product carried its own flash sale: `flashSaleDaily`,
+ * `flashSaleStartsAt` / `flashSaleEndsAt` and `flashSale`. Only read now to
+ * migrate them into campaigns (`migrateFlashCampaigns`); stripped on read.
+ */
+export type LegacyFlashFields = { flashSaleDaily?: boolean; flashSale?: FlashSaleConfig; flashSaleEndsAt?: number; flashSaleStartsAt?: number };
+export type LegacyFlashProduct = AdminProduct & LegacyFlashFields;
+
+export const isInFlashSale = (p: LegacyFlashFields) => p.flashSaleEndsAt !== undefined || !!p.flashSaleDaily;
+
+/** The product without the old per-product flash fields. */
+export function stripLegacyFlashFields<T extends LegacyFlashFields>(p: T): Omit<T, keyof LegacyFlashFields> {
+  const { flashSaleDaily: _d, flashSale: _f, flashSaleEndsAt: _e, flashSaleStartsAt: _s, ...rest } = p;
+  return rest;
+}
 
 /** Default config for a product just added to the flash sale: level product, ลด 10%. */
 export function defaultFlashSaleConfig(percent = 10): FlashSaleConfig {
@@ -85,7 +99,7 @@ export function defaultFlashSaleConfig(percent = 10): FlashSaleConfig {
  * old `compareAtPrice`, so the storefront looks the same during the sale.
  * Idempotent: a product that already has `flashSale` is returned as is.
  */
-export function migrateLegacyFlashSale(p: AdminProduct): AdminProduct {
+export function migrateLegacyFlashSale<T extends LegacyFlashProduct>(p: T): T {
   if (!isInFlashSale(p) || p.flashSale) return p;
   const flash = p.price;
   const normal = p.compareAtPrice && p.compareAtPrice > p.price ? p.compareAtPrice : p.price;
@@ -100,16 +114,17 @@ export function migrateLegacyFlashSale(p: AdminProduct): AdminProduct {
 }
 
 /** Level "option" can only be used by a product that has options. */
-export function effectiveLevel(p: Pick<AdminProduct, "adminVariants" | "flashSale">): FlashSaleLevel {
-  return p.flashSale?.level === "option" && p.adminVariants.length > 0 ? "option" : "product";
+export function effectiveLevel(p: Pick<AdminProduct, "adminVariants">, cfg: FlashSaleConfig | undefined): FlashSaleLevel {
+  return cfg?.level === "option" && p.adminVariants.length > 0 ? "option" : "product";
 }
 
+export type FlashPriceRow = { variantId?: string; flash: number; normal: number; totalLimit?: number; customerLimit?: number };
+
 /** Flash price per option id (only options in the flash sale, below their normal price). */
-export function flashPricesOf(p: AdminProduct): { variantId?: string; flash: number; normal: number; totalLimit?: number; customerLimit?: number }[] {
-  const cfg = p.flashSale;
+export function flashPricesOf(p: AdminProduct, cfg: FlashSaleConfig | undefined): FlashPriceRow[] {
   if (!cfg) return [];
-  const out: { variantId?: string; flash: number; normal: number; totalLimit?: number; customerLimit?: number }[] = [];
-  if (effectiveLevel(p) === "product") {
+  const out: FlashPriceRow[] = [];
+  if (effectiveLevel(p, cfg) === "product") {
     if (p.adminVariants.length === 0) {
       const flash = flashPriceFrom(p.price, cfg.mode, cfg.value);
       if (flash > 0 && flash < p.price) out.push({ flash, normal: p.price, totalLimit: cfg.totalLimit, customerLimit: cfg.customerLimit });
@@ -134,9 +149,9 @@ export function flashPricesOf(p: AdminProduct): { variantId?: string; flash: num
 }
 
 /** The flash sale's own stock bar total: the total limit(s), when every priced row has one. */
-function flashTotalOf(p: AdminProduct, rows: ReturnType<typeof flashPricesOf>): number | undefined {
-  if (!p.flashSale || rows.length === 0) return undefined;
-  if (effectiveLevel(p) === "product") return p.flashSale.totalLimit;
+function flashTotalOf(p: AdminProduct, cfg: FlashSaleConfig, rows: FlashPriceRow[]): number | undefined {
+  if (rows.length === 0) return undefined;
+  if (effectiveLevel(p, cfg) === "product") return cfg.totalLimit;
   return rows.every((r) => r.totalLimit !== undefined) ? rows.reduce((n, r) => n + (r.totalLimit ?? 0), 0) : undefined;
 }
 
@@ -147,10 +162,10 @@ function flashTotalOf(p: AdminProduct, rows: ReturnType<typeof flashPricesOf>): 
  * when it isn't in the flash sale), and `flashDeal` carries what the cart
  * needs for the limits. With no valid flash price it returns the product as is.
  */
-export function applyFlashPricing<T extends AdminProduct>(p: T): T & FlashPricedProduct {
-  const rows = flashPricesOf(p);
+export function applyFlashPricing<T extends AdminProduct>(p: T, cfg: FlashSaleConfig): T & FlashPricedProduct {
+  const rows = flashPricesOf(p, cfg);
   if (rows.length === 0) return p;
-  const level = effectiveLevel(p);
+  const level = effectiveLevel(p, cfg);
   const keyOf = (variantId?: string) => (level === "product" || !variantId ? p.id : `${p.id}:${variantId}`);
   const deal: FlashDeal = { variants: {}, regularCompareAtPrice: p.compareAtPrice };
   for (const r of rows) {
@@ -159,7 +174,7 @@ export function applyFlashPricing<T extends AdminProduct>(p: T): T & FlashPriced
     else deal.base = price;
   }
   const cheapest = rows.reduce((a, b) => (b.flash < a.flash ? b : a));
-  const flashTotal = flashTotalOf(p, rows);
+  const flashTotal = flashTotalOf(p, cfg, rows);
   const stockLeft = p.stockLeft;
   const next = {
     ...p,
@@ -223,25 +238,13 @@ export function normalizeFlashSaleConfig(raw: unknown): FlashSaleConfig | undefi
 }
 
 const baht = (n: number) => `฿${n.toLocaleString("th-TH")}`;
-const limitText = (label: string, n?: number) => (n ? ` ${label} ${n.toLocaleString("th-TH")} ชิ้น` : "");
 
-/** Price part of a flash config: "ลด 10%" / "฿199" / "3 ตัวเลือก". */
-export function flashPriceLabel(p: AdminProduct): string {
-  const cfg = p.flashSale;
+/** Price part of a flash config: "ลด 10%" / "฿199" / "ราคาตามตัวเลือก 3 ตัวเลือก". */
+export function flashPriceLabel(p: AdminProduct, cfg: FlashSaleConfig | undefined): string {
   if (!cfg) return "-";
-  if (effectiveLevel(p) === "option") {
+  if (effectiveLevel(p, cfg) === "option") {
     const n = cfg.options.filter((o) => o.enabled && p.adminVariants.some((v) => v.id === o.variantId)).length;
     return `ราคาตามตัวเลือก ${n} ตัวเลือก`;
   }
   return cfg.mode === "percent" ? `ลด ${cfg.value}%` : baht(cfg.value);
-}
-
-/** One-line summary (Product form's แฟลชเซล section). */
-export function flashSaleSummary(p: AdminProduct): string {
-  const cfg = p.flashSale;
-  const level = effectiveLevel(p) === "option" ? "ระดับตัวเลือกสินค้า" : "ระดับสินค้า";
-  const timing = p.flashSaleDaily ? "รอบรายวัน" : "ตั้งเวลาเริ่มและจบ";
-  if (!cfg) return `อยู่ในแฟลชเซล ${timing}`;
-  const limits = effectiveLevel(p) === "product" ? limitText("จำกัดทั้งหมด", cfg.totalLimit) + limitText("จำกัดต่อลูกค้า", cfg.customerLimit) : "";
-  return `อยู่ในแฟลชเซล ${level} ${flashPriceLabel(p)}${limits} ${timing}`;
 }

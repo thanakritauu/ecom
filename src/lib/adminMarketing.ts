@@ -729,7 +729,7 @@ export function couponTool(c: Pick<Coupon, "tool" | "showOnHome" | "showAtChecko
 
 /** Where a tool card's "สร้าง" goes. */
 export function marketingToolCreateHref(tool: MarketingTool): string {
-  if (tool === "flash_sale") return "/admin/marketing/flash-sale";
+  if (tool === "flash_sale") return "/admin/marketing/flash-sale/new";
   if (isCouponTool(tool)) return `/admin/marketing/coupons/new?tool=${tool}`;
   return `/admin/marketing/promotions/new?tool=${tool}`;
 }

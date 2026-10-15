@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, For, on, Show, type JSX } from 
 import type { Product } from "~/lib/types";
 import { isVideoMedia, mediaImage, type MediaValue } from "~/lib/media";
 import { getDiscountPercent } from "~/lib/products";
-import { flashSaleSummary } from "~/lib/flashSalePricing";
+import { ProductFlashCampaigns } from "./ProductFlashCampaigns";
 import {
   ADMIN_PRODUCT_STATUS_META,
   LOW_STOCK_THRESHOLD,
@@ -100,8 +100,6 @@ export function ProductForm(props: {
   // §8 — falls back to the Gallery's first photo whenever no explicit pin exists yet, or the pinned photo was since removed — never crashes, never silently keeps pointing at a URL that's no longer in the Gallery.
   const effectiveMainImage = () => (mainImage() && images().includes(mainImage()!) ? mainImage()! : images()[0]);
   const [variants, setVariants] = createSignal<AdminVariant[]>(props.initial?.adminVariants ?? []);
-  // Flash sale (prices, limits, timing) is managed on the Flash Sale page; this form only shows a summary.
-  const inFlashSale = () => !!props.initial && (props.initial.flashSaleEndsAt !== undefined || !!props.initial.flashSaleDaily);
   const [showDiscountBadge, setShowDiscountBadge] = createSignal(props.initial?.showDiscountBadge !== false);
   // Clips this product's PDP shows first; written to the clips on save (`setProductTiktokClips`, see the routes).
   const clipStore = useAdminTiktokClips();
@@ -233,7 +231,6 @@ export function ProductForm(props: {
       // completely untouched (see `handleSubmit`'s own `stockLeft: Number(stockLeft())`).
       stockLeft: Math.max(stockLeftNum, 1),
       stockTotal: Math.max(props.initial?.stockTotal ?? 0, stockLeftNum, 1),
-      flashSaleEndsAt: inFlashSale() ? props.initial?.flashSaleEndsAt : undefined,
       // The card's shade circle follows the swatch settings (color, or the
       // separate swatch image in Image mode); the variant's photos stay its
       // modal/option photos — the two are uploaded independently.
@@ -455,10 +452,10 @@ export function ProductForm(props: {
       <Show when={props.initial}>
         {(product) => (
           <Section title="แฟลชเซล">
-            <p class="text-sm text-ink">{inFlashSale() ? flashSaleSummary(product()) : "ไม่ได้อยู่ในแฟลชเซล"}</p>
-            <p class="text-xs text-ink-gray">ราคาแฟลชเซล จำนวนจำกัด และเวลา ตั้งแยกจากราคาขายปกติ ราคาขายด้านบนไม่เปลี่ยน</p>
-            <a href="/admin/marketing/flash-sale" class="self-start text-sm font-medium text-brand-pink underline decoration-from-font">
-              จัดการที่หน้าแฟลชเซล
+            <ProductFlashCampaigns product={product()} />
+            <p class="text-xs text-ink-gray">ราคาแฟลชเซล จำนวนจำกัด และเวลา ตั้งในแต่ละแคมเปญแฟลชเซล ราคาขายด้านบนไม่เปลี่ยน</p>
+            <a href="/admin/marketing/promotions?tab=manage&tool=flash_sale" class="self-start text-sm font-medium text-brand-pink underline decoration-from-font">
+              จัดการแฟลชเซล
             </a>
           </Section>
         )}
@@ -513,7 +510,7 @@ export function ProductForm(props: {
     >
       {/* Card at about its storefront size, centred in the (wider) preview column. */}
       <div class="mx-auto w-full max-w-[300px] p-4 sm:p-5">
-        <ProductCard product={previewProduct()} flashSale={inFlashSale()} />
+        <ProductCard product={previewProduct()} />
       </div>
       <Show when={!isRichTextEmpty(description())}>
         <div class="flex flex-col gap-3 border-t border-border p-4 sm:p-5">
