@@ -53,14 +53,23 @@ const MAX_SHADE_SLOTS = 5;
  * Flash Sale menu page (sections sourced from `flash_sale`) pass it, so a
  * flash-sale product shows as a normal card everywhere else.
  */
-export function ProductCard(props: { product: Product; variant?: "grid" | "list"; flashSale?: boolean }) {
+export function ProductCard(props: {
+  product: Product;
+  variant?: "grid" | "list";
+  flashSale?: boolean;
+  /** Starts the card with this option (shade) already picked, e.g. a SKU-level pick in a page section. Ignored when the product has no such option. */
+  initialVariantId?: string;
+}) {
   const variant = () => props.variant ?? "grid";
   const cart = useCart();
   const wishlist = useWishlist();
   const [sheetOpen, setSheetOpen] = createDialogOpenState();
   const [addStatus, setAddStatus] = createSignal<"idle" | "loading" | "error">("idle");
   const [wishStatus, setWishStatus] = createSignal<"idle" | "loading">("idle");
-  const [selectedVariantId, setSelectedVariantId] = createSignal<string | null>(null);
+  // Read once on mount (a card is keyed by its product, so a new pick remounts it).
+  const [selectedVariantId, setSelectedVariantId] = createSignal<string | null>(
+    props.initialVariantId && props.product.variants?.some((v) => v.id === props.initialVariantId) ? props.initialVariantId : null,
+  );
   const [shadeRequired, setShadeRequired] = createSignal(false);
   let cardRef: HTMLDivElement | undefined;
   /** Success feedback for every add from this card (button or option modal) — the photo flies into the cart. */

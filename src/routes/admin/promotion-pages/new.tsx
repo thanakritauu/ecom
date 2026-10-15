@@ -34,6 +34,12 @@ export default function AdminLandingPageNewPage() {
         isSlugTaken={(slug) => isSlugTaken(store.pages(), slug)}
         onSubmit={handleSubmit}
         onCancel={() => navigate("/admin/promotion-pages")}
+        onDesign={async (values) => {
+          if (!values) return;
+          const created = await store.add({ ...values, status: "draft" });
+          pushToast("บันทึกแบบร่างแล้ว เริ่มออกแบบหน้าได้เลย", "success");
+          navigate(`/admin/promotion-pages/${created.id}/builder`);
+        }}
       />
     </div>
   );

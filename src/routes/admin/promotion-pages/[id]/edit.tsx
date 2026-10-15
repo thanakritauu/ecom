@@ -60,6 +60,7 @@ export default function AdminLandingPageEditPage() {
             isSlugTaken={(slug) => isSlugTaken(store.pages(), slug, current().id)}
             onSubmit={handleSubmit}
             onCancel={() => navigate(`/admin/promotion-pages/${current().id}`)}
+            onDesign={() => navigate(`/admin/promotion-pages/${current().id}/builder`)}
           />
         </div>
       )}

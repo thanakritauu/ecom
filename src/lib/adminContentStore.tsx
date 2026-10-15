@@ -12,12 +12,26 @@ import {
   upgradePromotionPageSeeds,
   PROMOTION_PAGE_SEED_VERSION,
 } from "./adminContent";
+import { normalizeHomepageSection, type HomepageSection } from "./pageSections";
 
 const STORAGE_KEY = "charmiss:admin:content:promotionPages";
 /** Separate key, so the storefront's read-only mirror (`promotionPages.tsx`) keeps reading `STORAGE_KEY` unchanged. Missing = v1 (before seed versioning existed). */
 const SEED_VERSION_KEY = "charmiss:admin:content:promotionPages:seedVersion";
 const TODAY_LABEL = "17 ก.ย. 2569";
 let nextId = 1000;
+/**
+ * Page builder working copies (`/admin/promotion-pages/:id/builder`): edits to
+ * a page that has been published once autosave here, keyed by page id, never
+ * into the page record itself. The storefront mirror only reads `STORAGE_KEY`,
+ * so nothing here can leak live until "ตกลงและเผยแพร่" copies it over.
+ */
+const WORKING_COPY_KEY = "charmiss:admin:content:promotionPages:workingCopies";
+
+export type PageWorkingCopy = {
+  sections: HomepageSection[];
+  /** ISO time of the last autosave. */
+  savedAt: string;
+};
 
 type AdminContentContextValue = {
   pages: Accessor<PromotionPage[]>;
@@ -27,6 +41,14 @@ type AdminContentContextValue = {
   remove: (id: string) => Promise<void>;
   setStatus: (id: string, status: PromotionPageStatus) => Promise<void>;
   duplicate: (id: string) => Promise<PromotionPage>;
+  /** Unpublished builder edits of a published page, if any. */
+  workingCopy: (id: string) => PageWorkingCopy | undefined;
+  saveWorkingCopy: (id: string, sections: HomepageSection[]) => PageWorkingCopy;
+  discardWorkingCopy: (id: string) => void;
+  /** Builder autosave for a page still in แบบร่าง: writes the sections straight into the draft (instant, no simulated failure). */
+  saveSections: (id: string, sections: HomepageSection[]) => void;
+  /** Builder "ตกลงและเผยแพร่": the sections go live with `status`, and the working copy is cleared. */
+  publishSections: (id: string, sections: HomepageSection[], status: PromotionPageStatus) => Promise<void>;
 };
 
 const AdminContentContext = createContext<AdminContentContextValue>();
@@ -39,6 +61,7 @@ const AdminContentContext = createContext<AdminContentContextValue>();
  */
 export function AdminContentProvider(props: { children: JSX.Element }) {
   const [pages, setPages] = createSignal<PromotionPage[]>(buildMockPromotionPages());
+  const [workingCopies, setWorkingCopies] = createSignal<Record<string, PageWorkingCopy>>({});
 
   onMount(() => {
     try {
@@ -55,6 +78,16 @@ export function AdminContentProvider(props: { children: JSX.Element }) {
         }
       }
       localStorage.setItem(SEED_VERSION_KEY, String(PROMOTION_PAGE_SEED_VERSION));
+      const rawCopies = localStorage.getItem(WORKING_COPY_KEY);
+      if (rawCopies) {
+        const parsed = JSON.parse(rawCopies) as Record<string, Partial<PageWorkingCopy>>;
+        const next: Record<string, PageWorkingCopy> = {};
+        for (const [id, copy] of Object.entries(parsed)) {
+          if (!copy || !Array.isArray(copy.sections)) continue;
+          next[id] = { sections: copy.sections.filter((sec) => sec && typeof sec.id === "string").map(normalizeHomepageSection), savedAt: copy.savedAt ?? "" };
+        }
+        setWorkingCopies(next);
+      }
     } catch {
       // storage unavailable — stays in-memory for this tab.
     }
@@ -73,6 +106,29 @@ export function AdminContentProvider(props: { children: JSX.Element }) {
       persist(next);
       return next;
     });
+  };
+
+  const persistWorkingCopies = (copies: Record<string, PageWorkingCopy>) => {
+    setWorkingCopies(copies);
+    if (isServer) return;
+    try {
+      localStorage.setItem(WORKING_COPY_KEY, JSON.stringify(copies));
+    } catch {}
+  };
+
+  const workingCopy: AdminContentContextValue["workingCopy"] = (id) => workingCopies()[id];
+  const saveWorkingCopy: AdminContentContextValue["saveWorkingCopy"] = (id, sections) => {
+    const copy: PageWorkingCopy = { sections, savedAt: new Date().toISOString() };
+    persistWorkingCopies({ ...workingCopies(), [id]: copy });
+    return copy;
+  };
+  const discardWorkingCopy: AdminContentContextValue["discardWorkingCopy"] = (id) => {
+    if (!workingCopies()[id]) return;
+    const { [id]: _dropped, ...rest } = workingCopies();
+    persistWorkingCopies(rest);
+  };
+  const saveSections: AdminContentContextValue["saveSections"] = (id, sections) => {
+    mutate((list) => list.map((p) => (p.id === id ? { ...p, sections, updatedAt: TODAY_LABEL } : p)));
   };
 
   const simulateDelay = () => new Promise<void>((resolve) => setTimeout(resolve, 400 + Math.random() * 250));
@@ -112,11 +168,18 @@ export function AdminContentProvider(props: { children: JSX.Element }) {
     const target = getById(id);
     if (target?.isHomepage) throw new Error("CANNOT_DELETE_HOMEPAGE");
     mutate((list) => list.filter((p) => p.id !== id));
+    discardWorkingCopy(id);
   };
 
   const setStatus: AdminContentContextValue["setStatus"] = async (id, status) => {
     await simulateDelay();
     mutate((list) => list.map((p) => (p.id === id ? { ...p, status, updatedAt: TODAY_LABEL } : p)));
+  };
+
+  const publishSections: AdminContentContextValue["publishSections"] = async (id, sections, status) => {
+    await simulateDelay();
+    mutate((list) => list.map((p) => (p.id === id ? { ...p, sections, status, updatedAt: TODAY_LABEL } : p)));
+    discardWorkingCopy(id);
   };
 
   /**
@@ -158,7 +221,7 @@ export function AdminContentProvider(props: { children: JSX.Element }) {
     return created;
   };
 
-  return <AdminContentContext.Provider value={{ pages, getById, add, update, remove, setStatus, duplicate }}>{props.children}</AdminContentContext.Provider>;
+  return <AdminContentContext.Provider value={{ pages, getById, add, update, remove, setStatus, duplicate, workingCopy, saveWorkingCopy, discardWorkingCopy, saveSections, publishSections }}>{props.children}</AdminContentContext.Provider>;
 }
 
 export function useAdminContent() {

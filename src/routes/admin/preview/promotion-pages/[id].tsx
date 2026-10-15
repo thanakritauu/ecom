@@ -28,12 +28,16 @@ export default function AdminPromotionPagePreviewRoute() {
   const params = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const store = useAdminContent();
+  /** `?embed=1`: shown inside the page builder's ดูตัวอย่าง frame, which has its own close button. */
+  const embedded = () => searchParams.embed === "1";
   const draftId = () => (Array.isArray(searchParams.draft) ? searchParams.draft[0] : searchParams.draft);
   const page = createMemo<PromotionPage | undefined>(() => readPreviewDraft<PromotionPage>("promotion-page", draftId()) ?? store.getById(params.id));
 
   return (
     <>
-      <PreviewModeBar label={page()?.name} />
+      <Show when={!embedded()}>
+        <PreviewModeBar label={page()?.name} />
+      </Show>
       <Show when={page()} fallback={<PromotionPageNotFound slug={params.id} />}>
         {(p) => <PromotionPageView page={p()} />}
       </Show>

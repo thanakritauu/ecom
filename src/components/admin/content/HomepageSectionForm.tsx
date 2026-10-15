@@ -12,6 +12,7 @@ import { mediaErrors } from "~/lib/media";
 import type { FormErrors } from "~/lib/adminFormValidation";
 import { useAdminCollections } from "~/lib/adminCollectionStore";
 import { useAdminCategories } from "~/lib/adminCategoryStore";
+import { BannerGridFields, BannerSliderFields, blockSectionFieldErrors, CountdownFields, DividerFields, ProductGridFields } from "./BlockSectionForms";
 
 /**
  * Product Section — Product Source Rule (§4/§22) — "เลือกสินค้าเอง" (manual)
@@ -35,14 +36,21 @@ const CONTENT_LAYOUT_OPTIONS: { value: HomepageContentLayout; label: string }[] 
 /**
  * What one section still needs before it can show on the storefront, keyed
  * by field (`name`, `slides`, `banner`, `collectionId`, `categoryId`,
- * `products`, `ctaLabel`, `ctaDestination`). The Landing Page form runs this
- * for every enabled section when the page goes live.
+ * `products`, `ctaLabel`, `ctaDestination`, plus the page-builder keys
+ * listed on `blockSectionFieldErrors`). The Landing Page form runs this
+ * for every enabled section when the page goes live. `requireFutureEnd`
+ * (default true) rejects a countdown banner whose end time has passed.
  */
-export function sectionFieldErrors(section: HomepageSection): FormErrors {
+export function sectionFieldErrors(section: HomepageSection, opts?: { requireFutureEnd?: boolean; now?: number }): FormErrors {
   const e: FormErrors = {};
   // Built-in blocks pull their own data; the heading override is optional, so there is nothing to fill in.
   if (isBuiltinSectionType(section.type)) return e;
   if (!section.name.trim()) e.name = "กรุณากรอกชื่อส่วน";
+  // Page-builder types: their own rules; only the countdown banner also has the shared button below.
+  if (section.type === "banner_slider" || section.type === "banner_grid" || section.type === "product_grid" || section.type === "divider") {
+    return { ...e, ...blockSectionFieldErrors(section, opts) };
+  }
+  if (section.type === "countdown_banner") Object.assign(e, blockSectionFieldErrors(section, opts));
   if (section.type === "hero") {
     const slideErrors = validateHeroAssets(section.assets);
     if (slideErrors.length > 0) e.slides = slideErrors.join(", ");
@@ -98,6 +106,12 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
 
   const hasBanners = () => s().type === "hero" || s().type === "promotion_banner" || s().type === "content";
   const hasEyebrow = () => s().type === "hero" || s().type === "content" || s().type === "cta";
+  /** Page-builder types without heading text of their own (pictures only, or spacing). */
+  const noTextFields = () => s().type === "banner_slider" || s().type === "banner_grid" || s().type === "divider";
+  const isCountdown = () => s().type === "countdown_banner";
+  const isProductGrid = () => s().type === "product_grid";
+  /** The shared "ปุ่ม" block: the original types plus the countdown banner. product_grid has its own "ดูทั้งหมด" link. */
+  const hasCtaBlock = () => !noTextFields() && !isProductGrid();
 
   return (
     <div class="flex flex-col gap-4 border-t border-border p-4 sm:p-5">
@@ -107,18 +121,39 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
         <TextField label="ข้อความเล็กเหนือหัวข้อ" placeholder="เช่น NEW" value={s().eyebrow} onInput={(e) => patch({ eyebrow: e.currentTarget.value })} class="sm:max-w-xs" />
       </Show>
 
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <TextField label="หัวข้อ" value={s().title} onInput={(e) => patch({ title: e.currentTarget.value })} />
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium text-ink">คำอธิบาย</span>
-          <textarea
-            value={s().description}
-            onInput={(e) => patch({ description: e.currentTarget.value })}
-            rows={3}
-            class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink"
-          />
-        </label>
-      </div>
+      <Show when={s().type === "banner_slider"}>
+        <BannerSliderFields section={s()} patch={patch} errors={props.errors} />
+      </Show>
+      <Show when={s().type === "banner_grid"}>
+        <BannerGridFields section={s()} patch={patch} errors={props.errors} />
+      </Show>
+      <Show when={s().type === "divider"}>
+        <DividerFields section={s()} patch={patch} />
+      </Show>
+
+      <Show when={isProductGrid()}>
+        <TextField label="หัวข้อ (ไม่บังคับ)" placeholder="เช่น สินค้าแนะนำ" value={s().title} onInput={(e) => patch({ title: e.currentTarget.value })} class="sm:max-w-md" />
+        <ProductGridFields section={s()} patch={patch} errors={props.errors} />
+      </Show>
+
+      <Show when={!noTextFields() && !isProductGrid()}>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <TextField label="หัวข้อ" value={s().title} onInput={(e) => patch({ title: e.currentTarget.value })} />
+          <label class="flex flex-col gap-1.5">
+            <span class="text-sm font-medium text-ink">{isCountdown() ? "ข้อความรอง" : "คำอธิบาย"}</span>
+            <textarea
+              value={s().description}
+              onInput={(e) => patch({ description: e.currentTarget.value })}
+              rows={3}
+              class="rounded-card border border-border bg-surface-card px-4 py-3 text-sm text-ink outline-none focus:border-brand-pink"
+            />
+          </label>
+        </div>
+      </Show>
+
+      <Show when={isCountdown()}>
+        <CountdownFields section={s()} patch={patch} errors={props.errors} />
+      </Show>
 
       <Show when={s().type === "content"}>
         <label class="flex flex-col gap-1.5 sm:max-w-md">
@@ -247,24 +282,26 @@ export function HomepageSectionForm(props: { section: HomepageSection; onChange:
       </Show>
 
       {/* Landing Page Frontend Polish §10 — "product" sections get a CTA too, used as the section's "View All" link (e.g. to the Collection's own listing). */}
-      <div class="flex flex-col gap-3 rounded-card bg-surface-gray/60 p-3">
-        <p class="text-sm font-semibold text-ink">ปุ่ม</p>
-        <TextField
-          label="ข้อความบนปุ่ม"
-          required={s().type === "cta"}
-          placeholder="เช่น ช้อปเลย"
-          value={s().cta.label}
-          onInput={(e) => patch({ cta: { ...s().cta, label: e.currentTarget.value } })}
-          error={err("ctaLabel")}
-          class="sm:max-w-xs"
-        />
-        <DestinationSelector
-          required={s().type === "cta"}
-          value={s().cta.destination}
-          onChange={(destination) => patch({ cta: { ...s().cta, destination } })}
-          error={err("ctaDestination")}
-        />
-      </div>
+      <Show when={hasCtaBlock()}>
+        <div class="flex flex-col gap-3 rounded-card bg-surface-gray/60 p-3">
+          <p class="text-sm font-semibold text-ink">ปุ่ม</p>
+          <TextField
+            label="ข้อความบนปุ่ม"
+            required={s().type === "cta"}
+            placeholder="เช่น ช้อปเลย"
+            value={s().cta.label}
+            onInput={(e) => patch({ cta: { ...s().cta, label: e.currentTarget.value } })}
+            error={err("ctaLabel")}
+            class="sm:max-w-xs"
+          />
+          <DestinationSelector
+            required={s().type === "cta"}
+            value={s().cta.destination}
+            onChange={(destination) => patch({ cta: { ...s().cta, destination } })}
+            error={err("ctaDestination")}
+          />
+        </div>
+      </Show>
     </div>
   );
 }

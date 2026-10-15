@@ -1,7 +1,8 @@
 import { Show } from "solid-js";
-import { mediaImage } from "~/lib/media";
-import { DragHandleIcon, ImageIcon, ChevronDownIcon, TrashIcon, DuplicateIcon, FlashBoltIcon, StarIcon, CouponTicketIcon, ProductBoxIcon } from "~/components/admin/icons";
+import { DragHandleIcon, ChevronDownIcon, TrashIcon, DuplicateIcon } from "~/components/admin/icons";
 import { BUILTIN_SECTION_META, HOMEPAGE_SECTION_TYPE_META, isBuiltinSectionType, type BuiltinSectionType, type HomepageSection } from "~/lib/adminHomepage";
+import { describeSection, sectionThumbnail } from "~/lib/pageSections";
+import { SectionTypeIcon } from "./SectionTypeIcon";
 import { BuiltinSectionForm, HomepageSectionForm } from "./HomepageSectionForm";
 import { Toggle } from "~/components/admin/Toggle";
 import { StatusBadge } from "~/components/admin/StatusBadge";
@@ -34,12 +35,8 @@ export function HomepageSectionCard(props: {
   const s = () => props.section;
   const hasErrors = () => Object.keys(props.errors ?? {}).length > 0;
   const builtin = () => (isBuiltinSectionType(s().type) ? (s().type as BuiltinSectionType) : undefined);
-  const builtinIcon = (type: BuiltinSectionType) => {
-    if (type === "flash_sale") return <FlashBoltIcon class="size-5" />;
-    if (type === "coupons") return <CouponTicketIcon class="size-5" />;
-    if (type === "reviews" || type === "faq") return <StarIcon class="size-5" />;
-    return <ProductBoxIcon class="size-5" />;
-  };
+  const thumbnail = () => sectionThumbnail(s());
+  const summary = () => describeSection(s());
 
   return (
     <div class="flex flex-col rounded-card border bg-surface-card" classList={{ "border-system-red": hasErrors(), "border-border": !hasErrors() }} draggable="true" onDragStart={props.onDragStart} onDragOver={props.onDragOver} onDrop={props.onDrop}>
@@ -49,8 +46,8 @@ export function HomepageSectionCard(props: {
         </span>
 
         <div class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-media bg-surface-gray/60 text-ink-placeholder">
-          <Show when={mediaImage(s().banners.desktop)} fallback={builtin() ? builtinIcon(builtin()!) : <ImageIcon class="size-5" />}>
-            <img src={mediaImage(s().banners.desktop)} alt="" class="size-full object-cover" />
+          <Show when={thumbnail()} fallback={<SectionTypeIcon type={s().type} />}>
+            <img src={thumbnail()} alt="" class="size-full object-cover" />
           </Show>
         </div>
 
@@ -64,6 +61,9 @@ export function HomepageSectionCard(props: {
           </Show>
           <Show when={builtin()}>
             {(type) => <p class="text-sm text-ink-gray">{BUILTIN_SECTION_META[type()].note}</p>}
+          </Show>
+          <Show when={summary()}>
+            <p class="truncate text-sm text-ink-gray">{summary()}</p>
           </Show>
           <Show when={hasErrors() && !props.expanded}>
             <p class="text-sm text-system-red">ยังกรอกข้อมูลไม่ครบ กด "แก้ไข" เพื่อดูรายละเอียด</p>

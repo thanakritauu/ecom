@@ -1,6 +1,6 @@
 import type { PromotionPageProductRef } from "./adminContent";
 import { upgradeSeedBanners } from "./seedBanners";
-import { isVideoMedia, mediaErrors, mediaSrc, normalizeMedia, normalizeMediaSet, type MediaValue } from "./media";
+import { isVideoMedia, mediaErrors, mediaImage, mediaSrc, normalizeMedia, normalizeMediaSet, type MediaValue } from "./media";
 
 /**
  * Landing Page Admin Management — moved out of `adminHomepage.ts` (which
@@ -27,21 +27,68 @@ import { isVideoMedia, mediaErrors, mediaSrc, normalizeMedia, normalizeMediaSet,
 export const BUILTIN_SECTION_TYPES = ["flash_sale", "best_sellers", "coupons", "new_arrivals", "trending", "reviews", "faq"] as const;
 export type BuiltinSectionType = (typeof BUILTIN_SECTION_TYPES)[number];
 
-export type HomepageSectionType = "hero" | "promotion_banner" | "product" | "content" | "cta" | BuiltinSectionType;
+/** Section types added with the page builder (หน้าแคมเปญ + หน้าแรก share them). Each keeps its own settings object on the section, see `HomepageSection`. */
+export const BLOCK_SECTION_TYPES = ["banner_slider", "banner_grid", "countdown_banner", "product_grid", "divider"] as const;
+export type BlockSectionType = (typeof BLOCK_SECTION_TYPES)[number];
 
-export const HOMEPAGE_SECTION_TYPE_META: Record<HomepageSectionType, { label: string }> = {
-  hero: { label: "แบนเนอร์สไลด์" },
-  promotion_banner: { label: "แบนเนอร์โปรโมชั่น" },
-  product: { label: "รายการสินค้า" },
-  content: { label: "รูปพร้อมข้อความ" },
-  cta: { label: "ปุ่มชวนคลิก" },
-  flash_sale: { label: "Flash Sale" },
-  best_sellers: { label: "สินค้าขายดี" },
-  coupons: { label: "คูปองส่วนลด" },
-  new_arrivals: { label: "มาใหม่" },
-  trending: { label: "กำลังฮิตสัปดาห์นี้" },
-  reviews: { label: "รีวิวลูกค้า" },
-  faq: { label: "คำถามที่พบบ่อย" },
+export type HomepageSectionType = "hero" | "promotion_banner" | "product" | "content" | "cta" | BlockSectionType | BuiltinSectionType;
+
+/** Palette group in the page builder. */
+export type SectionTypeGroup = "media" | "products" | "builtin" | "content";
+
+/** Icon key; `SectionTypeIcon` (admin/content/SectionTypeIcon.tsx) draws it. */
+export type SectionIconName = "hero" | "banner" | "slider" | "grid" | "countdown" | "products" | "content" | "cta" | "divider" | "flash" | "coupon" | "star" | "faq";
+
+export type SectionTypeMeta = { label: string; description: string; group: SectionTypeGroup; icon: SectionIconName };
+
+/**
+ * The one registry of section types: label (admin + builder palette), a
+ * one-line description, the palette group and an icon key. Every surface
+ * that lists or names section types reads this.
+ */
+export const SECTION_TYPE_META: Record<HomepageSectionType, SectionTypeMeta> = {
+  hero: { label: "แบนเนอร์หลัก", description: "แบนเนอร์ใหญ่บนสุดของหน้า ใส่รูป วิดีโอ หรือ YouTube ได้หลายสไลด์", group: "media", icon: "hero" },
+  promotion_banner: { label: "แบนเนอร์โปรโมชั่น", description: "แบนเนอร์รูปเดียว ตั้งรูปแยกเดสก์ท็อป แท็บเล็ต มือถือ และกดไปลิงก์ได้", group: "media", icon: "banner" },
+  banner_slider: { label: "แบนเนอร์สไลด์", description: "หลายรูปหรือวิดีโอเลื่อนต่อกัน รูปเต็มความกว้างไม่ถูกตัด แต่ละสไลด์มีลิงก์ของตัวเอง", group: "media", icon: "slider" },
+  banner_grid: { label: "แบนเนอร์หลายรูป", description: "รูป 2 หรือ 3 รูปเรียงในแถวเดียว แต่ละรูปมีลิงก์ของตัวเอง", group: "media", icon: "grid" },
+  countdown_banner: { label: "แบนเนอร์นับถอยหลัง", description: "แบนเนอร์พร้อมนาฬิกานับถอยหลังถึงเวลาที่ตั้ง และปุ่มชวนคลิก", group: "media", icon: "countdown" },
+  product: { label: "รายการสินค้า", description: "สินค้าจากกลุ่มสินค้าพิเศษ หมวดหมู่ หรือให้ระบบเลือกอัตโนมัติ", group: "products", icon: "products" },
+  product_grid: { label: "การ์ดสินค้า", description: "เลือกสินค้าหรือตัวเลือกสินค้าเอง จัดเป็นตารางหรือแถวเลื่อนแนวนอน", group: "products", icon: "products" },
+  content: { label: "รูปพร้อมข้อความ", description: "รูปคู่กับหัวข้อ ข้อความ และปุ่ม", group: "content", icon: "content" },
+  cta: { label: "ปุ่มชวนคลิก", description: "หัวข้อ ข้อความสั้น และปุ่มเดียว", group: "content", icon: "cta" },
+  divider: { label: "เส้นคั่น / ระยะห่าง", description: "เว้นระยะระหว่างส่วน เลือกใส่เส้นคั่นได้", group: "content", icon: "divider" },
+  flash_sale: { label: "Flash Sale", description: "สินค้าแฟลชเซลพร้อมนับถอยหลัง ดึงข้อมูลอัตโนมัติ", group: "builtin", icon: "flash" },
+  best_sellers: { label: "สินค้าขายดี", description: "สินค้าขายดีพร้อมแท็บหมวด ดึงข้อมูลอัตโนมัติ", group: "builtin", icon: "products" },
+  coupons: { label: "คูปองส่วนลด", description: "คูปองที่ตั้งให้แสดงหน้าแรก พร้อมปุ่มเก็บคูปอง", group: "builtin", icon: "coupon" },
+  new_arrivals: { label: "มาใหม่", description: "สินค้ามาใหม่ ดึงข้อมูลอัตโนมัติ", group: "builtin", icon: "products" },
+  trending: { label: "กำลังฮิตสัปดาห์นี้", description: "สินค้ากำลังฮิต ดึงข้อมูลอัตโนมัติ", group: "builtin", icon: "products" },
+  reviews: { label: "รีวิวลูกค้า", description: "คะแนนรีวิวและคลิปรีวิวจาก TikTok", group: "builtin", icon: "star" },
+  faq: { label: "คำถามที่พบบ่อย", description: "คำถามที่พบบ่อยชุดเดียวกับหน้าช่วยเหลือ", group: "builtin", icon: "faq" },
+};
+
+/** Kept for every existing import site; same object as `SECTION_TYPE_META`. */
+export const HOMEPAGE_SECTION_TYPE_META: Record<HomepageSectionType, SectionTypeMeta> = SECTION_TYPE_META;
+
+/** Palette order in the builder (and any "add section" menu). */
+export const SECTION_TYPE_ORDER: HomepageSectionType[] = [
+  "hero",
+  "banner_slider",
+  "promotion_banner",
+  "banner_grid",
+  "countdown_banner",
+  "product_grid",
+  "product",
+  "content",
+  "cta",
+  "divider",
+  ...BUILTIN_SECTION_TYPES,
+];
+
+export const SECTION_TYPE_GROUP_LABEL: Record<SectionTypeGroup, string> = {
+  media: "แบนเนอร์และสื่อ",
+  products: "สินค้า",
+  content: "ข้อความและการจัดหน้า",
+  builtin: "ส่วนสำเร็จรูป",
 };
 
 /**
@@ -256,6 +303,68 @@ export type HomepageCta = {
 /** Content section layout — Landing Page Frontend Polish §15. Ignored by every other section type. */
 export type HomepageContentLayout = "image-text" | "text-image" | "full-width";
 
+/**
+ * One picture (or MP4) + alt text + where it links: a slide of
+ * `banner_slider`, a tile of `banner_grid`. Single upload, no device crops;
+ * `aspect` (width / height) is measured in admin when the file is chosen so
+ * the storefront can reserve the right height before it loads (0 = unknown).
+ */
+export type SectionMediaItem = {
+  id: string;
+  media: MediaValue;
+  alt: string;
+  destination: HomepageDestination;
+  aspect: number;
+};
+
+export type BannerSliderSettings = {
+  slides: SectionMediaItem[];
+  autoplay: boolean;
+  /** Seconds per slide when `autoplay` is on. */
+  intervalSeconds: number;
+  showDots: boolean;
+  showArrows: boolean;
+};
+
+export type BannerGridColumns = 2 | 3;
+export type BannerGridSettings = {
+  columns: BannerGridColumns;
+  /** Always `MAX_GRID_TILES` long so switching 3 to 2 columns and back keeps the third tile; only the first `columns` show. */
+  tiles: SectionMediaItem[];
+};
+
+export type CountdownBackground = "image" | "brand";
+export type CountdownAfterEnd = "hide" | "message";
+export type CountdownBannerSettings = {
+  background: CountdownBackground;
+  /** Image only (`background: "image"`). */
+  image: string;
+  /** Local date-time `YYYY-MM-DDTHH:mm` (the admin's clock), same format as `<input type="datetime-local">`. */
+  endsAt: string;
+  afterEnd: CountdownAfterEnd;
+  /** Shown instead of the timer when `afterEnd` is "message". */
+  endedText: string;
+};
+
+export type ProductGridLayout = "grid" | "rail";
+export type ProductGridColumns = 2 | 3 | 4 | 5;
+export type ProductGridSettings = {
+  layout: ProductGridLayout;
+  /** Desktop columns for `grid` (mobile is always 2). */
+  columns: ProductGridColumns;
+  /** `grid` only: at most this many desktop rows, 0 = show every product. */
+  maxRows: number;
+};
+
+export type DividerSize = "s" | "m" | "l";
+export type DividerSettings = { size: DividerSize; line: boolean };
+
+export const MAX_SLIDER_SLIDES = 10;
+export const MAX_GRID_TILES = 3;
+export const SLIDER_INTERVAL_RANGE = { min: 2, max: 30, default: 5 } as const;
+export const PRODUCT_GRID_MAX_ROWS = 10;
+export const COUNTDOWN_ENDED_TEXT_DEFAULT = "หมดเวลาแล้ว";
+
 export type HomepageSection = {
   id: string;
   type: HomepageSectionType;
@@ -280,6 +389,21 @@ export type HomepageSection = {
   collectionId: string;
   /** "product" only, when `productSource === "category"` — id into `~/lib/adminCategories`'s `AdminCategory[]`. Resolved live at render time by filtering the Product Catalog on `categoryId`, never copied in — Category stays classification-only, never a page builder (§6). */
   categoryId: string;
+  /**
+   * Per-type settings of the page-builder section types. Optional so every
+   * record saved before they existed (and every hand-built section literal)
+   * stays valid; `normalizeHomepageSection` fills the one matching the
+   * section's type, and readers use `sliderSettings(s)` etc., which fall
+   * back to the defaults. `product_grid` keeps its picks in `products`
+   * (product or SKU level), its heading in `title` and its "ดูทั้งหมด" link
+   * in `cta.destination`; `countdown_banner` uses `title` / `description`
+   * / `cta` for its text and button.
+   */
+  slider?: BannerSliderSettings;
+  grid?: BannerGridSettings;
+  countdown?: CountdownBannerSettings;
+  productGrid?: ProductGridSettings;
+  divider?: DividerSettings;
   createdAt: string;
   updatedAt: string;
 };
@@ -354,9 +478,155 @@ export function normalizeHomepageSection(s: Partial<HomepageSection> & { id: str
       : [],
     collectionId: s.collectionId ?? "",
     categoryId: s.categoryId ?? "",
+    ...normalizeBlockSettings(s),
     createdAt: s.createdAt ?? "",
     updatedAt: s.updatedAt ?? "",
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Page-builder section types: defaults, normalizers, factory          */
+/* ------------------------------------------------------------------ */
+
+let nextItemRuntimeId = 1;
+export const genSectionItemId = () => `sec-item-${Date.now()}-${nextItemRuntimeId++}`;
+
+export function emptySectionMediaItem(): SectionMediaItem {
+  return { id: genSectionItemId(), media: "", alt: "", destination: emptyDestination(), aspect: 0 };
+}
+
+function normalizeSectionMediaItem(raw: Partial<SectionMediaItem> | undefined): SectionMediaItem {
+  const aspect = Number(raw?.aspect);
+  return {
+    id: typeof raw?.id === "string" && raw.id ? raw.id : genSectionItemId(),
+    media: normalizeMedia(raw?.media),
+    alt: typeof raw?.alt === "string" ? raw.alt : "",
+    destination: normalizeHomepageDestination(raw?.destination),
+    aspect: Number.isFinite(aspect) && aspect > 0 ? aspect : 0,
+  };
+}
+
+const clampInt = (v: unknown, min: number, max: number, fallback: number) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+};
+
+export function defaultSliderSettings(): BannerSliderSettings {
+  return { slides: [emptySectionMediaItem()], autoplay: true, intervalSeconds: SLIDER_INTERVAL_RANGE.default, showDots: true, showArrows: true };
+}
+export function defaultGridSettings(): BannerGridSettings {
+  return { columns: 2, tiles: Array.from({ length: MAX_GRID_TILES }, emptySectionMediaItem) };
+}
+export function defaultCountdownSettings(): CountdownBannerSettings {
+  return { background: "brand", image: "", endsAt: "", afterEnd: "hide", endedText: COUNTDOWN_ENDED_TEXT_DEFAULT };
+}
+export function defaultProductGridSettings(): ProductGridSettings {
+  return { layout: "grid", columns: 4, maxRows: 0 };
+}
+export function defaultDividerSettings(): DividerSettings {
+  return { size: "m", line: false };
+}
+
+export function normalizeSliderSettings(raw: Partial<BannerSliderSettings> | undefined): BannerSliderSettings {
+  const d = defaultSliderSettings();
+  if (!raw || typeof raw !== "object") return d;
+  return {
+    slides: Array.isArray(raw.slides) ? raw.slides.slice(0, MAX_SLIDER_SLIDES).map(normalizeSectionMediaItem) : d.slides,
+    autoplay: typeof raw.autoplay === "boolean" ? raw.autoplay : d.autoplay,
+    intervalSeconds: clampInt(raw.intervalSeconds, SLIDER_INTERVAL_RANGE.min, SLIDER_INTERVAL_RANGE.max, d.intervalSeconds),
+    showDots: typeof raw.showDots === "boolean" ? raw.showDots : d.showDots,
+    showArrows: typeof raw.showArrows === "boolean" ? raw.showArrows : d.showArrows,
+  };
+}
+
+export function normalizeGridSettings(raw: Partial<BannerGridSettings> | undefined): BannerGridSettings {
+  const tiles = Array.isArray(raw?.tiles) ? raw!.tiles.slice(0, MAX_GRID_TILES).map(normalizeSectionMediaItem) : [];
+  while (tiles.length < MAX_GRID_TILES) tiles.push(emptySectionMediaItem());
+  return { columns: raw?.columns === 3 ? 3 : 2, tiles };
+}
+
+export function normalizeCountdownSettings(raw: Partial<CountdownBannerSettings> | undefined): CountdownBannerSettings {
+  const d = defaultCountdownSettings();
+  if (!raw || typeof raw !== "object") return d;
+  return {
+    background: raw.background === "image" ? "image" : "brand",
+    image: typeof raw.image === "string" ? raw.image : "",
+    endsAt: typeof raw.endsAt === "string" ? raw.endsAt : "",
+    afterEnd: raw.afterEnd === "message" ? "message" : "hide",
+    endedText: typeof raw.endedText === "string" ? raw.endedText : d.endedText,
+  };
+}
+
+export function normalizeProductGridSettings(raw: Partial<ProductGridSettings> | undefined): ProductGridSettings {
+  const d = defaultProductGridSettings();
+  if (!raw || typeof raw !== "object") return d;
+  return {
+    layout: raw.layout === "rail" ? "rail" : "grid",
+    columns: clampInt(raw.columns, 2, 5, d.columns) as ProductGridColumns,
+    maxRows: clampInt(raw.maxRows, 0, PRODUCT_GRID_MAX_ROWS, d.maxRows),
+  };
+}
+
+export function normalizeDividerSettings(raw: Partial<DividerSettings> | undefined): DividerSettings {
+  const d = defaultDividerSettings();
+  if (!raw || typeof raw !== "object") return d;
+  return { size: raw.size === "s" || raw.size === "l" ? raw.size : "m", line: !!raw.line };
+}
+
+/** Only the settings object matching the section's type is kept (and always present for it). */
+function normalizeBlockSettings(s: Partial<HomepageSection>): Pick<HomepageSection, "slider" | "grid" | "countdown" | "productGrid" | "divider"> {
+  switch (s.type) {
+    case "banner_slider":
+      return { slider: normalizeSliderSettings(s.slider) };
+    case "banner_grid":
+      return { grid: normalizeGridSettings(s.grid) };
+    case "countdown_banner":
+      return { countdown: normalizeCountdownSettings(s.countdown) };
+    case "product_grid":
+      return { productGrid: normalizeProductGridSettings(s.productGrid) };
+    case "divider":
+      return { divider: normalizeDividerSettings(s.divider) };
+    default:
+      return {};
+  }
+}
+
+/** Settings readers: always a complete object, defaults when the section has none yet. */
+export const sliderSettings = (s: HomepageSection): BannerSliderSettings => s.slider ?? normalizeSliderSettings(undefined);
+export const gridSettings = (s: HomepageSection): BannerGridSettings => s.grid ?? normalizeGridSettings(undefined);
+export const countdownSettings = (s: HomepageSection): CountdownBannerSettings => s.countdown ?? normalizeCountdownSettings(undefined);
+export const productGridSettings = (s: HomepageSection): ProductGridSettings => s.productGrid ?? normalizeProductGridSettings(undefined);
+export const dividerSettings = (s: HomepageSection): DividerSettings => s.divider ?? normalizeDividerSettings(undefined);
+
+/** `endsAt` (local `YYYY-MM-DDTHH:mm`) as epoch ms, or NaN when empty/invalid. */
+export function countdownEndsAtMs(endsAt: string): number {
+  if (!endsAt) return NaN;
+  return new Date(endsAt).getTime();
+}
+
+/** Two aspect ratios count as the same when within 2% (rounding in exported files). */
+export function sameAspect(a: number, b: number): boolean {
+  if (!a || !b) return true;
+  return Math.abs(a - b) / Math.max(a, b) < 0.02;
+}
+
+/**
+ * New section of any type with its defaults (what the builder's palette and
+ * "+ เพิ่มส่วน" create). `name` defaults to the type label (+ " ใหม่" for
+ * editable types); `now` is the createdAt/updatedAt label.
+ */
+export function createSection(type: HomepageSectionType, opts: { id?: string; name?: string; now?: string } = {}): HomepageSection {
+  const label = SECTION_TYPE_META[type].label;
+  return normalizeHomepageSection({
+    id: opts.id ?? genHomepageSectionId(),
+    type,
+    name: opts.name ?? (isBuiltinSectionType(type) ? label : `${label} ใหม่`),
+    enabled: true,
+    productSource: type === "product" ? "best_seller" : "manual",
+    banners: emptyBanners(),
+    createdAt: opts.now ?? "",
+    updatedAt: opts.now ?? "",
+  });
 }
 
 /**
@@ -430,3 +700,64 @@ export function resolveHomepageDestinationHref(
 /** Runtime "+ Add Section" (Editor-only) needs genuinely unique ids — baselines use fixed ids instead so calling a baseline builder twice in one session never produces two different "same" baselines. */
 let nextRuntimeId = 1;
 export const genHomepageSectionId = () => `home-sec-runtime-${Date.now()}-${nextRuntimeId++}`;
+
+/* ------------------------------------------------------------------ */
+/* Admin summaries (section list rows, builder outline)                 */
+/* ------------------------------------------------------------------ */
+
+/** The still image that best represents a section (list thumbnails), or "". */
+export function sectionThumbnail(section: HomepageSection): string {
+  const banner = mediaImage(section.banners.desktop) || mediaImage(section.banners.tablet) || mediaImage(section.banners.mobile);
+  if (banner) return banner;
+  switch (section.type) {
+    case "hero":
+      return section.assets.map((a) => (a.type === "image" ? a.source : a.poster ?? "")).find(Boolean) ?? "";
+    case "banner_slider":
+      return sliderSettings(section).slides.map((s) => mediaImage(s.media)).find(Boolean) ?? "";
+    case "banner_grid": {
+      const g = gridSettings(section);
+      return g.tiles.slice(0, g.columns).map((t) => mediaImage(t.media)).find(Boolean) ?? "";
+    }
+    case "countdown_banner":
+      return countdownSettings(section).background === "image" ? countdownSettings(section).image : "";
+    default:
+      return "";
+  }
+}
+
+const DIVIDER_SIZE_LABEL: Record<DividerSize, string> = { s: "เล็ก", m: "กลาง", l: "ใหญ่" };
+
+/** One line describing a page-builder section's settings (undefined for the other types). `now` for the countdown's ended state. */
+export function describeSection(section: HomepageSection, now: number = Date.now()): string | undefined {
+  switch (section.type) {
+    case "banner_slider": {
+      const s = sliderSettings(section);
+      const count = s.slides.filter((slide) => mediaSrc(slide.media)).length;
+      return `${count} สไลด์, ${s.autoplay ? `เลื่อนอัตโนมัติทุก ${s.intervalSeconds} วินาที` : "ไม่เลื่อนอัตโนมัติ"}`;
+    }
+    case "banner_grid": {
+      const g = gridSettings(section);
+      const filled = g.tiles.slice(0, g.columns).filter((t) => mediaSrc(t.media)).length;
+      return `${g.columns} รูปต่อแถว, ใส่รูปแล้ว ${filled}/${g.columns}`;
+    }
+    case "countdown_banner": {
+      const c = countdownSettings(section);
+      const ends = countdownEndsAtMs(c.endsAt);
+      if (!Number.isFinite(ends)) return "ยังไม่ได้ตั้งเวลาสิ้นสุด";
+      const label = new Date(ends).toLocaleString("th-TH", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+      if (ends <= now) return `หมดเวลาแล้ว ${label}${c.afterEnd === "hide" ? " หน้าร้านซ่อนส่วนนี้อยู่" : ""}`;
+      return `นับถอยหลังถึง ${label}`;
+    }
+    case "product_grid": {
+      const g = productGridSettings(section);
+      const layout = g.layout === "rail" ? "แถวเลื่อนแนวนอน" : `ตาราง ${g.columns} คอลัมน์${g.maxRows > 0 ? ` สูงสุด ${g.maxRows} แถว` : ""}`;
+      return `${section.products.length} สินค้า, ${layout}`;
+    }
+    case "divider": {
+      const d = dividerSettings(section);
+      return `ระยะห่าง${DIVIDER_SIZE_LABEL[d.size]}${d.line ? " มีเส้นคั่น" : ""}`;
+    }
+    default:
+      return undefined;
+  }
+}

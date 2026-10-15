@@ -132,8 +132,11 @@ export default function AdminLandingPageDetailPage() {
                   <Button variant="outline" onClick={() => window.open(`/admin/preview/promotion-pages/${p().id}`, "_blank")}>
                     <EyeIcon class="size-4" /> ดูตัวอย่างเต็มหน้า
                   </Button>
-                  <Button variant="primary" href={`/admin/promotion-pages/${p().id}/edit`}>
+                  <Button variant="outline" href={`/admin/promotion-pages/${p().id}/edit`}>
                     แก้ไขหน้าแคมเปญ
+                  </Button>
+                  <Button variant="primary" href={`/admin/promotion-pages/${p().id}/builder`}>
+                    ออกแบบหน้า
                   </Button>
                   <LandingPageRowActionsMenu
                     id={p().id}

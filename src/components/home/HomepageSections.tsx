@@ -22,6 +22,7 @@ import { NewArrivalsSection } from "./NewArrivalsSection";
 import { TrendingSection } from "./TrendingSection";
 import { ReviewsSection } from "./ReviewsSection";
 import { FAQSection } from "./FAQSection";
+import { BannerGridBlock, BannerSliderBlock, CountdownBannerBlock, DividerBlock, ProductGridBlock } from "./PageBlockSections";
 
 /** Architecture Cleanup & Source of Truth — filters the *live* Product Store list instead of pointing at a separately-curated array per source; membership itself is still the same seed-id-derived signal `~/lib/products`'s `isBestSeller`/etc. always used. */
 function productsForSource(source: Exclude<HomepageProductSource, "manual" | "collection" | "category">, products: Product[]): Product[] {
@@ -120,6 +121,17 @@ function HomepageSectionBlock(props: { section: HomepageSection; productRows?: n
       return <ContentSectionBlock section={props.section} />;
     case "cta":
       return <CtaSectionBlock section={props.section} />;
+    // Page-builder blocks (PageBlockSections.tsx).
+    case "banner_slider":
+      return <BannerSliderBlock section={props.section} />;
+    case "banner_grid":
+      return <BannerGridBlock section={props.section} />;
+    case "countdown_banner":
+      return <CountdownBannerBlock section={props.section} />;
+    case "product_grid":
+      return <ProductGridBlock section={props.section} />;
+    case "divider":
+      return <DividerBlock section={props.section} />;
     // Built-in blocks: the existing components, pulling their own data; only the heading can be overridden.
     case "flash_sale":
       return <FlashSaleSection />;

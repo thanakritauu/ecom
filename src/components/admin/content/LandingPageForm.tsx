@@ -1,54 +1,28 @@
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createMemo, createSignal, Show } from "solid-js";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
 import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
 import { ConfirmDialog } from "~/components/admin/ConfirmDialog";
-import { EmptyState } from "~/components/admin/EmptyState";
-import { ChevronDownIcon, EyeIcon, LayersIcon, PlusIcon } from "~/components/admin/icons";
+import { ChevronDownIcon, EyeIcon, LayersIcon } from "~/components/admin/icons";
 import { BannerUploader } from "./BannerUploader";
 import { ProductSkuPicker } from "~/components/admin/ProductSkuPicker";
-import { HomepageSectionCard } from "./HomepageSectionCard";
 import { sectionFieldErrors } from "./HomepageSectionForm";
 import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
 import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
 import { mediaErrors } from "~/lib/media";
 import { HomepageSectionsPreview } from "./HomepageSectionsPreview";
 import { PromotionPagePreviewBody, isListingModePage } from "./PromotionPagePreviewBody";
-import { BUILTIN_SECTION_TYPES, HOMEPAGE_SECTION_TYPE_META, genHomepageSectionId, isBuiltinSectionType, isValidYoutubeUrl, type HomepageSection, type HomepageSectionType } from "~/lib/adminHomepage";
+import { isValidYoutubeUrl, type HomepageSection } from "~/lib/adminHomepage";
+import { useAdminContent } from "~/lib/adminContentStore";
 import { formatMarketingDateTime, isValidDateRange } from "~/lib/adminMarketing";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { slugify, isReservedSlug, promotionPageHref, PROMOTION_PAGE_STATUS_META, type LandingPage, type LandingPageFormValues, type LandingPageStatus, type PromotionPage } from "~/lib/adminContent";
 import { writePreviewDraft } from "~/lib/adminPreviewDraft";
 import { pushToast } from "~/lib/toast";
 
-const ADD_SECTION_TYPE_OPTIONS: HomepageSectionType[] = ["hero", "promotion_banner", "product", "content", "cta"];
-/** Ready-made storefront blocks (their own data and design); only heading + on/off are set here. */
-const ADD_BUILTIN_TYPE_OPTIONS: HomepageSectionType[] = [...BUILTIN_SECTION_TYPES];
 const TODAY_LABEL = "18 ก.ย. 2569";
-
-function blankLandingSection(type: HomepageSectionType): HomepageSection {
-  return {
-    id: genHomepageSectionId(),
-    type,
-    name: isBuiltinSectionType(type) ? HOMEPAGE_SECTION_TYPE_META[type].label : `${HOMEPAGE_SECTION_TYPE_META[type].label} ใหม่`,
-    enabled: true,
-    eyebrow: "",
-    title: "",
-    description: "",
-    banners: { desktop: "", tablet: "", mobile: "" },
-    assets: [],
-    cta: { label: "", destination: { type: "none" } },
-    contentLayout: "image-text",
-    productSource: type === "product" ? "best_seller" : "manual",
-    products: [],
-    collectionId: "",
-    categoryId: "",
-    createdAt: TODAY_LABEL,
-    updatedAt: TODAY_LABEL,
-  };
-}
 
 const BASE_LABELS: Record<string, string> = {
   name: "ชื่อหน้า",
@@ -61,7 +35,6 @@ const BASE_LABELS: Record<string, string> = {
   products: "เลือกสินค้า",
   sections: "ส่วนเนื้อหาของหน้า",
 };
-const sectionKey = (id: string) => `section:${id}`;
 
 const statusOption = (value: LandingPageStatus) => ({ value, label: PROMOTION_PAGE_STATUS_META[value].label });
 /** Once a page has been published it's on, scheduled or off; "แบบร่าง" is only the state before its first publish. */
@@ -90,7 +63,14 @@ export function LandingPageForm(props: {
   isSlugTaken: (slug: string) => boolean;
   onSubmit: (values: LandingPageFormValues) => Promise<void>;
   onCancel: () => void;
+  /**
+   * "ออกแบบหน้า": open the page builder. Create mode saves the draft first
+   * (name + slug checked, same as บันทึกแบบร่าง) and passes its values; edit
+   * mode passes nothing (the page already exists).
+   */
+  onDesign: (values?: LandingPageFormValues) => Promise<void> | void;
 }) {
+  const contentStore = useAdminContent();
   const [name, setName] = createSignal(props.initial?.name ?? "");
   const [slug, setSlugRaw] = createSignal(props.initial?.slug ?? "");
   const [slugTouched, setSlugTouched] = createSignal(!!props.initial);
@@ -106,106 +86,18 @@ export function LandingPageForm(props: {
   const [startTime, setStartTime] = createSignal(props.initial?.startTime ?? "00:00");
   const [endDate, setEndDate] = createSignal(props.initial?.endDate ?? "");
   const [endTime, setEndTime] = createSignal(props.initial?.endTime ?? "23:59");
-  const [sections, setSections] = createSignal<HomepageSection[]>(props.initial?.sections ?? []);
-  const [expandedSectionId, setExpandedSectionId] = createSignal<string | null>(null);
-  const [dragIndex, setDragIndex] = createSignal<number | null>(null);
-  const [confirmDeleteSection, setConfirmDeleteSection] = createSignal<HomepageSection | null>(null);
-  /** Where "+ add section" puts the new section: after this section id, or at the end ("" ). */
-  const [insertAfterId, setInsertAfterId] = createSignal("");
+  /** Sections are edited in the page builder only; this form just carries the saved ones through. */
+  const sections = (): HomepageSection[] => props.initial?.sections ?? [];
+  const workingCopy = () => (props.initial ? contentStore.workingCopy(props.initial.id) : undefined);
+  const [confirmLeave, setConfirmLeave] = createSignal(false);
 
   const [errors, setErrors] = createSignal<FormErrors>({});
-  /** Per-section field errors (only for sections that still need something), shown inside each section card. */
-  const [sectionErrors, setSectionErrors] = createSignal<Record<string, FormErrors>>({});
   /** Whether the last save attempt needed the full "goes live" check, so fixes re-check against the same rules. */
   const [fullCheck, setFullCheck] = createSignal(false);
   const clearError = (key: string) => setErrors((prev) => clearFieldError(prev, key));
-  const labels = createMemo(() => {
-    const out: Record<string, string> = { ...BASE_LABELS };
-    for (const sec of sections()) out[sectionKey(sec.id)] = `ส่วนเนื้อหา: ${sec.name || "ไม่มีชื่อ"}`;
-    return out;
-  });
+  const labels = () => BASE_LABELS;
   const [saving, setSaving] = createSignal(false);
   const [submitError, setSubmitError] = createSignal<string>();
-
-  /** Re-checks one section that's already flagged, so its errors disappear as soon as it's fixed. */
-  const recheckSection = (section: HomepageSection | undefined, id: string) => {
-    if (!sectionErrors()[id]) return;
-    const next = section && section.enabled ? sectionFieldErrors(section) : {};
-    if (Object.keys(next).length > 0) setSectionErrors((prev) => ({ ...prev, [id]: next }));
-    else {
-      setSectionErrors(({ [id]: _fixed, ...rest }) => rest);
-      clearError(sectionKey(id));
-    }
-  };
-  const updateSection = (id: string, next: HomepageSection) => {
-    setSections((list) => list.map((s) => (s.id === id ? next : s)));
-    recheckSection(next, id);
-  };
-  const toggleSectionEnabled = (id: string) => {
-    setSections((list) => list.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
-    recheckSection(sections().find((s) => s.id === id), id);
-    if (sections().some((s) => s.enabled)) clearError("sections");
-  };
-  const removeSection = (id: string) => {
-    setSections((list) => list.filter((s) => s.id !== id));
-    recheckSection(undefined, id);
-    if (insertAfterId() === id) setInsertAfterId("");
-  };
-
-  const moveSection = (index: number, dir: -1 | 1) => {
-    setSections((list) => {
-      const target = index + dir;
-      if (target < 0 || target >= list.length) return list;
-      const next = [...list];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  };
-
-  const reorderSections = (from: number, to: number) => {
-    setSections((list) => {
-      if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return list;
-      const next = [...list];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
-  };
-
-  const addSection = (type: HomepageSectionType) => {
-    const created = blankLandingSection(type);
-    setSections((list) => {
-      const at = list.findIndex((s) => s.id === insertAfterId());
-      if (at === -1) return [...list, created];
-      const next = [...list];
-      next.splice(at + 1, 0, created);
-      return next;
-    });
-    // Built-in blocks only have a heading and on/off, so there's nothing to open.
-    if (!isBuiltinSectionType(type)) setExpandedSectionId(created.id);
-    // Sections replace the flat banner/title/products layout, so those requirements no longer apply.
-    setErrors((prev) => ["banner", "title", "products", "sections"].reduce((acc, key) => clearFieldError(acc, key), prev));
-  };
-
-  /** §25/§10 — new id, "(สำเนา)" name; Product/Collection REFERENCES (`products`/`collectionId`) are copied as-is, still pointing at the same original entities, never duplicated as new entities. */
-  const duplicateSection = (id: string) => {
-    setSections((list) => {
-      const index = list.findIndex((s) => s.id === id);
-      if (index === -1) return list;
-      const copy: HomepageSection = { ...list[index], id: genHomepageSectionId(), name: `${list[index].name} (สำเนา)` };
-      const next = [...list];
-      next.splice(index + 1, 0, copy);
-      return next;
-    });
-  };
-
-  const requestDeleteSection = (s: HomepageSection) => setConfirmDeleteSection(s);
-  const confirmDeleteSectionAction = () => {
-    const s = confirmDeleteSection();
-    if (!s) return;
-    removeSection(s.id);
-    setConfirmDeleteSection(null);
-  };
 
   const dateRangeValid = createMemo(() => isValidDateRange(startDate(), startTime(), endDate(), endTime()));
 
@@ -294,9 +186,8 @@ export function LandingPageForm(props: {
    * video, a heading and products for a flat page; at least one shown
    * section, and every shown section complete, for a section-built page.
    */
-  const validate = (targetStatus: LandingPageStatus, full: boolean): { fields: FormErrors; perSection: Record<string, FormErrors> } => {
+  const validate = (targetStatus: LandingPageStatus, full: boolean): { fields: FormErrors } => {
     const next: FormErrors = {};
-    const perSection: Record<string, FormErrors> = {};
     if (!name().trim()) next.name = "กรุณากรอกชื่อหน้า";
     if (!isHomepage()) {
       const cleanSlug = slugify(slug());
@@ -309,7 +200,7 @@ export function LandingPageForm(props: {
     if (targetStatus === "scheduled" && !startDate()) next.startDate = "กรุณาระบุวันที่เริ่มต้นสำหรับหน้าที่ตั้งเวลาไว้";
     if (startDate() && endDate() && !dateRangeValid()) next.endDate = "วันสิ้นสุดต้องอยู่หลังวันเริ่ม";
     if (videoUrl().trim() && !isValidYoutubeUrl(videoUrl())) next.videoUrl = "ลิงก์ YouTube ไม่ถูกต้อง";
-    if (!full) return { fields: next, perSection };
+    if (!full) return { fields: next };
 
     if (sections().length === 0 && !isHomepage()) {
       const banners = { desktop: bannerDesktop(), tablet: bannerTablet(), mobile: bannerMobile() };
@@ -321,15 +212,9 @@ export function LandingPageForm(props: {
       if (products().length === 0) next.products = "กรุณาเลือกสินค้าอย่างน้อย 1 รายการ";
     }
     if (sections().length > 0 && !isHomepage() && !sections().some((sec) => sec.enabled)) next.sections = "กรุณาเปิดแสดงส่วนเนื้อหาอย่างน้อย 1 ส่วน";
-    for (const sec of sections()) {
-      if (!sec.enabled) continue;
-      const secErrors = sectionFieldErrors(sec);
-      if (Object.keys(secErrors).length > 0) {
-        perSection[sec.id] = secErrors;
-        next[sectionKey(sec.id)] = Object.values(secErrors).join(", ");
-      }
-    }
-    return { fields: next, perSection };
+    const broken = sections().filter((sec) => sec.enabled && Object.keys(sectionFieldErrors(sec, { requireFutureEnd: true })).length > 0);
+    if (broken.length > 0) next.sections = `ส่วนที่ยังกรอกไม่ครบ: ${broken.map((sec) => sec.name || "ไม่มีชื่อ").join(", ")} กด ออกแบบหน้า เพื่อแก้ไข`;
+    return { fields: next };
   };
 
   // After a failed save, re-check the flat-page fields as they change so each error clears once fixed.
@@ -342,14 +227,9 @@ export function LandingPageForm(props: {
 
   const submitWith = async (targetStatus: LandingPageStatus, requireFullValidation: boolean) => {
     setFullCheck(requireFullValidation);
-    const { fields, perSection } = validate(targetStatus, requireFullValidation);
+    const { fields } = validate(targetStatus, requireFullValidation);
     setErrors(fields);
-    setSectionErrors(perSection);
     if (Object.keys(fields).length > 0) {
-      // Open the first broken section so its fields (and messages) are on screen when the page scrolls to it.
-      const firstBroken = sections().find((sec) => perSection[sec.id]);
-      const flatBroken = Object.keys(fields).some((k) => !k.startsWith("section:"));
-      if (firstBroken && !flatBroken) setExpandedSectionId(firstBroken.id);
       reportFormErrors(fields, labels());
       return;
     }
@@ -382,6 +262,33 @@ export function LandingPageForm(props: {
     e?.preventDefault();
     if (draftFlow) return handlePublish();
     submitWith(status(), true);
+  };
+
+  /** Settings as they were when the form opened, to warn before leaving unsaved edits for the builder. */
+  const initialSnapshot = JSON.stringify(buildValues(props.initial?.status ?? "draft"));
+  const handleDesign = async () => {
+    if (props.mode === "edit") {
+      if (JSON.stringify(buildValues(status())) !== initialSnapshot) setConfirmLeave(true);
+      else void props.onDesign();
+      return;
+    }
+    // New page: it needs a record first, so save it as a draft (name + slug only), then open the builder.
+    setFullCheck(false);
+    const { fields } = validate("draft", false);
+    setErrors(fields);
+    if (Object.keys(fields).length > 0) {
+      reportFormErrors(fields, labels());
+      return;
+    }
+    setSaving(true);
+    setSubmitError(undefined);
+    try {
+      await props.onDesign(buildValues("draft"));
+    } catch {
+      setSubmitError("บันทึกแบบร่างไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const landingPageForm = (
@@ -561,91 +468,31 @@ export function LandingPageForm(props: {
           </Show>
 
           <Section title="ส่วนเนื้อหาของหน้า">
-            <div class="flex flex-col gap-4">
-              <p class="text-sm text-ink-gray">
-                ทุกส่วนของหน้าอยู่ในรายการนี้ หน้าเว็บแสดงจากบนลงล่างตามลำดับนี้ จัดลำดับด้วยปุ่มขึ้นลงหรือลากวาง ปิดส่วนที่ไม่ต้องการแสดงได้ และแทรกส่วนใหม่ (เช่น แบนเนอร์โปรโมชั่น) ไว้ระหว่างส่วนไหนก็ได้
-              </p>
-              <div data-field="sections">
-                <FieldMessage message={errors().sections} />
-              </div>
-              <Show when={sections().length > 0}>
-                <label class="flex flex-col gap-1.5 sm:max-w-md">
-                  <span class="text-sm font-medium text-ink">ตำแหน่งของส่วนที่เพิ่มใหม่</span>
-                  <div class="relative">
-                    <select
-                      value={insertAfterId()}
-                      onChange={(e) => setInsertAfterId(e.currentTarget.value)}
-                      class="h-11 w-full appearance-none rounded-card border border-border bg-surface-card pl-4 pr-9 text-sm text-ink outline-none focus:border-brand-pink"
-                    >
-                      <option value="">ต่อท้ายสุดของหน้า</option>
-                      <For each={sections()}>
-                        {(sec, i) => <option value={sec.id}>ต่อจากส่วนที่ {i() + 1} {sec.name || HOMEPAGE_SECTION_TYPE_META[sec.type].label}</option>}
-                      </For>
-                    </select>
-                    <ChevronDownIcon class="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-gray" />
-                  </div>
-                </label>
-              </Show>
-              <div class="flex flex-col gap-2">
-                <p class="text-xs font-medium text-ink-gray">ส่วนที่ปรับแต่งเอง</p>
-                <div class="flex flex-wrap gap-2">
-                  <For each={ADD_SECTION_TYPE_OPTIONS}>
-                    {(type) => (
-                      <Button type="button" variant="outline" size="sm" onClick={() => addSection(type)}>
-                        <PlusIcon class="size-3.5" /> {HOMEPAGE_SECTION_TYPE_META[type].label}
-                      </Button>
-                    )}
-                  </For>
+            <div data-field="sections" class="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div class="flex min-w-0 flex-1 items-start gap-3">
+                <span class="flex size-11 shrink-0 items-center justify-center rounded-card bg-surface-pink text-brand-pink">
+                  <LayersIcon class="size-5" />
+                </span>
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-ink">
+                    <Show when={sections().length > 0} fallback="ยังไม่มีส่วนเนื้อหา">
+                      {sections().length} ส่วน (แสดง {sections().filter((sec) => sec.enabled).length} ส่วน)
+                    </Show>
+                  </p>
+                  <p class="text-sm text-ink-gray">จัดหน้า เพิ่ม ลบ และแก้ไขแต่ละส่วนในตัวออกแบบหน้า เห็นหน้าตาจริงทั้งเดสก์ท็อป แท็บเล็ต และมือถือ</p>
+                  <Show when={workingCopy()}>
+                    <p class="mt-1 text-sm font-medium text-brand-pink">มีการแก้ไขในตัวออกแบบที่ยังไม่เผยแพร่</p>
+                  </Show>
                 </div>
               </div>
-              <div class="flex flex-col gap-2">
-                <p class="text-xs font-medium text-ink-gray">ส่วนสำเร็จรูป (ดึงข้อมูลจากหน้าร้านอัตโนมัติ)</p>
-                <div class="flex flex-wrap gap-2">
-                  <For each={ADD_BUILTIN_TYPE_OPTIONS}>
-                    {(type) => (
-                      <Button type="button" variant="outline" size="sm" onClick={() => addSection(type)}>
-                        <PlusIcon class="size-3.5" /> {HOMEPAGE_SECTION_TYPE_META[type].label}
-                      </Button>
-                    )}
-                  </For>
-                </div>
-              </div>
-
-              <Show
-                when={sections().length > 0}
-                fallback={<EmptyState icon={<LayersIcon />} title="ยังไม่มีส่วนเนื้อหา" description="เพิ่มส่วนเนื้อหาด้วยปุ่มด้านบน" class="bg-surface-gray/60" />}
-              >
-                <div class="flex flex-col gap-3">
-                  <For each={sections()}>
-                    {(section, index) => (
-                      <div data-field={sectionKey(section.id)}>
-                      <HomepageSectionCard
-                        section={section}
-                        errors={sectionErrors()[section.id]}
-                        index={index()}
-                        total={sections().length}
-                        expanded={expandedSectionId() === section.id}
-                        onToggleExpand={() => setExpandedSectionId((id) => (id === section.id ? null : section.id))}
-                        onChange={(next) => updateSection(section.id, next)}
-                        onToggleEnabled={() => toggleSectionEnabled(section.id)}
-                        onDelete={() => requestDeleteSection(section)}
-                        onDuplicate={() => duplicateSection(section.id)}
-                        onMove={(dir) => moveSection(index(), dir)}
-                        onDragStart={() => setDragIndex(index())}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const from = dragIndex();
-                          if (from !== null) reorderSections(from, index());
-                          setDragIndex(null);
-                        }}
-                      />
-                      </div>
-                    )}
-                  </For>
-                </div>
-              </Show>
+              <Button type="button" variant="primary" onClick={handleDesign} disabled={saving()} class="shrink-0">
+                <LayersIcon class="size-4" /> ออกแบบหน้า
+              </Button>
             </div>
+            <Show when={props.mode === "create"}>
+              <p class="text-xs text-ink-gray">กด ออกแบบหน้า ระบบจะบันทึกหน้านี้เป็นแบบร่างก่อน (ต้องมีชื่อหน้าและ Slug)</p>
+            </Show>
+            <FieldMessage message={errors().sections} />
           </Section>
 
         </div>
@@ -709,13 +556,15 @@ export function LandingPageForm(props: {
       <div class="h-16" aria-hidden="true" />
 
       <ConfirmDialog
-        open={confirmDeleteSection() !== null}
-        onOpenChange={(open) => !open && setConfirmDeleteSection(null)}
-        title="ลบส่วนเนื้อหา?"
-        description={`คุณต้องการลบ "${confirmDeleteSection()?.name ?? ""}" ออกจากหน้านี้หรือไม่? มีผลเมื่อกดบันทึก`}
-        confirmLabel="ลบส่วนเนื้อหา"
-        tone="danger"
-        onConfirm={confirmDeleteSectionAction}
+        open={confirmLeave()}
+        onOpenChange={setConfirmLeave}
+        title="ยังไม่ได้บันทึกการตั้งค่า"
+        description="ข้อมูลที่แก้ในหน้านี้ยังไม่ได้บันทึก ถ้าไปหน้าออกแบบตอนนี้ การแก้ไขนี้จะหายไป"
+        confirmLabel="ไปหน้าออกแบบ"
+        onConfirm={() => {
+          setConfirmLeave(false);
+          void props.onDesign();
+        }}
       />
     </form>
   );

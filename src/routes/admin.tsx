@@ -38,6 +38,8 @@ function AdminGate(props: { children: JSX.Element }) {
   // route gets AdminLayout" — same shape as the /admin/login exception
   // above, still gated on being signed in.
   const isPreviewRoute = () => location.pathname.startsWith("/admin/preview/");
+  /** The page builder (`/admin/promotion-pages/:id/builder`) is a full-screen editor with its own top bar, so it skips the sidebar/topbar too (but keeps Admin's theme). */
+  const isFullScreenRoute = () => isPreviewRoute() || /^\/admin\/promotion-pages\/[^/]+\/builder\/?$/.test(location.pathname);
 
   // CMS + Frontend Final Refinement §9 — the one place Admin's Dark/Light
   // preference actually touches the DOM: a `data-theme` attribute on
@@ -64,7 +66,7 @@ function AdminGate(props: { children: JSX.Element }) {
     <Show when={admin.isReady()} fallback={<AdminBootScreen />}>
       <Show when={admin.isAuthenticated()} fallback={<Show when={isLoginRoute()} fallback={<Navigate href="/admin/login" />}>{props.children}</Show>}>
         <Show when={!isLoginRoute()} fallback={<Navigate href="/admin" />}>
-          <Show when={!isPreviewRoute()} fallback={props.children}>
+          <Show when={!isFullScreenRoute()} fallback={props.children}>
             <AdminLayout>{props.children}</AdminLayout>
           </Show>
         </Show>
