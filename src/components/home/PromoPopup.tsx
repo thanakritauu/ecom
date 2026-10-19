@@ -2,7 +2,9 @@ import { Dialog } from "@kobalte/core/dialog";
 import { useLocation, useNavigate } from "@solidjs/router";
 import { createEffect, createSignal, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { useAuth } from "~/lib/auth";
-import { cookieConsentSettled } from "~/lib/cookieConsent";
+import { matchesAudience } from "~/lib/marketingAudience";
+import { useProductCatalog } from "~/lib/productCatalog";
+import { cookieBarAllowed, cookieConsentSettled, releaseCookieBar } from "~/lib/cookieConsent";
 import {
   hidePromoForever,
   isPopupOnPage,
@@ -20,7 +22,7 @@ import { MediaView } from "../shared/MediaView";
 import { Button } from "../shared/Button";
 import { CheckIcon, CloseMark } from "../shared/icons";
 
-/** Pause between the cookie choice (or page load, for a returning visitor) and the popup. */
+/** Pause between page load and the popup. */
 const POPUP_DELAY_MS = 1200;
 
 /**
@@ -52,7 +54,11 @@ export function PromoPopup(props: { content?: PromoPopupContent }) {
   const [mounted, setMounted] = createSignal(false);
   onMount(() => setMounted(true));
 
-  const guestsOnly = () => content().audience === "guests";
+  // Who is shopping (guest / new / returning, tier): same กลุ่มลูกค้า check as promotions and coupons.
+  const catalog = useProductCatalog();
+  // No button link = a sign-up offer: the button opens sign-in / sign-up, so signed-in members never see it.
+  const signUpOffer = (p: PromoPopupContent) => !p.ctaUrl;
+  const forThisShopper = (p: PromoPopupContent) => matchesAudience(p.audience, catalog.shopper()) && !(signUpOffer(p) && auth.isAuthenticated());
   const mayShow = (p: PromoPopupRecord, pathname: string) =>
     !p.draft &&
     p.enabled &&
@@ -60,24 +66,27 @@ export function PromoPopup(props: { content?: PromoPopupContent }) {
     isPopupOnPage(p.pages, pathname) &&
     !isPromoHidden(p.id) &&
     !wasPromoShownToday(p.id) &&
-    !(p.audience === "guests" && auth.isAuthenticated());
+    forThisShopper(p);
   const pickFor = (pathname: string) => stored().find((p) => mayShow(p, pathname));
 
   // Client-only (after mount), re-checked on every page change: a popup can
   // be set to a page the visitor only reaches later in the visit.
-  // Cookie bar first: the popup waits until the visitor has made a cookie choice (or made one on an earlier
-  // visit), then opens after a short pause so the two never land at once.
+  // Popup first, cookie bar second: the bar waits until the popup is closed, or until this page turns out to
+  // have no popup for this visitor. Once the bar is up, a popup that becomes due later waits for the cookie choice.
   let openTimer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(openTimer));
   const canOpenOn = (pathname: string) =>
     !open() && !pathname.startsWith("/admin") && !!pickFor(pathname) && !auth.isAuthModalOpen() && !document.querySelector('[role="dialog"]');
   createEffect(
-    on([mounted, cookieConsentSettled, () => location.pathname, stored], ([isMounted, settled, pathname]) => {
+    // The shopper is a dependency too: a member's orders load after mount, which can turn them from "new" into "returning".
+    on([mounted, cookieConsentSettled, cookieBarAllowed, () => location.pathname, stored, catalog.shopper], ([isMounted, settled, barAllowed, pathname]) => {
       clearTimeout(openTimer);
-      if (!isMounted || !settled || !canOpenOn(pathname)) return;
+      if (!isMounted || open()) return;
+      if (barAllowed && !settled) return; // the cookie bar is up: it goes first now
+      if (!canOpenOn(pathname)) return releaseCookieBar();
       openTimer = setTimeout(() => {
         // Re-check: the visitor may have moved on, signed in or opened another dialog meanwhile.
-        if (!canOpenOn(location.pathname)) return;
+        if (!canOpenOn(location.pathname)) return releaseCookieBar();
         const next = pickFor(location.pathname)!;
         setNeverAgain(false);
         setPicked(next);
@@ -86,10 +95,12 @@ export function PromoPopup(props: { content?: PromoPopupContent }) {
       }, POPUP_DELAY_MS);
     }),
   );
-  // A new-member offer: signed-in members never see it (also covers the session restoring just after mount).
+  // However it closes (×, overlay, button, "ไม่ต้องแสดงอีก", or signing in), the cookie bar comes next.
+  createEffect(on(open, (isOpen, wasOpen) => wasOpen && !isOpen && releaseCookieBar(), { defer: true }));
+  // Re-checked while open: covers the session restoring just after mount, or signing in from the popup's own button.
   createEffect(() => {
-    if (!open()) return;
-    if (guestsOnly() && auth.isAuthenticated()) setOpen(false);
+    if (!open() || props.content) return;
+    if (!forThisShopper(content())) setOpen(false);
   });
 
   const close = () => {
@@ -99,8 +110,8 @@ export function PromoPopup(props: { content?: PromoPopupContent }) {
 
   const onCta = () => {
     close();
-    if (guestsOnly()) auth.openAuthModal();
-    else if (content().ctaUrl) {
+    if (signUpOffer(content())) auth.openAuthModal();
+    else {
       const url = content().ctaUrl!;
       if (/^https?:\/\//.test(url)) window.open(url, "_blank", "noopener,noreferrer");
       else navigate(url);

@@ -4,6 +4,7 @@ import { Toggle } from "~/components/admin/Toggle";
 import { INFO_PAGES } from "~/lib/siteInfo";
 import {
   COOKIE_CATEGORIES,
+  cookieBarAllowed,
   cookieSettingsOpen,
   markCookieConsentSettled,
   readCookieConsent,
@@ -16,7 +17,7 @@ import { SheetModal } from "./SheetModal";
 
 /**
  * PDPA cookie consent: a bar pinned to the bottom of every storefront page
- * until the visitor chooses (accept all / necessary only / custom), plus the
+ * (after the promo popup is closed, see `releaseCookieBar`) until the visitor chooses (accept all / necessary only / custom), plus the
  * settings sheet, which the Footer's "ตั้งค่าคุกกี้" also opens later.
  * Client-only (shown after mount), never on /admin.
  */
@@ -48,7 +49,7 @@ export function CookieConsent() {
 
   return (
     <Show when={onStorefront()}>
-      <Show when={!decided()}>
+      <Show when={!decided() && cookieBarAllowed()}>
         <div class="fixed inset-x-0 bottom-0 z-[45] p-3 sm:p-4" role="region" aria-label="การใช้คุกกี้">
           <div class="mx-auto flex max-w-[1140px] flex-col gap-4 rounded-card border border-border bg-white p-4 shadow-card sm:p-5 lg:flex-row lg:items-center lg:gap-8">
             <div class="flex min-w-0 flex-1 flex-col gap-1">

@@ -5,6 +5,7 @@ import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
 import { AdminFormPreviewLayout } from "~/components/admin/AdminFormPreviewLayout";
 import { SelectField } from "~/components/admin/SelectField";
+import { AudienceField, audienceError, fromAudienceDraft, toAudienceDraft } from "~/components/admin/marketing/MarketingFormBlocks";
 import { MediaUploader } from "~/components/admin/MediaUploader";
 import { StatusBadge, type StatusTone } from "~/components/admin/StatusBadge";
 import { Toggle } from "~/components/admin/Toggle";
@@ -17,13 +18,11 @@ import {
   readStoredPromoPopups,
   saveStoredPromoPopups,
   type PromoPopupRecord,
-  PROMO_POPUP_AUDIENCE_META,
   PROMO_POPUP_MEDIA_SIZE,
   normalizePopupPath,
   promoPopupFingerprint,
   promoPopupMediaValue,
   withPromoPopupMediaValue,
-  type PromoPopupAudience,
   type PromoPopupContent,
 } from "~/lib/promoPopup";
 import { pushToast } from "~/lib/toast";
@@ -63,6 +62,7 @@ const LABELS: Record<string, string> = {
   title: "หัวข้อ",
   ctaLabel: "ข้อความบนปุ่ม",
   ctaUrl: "ลิงก์ของปุ่ม",
+  audience: "กลุ่มลูกค้า",
   endsAt: "สิ้นสุด",
 };
 
@@ -128,10 +128,12 @@ export function PopupEditor(props: { initial?: PromoPopupRecord; onCancel: () =>
     else if (d.media.type === "video" && !d.media.poster) e.media = "วิดีโอต้องมีภาพปก กรุณาอัปโหลดภาพปกวิดีโอ";
     if (!d.title.trim()) e.title = "กรุณากรอกหัวข้อ";
     if (!d.ctaLabel.trim()) e.ctaLabel = "กรุณากรอกข้อความบนปุ่ม";
-    if (d.audience === "everyone") {
-      if (!d.ctaUrl?.trim()) e.ctaUrl = "กรุณากรอกลิงก์ของปุ่ม";
-      else if (!isValidHref(d.ctaUrl)) e.ctaUrl = "ลิงก์ต้องขึ้นต้นด้วย / หรือ https://";
-    }
+    if (d.ctaUrl?.trim() && !isValidHref(d.ctaUrl)) e.ctaUrl = "ลิงก์ต้องขึ้นต้นด้วย / หรือ https://";
+    // ลูกค้าเก่า / เฉพาะระดับ are signed-in members, and an empty link is a sign-up offer members never see.
+    else if (!d.ctaUrl?.trim() && (d.audience?.kind === "returning" || d.audience?.kind === "tiers"))
+      e.ctaUrl = "กลุ่มลูกค้านี้เป็นสมาชิกที่เข้าสู่ระบบแล้ว กรุณากรอกลิงก์ของปุ่ม";
+    const audienceProblem = audienceError(toAudienceDraft(d.audience));
+    if (audienceProblem) e.audience = audienceProblem;
     if (d.startsAt && d.endsAt && new Date(d.endsAt).getTime() <= new Date(d.startsAt).getTime()) e.endsAt = "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม";
     return e;
   });
@@ -163,7 +165,7 @@ export function PopupEditor(props: { initial?: PromoPopupRecord; onCancel: () =>
         description: d.description.trim(),
         condition: d.condition?.trim() || undefined,
         ctaLabel: d.ctaLabel.trim(),
-        ctaUrl: d.audience === "everyone" ? d.ctaUrl?.trim() : undefined,
+        ctaUrl: d.ctaUrl?.trim() || undefined,
         media: { ...d.media, alt: d.media.alt.trim() },
         pages: [...d.pages],
         startsAt: d.startsAt || undefined,
@@ -250,19 +252,17 @@ export function PopupEditor(props: { initial?: PromoPopupRecord; onCancel: () =>
         <p class="-mt-2 text-xs text-ink-gray">แสดงเป็นป้ายสีชมพูใต้รายละเอียด เว้นว่างได้</p>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField label="ข้อความบนปุ่ม" required value={draft().ctaLabel} data-field="ctaLabel" error={err("ctaLabel")} disabled={saving()} onInput={(e) => set("ctaLabel", e.currentTarget.value)} />
-          <Show when={draft().audience === "everyone"}>
-            <TextField
-              label="ลิงก์ของปุ่ม"
-              required
-              placeholder="/promotion/promotions"
-              value={draft().ctaUrl ?? ""}
-              data-field="ctaUrl"
-              error={err("ctaUrl")}
-              disabled={saving()}
-              onInput={(e) => set("ctaUrl", e.currentTarget.value)}
-            />
-          </Show>
+          <TextField
+            label="ลิงก์ของปุ่ม"
+            placeholder="/promotion/promotions"
+            value={draft().ctaUrl ?? ""}
+            data-field="ctaUrl"
+            error={err("ctaUrl")}
+            disabled={saving()}
+            onInput={(e) => set("ctaUrl", e.currentTarget.value)}
+          />
         </div>
+        <p class="-mt-2 text-xs text-ink-gray">เว้นลิงก์ว่างได้ ปุ่มจะเปิดหน้าต่างสมัครสมาชิก / เข้าสู่ระบบ และสมาชิกที่เข้าสู่ระบบแล้วจะไม่เห็น Popup นี้</p>
       </Section>
 
       <Section title="ช่วงเวลาแสดง">
@@ -286,13 +286,12 @@ export function PopupEditor(props: { initial?: PromoPopupRecord; onCancel: () =>
         <p class="-mt-2 text-xs text-ink-gray">
           ขึ้นวันละ 1 ครั้ง ตอนลูกค้าเปิดหน้าที่เลือกไว้ครั้งแรกของวัน ปิดแล้วจะขึ้นอีกครั้งในการเข้าเว็บวันถัดไป ถ้าติ๊ก "ไม่ต้องแสดงอีก" ลูกค้าคนนั้นจะไม่เห็น Popup นี้อีก
         </p>
-        <SelectField
-          label="ใครเห็น Popup นี้"
-          value={draft().audience}
-          options={(Object.keys(PROMO_POPUP_AUDIENCE_META) as PromoPopupAudience[]).map((value) => ({ value, label: PROMO_POPUP_AUDIENCE_META[value].label }))}
-          onChange={(v) => set("audience", v as PromoPopupAudience)}
+        {/* Same กลุ่มลูกค้า field as promotions, coupons and flash sales. */}
+        <AudienceField
+          value={toAudienceDraft(draft().audience)}
+          onChange={(next) => set("audience", fromAudienceDraft(next))}
+          error={err("audience")}
           disabled={saving()}
-          hint={PROMO_POPUP_AUDIENCE_META[draft().audience].hint}
         />
       </Section>
 

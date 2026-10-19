@@ -1,4 +1,5 @@
 import { createSignal, onCleanup, onMount, type Accessor } from "solid-js";
+import { normalizeAudience, type Audience } from "./marketingAudience";
 import membershipBg from "~/assets/images/membership/membership-bg.png";
 import { isVideoMedia, mediaSrc, type MediaValue } from "./media";
 
@@ -10,7 +11,6 @@ import { isVideoMedia, mediaSrc, type MediaValue } from "./media";
  * popup a new id whenever its content changes, so a new campaign shows again
  * even to someone who hid the previous one.
  */
-export type PromoPopupAudience = "guests" | "everyone";
 
 /**
  * Image or MP4 video (`~/lib/media` rules). Old saved popups have no `type`
@@ -43,12 +43,12 @@ export type PromoPopupContent = {
   /** Code / condition line, e.g. "ใช้โค้ด SAVE100 ขั้นต่ำ ฿2,000". */
   condition?: string;
   ctaLabel: string;
+  /** กลุ่มลูกค้า, same choices as promotions and coupons (`matchesAudience`). Unset = everyone. */
+  audience?: Audience;
   /**
-   * `guests`: new-member offer, signed-in members never see it and the CTA
-   * opens the sign-in / sign-up modal. `everyone`: shown to all, the CTA goes
-   * to `ctaUrl`.
+   * Where the button goes. Empty = a sign-up offer: the button opens the
+   * sign-in / sign-up modal, and signed-in members never see the popup.
    */
-  audience: PromoPopupAudience;
   ctaUrl?: string;
   /**
    * Storefront paths the popup opens on, e.g. "/", "/promotion/9-9-beauty-sale".
@@ -76,11 +76,6 @@ export type PromoPopupRecord = PromoPopupContent & {
   draft?: boolean;
 };
 
-export const PROMO_POPUP_AUDIENCE_META: Record<PromoPopupAudience, { label: string; hint: string }> = {
-  guests: { label: "ผู้ที่ยังไม่ได้เป็นสมาชิก", hint: "สมาชิกที่เข้าสู่ระบบแล้วจะไม่เห็น ปุ่มจะเปิดหน้าต่างสมัครสมาชิก / เข้าสู่ระบบ" },
-  everyone: { label: "ทุกคน", hint: "แสดงทั้งลูกค้าทั่วไปและสมาชิก ปุ่มจะพาไปยังลิงก์ที่กำหนด" },
-};
-
 export const HOME_PROMO_POPUP: PromoPopupContent = {
   id: "new-member-100",
   enabled: true,
@@ -88,7 +83,7 @@ export const HOME_PROMO_POPUP: PromoPopupContent = {
   title: "สมาชิกใหม่รับส่วนลด ฿100",
   description: "สมัคร Charmiss Club วันนี้ รับคูปองส่วนลดทันที\nพร้อมสะสมคอยน์ทุกการช้อป",
   ctaLabel: "สมัครสมาชิกเลย",
-  audience: "guests",
+  audience: { kind: "new" },
   pages: ["/"],
 };
 
@@ -126,7 +121,7 @@ export const PROMO_POPUP_CHANGED_EVENT = "charmiss:promo-popup-changed";
 
 /** The fields a customer sees: any change here means a new campaign (new id). */
 export function promoPopupFingerprint(c: PromoPopupContent): string {
-  return JSON.stringify([c.media.src, c.media.type ?? "image", c.media.poster ?? "", !!c.media.hasAudio, c.media.alt, c.title, c.description, c.condition ?? "", c.ctaLabel, c.audience, c.ctaUrl ?? ""]);
+  return JSON.stringify([c.media.src, c.media.type ?? "image", c.media.poster ?? "", !!c.media.hasAudio, c.media.alt, c.title, c.description, c.condition ?? "", c.ctaLabel, c.audience ?? null, c.ctaUrl ?? ""]);
 }
 
 export const newPromoPopupId = () => `popup-${Date.now().toString(36)}`;
@@ -139,10 +134,17 @@ export function normalizePromoPopup(raw: Partial<PromoPopupContent> | undefined)
     ...raw,
     media: normalizeMediaFields({ ...seed.media, ...raw.media }),
     enabled: raw.enabled !== false,
-    audience: raw.audience === "everyone" ? "everyone" : "guests",
+    audience: normalizePopupAudience(raw.audience),
     // Saved before page targeting existed: it was a Home-only popup.
     pages: Array.isArray(raw.pages) ? [...new Set(raw.pages.map(normalizePopupPath).filter(Boolean))] : [...seed.pages],
   };
+}
+
+/** Saved before popups used the promotions' customer groups: "guests" (non-members) reads as ลูกค้าใหม่, "everyone" as ทั้งหมด. */
+function normalizePopupAudience(raw: unknown): Audience | undefined {
+  if (raw === "guests") return { kind: "new" };
+  if (raw === "everyone" || !raw || typeof raw !== "object") return undefined;
+  return normalizeAudience(raw as Audience);
 }
 
 function normalizeMediaFields(m: PromoPopupMedia): PromoPopupMedia {

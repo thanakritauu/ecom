@@ -74,9 +74,18 @@ export const setCookieSettingsOpen = setSettingsOpen;
 
 /**
  * `true` once the visitor has made a cookie choice (stored from an earlier
- * visit, or just now). The promo popup waits for it, so the cookie bar always
- * comes first and the two never show at the same time.
+ * visit, or just now). A popup that only becomes due later (e.g. a member's
+ * orders load) waits for it, so the cookie bar and the popup never show at once.
  */
 const [consentSettled, setConsentSettled] = createSignal(false);
 export const cookieConsentSettled = consentSettled;
 export const markCookieConsentSettled = () => setConsentSettled(true);
+
+/**
+ * Popup first, cookie bar second: the bar stays hidden until the promo popup
+ * has been closed (× / overlay / button / "ไม่ต้องแสดงอีก"), or the popup has
+ * found nothing to show on this page.
+ */
+const [cookieBarReleased, setCookieBarReleased] = createSignal(false);
+export const cookieBarAllowed = cookieBarReleased;
+export const releaseCookieBar = () => setCookieBarReleased(true);
