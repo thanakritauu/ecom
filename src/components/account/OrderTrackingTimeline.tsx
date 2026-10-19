@@ -3,7 +3,7 @@ import type { Shipment } from "~/lib/types";
 import { CARRIERS, getCarrierTrackingUrl } from "~/lib/carriers";
 import { buildTrackingTimeline, formatEventTime, type TimelineEntry } from "~/lib/orderTracking";
 import dhlLogo from "~/assets/icons/dhl-logo-circle.png";
-import { CheckBadge } from "../shared/icons";
+import { CheckBadge, CheckIcon, CopyIcon } from "../shared/icons";
 
 /**
  * Phase 05 — "ติดตามการจัดส่ง". Everything is shown on the Charmiss site:
@@ -57,10 +57,18 @@ export function OrderTrackingTimeline(props: { shipment: Shipment; /** Order tit
               fallback={<p class="text-xs text-ink-gray">จะได้รับเลขพัสดุเมื่อส่งมอบสินค้าให้ {carrier().name}</p>}
             >
               {(n) => (
-                <p class="flex flex-wrap items-center gap-x-2 text-sm text-ink-gray">
+                <p class="flex flex-wrap items-center gap-x-1 text-sm text-ink-gray">
                   Tracking Number: <span class="font-semibold tracking-wide text-ink">{n()}</span>
-                  <button type="button" onClick={copyTrackingNumber} class="min-h-8 text-xs font-medium text-brand-pink underline">
-                    {copied() ? "คัดลอกแล้ว" : "คัดลอก"}
+                  {/* Same copy button as the order number on the order detail page */}
+                  <button
+                    type="button"
+                    onClick={copyTrackingNumber}
+                    aria-label={copied() ? "คัดลอกเลขพัสดุแล้ว" : "คัดลอกเลขพัสดุ"}
+                    class="flex size-8 shrink-0 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 lg:hover:bg-surface-pink lg:hover:text-brand-pink"
+                  >
+                    <Show when={copied()} fallback={<CopyIcon class="size-4" />}>
+                      <CheckIcon class="size-4 text-success" />
+                    </Show>
                   </button>
                 </p>
               )}
