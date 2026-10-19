@@ -108,3 +108,9 @@ export function formatOrderDate(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("th-TH", { timeZone: TZ, day: "2-digit", month: "short", year: "numeric" });
 }
+
+/** "01 ต.ค. 2569 14:32" (order headers) */
+export function formatOrderDateTime(iso: string): string {
+  const date = formatOrderDate(iso);
+  return date && `${date} ${new Date(iso).toLocaleTimeString("th-TH", { timeZone: TZ, hour: "2-digit", minute: "2-digit" })}`;
+}

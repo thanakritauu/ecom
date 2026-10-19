@@ -19,7 +19,7 @@ import { computeCoinsEarned } from "~/lib/cartSelectors";
 import { formatAddress } from "~/lib/checkoutData";
 import { canReviewOrder, createMockOrderRepository, createOrderHistory, getOrderRating, isOrderReviewed } from "~/lib/orderHistory";
 import { resolveTier, yearlySpend, type TierId } from "~/lib/membership";
-import { formatEventTime, formatOrderDate } from "~/lib/orderTracking";
+import { formatEventTime, formatOrderDateTime } from "~/lib/orderTracking";
 import type { Order } from "~/lib/types";
 
 // Same Kobalte Dialog SSR/hydration workaround as ProductCard's QuickAddSheet.
@@ -69,11 +69,11 @@ function OrderDetail(props: {
     if (location.hash === "#tracking") document.getElementById("tracking")?.scrollIntoView({ block: "start" });
   });
 
-  // Order number + date. No status badge here — the current status is the tracking box's hero (or the banner above when there's no tracking).
+  // Same header text as the Purchase History card: "คำสั่งซื้อ วันที่ ..." then the order number. No status badge here — the current status is the tracking box's hero (or the banner above when there's no tracking).
   const title = (
     <div>
-      <h1 class="text-xl font-bold text-ink sm:text-2xl">คำสั่งซื้อ {props.order.id}</h1>
-      <p class="text-sm text-ink-gray">สั่งซื้อเมื่อ {formatEventTime(props.order.placedAt) || formatOrderDate(props.order.placedAt)}</p>
+      <h1 class="text-xl font-bold text-ink sm:text-2xl">คำสั่งซื้อ วันที่ {formatOrderDateTime(props.order.placedAt)}</h1>
+      <p class="text-sm text-ink-gray">{props.order.id}</p>
     </div>
   );
 

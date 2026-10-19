@@ -5,7 +5,7 @@ import type { Order, OrderItem } from "~/lib/types";
 import { CARRIERS } from "~/lib/carriers";
 import { canReviewOrder, getOrderRating, isOrderReviewed } from "~/lib/orderHistory";
 import { getPaymentDeadline } from "~/lib/accountData";
-import { formatEventTime, formatOrderDate, getOrderDisplayStatus } from "~/lib/orderTracking";
+import { formatEventTime, formatOrderDateTime, getOrderDisplayStatus } from "~/lib/orderTracking";
 import { formatTHB } from "../shared/PriceDisplay";
 import { CheckIcon, GiftIcon } from "../shared/icons";
 import { ReviewStars } from "./OrderMeta";
@@ -13,7 +13,7 @@ import { ReviewStars } from "./OrderMeta";
 // Same Kobalte Dialog SSR/hydration workaround as ProductCard's QuickAddSheet.
 const OrderReviewDialog = clientOnly(() => import("./OrderReviewDialog").then((m) => ({ default: m.OrderReviewDialog })));
 
-const PILL = "flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-pill px-3 text-xs font-medium transition-colors duration-150";
+const PILL = "relative z-10 flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-pill px-3 text-xs font-medium transition-colors duration-150";
 const PILL_PRIMARY = `${PILL} bg-brand-pink text-white lg:hover:bg-brand-pink/90`;
 const PILL_OUTLINE = `${PILL} border border-brand-pink bg-white text-brand-pink lg:hover:bg-surface-pink`;
 
@@ -41,17 +41,27 @@ export function OrderCard(props: { order: Order }) {
   const [reviewOpen, setReviewOpen] = createSignal(false);
 
   return (
-    <article class="flex w-full flex-col gap-3 rounded-2xl border border-surface-gray p-4">
+    <article class="relative flex w-full flex-col gap-3 rounded-2xl border border-surface-gray p-4 transition-colors duration-150 lg:hover:border-brand-pink/40">
+      {/* "คำสั่งซื้อ วันที่ ..." on top, then the order number with the piece count at the far right.
+          The date link stretches over the whole card, so tapping anywhere opens the order; the buttons sit above it. */}
       <div class="flex flex-col gap-0.5">
-        <A href={detailHref()} class="text-base font-semibold text-ink lg:hover:text-brand-pink">
-          คำสั่งซื้อ {props.order.id}
-        </A>
-        <p class="text-sm text-ink-gray">
-          {formatOrderDate(props.order.placedAt)} จำนวน {itemCount()} ชิ้น
+        <p class="text-base font-semibold text-ink">
+          คำสั่งซื้อ วันที่{" "}
+          <A
+            href={detailHref()}
+            aria-label={`ดูรายละเอียดคำสั่งซื้อ ${props.order.id}`}
+            class="after:absolute after:inset-0 after:rounded-2xl after:content-[''] lg:hover:text-brand-pink"
+          >
+            {formatOrderDateTime(props.order.placedAt)}
+          </A>
         </p>
+        <div class="flex items-baseline justify-between gap-3">
+          <span class="min-w-0 truncate text-sm text-ink-gray">{props.order.id}</span>
+          <span class="shrink-0 text-sm text-ink-gray">{itemCount()} ชิ้น</span>
+        </div>
       </div>
 
-      <A href={detailHref()} class="flex flex-col gap-2" aria-label={`ดูรายละเอียดคำสั่งซื้อ ${props.order.id}`}>
+      <div class="flex flex-col gap-2">
         <For each={props.order.items.slice(0, MAX_ITEMS_SHOWN)}>
           {(item) => (
             <div class="flex items-center gap-3">
@@ -67,7 +77,7 @@ export function OrderCard(props: { order: Order }) {
         <Show when={props.order.items.length > MAX_ITEMS_SHOWN}>
           <p class="text-xs text-ink-gray">และสินค้าอีก {props.order.items.length - MAX_ITEMS_SHOWN} รายการ</p>
         </Show>
-      </A>
+      </div>
 
       {/* The order's one status line — order status until DHL has it, then DHL's own status; tracking lives here too */}
       <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-surface-gray/60 py-2 pl-3 pr-2 text-sm">
