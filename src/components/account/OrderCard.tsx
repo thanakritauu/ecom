@@ -5,7 +5,7 @@ import type { Order, OrderItem } from "~/lib/types";
 import { CARRIERS } from "~/lib/carriers";
 import { canReviewOrder, getOrderRating, isOrderReviewed } from "~/lib/orderHistory";
 import { getPaymentDeadline } from "~/lib/accountData";
-import { formatEventTime, formatOrderDateTime, getOrderDisplayStatus } from "~/lib/orderTracking";
+import { formatEventTime, formatOrderDate, getOrderDisplayStatus } from "~/lib/orderTracking";
 import { formatTHB } from "../shared/PriceDisplay";
 import { CheckIcon, GiftIcon } from "../shared/icons";
 import { ReviewStars } from "./OrderMeta";
@@ -42,23 +42,20 @@ export function OrderCard(props: { order: Order }) {
 
   return (
     <article class="relative flex w-full flex-col gap-3 rounded-2xl border border-surface-gray p-4 transition-colors duration-150 lg:hover:border-brand-pink/40">
-      {/* "คำสั่งซื้อ วันที่ ..." on top, then the order number with the piece count at the far right.
+      {/* "คำสั่งซื้อ วันที่ ..." with the piece count at the far right (order number lives on the detail page).
           The date link stretches over the whole card, so tapping anywhere opens the order; the buttons sit above it. */}
-      <div class="flex flex-col gap-0.5">
-        <p class="text-base font-semibold text-ink">
+      <div class="flex items-baseline justify-between gap-3">
+        <p class="min-w-0 text-base font-semibold text-ink">
           คำสั่งซื้อ วันที่{" "}
           <A
             href={detailHref()}
             aria-label={`ดูรายละเอียดคำสั่งซื้อ ${props.order.id}`}
             class="after:absolute after:inset-0 after:rounded-2xl after:content-[''] lg:hover:text-brand-pink"
           >
-            {formatOrderDateTime(props.order.placedAt)}
+            {formatOrderDate(props.order.placedAt)}
           </A>
         </p>
-        <div class="flex items-baseline justify-between gap-3">
-          <span class="min-w-0 truncate text-sm text-ink-gray">{props.order.id}</span>
-          <span class="shrink-0 text-sm text-ink-gray">{itemCount()} ชิ้น</span>
-        </div>
+        <span class="shrink-0 text-sm text-ink-gray">{itemCount()} ชิ้น</span>
       </div>
 
       <div class="flex flex-col gap-2">

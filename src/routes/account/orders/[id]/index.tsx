@@ -7,7 +7,7 @@ import { Container } from "~/components/shared/Container";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { Button } from "~/components/shared/Button";
 import { ChevronIcon } from "~/components/shared/ChevronIcon";
-import { CheckIcon } from "~/components/shared/icons";
+import { CheckIcon, CopyIcon } from "~/components/shared/icons";
 import { formatTHB } from "~/components/shared/PriceDisplay";
 import { AccountGuestPrompt } from "~/components/account/AccountGuestPrompt";
 import { OrderTrackingTimeline } from "~/components/account/OrderTrackingTimeline";
@@ -69,11 +69,32 @@ function OrderDetail(props: {
     if (location.hash === "#tracking") document.getElementById("tracking")?.scrollIntoView({ block: "start" });
   });
 
-  // Same header text as the Purchase History card: "คำสั่งซื้อ วันที่ ..." then the order number. No status badge here — the current status is the tracking box's hero (or the banner above when there's no tracking).
+  const [copied, setCopied] = createSignal(false);
+  const copyOrderId = async () => {
+    try {
+      await navigator.clipboard.writeText(props.order.id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
+
+  // "คำสั่งซื้อ วันที่ ..." (with time), then the order number with a copy button. No status badge here — the current status is the tracking box's hero (or the banner above when there's no tracking).
   const title = (
     <div>
       <h1 class="text-xl font-bold text-ink sm:text-2xl">คำสั่งซื้อ วันที่ {formatOrderDateTime(props.order.placedAt)}</h1>
-      <p class="text-sm text-ink-gray">{props.order.id}</p>
+      <p class="flex items-center gap-1 text-sm text-ink-gray">
+        เลขที่ออเดอร์: <span class="text-ink">{props.order.id}</span>
+        <button
+          type="button"
+          onClick={copyOrderId}
+          aria-label={copied() ? "คัดลอกเลขที่ออเดอร์แล้ว" : "คัดลอกเลขที่ออเดอร์"}
+          class="flex size-8 shrink-0 items-center justify-center rounded-pill text-ink-gray transition-colors duration-150 lg:hover:bg-surface-pink lg:hover:text-brand-pink"
+        >
+          <Show when={copied()} fallback={<CopyIcon class="size-4" />}>
+            <CheckIcon class="size-4 text-success" />
+          </Show>
+        </button>
+      </p>
     </div>
   );
 
