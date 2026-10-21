@@ -106,7 +106,10 @@ export default function AdminOrderReceiptPage() {
                 </p>
                 <p class="text-xs text-ink-gray">{SELLER.address}</p>
                 <p class="text-xs text-ink-gray">
-                  เลขประจำตัวผู้เสียภาษี <span class="whitespace-nowrap">{formatTaxId(SELLER.taxId)}</span> โทร{" "}
+                  <Show when={SELLER.taxId}>
+                    เลขประจำตัวผู้เสียภาษี <span class="whitespace-nowrap">{formatTaxId(SELLER.taxId)}</span>{" "}
+                  </Show>
+                  โทร{" "}
                   <span class="whitespace-nowrap">{SELLER.phone}</span>
                 </p>
               </div>

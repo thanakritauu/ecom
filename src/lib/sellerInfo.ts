@@ -1,13 +1,13 @@
 /**
- * The shop as printed on receipts and tax invoices. Name and address are the
- * owner's; `taxId` and `phone` are still placeholders to replace before going live.
+ * The shop as printed on receipts and tax invoices (the owner's details).
  */
 export const SELLER = {
   name: "บริษัท บีไทม์ บิวตี้ เฮ้าส์ จำกัด",
   branch: "สำนักงานใหญ่",
-  taxId: "0105569012345",
+  /** เลขทะเบียนนิติบุคคล = เลขประจำตัวผู้เสียภาษี. Empty would hide the line. */
+  taxId: "0105563061352",
   address: "188/49 โครงการ DRAGON TOWN อาคาร C14 ถนนจรัสเมือง แขวงวังใหม่ เขตปทุมวัน กรุงเทพมหานคร 10330",
-  phone: "02-000-1234",
+  phone: "061-172-7257",
 };
 
 /** Storefront prices include 7% VAT. */

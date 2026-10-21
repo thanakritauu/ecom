@@ -57,7 +57,7 @@ export function buildOrderReceiptHtml(data: ReceiptData, formatCurrency: (n: num
 <body>
   <h1>CHARMISS</h1>
   <div><strong>${escapeHtml(data.documentTitle)}</strong></div>
-  <div class="muted">${escapeHtml(SELLER.name)} (${escapeHtml(SELLER.branch)})<br>${escapeHtml(SELLER.address)}<br>เลขประจำตัวผู้เสียภาษี ${escapeHtml(formatTaxId(SELLER.taxId))} โทร ${escapeHtml(SELLER.phone)}</div>
+  <div class="muted">${escapeHtml(SELLER.name)} (${escapeHtml(SELLER.branch)})<br>${escapeHtml(SELLER.address)}<br>${SELLER.taxId ? `เลขประจำตัวผู้เสียภาษี ${escapeHtml(formatTaxId(SELLER.taxId))} ` : ""}โทร ${escapeHtml(SELLER.phone)}</div>
   <div class="row">
     <div>
       <div><strong>เลขที่:</strong> ${escapeHtml(data.receiptNumber)}</div>
