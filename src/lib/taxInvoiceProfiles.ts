@@ -85,6 +85,10 @@ export function upsertTaxInvoiceProfile(state: AddressMockState, profile: TaxInv
 
 export const setDefaultTaxInvoiceProfile = (state: AddressMockState, id: string) => write(state, withDefaultTaxInvoiceProfile(readTaxInvoiceProfiles(state), id));
 
+/** Removing the default hands the flag to the next entry (as removing the default shipping address does). */
+export const removeTaxInvoiceProfile = (state: AddressMockState, id: string) =>
+  write(state, ordered(withSingleDefault(readTaxInvoiceProfiles(state).filter((p) => p.id !== id))));
+
 function write(state: AddressMockState, list: TaxInvoiceProfile[]): TaxInvoiceProfile[] {
   try {
     localStorage.setItem(keyFor(state), JSON.stringify(list));

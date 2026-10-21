@@ -29,6 +29,8 @@ export function TaxInvoiceSheet(props: {
   shippingAddress?: Address;
   onSaveAddress: (address: Address, opts: { makeDefault: boolean }) => Promise<Address>;
   accountEmail: string;
+  /** Account page: the popup is only the add / edit form (the page lists the entries), so ยกเลิก closes it. */
+  formOnly?: boolean;
 }) {
   const [view, setView] = createSignal<TaxInvoiceSheetView>(props.view);
   const [draft, setDraft] = createSignal<TaxInvoiceDraft>(emptyTaxInvoiceDraft());
@@ -127,7 +129,7 @@ export function TaxInvoiceSheet(props: {
     props.onOpenChange(false);
   };
 
-  const backFromForm = () => (props.profiles.length > 0 ? setView({ kind: "list" }) : props.onOpenChange(false));
+  const backFromForm = () => (props.profiles.length > 0 && !props.formOnly ? setView({ kind: "list" }) : props.onOpenChange(false));
 
   const addressOf = (p: TaxInvoiceProfile) => props.addresses.find((a) => a.id === p.addressId) ?? props.shippingAddress;
 
