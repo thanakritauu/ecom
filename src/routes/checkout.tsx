@@ -24,11 +24,19 @@ import { resolveTier, yearlySpend } from "~/lib/membership";
 import { useProductCatalog } from "~/lib/productCatalog";
 import { useCartPromotions, useStorefrontPromotions } from "~/lib/storefrontPromotions";
 import { formatTHB } from "~/components/shared/PriceDisplay";
-import { AddressSection } from "~/components/checkout/AddressSection";
+import { AddressCard } from "~/components/checkout/AddressSection";
+import type { ShippingAddressSheetView } from "~/components/checkout/ShippingAddressSheet";
 import { TaxInvoiceSummary } from "~/components/checkout/TaxInvoiceFields";
 import type { TaxInvoiceSheetView } from "~/components/checkout/TaxInvoiceSheet";
 import { clientOnly } from "@solidjs/start";
-import { mergeTaxInvoiceProfile, readTaxInvoiceProfiles, upsertTaxInvoiceProfile, type TaxInvoiceProfile } from "~/lib/taxInvoiceProfiles";
+import {
+  mergeTaxInvoiceProfile,
+  readTaxInvoiceProfiles,
+  setDefaultTaxInvoiceProfile,
+  upsertTaxInvoiceProfile,
+  withDefaultTaxInvoiceProfile,
+  type TaxInvoiceProfile,
+} from "~/lib/taxInvoiceProfiles";
 import { PaymentSection } from "~/components/checkout/PaymentSection";
 import { createCheckoutPayment, type PaidResult } from "~/components/checkout/checkoutPayment";
 import { generateOrderNumber } from "~/lib/orderNumber";
@@ -46,6 +54,7 @@ import { focusFirstInvalid } from "~/lib/validators";
  */
 
 // Same Kobalte Dialog SSR/hydration workaround as the coupon / coin sheets.
+const ShippingAddressSheet = clientOnly(() => import("~/components/checkout/ShippingAddressSheet").then((m) => ({ default: m.ShippingAddressSheet })));
 const TaxInvoiceSheet = clientOnly(() => import("~/components/checkout/TaxInvoiceSheet").then((m) => ({ default: m.TaxInvoiceSheet })));
 export default function CheckoutPage() {
   const cart = useCart();
@@ -75,7 +84,13 @@ export default function CheckoutPage() {
   const shippingAddresses = () => addressBook.addresses().filter((a) => a.kind !== "billing");
   const selectedAddressId = () =>
     shippingAddresses().some((a) => a.id === pickedShippingId()) ? pickedShippingId() : addressBook.defaultAddress()?.id;
-  const [shippingFormOpen, setShippingFormOpen] = createSignal(false);
+  // "เปลี่ยน" on the address card (or "+ เพิ่มที่อยู่จัดส่ง" with none yet) opens `ShippingAddressSheet`.
+  const [shippingSheetOpen, setShippingSheetOpen] = createSignal(false);
+  const [shippingSheetView, setShippingSheetView] = createSignal<ShippingAddressSheetView>({ kind: "list" });
+  const openShippingSheet = (view: ShippingAddressSheetView) => {
+    setShippingSheetView(view);
+    setShippingSheetOpen(true);
+  };
 
   // Tax invoice — off by default. Ticked: a summary of the chosen details (most recent saved entry) with "เปลี่ยน",
   // which opens `TaxInvoiceSheet` (pick from the saved list, or add / edit). No saved entry yet: the popup opens on its form.
@@ -99,19 +114,23 @@ export default function CheckoutPage() {
     if (!on || taxProfileId()) return;
     const profiles = auth.isAuthenticated() ? readTaxInvoiceProfiles(accountState()) : taxProfiles();
     setTaxProfiles(profiles);
-    if (profiles[0]) setTaxProfileId(profiles[0].id);
+    // Start from the default (the list keeps it first).
+    const start = profiles.find((p) => p.isDefault) ?? profiles[0];
+    if (start) setTaxProfileId(start.id);
     else openTaxSheet({ kind: "form" });
   };
-  const saveTaxProfile = (profile: TaxInvoiceProfile) => {
-    setTaxProfiles((list) => (auth.isAuthenticated() ? upsertTaxInvoiceProfile(accountState(), profile) : mergeTaxInvoiceProfile(list, profile)));
+  const saveTaxProfile = (profile: TaxInvoiceProfile, opts: { makeDefault: boolean }) => {
+    setTaxProfiles((list) =>
+      auth.isAuthenticated() ? upsertTaxInvoiceProfile(accountState(), profile, opts.makeDefault) : mergeTaxInvoiceProfile(list, profile, opts.makeDefault),
+    );
     setTaxProfileId(profile.id);
     setFieldErrors(({ taxInvoice, ...rest }) => rest);
   };
+  const setDefaultTaxProfile = (id: string) =>
+    setTaxProfiles((list) => (auth.isAuthenticated() ? setDefaultTaxInvoiceProfile(accountState(), id) : withDefaultTaxInvoiceProfile(list, id)));
   const [pickedCoupon, setCoupon] = createSignal<Coupon>();
   const [coinsPicked, setCoinsPicked] = createSignal(0);
 
-  // The open (unsaved) address forms' "validate as if submitted" checks — the pay button runs them too.
-  let validateShippingForm: (() => boolean) | undefined;
   let formColumn: HTMLDivElement | undefined;
 
   const [fieldErrors, setFieldErrors] = createSignal<Record<string, string>>({});
@@ -160,14 +179,7 @@ export default function CheckoutPage() {
     const errors: Record<string, string> = {};
     // An open form shows every empty/invalid field's own error (both forms at once); the line under it
     // only says what's left — fix the fields, or save a complete form first.
-    if (shippingFormOpen()) {
-      const complete = validateShippingForm?.() ?? false;
-      errors.address = !complete
-        ? "กรุณากรอกที่อยู่จัดส่งให้ครบตามช่องที่แจ้งไว้"
-        : selectedAddressId()
-          ? 'กรุณากด "บันทึกการแก้ไข" หรือ "ยกเลิก" ในฟอร์มที่อยู่จัดส่งก่อน'
-          : 'กรุณากด "ใช้ที่อยู่นี้" เพื่อบันทึกที่อยู่จัดส่ง';
-    } else if (!selectedAddressId()) errors.address = "กรุณาเพิ่มที่อยู่จัดส่ง";
+    if (!selectedAddressId()) errors.address = "กรุณาเพิ่มที่อยู่จัดส่ง";
     if (wantsTaxInvoice() && !selectedTaxProfile()) errors.taxInvoice = "กรุณาเพิ่มข้อมูลใบกำกับภาษี";
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
@@ -252,27 +264,43 @@ export default function CheckoutPage() {
               <div class="flex flex-col lg:flex-row lg:items-start lg:gap-6">
                 <div ref={formColumn} class="flex min-w-0 flex-1 flex-col gap-6 rounded-t-card bg-white p-4 lg:rounded-card lg:p-6">
                   <Show when={addressBook.ready()} fallback={<AddressSkeleton />}>
-                    <AddressSection
-                      headingId="shipping-address-heading"
-                      title="ที่อยู่จัดส่ง"
-                      emptyTitle="เพิ่มที่อยู่จัดส่ง"
-                      newAddressLabel="ที่อยู่ใหม่"
-                      addresses={shippingAddresses()}
-                      selectedId={selectedAddressId()}
-                      onSelect={(id) => {
-                        setPickedShippingId(id);
-                        setFieldErrors(({ address, ...rest }) => rest);
-                      }}
-                      onSave={(address, opts) => addressBook.save(address, opts)}
-                      onSetDefault={addressBook.setDefault}
-                      showDefaultOption
-                      onFormOpenChange={(open) => {
-                        setShippingFormOpen(open);
-                        if (!open) setFieldErrors(({ address, ...rest }) => rest);
-                      }}
-                      onRegisterValidate={(fn) => (validateShippingForm = fn)}
-                      error={fieldErrors().address}
-                    />
+                    {/* Same flow as the tax invoice: the chosen address in one card, "เปลี่ยน" to pick / add / edit in the popup. */}
+                    <section aria-labelledby="shipping-address-heading" class="flex flex-col gap-3">
+                      <h2 id="shipping-address-heading" class="text-lg font-semibold text-ink">
+                        ที่อยู่จัดส่ง
+                      </h2>
+                      <Show
+                        when={shippingAddress()}
+                        fallback={
+                          <div class="flex flex-col items-start gap-3 rounded-card border border-surface-gray p-4">
+                            <p class="text-sm text-ink-gray">ยังไม่มีที่อยู่จัดส่ง กรอกเพียงครั้งเดียว ครั้งหน้าระบบจะใช้ที่อยู่นี้ให้อัตโนมัติ</p>
+                            <Button type="button" variant="outline" size="sm" onClick={() => openShippingSheet({ kind: "form" })}>
+                              + เพิ่มที่อยู่จัดส่ง
+                            </Button>
+                          </div>
+                        }
+                      >
+                        {(a) => <AddressCard address={a()} editLabel="เปลี่ยน" onEdit={() => openShippingSheet({ kind: "list" })} />}
+                      </Show>
+                      <Show when={fieldErrors().address}>
+                        <p role="alert" class="text-sm text-system-red">
+                          {fieldErrors().address}
+                        </p>
+                      </Show>
+                      <ShippingAddressSheet
+                        open={shippingSheetOpen()}
+                        onOpenChange={setShippingSheetOpen}
+                        view={shippingSheetView()}
+                        addresses={shippingAddresses()}
+                        selectedId={selectedAddressId()}
+                        onSelect={(id) => {
+                          setPickedShippingId(id);
+                          setFieldErrors(({ address, ...rest }) => rest);
+                        }}
+                        onSave={(address, opts) => addressBook.save(address, opts)}
+                        onSetDefault={addressBook.setDefault}
+                      />
+                    </section>
 
                     <Show when={selectedAddressId()}>
                       {/* No gap: the checkbox row keeps its 44px tap height, which alone puts its box 12px under the heading. */}
@@ -337,6 +365,7 @@ export default function CheckoutPage() {
                             setFieldErrors(({ taxInvoice, ...rest }) => rest);
                           }}
                           onSave={saveTaxProfile}
+                          onSetDefault={setDefaultTaxProfile}
                           addresses={addressBook.addresses()}
                           shippingAddress={shippingAddress()}
                           onSaveAddress={(address, opts) => addressBook.save(address, opts)}

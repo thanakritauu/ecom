@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js";
 import { TextField } from "../shared/TextField";
+import { Badge } from "../shared/Badge";
 import { formatTaxBranch, formatTaxId, TAX_INVOICE_TYPE_LABEL, taxIdError, taxIdLabel, taxNameLabel, type TaxInvoiceBuyer, type TaxInvoiceType } from "~/lib/taxInvoice";
 import { formatAddress, type Address } from "~/lib/checkoutData";
 import type { TaxInvoiceProfile } from "~/lib/taxInvoiceProfiles";
@@ -166,9 +167,15 @@ function RadioCards<T extends string>(props: { label: string; options: { value: 
 export function TaxInvoiceSummary(props: { profile: TaxInvoiceProfile; address?: Address }) {
   return (
     <span class="flex min-w-0 flex-col gap-0.5 text-sm">
-      <span class="font-semibold text-ink">
-        {props.profile.name}
-        <Show when={formatTaxBranch(props.profile)}>{(branch) => ` (${branch()})`}</Show>
+      <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span class="font-semibold text-ink">
+          {props.profile.name}
+          <Show when={formatTaxBranch(props.profile)}>{(branch) => ` (${branch()})`}</Show>
+        </span>
+        {/* Same badge as the default shipping address. */}
+        <Show when={props.profile.isDefault}>
+          <Badge tone="success">ค่าเริ่มต้น</Badge>
+        </Show>
       </span>
       <span class="text-ink-gray">
         {TAX_INVOICE_TYPE_LABEL[props.profile.type]} <span class="whitespace-nowrap">{formatTaxId(props.profile.taxId)}</span>

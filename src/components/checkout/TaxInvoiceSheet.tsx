@@ -23,7 +23,8 @@ export function TaxInvoiceSheet(props: {
   profiles: TaxInvoiceProfile[];
   selectedId?: string;
   onSelect: (id: string) => void;
-  onSave: (profile: TaxInvoiceProfile) => void;
+  onSave: (profile: TaxInvoiceProfile, opts: { makeDefault: boolean }) => void;
+  onSetDefault: (id: string) => void;
   addresses: Address[];
   shippingAddress?: Address;
   onSaveAddress: (address: Address, opts: { makeDefault: boolean }) => Promise<Address>;
@@ -35,10 +36,14 @@ export function TaxInvoiceSheet(props: {
   const [pickedAddressId, setPickedAddressId] = createSignal<string | undefined>();
   const [addressFormOpen, setAddressFormOpen] = createSignal(false);
   const [errors, setErrors] = createSignal<TaxInvoiceErrors & { address?: string }>({});
+  const [makeDefault, setMakeDefault] = createSignal(false);
+  // The first entry always becomes the default (as the first shipping address does); the default can't be un-defaulted here.
+  const forceDefault = () => props.profiles.length === 0 || !!editing()?.isDefault;
   let validateAddressForm: (() => boolean) | undefined;
 
   const openForm = (editing?: TaxInvoiceProfile) => {
     setErrors({});
+    setMakeDefault(!!editing?.isDefault);
     setAddressFormOpen(false);
     if (editing) {
       setDraft(draftFromTaxBuyer(editing));
@@ -110,12 +115,15 @@ export function TaxInvoiceSheet(props: {
     }
     setErrors(e);
     if (Object.keys(e).length > 0) return;
-    props.onSave({
-      ...taxBuyerFromDraft(draft()),
-      id: editing()?.id ?? newTaxInvoiceProfileId(),
-      addressId: sameAsShipping() ? undefined : pickedAddressId(),
-      lastUsedAt: new Date().toISOString(),
-    });
+    props.onSave(
+      {
+        ...taxBuyerFromDraft(draft()),
+        id: editing()?.id ?? newTaxInvoiceProfileId(),
+        addressId: sameAsShipping() ? undefined : pickedAddressId(),
+        lastUsedAt: new Date().toISOString(),
+      },
+      { makeDefault: forceDefault() || makeDefault() },
+    );
     props.onOpenChange(false);
   };
 
@@ -181,9 +189,22 @@ export function TaxInvoiceSheet(props: {
                       </span>
                       <TaxInvoiceSummary profile={p} address={addressOf(p)} />
                     </button>
-                    <button type="button" onClick={() => openForm(p)} class="min-h-6 shrink-0 text-xs font-medium text-brand-pink underline" aria-label={`แก้ไข ${p.name}`}>
-                      แก้ไข
-                    </button>
+                    {/* Same actions column as the address card: แก้ไข, then ตั้งเป็นค่าเริ่มต้น for the others. */}
+                    <div class="flex shrink-0 flex-col items-end gap-2">
+                      <button type="button" onClick={() => openForm(p)} class="min-h-6 text-xs font-medium text-brand-pink underline" aria-label={`แก้ไข ${p.name}`}>
+                        แก้ไข
+                      </button>
+                      <Show when={!p.isDefault}>
+                        <button
+                          type="button"
+                          onClick={() => props.onSetDefault(p.id)}
+                          class="min-h-6 whitespace-nowrap text-xs text-ink-gray underline lg:hover:text-brand-pink"
+                          aria-label={`ตั้ง ${p.name} เป็นค่าเริ่มต้น`}
+                        >
+                          ตั้งเป็นค่าเริ่มต้น
+                        </button>
+                      </Show>
+                    </div>
                   </div>
                 );
               }}
@@ -242,6 +263,21 @@ export function TaxInvoiceSheet(props: {
             </div>
           </Show>
         </div>
+        <label class="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-ink" classList={{ "cursor-default": forceDefault() }}>
+          <input
+            type="checkbox"
+            checked={forceDefault() || makeDefault()}
+            disabled={forceDefault()}
+            onChange={(e) => setMakeDefault(e.currentTarget.checked)}
+            class="size-5 shrink-0 rounded accent-brand-pink"
+          />
+          <span>
+            บันทึกเป็นข้อมูลเริ่มต้น
+            <Show when={props.profiles.length === 0}>
+              <span class="block text-xs text-ink-gray">ข้อมูลแรกจะถูกตั้งเป็นค่าเริ่มต้นอัตโนมัติ</span>
+            </Show>
+          </span>
+        </label>
       </Show>
     </SheetModal>
   );

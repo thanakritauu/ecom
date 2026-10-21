@@ -183,6 +183,8 @@ export function AddressCard(props: {
   selected?: boolean;
   onSelect?: () => void;
   onEdit: () => void;
+  /** The top-right link's word; default "แก้ไข" (Checkout's summary card uses "เปลี่ยน" to open the address popup). */
+  editLabel?: string;
   onSetDefault?: () => Promise<void>;
   onDelete?: () => void;
 }) {
@@ -226,8 +228,13 @@ export function AddressCard(props: {
         </button>
       </Show>
       <div class="flex shrink-0 flex-col items-end gap-2">
-        <button type="button" onClick={props.onEdit} class="min-h-6 text-xs font-medium text-brand-pink underline" aria-label={`แก้ไขที่อยู่ของ ${props.address.recipientName}`}>
-          แก้ไข
+        <button
+          type="button"
+          onClick={props.onEdit}
+          class="min-h-6 text-xs font-medium text-brand-pink underline"
+          aria-label={`${props.editLabel ?? "แก้ไข"}ที่อยู่ของ ${props.address.recipientName}`}
+        >
+          {props.editLabel ?? "แก้ไข"}
         </button>
         <Show when={props.onSetDefault}>
           <button
@@ -287,6 +294,13 @@ export function AddressForm(props: {
   onSubmit: (address: Address, makeDefault: boolean) => Promise<void>;
   /** Overrides the new-address button label ("ใช้ที่อยู่นี้" is checkout wording). */
   submitLabel?: string;
+  /**
+   * Inside a popup: no card border and no buttons of its own; the popup's pinned footer submits it
+   * through `<button form={formId}>`.
+   */
+  formId?: string;
+  /** Lets that footer button show its loading state. */
+  onSavingChange?: (saving: boolean) => void;
   /** Kind given to a new address ("billing" from a billing form). */
   kind?: Address["kind"];
   /**
@@ -402,7 +416,9 @@ export function AddressForm(props: {
       focusFirstInvalid(e.currentTarget as HTMLFormElement);
       return;
     }
+    if (status() === "saving") return;
     setStatus("saving");
+    props.onSavingChange?.(true);
     try {
       const t = (k: FieldKey) => v(k).trim();
       await props.onSubmit(
@@ -425,11 +441,20 @@ export function AddressForm(props: {
       setStatus("idle");
     } catch {
       setStatus("error");
+    } finally {
+      props.onSavingChange?.(false);
     }
   };
 
   return (
-    <form onSubmit={submit} onFocusIn={onFocusIn} novalidate class="flex flex-col gap-4 rounded-card border border-surface-gray p-4">
+    <form
+      id={props.formId}
+      onSubmit={submit}
+      onFocusIn={onFocusIn}
+      novalidate
+      class="flex flex-col gap-4"
+      classList={{ "rounded-card border border-surface-gray p-4": !props.formId }}
+    >
       {/* ชื่อ | นามสกุล — always side by side. */}
       <div class="grid grid-cols-2 gap-3 sm:gap-4">
         <TextField
@@ -564,6 +589,7 @@ export function AddressForm(props: {
         </p>
       </Show>
 
+      <Show when={!props.formId}>
       <div class="flex flex-col-reverse gap-3 sm:flex-row">
         <Show when={props.canCancel}>
           <Button type="button" variant="outline" class="w-full sm:w-auto" onClick={props.onCancel} disabled={status() === "saving"}>
@@ -574,6 +600,7 @@ export function AddressForm(props: {
           {props.initial ? "บันทึกการแก้ไข" : (props.submitLabel ?? "ใช้ที่อยู่นี้")}
         </Button>
       </div>
+      </Show>
     </form>
   );
 }
