@@ -25,9 +25,10 @@ import { useProductCatalog } from "~/lib/productCatalog";
 import { useCartPromotions, useStorefrontPromotions } from "~/lib/storefrontPromotions";
 import { formatTHB } from "~/components/shared/PriceDisplay";
 import { AddressSection } from "~/components/checkout/AddressSection";
-import { emptyTaxInvoiceDraft, TaxInvoiceFields, type TaxInvoiceDraft, type TaxInvoiceErrors } from "~/components/checkout/TaxInvoiceFields";
-import { taxIdError } from "~/lib/taxInvoice";
-import { formatAddress } from "~/lib/checkoutData";
+import { TaxInvoiceSummary } from "~/components/checkout/TaxInvoiceFields";
+import type { TaxInvoiceSheetView } from "~/components/checkout/TaxInvoiceSheet";
+import { clientOnly } from "@solidjs/start";
+import { mergeTaxInvoiceProfile, readTaxInvoiceProfiles, upsertTaxInvoiceProfile, type TaxInvoiceProfile } from "~/lib/taxInvoiceProfiles";
 import { PaymentSection } from "~/components/checkout/PaymentSection";
 import { createCheckoutPayment, type PaidResult } from "~/components/checkout/checkoutPayment";
 import { generateOrderNumber } from "~/lib/orderNumber";
@@ -35,7 +36,7 @@ import { CheckoutOrderSummary, CheckoutPerks } from "~/components/checkout/Check
 import { METHOD_ICONS } from "~/components/checkout/paymentMarks";
 import coinMark from "~/assets/icons/charmiss-coin.png";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
-import { EMAIL_PATTERN, focusFirstInvalid } from "~/lib/validators";
+import { focusFirstInvalid } from "~/lib/validators";
 
 /**
  * Figma node 146:8484. Reuses the exact same shared cart state and pricing
@@ -43,6 +44,9 @@ import { EMAIL_PATTERN, focusFirstInvalid } from "~/lib/validators";
  * this is the fourth and last screen in that one chain, not a fourth place
  * that re-derives its own subtotal.
  */
+
+// Same Kobalte Dialog SSR/hydration workaround as the coupon / coin sheets.
+const TaxInvoiceSheet = clientOnly(() => import("~/components/checkout/TaxInvoiceSheet").then((m) => ({ default: m.TaxInvoiceSheet })));
 export default function CheckoutPage() {
   const cart = useCart();
   const auth = useAuth();
@@ -60,11 +64,11 @@ export default function CheckoutPage() {
   // default address (State B), guest = first-time buyer with none (State A);
   // `?address=new|existing` forces either for QA / user testing.
   const [searchParams] = useSearchParams();
-  const addressBook = createAddressBook(() => {
+  const accountState = (): AddressMockState => {
     const forced = searchParams.address;
-    const state: AddressMockState = forced === "new" || forced === "existing" ? forced : auth.isAuthenticated() ? "existing" : "new";
-    return createLocalAddressRepository(state);
-  });
+    return forced === "new" || forced === "existing" ? forced : auth.isAuthenticated() ? "existing" : "new";
+  };
+  const addressBook = createAddressBook(() => createLocalAddressRepository(accountState()));
   const [pickedShippingId, setPickedShippingId] = createSignal<string | undefined>();
   // Falls back to the default address, so a returning shopper's checkout opens ready to go.
   // Billing-only addresses (saved from the billing form, maybe a company) aren't offered for shipping.
@@ -73,55 +77,41 @@ export default function CheckoutPage() {
     shippingAddresses().some((a) => a.id === pickedShippingId()) ? pickedShippingId() : addressBook.defaultAddress()?.id;
   const [shippingFormOpen, setShippingFormOpen] = createSignal(false);
 
-  // Tax invoice — off by default. Ticked: "ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง" (on by default, State E); unticking that reveals a picker/form (State D).
+  // Tax invoice — off by default. Ticked: a summary of the chosen details (most recent saved entry) with "เปลี่ยน",
+  // which opens `TaxInvoiceSheet` (pick from the saved list, or add / edit). No saved entry yet: the popup opens on its form.
   const [wantsTaxInvoice, setWantsTaxInvoice] = createSignal(false);
-  // บุคคลธรรมดา / นิติบุคคล, name, 13-digit number, สาขา (see `TaxInvoiceFields`).
-  const [taxBuyer, setTaxBuyer] = createSignal<TaxInvoiceDraft>(emptyTaxInvoiceDraft());
-  const taxErrors = (): TaxInvoiceErrors => ({ taxName: fieldErrors().taxName, taxId: fieldErrors().taxId, taxBranch: fieldErrors().taxBranch, taxEmail: fieldErrors().taxEmail });
+  // Signed-in members' entries persist (`taxInvoiceProfiles`); a guest's live for this visit only. Read on tick (client only).
+  const [taxProfiles, setTaxProfiles] = createSignal<TaxInvoiceProfile[]>([]);
+  const [taxProfileId, setTaxProfileId] = createSignal<string | undefined>();
+  const [taxSheetOpen, setTaxSheetOpen] = createSignal(false);
+  const [taxSheetView, setTaxSheetView] = createSignal<TaxInvoiceSheetView>({ kind: "list" });
+  const selectedTaxProfile = () => taxProfiles().find((p) => p.id === taxProfileId());
   const shippingAddress = () => shippingAddresses().find((a) => a.id === selectedAddressId());
-  const shippingRecipientName = () => shippingAddress()?.recipientName ?? "";
-  const billingPrefill = () => {
-    const a = shippingAddress();
-    if (!a) return undefined;
-    const { id, label, isDefault, kind, ...fields } = a;
-    const company = taxBuyer().type === "company" && taxBuyer().name.trim();
-    return company ? { ...fields, recipientName: company } : fields;
+  /** ที่อยู่ออกใบกำกับภาษี: the entry's saved address, or the shipping address. */
+  const taxInvoiceAddress = (p: TaxInvoiceProfile) => addressBook.addresses().find((a) => a.id === p.addressId) ?? shippingAddress();
+  const openTaxSheet = (view: TaxInvoiceSheetView) => {
+    setTaxSheetView(view);
+    setTaxSheetOpen(true);
   };
-  const editTaxBuyer = (patch: Partial<TaxInvoiceDraft>) => {
-    // A company's invoice needs its registered address, which often isn't where the parcel goes (an employee's home):
-    // นิติบุคคล starts with "ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง" unticked (still tickable), บุคคลธรรมดา with it ticked.
-    if (patch.type && patch.type !== taxBuyer().type) {
-      setBillingSameAsShipping(patch.type === "individual");
-      setFieldErrors(({ billing, ...rest }) => rest);
-      // The prefilled recipient's name fits a บุคคลธรรมดา only: a company starts with an empty ชื่อบริษัท, and back again.
-      const recipient = shippingRecipientName();
-      if (patch.name === undefined) {
-        if (patch.type === "company" && taxBuyer().name === recipient) patch = { ...patch, name: "" };
-        if (patch.type === "individual" && !taxBuyer().name) patch = { ...patch, name: recipient };
-      }
-    }
-    setTaxBuyer((b) => ({ ...b, ...patch }));
-    // Each field's error clears as soon as it's edited; switching type or สาขา re-asks the affected fields.
-    setFieldErrors(({ taxName, taxId, taxBranch, taxEmail, ...rest }) => ({
-      ...rest,
-      ...(patch.email === undefined && taxEmail ? { taxEmail } : {}),
-      ...(patch.name === undefined && patch.type === undefined && taxName ? { taxName } : {}),
-      ...(patch.taxId === undefined && patch.type === undefined && taxId ? { taxId } : {}),
-      ...(patch.branchNo === undefined && patch.headOffice === undefined && patch.type === undefined && taxBranch ? { taxBranch } : {}),
-    }));
+  const onTaxInvoiceToggle = (on: boolean) => {
+    setWantsTaxInvoice(on);
+    setFieldErrors(({ taxInvoice, ...rest }) => rest);
+    if (!on || taxProfileId()) return;
+    const profiles = auth.isAuthenticated() ? readTaxInvoiceProfiles(accountState()) : taxProfiles();
+    setTaxProfiles(profiles);
+    if (profiles[0]) setTaxProfileId(profiles[0].id);
+    else openTaxSheet({ kind: "form" });
   };
-  const [billingSameAsShipping, setBillingSameAsShipping] = createSignal(true);
-  const [pickedBillingId, setPickedBillingId] = createSignal<string | undefined>();
-  const [billingFormOpen, setBillingFormOpen] = createSignal(false);
-  const billingCandidates = () => addressBook.addresses().filter((a) => a.id !== selectedAddressId());
-  const billingAddressId = () =>
-    billingSameAsShipping() ? selectedAddressId() : billingCandidates().some((a) => a.id === pickedBillingId()) ? pickedBillingId() : undefined;
+  const saveTaxProfile = (profile: TaxInvoiceProfile) => {
+    setTaxProfiles((list) => (auth.isAuthenticated() ? upsertTaxInvoiceProfile(accountState(), profile) : mergeTaxInvoiceProfile(list, profile)));
+    setTaxProfileId(profile.id);
+    setFieldErrors(({ taxInvoice, ...rest }) => rest);
+  };
   const [pickedCoupon, setCoupon] = createSignal<Coupon>();
   const [coinsPicked, setCoinsPicked] = createSignal(0);
 
   // The open (unsaved) address forms' "validate as if submitted" checks — the pay button runs them too.
   let validateShippingForm: (() => boolean) | undefined;
-  let validateBillingForm: (() => boolean) | undefined;
   let formColumn: HTMLDivElement | undefined;
 
   const [fieldErrors, setFieldErrors] = createSignal<Record<string, string>>({});
@@ -178,28 +168,12 @@ export default function CheckoutPage() {
           ? 'กรุณากด "บันทึกการแก้ไข" หรือ "ยกเลิก" ในฟอร์มที่อยู่จัดส่งก่อน'
           : 'กรุณากด "ใช้ที่อยู่นี้" เพื่อบันทึกที่อยู่จัดส่ง';
     } else if (!selectedAddressId()) errors.address = "กรุณาเพิ่มที่อยู่จัดส่ง";
-    if (wantsTaxInvoice()) {
-      const b = taxBuyer();
-      if (!b.name.trim()) errors.taxName = b.type === "company" ? "กรุณากรอกชื่อบริษัท" : "กรุณากรอกชื่อ-นามสกุล";
-      const idProblem = taxIdError(b.taxId, b.type);
-      if (idProblem) errors.taxId = idProblem;
-      if (!b.email.trim()) errors.taxEmail = "กรุณากรอกอีเมลสำหรับรับใบกำกับภาษี";
-      else if (!EMAIL_PATTERN.test(b.email.trim())) errors.taxEmail = "รูปแบบอีเมลไม่ถูกต้อง เช่น name@example.com";
-      if (b.type === "company" && !b.headOffice && b.branchNo.length !== 5) errors.taxBranch = b.branchNo ? "สาขาเลขที่ต้องมี 5 หลัก" : "กรุณากรอกสาขาเลขที่";
-    }
-    if (wantsTaxInvoice() && !billingSameAsShipping()) {
-      if (billingFormOpen()) {
-        const complete = validateBillingForm?.() ?? false;
-        errors.billing = complete
-          ? 'กรุณากดบันทึกที่อยู่ออกใบกำกับภาษี หรือเลือก "ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง"'
-          : "กรุณากรอกที่อยู่ออกใบกำกับภาษีให้ครบตามช่องที่แจ้งไว้";
-      } else if (!billingAddressId()) errors.billing = "กรุณาเลือกหรือเพิ่มที่อยู่ออกใบกำกับภาษี";
-    }
+    if (wantsTaxInvoice() && !selectedTaxProfile()) errors.taxInvoice = "กรุณาเพิ่มข้อมูลใบกำกับภาษี";
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
-      // First invalid field (shipping before billing); a complete-but-unsaved form → its section heading.
+      // First invalid field (shipping before the tax invoice); a complete-but-unsaved form → its section heading.
       if (!focusFirstInvalid(formColumn)) {
-        const scrollTargetId = errors.address ? "shipping-address-heading" : "billing-address-heading";
+        const scrollTargetId = errors.address ? "shipping-address-heading" : "tax-invoice-heading";
         document.getElementById(scrollTargetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
       }
       return false;
@@ -302,80 +276,72 @@ export default function CheckoutPage() {
 
                     <Show when={selectedAddressId()}>
                       {/* No gap: the checkbox row keeps its 44px tap height, which alone puts its box 12px under the heading. */}
-                      <section aria-labelledby="billing-address-heading" class="flex flex-col">
-                        <h2 id="billing-address-heading" class="text-lg font-semibold text-ink">
+                      <section aria-labelledby="tax-invoice-heading" class="flex flex-col">
+                        <h2 id="tax-invoice-heading" class="text-lg font-semibold text-ink">
                           ใบกำกับภาษี
                         </h2>
                         <label class="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-ink">
                           <input
                             type="checkbox"
                             checked={wantsTaxInvoice()}
-                            onChange={(e) => {
-                              const on = e.currentTarget.checked;
-                              setWantsTaxInvoice(on);
-                              // First time: start from the shipping recipient's name (a บุคคลธรรมดา usually bills themself).
-                              if (on && !taxBuyer().name && taxBuyer().type === "individual") setTaxBuyer((b) => ({ ...b, name: shippingRecipientName() }));
-                              // The invoice is emailed: start from the signed-in member's email.
-                              if (on && !taxBuyer().email) setTaxBuyer((b) => ({ ...b, email: auth.user()?.email ?? "" }));
-                              setFieldErrors(({ billing, taxName, taxId, taxBranch, taxEmail, ...rest }) => rest);
-                            }}
+                            onChange={(e) => onTaxInvoiceToggle(e.currentTarget.checked)}
                             class="size-5 shrink-0 rounded accent-brand-pink"
                           />
                           ขอใบกำกับภาษี
                         </label>
-                        {/* Asked only once a tax invoice is wanted. */}
+                        {/* Ticked: the chosen details in one card, "เปลี่ยน" to pick / add / edit in the popup. */}
                         <Show when={wantsTaxInvoice()}>
-                          <div class="mb-2 mt-2">
-                            <TaxInvoiceFields value={taxBuyer()} onChange={editTaxBuyer} errors={taxErrors()} />
+                          <div class="mt-2 flex flex-col gap-2">
+                            <Show
+                              when={selectedTaxProfile()}
+                              fallback={
+                                <div class="flex flex-col items-start gap-3 rounded-card border border-surface-gray p-4">
+                                  <p class="text-sm text-ink-gray">ยังไม่มีข้อมูลใบกำกับภาษี</p>
+                                  <Button type="button" variant="outline" size="sm" onClick={() => openTaxSheet({ kind: "form" })}>
+                                    + เพิ่มข้อมูลใบกำกับภาษี
+                                  </Button>
+                                </div>
+                              }
+                            >
+                              {(p) => (
+                                <div class="flex items-start gap-3 rounded-card bg-surface-pink p-4">
+                                  <div class="min-w-0 flex-1">
+                                    <TaxInvoiceSummary profile={p()} address={taxInvoiceAddress(p())} />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => openTaxSheet({ kind: "list" })}
+                                    class="min-h-6 shrink-0 text-xs font-medium text-brand-pink underline"
+                                    aria-label="เปลี่ยนข้อมูลใบกำกับภาษี"
+                                  >
+                                    เปลี่ยน
+                                  </button>
+                                </div>
+                              )}
+                            </Show>
+                            <Show when={fieldErrors().taxInvoice}>
+                              <p role="alert" class="text-sm text-system-red">
+                                {fieldErrors().taxInvoice}
+                              </p>
+                            </Show>
                           </div>
-                          {/* The address printed on the invoice (the invoice itself is emailed). */}
-                          <p class="mt-2 text-sm font-medium text-ink">ที่อยู่ออกใบกำกับภาษี</p>
-                          <label class="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-ink">
-                            <input
-                              type="checkbox"
-                              checked={billingSameAsShipping()}
-                              onChange={(e) => {
-                                setBillingSameAsShipping(e.currentTarget.checked);
-                                setFieldErrors(({ billing, ...rest }) => rest);
-                              }}
-                              class="size-5 shrink-0 rounded accent-brand-pink"
-                            />
-                            ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง
-                          </label>
-                          {/* Ticked: the address that will be printed, to review at a glance; follows any change to the shipping address. */}
-                          <Show when={billingSameAsShipping() && shippingAddress()}>
-                            {(a) => <p class="rounded-card bg-surface-gray/60 px-4 py-3 text-sm text-ink">{formatAddress(a())}</p>}
-                          </Show>
-                          <Show when={!billingSameAsShipping()}>
-                            <div class="mt-2">
-                              <AddressSection
-                                embedded
-                                headingId="billing-address-heading"
-                                title="เลือกที่อยู่ออกใบกำกับภาษี"
-                                emptyTitle="เพิ่มที่อยู่ออกใบกำกับภาษี"
-                                newAddressLabel="ที่อยู่ออกใบกำกับภาษี"
-                                // บุคคลธรรมดา: plain ชื่อ + นามสกุล; only นิติบุคคล gets "ชื่อ หรือชื่อบริษัท".
-                                companyAllowed={taxBuyer().type === "company"}
-                                kind="billing"
-                                // "+ เพิ่มที่อยู่ใหม่" starts from the shipping address (a company's name in place of the recipient's) to adjust and save.
-                                prefill={billingPrefill()}
-                                addresses={billingCandidates()}
-                                selectedId={billingAddressId()}
-                                onSelect={(id) => {
-                                  setPickedBillingId(id);
-                                  setFieldErrors(({ billing, ...rest }) => rest);
-                                }}
-                                onSave={(address) => addressBook.save(address)}
-                                onFormOpenChange={(open) => {
-                                  setBillingFormOpen(open);
-                                  if (!open) setFieldErrors(({ billing, ...rest }) => rest);
-                                }}
-                                onRegisterValidate={(fn) => (validateBillingForm = fn)}
-                                error={fieldErrors().billing}
-                              />
-                            </div>
-                          </Show>
                         </Show>
+                        <TaxInvoiceSheet
+                          open={taxSheetOpen()}
+                          onOpenChange={setTaxSheetOpen}
+                          view={taxSheetView()}
+                          profiles={taxProfiles()}
+                          selectedId={taxProfileId()}
+                          onSelect={(id) => {
+                            setTaxProfileId(id);
+                            setFieldErrors(({ taxInvoice, ...rest }) => rest);
+                          }}
+                          onSave={saveTaxProfile}
+                          addresses={addressBook.addresses()}
+                          shippingAddress={shippingAddress()}
+                          onSaveAddress={(address, opts) => addressBook.save(address, opts)}
+                          accountEmail={auth.user()?.email ?? ""}
+                        />
                       </section>
                     </Show>
                   </Show>

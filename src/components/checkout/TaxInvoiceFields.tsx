@@ -1,6 +1,9 @@
 import { For, Show } from "solid-js";
 import { TextField } from "../shared/TextField";
-import { TAX_INVOICE_TYPE_LABEL, taxIdLabel, taxNameLabel, type TaxInvoiceType } from "~/lib/taxInvoice";
+import { formatTaxBranch, formatTaxId, TAX_INVOICE_TYPE_LABEL, taxIdError, taxIdLabel, taxNameLabel, type TaxInvoiceBuyer, type TaxInvoiceType } from "~/lib/taxInvoice";
+import { formatAddress, type Address } from "~/lib/checkoutData";
+import type { TaxInvoiceProfile } from "~/lib/taxInvoiceProfiles";
+import { EMAIL_PATTERN } from "~/lib/validators";
 
 /** Checkout's form state; `headOffice` false = a branch (`branchNo` then required). */
 export type TaxInvoiceDraft = { type: TaxInvoiceType; name: string; taxId: string; headOffice: boolean; branchNo: string; email: string };
@@ -10,6 +13,29 @@ export type TaxInvoiceErrors = { taxName?: string; taxId?: string; taxBranch?: s
 export const emptyTaxInvoiceDraft = (name = ""): TaxInvoiceDraft => ({ type: "individual", name, taxId: "", headOffice: true, branchNo: "", email: "" });
 
 const TYPES: TaxInvoiceType[] = ["individual", "company"];
+
+/** Every field's error, empty when the draft can be saved. */
+export function validateTaxInvoiceDraft(d: TaxInvoiceDraft): TaxInvoiceErrors {
+  const e: TaxInvoiceErrors = {};
+  if (!d.name.trim()) e.taxName = d.type === "company" ? "กรุณากรอกชื่อบริษัท" : "กรุณากรอกชื่อ-นามสกุล";
+  const idProblem = taxIdError(d.taxId, d.type);
+  if (idProblem) e.taxId = idProblem;
+  if (d.type === "company" && !d.headOffice && d.branchNo.length !== 5) e.taxBranch = d.branchNo ? "สาขาเลขที่ต้องมี 5 หลัก" : "กรุณากรอกสาขาเลขที่";
+  if (!d.email.trim()) e.taxEmail = "กรุณากรอกอีเมลสำหรับรับใบกำกับภาษี";
+  else if (!EMAIL_PATTERN.test(d.email.trim())) e.taxEmail = "รูปแบบอีเมลไม่ถูกต้อง เช่น name@example.com";
+  return e;
+}
+
+/** Saved shape: trimmed, สาขา only for a company branch. */
+export const taxBuyerFromDraft = (d: TaxInvoiceDraft): TaxInvoiceBuyer => ({
+  type: d.type,
+  name: d.name.trim(),
+  taxId: d.taxId,
+  branchNo: d.type === "company" && !d.headOffice ? d.branchNo : undefined,
+  email: d.email.trim(),
+});
+
+export const draftFromTaxBuyer = (b: TaxInvoiceBuyer): TaxInvoiceDraft => ({ type: b.type, name: b.name, taxId: b.taxId, headOffice: !b.branchNo, branchNo: b.branchNo ?? "", email: b.email });
 
 /**
  * The buyer block of "ขอใบกำกับภาษี": บุคคลธรรมดา / นิติบุคคล, then the name
@@ -133,5 +159,22 @@ function RadioCards<T extends string>(props: { label: string; options: { value: 
         </For>
       </div>
     </div>
+  );
+}
+
+/** One saved entry as Checkout and the popup show it: name (สาขา), ประเภท + เลข, อีเมล, address. */
+export function TaxInvoiceSummary(props: { profile: TaxInvoiceProfile; address?: Address }) {
+  return (
+    <span class="flex min-w-0 flex-col gap-0.5 text-sm">
+      <span class="font-semibold text-ink">
+        {props.profile.name}
+        <Show when={formatTaxBranch(props.profile)}>{(branch) => ` (${branch()})`}</Show>
+      </span>
+      <span class="text-ink-gray">
+        {TAX_INVOICE_TYPE_LABEL[props.profile.type]} <span class="whitespace-nowrap">{formatTaxId(props.profile.taxId)}</span>
+      </span>
+      <span class="truncate text-ink-gray">{props.profile.email}</span>
+      <Show when={props.address}>{(a) => <span class="text-ink">{formatAddress(a())}</span>}</Show>
+    </span>
   );
 }
