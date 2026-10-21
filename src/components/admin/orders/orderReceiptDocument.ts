@@ -1,11 +1,14 @@
 import type { ReceiptData } from "~/lib/receiptResolver";
 import { formatOrderAddress } from "~/lib/adminOrders";
+import { formatTaxBranch, formatTaxId, taxIdLabel, vatBreakdown } from "~/lib/taxInvoice";
+import { SELLER } from "~/lib/sellerInfo";
 
 /**
  * The downloadable receipt: a self-contained printable HTML file built only
  * from `ReceiptData` — coupon and Charmiss Coin as separate lines, the
  * free-gift line, payment detail/reference and the ที่อยู่ออกใบกำกับภาษี
- * (billing address, or the shipping address when none was given).
+ * (billing address, or the shipping address when none was given), headed by
+ * the buyer's name, เลขประจำตัวผู้เสียภาษี and สาขา when a tax invoice was asked for.
  */
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -14,6 +17,10 @@ function escapeHtml(value: string): string {
 export function buildOrderReceiptHtml(data: ReceiptData, formatCurrency: (n: number) => string): string {
   const { order, totals, payment } = data;
   const billTo = data.billing;
+  // Asked for a tax invoice: the buyer's name (company + สาขา) and 13-digit number head the block.
+  const taxBuyer = data.taxInvoice;
+  // Prices include VAT: a tax invoice shows the total split into before-VAT + 7% VAT.
+  const vat = taxBuyer ? vatBreakdown(totals.grandTotal) : undefined;
   const itemRows = data.items
     .map(
       (item) => `
@@ -31,7 +38,7 @@ export function buildOrderReceiptHtml(data: ReceiptData, formatCurrency: (n: num
 <html lang="th">
 <head>
 <meta charset="UTF-8" />
-<title>${escapeHtml(data.receiptNumber)}</title>
+<title>${escapeHtml(data.documentTitle)} ${escapeHtml(data.receiptNumber)}</title>
 <style>
   body { font-family: -apple-system, "Segoe UI", sans-serif; color: #2b2b33; max-width: 720px; margin: 40px auto; padding: 0 24px; }
   h1 { color: #e91e63; font-size: 24px; margin: 0 0 4px; }
@@ -49,10 +56,11 @@ export function buildOrderReceiptHtml(data: ReceiptData, formatCurrency: (n: num
 </head>
 <body>
   <h1>CHARMISS</h1>
-  <p class="muted">ใบเสร็จรับเงิน</p>
+  <div><strong>${escapeHtml(data.documentTitle)}</strong></div>
+  <div class="muted">${escapeHtml(SELLER.name)} (${escapeHtml(SELLER.branch)})<br>${escapeHtml(SELLER.address)}<br>เลขประจำตัวผู้เสียภาษี ${escapeHtml(formatTaxId(SELLER.taxId))} โทร ${escapeHtml(SELLER.phone)}</div>
   <div class="row">
     <div>
-      <div><strong>เลขที่ใบเสร็จ:</strong> ${escapeHtml(data.receiptNumber)}</div>
+      <div><strong>เลขที่:</strong> ${escapeHtml(data.receiptNumber)}</div>
       <div><strong>เลขที่คำสั่งซื้อ:</strong> ${escapeHtml(order.orderNumber)}</div>
       <div><strong>วันที่:</strong> ${escapeHtml(data.receiptDate)}</div>
     </div>
@@ -65,7 +73,7 @@ export function buildOrderReceiptHtml(data: ReceiptData, formatCurrency: (n: num
   <div class="row">
     <div>
       <div><strong>ที่อยู่ออกใบกำกับภาษี</strong></div>
-      <div>${escapeHtml(billTo.recipientName)}</div><div>${escapeHtml(billTo.phone)}</div><div>${escapeHtml(formatOrderAddress(billTo))}</div>
+      ${taxBuyer ? `<div>${escapeHtml(taxBuyer.name)}${formatTaxBranch(taxBuyer) ? ` (${escapeHtml(formatTaxBranch(taxBuyer)!)})` : ""}</div><div>${escapeHtml(taxIdLabel(taxBuyer.type))} ${escapeHtml(formatTaxId(taxBuyer.taxId))}</div>` : `<div>${escapeHtml(billTo.recipientName)}</div>`}<div>${escapeHtml(billTo.phone)}</div><div>${escapeHtml(formatOrderAddress(billTo))}</div>
     </div>
     <div>
       <div><strong>ที่อยู่จัดส่ง</strong></div>
@@ -83,6 +91,7 @@ export function buildOrderReceiptHtml(data: ReceiptData, formatCurrency: (n: num
     ${totals.coinDiscount > 0 ? line(`ส่วนลด Charmiss Coin (${totals.coinsRedeemed.toLocaleString("th-TH")} คอยน์)`, `-${formatCurrency(totals.coinDiscount)}`) : ""}
     ${line("ค่าจัดส่ง (DHL)", totals.shippingFee > 0 ? formatCurrency(totals.shippingFee) : "ฟรี")}
     <div class="grand"><span>ยอดรวมทั้งหมด</span><span>${escapeHtml(formatCurrency(totals.grandTotal))}</span></div>
+    ${vat ? `${line("มูลค่าก่อนภาษีมูลค่าเพิ่ม", formatCurrency(vat.beforeVat))}${line("ภาษีมูลค่าเพิ่ม 7%", formatCurrency(vat.vat))}` : ""}
   </div>
   <div class="row">
     <div>
@@ -101,7 +110,7 @@ export function downloadOrderReceiptHtml(data: ReceiptData, formatCurrency: (n: 
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${data.receiptNumber}.html`;
+  a.download = `${data.taxInvoice ? "tax-invoice" : "receipt"}-${data.receiptNumber}.html`;
   document.body.appendChild(a);
   a.click();
   a.remove();

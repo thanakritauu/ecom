@@ -25,9 +25,10 @@ const STORAGE_KEY = "charmiss:admin:orders";
  * gift lines / coins from the storefront's account orders, each seed
  * customer's own address — older copies reseed the same way. v4 = returns
  * and refunds cut (storefront has none), mobile banking seeds, staff-only
- * cancellation — older copies reseed.
+ * cancellation — older copies reseed. v5 = tax invoice details
+ * (`taxInvoice`) on the seeds. v6 = `taxInvoiceSentAt` — older copies reseed.
  */
-const STORAGE_VERSION = 4;
+const STORAGE_VERSION = 6;
 
 function persist(orders: AdminOrder[]) {
   if (isServer) return;
@@ -81,6 +82,8 @@ type AdminOrderContextValue = {
   setTrackingNumber: (id: string, trackingNumber: string) => Promise<AdminOrder>;
   /** Records a DHL scan; moves the order forward if the scan implies a later status (never backward, never out of cancelled). */
   addTrackingEvent: (id: string, event: NewTrackingEvent) => Promise<AdminOrder>;
+  /** Marks the order's tax invoice as emailed (`sent` false undoes a mistaken mark). */
+  setTaxInvoiceSent: (id: string, sent: boolean) => Promise<AdminOrder>;
 };
 
 const AdminOrderContext = createContext<AdminOrderContextValue>();
@@ -178,8 +181,16 @@ export function AdminOrderProvider(props: { children: JSX.Element }) {
     });
   };
 
+  const setTaxInvoiceSent: AdminOrderContextValue["setTaxInvoiceSent"] = async (id, sent) => {
+    await delay();
+    const current = getById(id);
+    if (!current) throw new Error("NOT_FOUND");
+    if (!current.taxInvoice || current.paymentStatus !== "paid") throw new Error("INVALID_STATE");
+    return mutate(id, (order) => ({ ...order, taxInvoiceSentAt: sent ? new Date().toISOString() : undefined }));
+  };
+
   return (
-    <AdminOrderContext.Provider value={{ orders, getById, updateOrderStatus, setTrackingNumber, addTrackingEvent }}>
+    <AdminOrderContext.Provider value={{ orders, getById, updateOrderStatus, setTrackingNumber, addTrackingEvent, setTaxInvoiceSent }}>
       {props.children}
     </AdminOrderContext.Provider>
   );

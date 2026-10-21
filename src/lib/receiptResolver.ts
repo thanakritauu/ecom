@@ -1,4 +1,5 @@
 import type { AdminOrder, OrderAddress, OrderCustomer, OrderLineItem, OrderPaymentInfo, OrderShippingInfo, OrderTotals } from "./adminOrders";
+import type { TaxInvoiceBuyer } from "./taxInvoice";
 
 /**
  * Order + Receipt Phase §16 — Receipt is a Derived View, never a second
@@ -26,6 +27,10 @@ export type ReceiptData = {
   shipping: OrderShippingInfo;
   /** ที่อยู่ออกใบกำกับภาษี — the order's billing address, or the shipping address when the customer kept "ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง" (storefront Checkout default). */
   billing: OrderAddress;
+  /** Buyer details for a ใบกำกับภาษีเต็มรูป; unset when the customer didn't ask for one. */
+  taxInvoice?: TaxInvoiceBuyer;
+  /** "ใบเสร็จรับเงิน/ใบกำกับภาษี" when a tax invoice was asked for (one combined document), else "ใบเสร็จรับเงิน". */
+  documentTitle: string;
 };
 
 /**
@@ -56,5 +61,7 @@ export function getReceiptData(orderId: string, orders: AdminOrder[]): ReceiptDa
     payment: order.payment,
     shipping: order.shipping,
     billing: order.billingAddress ?? order.shipping.address,
+    taxInvoice: order.taxInvoice,
+    documentTitle: order.taxInvoice ? "ใบเสร็จรับเงิน/ใบกำกับภาษี" : "ใบเสร็จรับเงิน",
   };
 }

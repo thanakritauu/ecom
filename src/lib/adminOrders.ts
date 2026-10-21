@@ -1,4 +1,5 @@
 import type { StatusTone } from "~/components/admin/StatusBadge";
+import type { TaxInvoiceBuyer, TaxInvoiceStatus } from "./taxInvoice";
 import type { Order, ShipmentStatus, TrackingEvent, TrackingStatus } from "./types";
 import type { PaymentFailureReason } from "./payment";
 import { FAILURE_MESSAGES } from "./payment";
@@ -165,6 +166,10 @@ export const CANCELLED_BY_LABEL: Record<OrderCancellation["by"], string> = {
   system: "ระบบยกเลิกอัตโนมัติ",
 };
 
+/** Asked for a tax invoice: still to email ("pending") or emailed ("sent"); undefined when none was asked for. */
+export const taxInvoiceStatusOf = (order: Pick<AdminOrder, "taxInvoice" | "taxInvoiceSentAt">): TaxInvoiceStatus | undefined =>
+  order.taxInvoice ? (order.taxInvoiceSentAt ? "sent" : "pending") : undefined;
+
 /** Storefront rule (accountData.ts): an unpaid order is cancelled automatically 24 hours after it was placed. */
 export const orderPaymentDeadline = (order: Pick<AdminOrder, "placedAt">) => getPaymentDeadline(order);
 
@@ -188,6 +193,10 @@ export type AdminOrder = {
   payment: OrderPaymentInfo;
   shipping: OrderShippingInfo;
   billingAddress?: OrderBillingAddress;
+  /** Set when the customer ticked "ขอใบกำกับภาษี" at Checkout (ประเภท, ชื่อ, เลข 13 หลัก, สาขา); the address is `billingAddress`, else the shipping one. */
+  taxInvoice?: TaxInvoiceBuyer;
+  /** ISO time staff marked the tax invoice as emailed (Order Detail "บันทึกว่าส่งแล้ว"). */
+  taxInvoiceSentAt?: string;
   orderStatus: OrderStatus;
   paymentStatus: PaymentStatus;
   fulfillmentStatus: FulfillmentStatus;
@@ -376,7 +385,7 @@ const ADDRESSES: OrderAddress[] = [
 ];
 
 const COMPANY_BILLING: OrderBillingAddress = {
-  recipientName: "บริษัท ฟ้าใส บิวตี้ จำกัด (สำนักงานใหญ่)",
+  recipientName: "บริษัท ฟ้าใส บิวตี้ จำกัด",
   phone: "02-123-4567",
   addressLine: "999/9 อาคารเดอะออฟฟิศ ชั้น 12 ถนนพระราม 4",
   subDistrict: "คลองเตย",
@@ -384,6 +393,8 @@ const COMPANY_BILLING: OrderBillingAddress = {
   province: "กรุงเทพมหานคร",
   postalCode: "10110",
 };
+
+const COMPANY_TAX_INVOICE: TaxInvoiceBuyer = { type: "company", name: "บริษัท ฟ้าใส บิวตี้ จำกัด", taxId: "0105556123453", email: "account@fahsai-beauty.example.com" };
 
 const SHIPPING_METHOD = DELIVERY.method;
 
@@ -410,6 +421,9 @@ type OrderSeed = {
   customer: OrderCustomer;
   address: OrderAddress;
   billing?: OrderBillingAddress;
+  taxInvoice?: TaxInvoiceBuyer;
+  /** Hours after placing that the invoice was emailed. */
+  taxInvoiceSentAfterHours?: number;
   items: [string, number][]; // [productId, qty]
   orderStatus: OrderStatus;
   methodId: PaymentMethodId;
@@ -428,10 +442,10 @@ type OrderSeed = {
  * `ORD-2026-<seq>` sequence stays chronological.
  */
 const ADMIN_ORDER_SEEDS: OrderSeed[] = [
-  { seq: 1036, placedAt: "2026-10-02T11:50:00+07:00", customer: CUSTOMERS[3], address: ADDRESSES[3], billing: COMPANY_BILLING, items: [["feature-10", 1], ["new-3", 1], ["trend-8", 1]], orderStatus: "preparing", methodId: "truemoney", coinsRedeemed: 800 },
+  { seq: 1036, placedAt: "2026-10-02T11:50:00+07:00", customer: CUSTOMERS[3], address: ADDRESSES[3], billing: COMPANY_BILLING, taxInvoice: COMPANY_TAX_INVOICE, items: [["feature-10", 1], ["new-3", 1], ["trend-8", 1]], orderStatus: "preparing", methodId: "truemoney", coinsRedeemed: 800 },
   { seq: 1035, placedAt: "2026-10-02T11:15:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], items: [["flash-4", 1], ["best-4", 1]], orderStatus: "pending_payment", methodId: "promptpay" },
   { seq: 1034, placedAt: "2026-10-02T10:40:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["trend-2", 1]], orderStatus: "pending_payment", methodId: "card", card: { brand: "VISA", last4: "0002" }, failureReason: "card_declined" },
-  { seq: 1033, placedAt: "2026-10-02T10:05:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["best-2", 1], ["new-7", 1]], orderStatus: "preparing", methodId: "card", card: { brand: "VISA", last4: "4242" }, couponCode: "SAVE50" },
+  { seq: 1033, placedAt: "2026-10-02T10:05:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], taxInvoice: { type: "individual", name: ADDRESSES[2].recipientName, taxId: "1100701234561", email: CUSTOMERS[2].email }, items: [["best-2", 1], ["new-7", 1]], orderStatus: "preparing", methodId: "card", card: { brand: "VISA", last4: "4242" }, couponCode: "SAVE50" },
   { seq: 1024, placedAt: "2026-09-10T20:15:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], items: [["flash-1", 2], ["best-3", 1]], orderStatus: "completed", methodId: "card", card: { brand: "MASTERCARD", last4: "5100" } },
   { seq: 1023, placedAt: "2026-09-10T13:02:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["new-2", 1]], orderStatus: "cancelled", methodId: "promptpay", cancellation: { by: "system", reason: AUTO_CANCEL_REASON, afterHours: 24 } },
   { seq: 1022, placedAt: "2026-09-09T19:40:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["trend-1", 2]], orderStatus: "completed", methodId: "truemoney", couponCode: "SAVE20" },
@@ -445,7 +459,7 @@ const ADMIN_ORDER_SEEDS: OrderSeed[] = [
   { seq: 1014, placedAt: "2026-09-06T20:55:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["best-8", 1], ["new-6", 1]], orderStatus: "completed", methodId: "card", card: { brand: "VISA", last4: "1881" } },
   { seq: 1013, placedAt: "2026-09-06T12:35:00+07:00", customer: CUSTOMERS[5], address: ADDRESSES[5], items: [["trend-9", 3]], orderStatus: "completed", methodId: "card", card: { brand: "VISA", last4: "4242" } },
   { seq: 1012, placedAt: "2026-09-05T19:10:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["feature-5", 1]], orderStatus: "cancelled", methodId: "card", card: { brand: "VISA", last4: "4242" }, cancellation: { by: "admin", reason: "ลูกค้าแจ้งทาง LINE ว่าต้องการเปลี่ยนสีสินค้า", afterHours: 2 } },
-  { seq: 1011, placedAt: "2026-09-05T10:45:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], billing: COMPANY_BILLING, items: [["flash-9", 1], ["best-10", 1]], orderStatus: "completed", methodId: "card", card: { brand: "MASTERCARD", last4: "5100" }, couponCode: "SAVE20" },
+  { seq: 1011, placedAt: "2026-09-05T10:45:00+07:00", customer: CUSTOMERS[0], address: ADDRESSES[0], billing: COMPANY_BILLING, taxInvoice: { ...COMPANY_TAX_INVOICE, branchNo: "00002" }, taxInvoiceSentAfterHours: 3, items: [["flash-9", 1], ["best-10", 1]], orderStatus: "completed", methodId: "card", card: { brand: "MASTERCARD", last4: "5100" }, couponCode: "SAVE20" },
   { seq: 1010, placedAt: "2026-09-04T20:30:00+07:00", customer: CUSTOMERS[2], address: ADDRESSES[2], items: [["new-8", 1]], orderStatus: "completed", methodId: "mobilebanking" },
   { seq: 1009, placedAt: "2026-09-04T11:00:00+07:00", customer: CUSTOMERS[3], address: ADDRESSES[3], items: [["trend-4", 1], ["flash-11", 1]], orderStatus: "completed", methodId: "truemoney", coinsRedeemed: 300 },
   { seq: 1008, placedAt: "2026-09-03T17:25:00+07:00", customer: CUSTOMERS[4], address: ADDRESSES[4], items: [["best-6", 2]], orderStatus: "cancelled", methodId: "promptpay", cancellation: { by: "system", reason: AUTO_CANCEL_REASON, afterHours: 24 } },
@@ -499,6 +513,8 @@ function buildAdminSeedOrder(seed: OrderSeed): AdminOrder {
     },
     shipping,
     billingAddress: seed.billing,
+    taxInvoice: seed.taxInvoice,
+    taxInvoiceSentAt: seed.taxInvoice && seed.taxInvoiceSentAfterHours !== undefined ? addHours(seed.placedAt, seed.taxInvoiceSentAfterHours) : undefined,
     orderStatus: seed.orderStatus,
     paymentStatus,
     fulfillmentStatus: deriveFulfillmentStatus(shipping),

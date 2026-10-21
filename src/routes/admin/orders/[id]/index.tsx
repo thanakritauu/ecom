@@ -25,6 +25,8 @@ import {
   type AdminOrder,
   type OrderAddress,
   type OrderStatus,
+  formatOrderDateLabel,
+  taxInvoiceStatusOf,
 } from "~/lib/adminOrders";
 import { useAdminOrders } from "~/lib/adminOrderStore";
 import { useAdminCustomers } from "~/lib/adminCustomerStore";
@@ -33,6 +35,7 @@ import { getReceiptData } from "~/lib/receiptResolver";
 import { downloadOrderReceiptHtml } from "~/components/admin/orders/orderReceiptDocument";
 import { GIFT_PROMOTION } from "~/lib/cartSelectors";
 import { pushToast } from "~/lib/toast";
+import { formatTaxBranch, formatTaxId, TAX_INVOICE_STATUS_META, TAX_INVOICE_TYPE_LABEL, taxIdLabel, taxNameLabel } from "~/lib/taxInvoice";
 
 export default function AdminOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -41,6 +44,23 @@ export default function AdminOrderDetailPage() {
   const navigate = useNavigate();
 
   const order = createMemo(() => store.getById(params.id));
+
+  // An order that asked for a tax invoice gets the combined ใบเสร็จรับเงิน/ใบกำกับภาษี; the buttons say so.
+  const docName = () => (order()?.taxInvoice ? "ใบกำกับภาษี" : "ใบเสร็จ");
+  const [savingTaxSent, setSavingTaxSent] = createSignal(false);
+  const markTaxInvoiceSent = async (sent: boolean) => {
+    const o = order();
+    if (!o) return;
+    setSavingTaxSent(true);
+    try {
+      await store.setTaxInvoiceSent(o.id, sent);
+      pushToast(sent ? `ส่งใบกำกับภาษีไปที่ ${o.taxInvoice?.email ?? "อีเมลของลูกค้า"} แล้ว` : "ยกเลิกการบันทึกแล้ว", "success");
+    } catch {
+      pushToast(sent ? "ส่งใบกำกับภาษีไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" : "บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
+    } finally {
+      setSavingTaxSent(false);
+    }
+  };
 
   const [pendingStatus, setPendingStatus] = createSignal<OrderStatus | null>(null);
   const [saving, setSaving] = createSignal(false);
@@ -100,13 +120,13 @@ export default function AdminOrderDetailPage() {
                 <Show when={o().paymentStatus === "paid"}>
                 <div class="flex flex-wrap items-center gap-2">
                   <Button variant="outline" onClick={() => goToReceipt()}>
-                    <ReceiptIcon class="size-4" /> ดูใบเสร็จ
+                    <ReceiptIcon class="size-4" /> ดู{docName()}
                   </Button>
                   <Button variant="outline" onClick={() => goToReceipt(true)}>
-                    <PrintIcon class="size-4" /> พิมพ์ใบเสร็จ
+                    <PrintIcon class="size-4" /> พิมพ์{docName()}
                   </Button>
                   <Button variant="outline" onClick={handleDownloadReceipt}>
-                    <DownloadIcon class="size-4" /> ดาวน์โหลดใบเสร็จ
+                    <DownloadIcon class="size-4" /> ดาวน์โหลด{docName()}
                   </Button>
                 </div>
                 </Show>
@@ -222,9 +242,69 @@ export default function AdminOrderDetailPage() {
                   <AddressBlock address={o().shipping.address} />
                 </Section>
 
-                <Section title="ที่อยู่ออกใบกำกับภาษี">
-                  <Show when={o().billingAddress} fallback={<p class="text-sm text-ink-gray">ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง</p>}>
-                    {(b) => <AddressBlock address={b()} />}
+                {/* Only when the customer ticked "ขอใบกำกับภาษี" at Checkout. */}
+                <Section
+                  title="ใบกำกับภาษี"
+                  aside={
+                    <Show when={taxInvoiceStatusOf(o())}>
+                      {(st) => <StatusBadge tone={TAX_INVOICE_STATUS_META[st()].tone}>{TAX_INVOICE_STATUS_META[st()].label}</StatusBadge>}
+                    </Show>
+                  }
+                >
+                  <Show when={o().taxInvoice} fallback={<p class="text-sm text-ink-gray">ลูกค้าไม่ได้ขอใบกำกับภาษี</p>}>
+                    {(t) => (
+                      <div class="flex flex-col gap-3">
+                        {/* "ส่งใบกำกับภาษี" emails it (mock: records it as sent), so the list shows what's still waiting. */}
+                        <Show
+                          when={o().paymentStatus === "paid"}
+                          fallback={<p class="rounded-card bg-surface-gray px-3 py-2 text-sm text-ink-gray">ออกใบกำกับภาษีได้หลังลูกค้าชำระเงิน</p>}
+                        >
+                          <Show
+                            when={o().taxInvoiceSentAt}
+                            fallback={
+                              <div class="flex flex-col gap-2 rounded-card bg-surface-gray px-3 py-3">
+                                <p class="text-sm text-ink">หากตรวจสอบข้อมูลเรียบร้อยแล้ว กดส่งใบกำกับภาษีได้เลย ส่งไปที่ {t().email || "อีเมลของลูกค้า"}</p>
+                                <div class="flex flex-wrap gap-2">
+                                  <Button size="sm" variant="primary" loading={savingTaxSent()} onClick={() => markTaxInvoiceSent(true)}>
+                                    ส่งใบกำกับภาษี
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={handleDownloadReceipt}>
+                                    <DownloadIcon class="size-4" /> ดาวน์โหลดใบกำกับภาษี
+                                  </Button>
+                                </div>
+                              </div>
+                            }
+                          >
+                            {(at) => (
+                              <div class="flex flex-wrap items-center justify-between gap-2 rounded-card bg-success-soft px-3 py-2 text-sm">
+                                <span class="text-success">ส่งแล้วเมื่อ {formatOrderDateLabel(at())}</span>
+                                <button
+                                  type="button"
+                                  disabled={savingTaxSent()}
+                                  onClick={() => markTaxInvoiceSent(false)}
+                                  class="min-h-8 text-xs font-medium text-ink-gray underline lg:hover:text-brand-pink"
+                                >
+                                  ยกเลิกการบันทึก
+                                </button>
+                              </div>
+                            )}
+                          </Show>
+                        </Show>
+                        <dl class="flex flex-col gap-1.5 text-sm">
+                          <Row label="ประเภท" value={TAX_INVOICE_TYPE_LABEL[t().type]} />
+                          <Row label={taxNameLabel(t().type)} value={t().name} />
+                          <Row label={taxIdLabel(t().type)} value={formatTaxId(t().taxId)} />
+                          <Show when={formatTaxBranch(t())}>{(branch) => <Row label="สาขา" value={branch()} />}</Show>
+                          <Row label="อีเมลรับใบกำกับภาษี" value={t().email || "-"} />
+                        </dl>
+                        <div class="flex flex-col gap-1 border-t border-border pt-3">
+                          <p class="text-sm font-medium text-ink">ที่อยู่ออกใบกำกับภาษี</p>
+                          <Show when={o().billingAddress} fallback={<p class="text-sm text-ink-gray">ใช้ที่อยู่เดียวกับที่อยู่จัดส่ง</p>}>
+                            {(b) => <AddressBlock address={b()} />}
+                          </Show>
+                        </div>
+                      </div>
+                    )}
                   </Show>
                 </Section>
               </div>
@@ -283,10 +363,13 @@ export default function AdminOrderDetailPage() {
   );
 }
 
-function Section(props: { title: string; children: import("solid-js").JSX.Element }) {
+function Section(props: { title: string; aside?: import("solid-js").JSX.Element; children: import("solid-js").JSX.Element }) {
   return (
     <div class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-      <h2 class="text-base font-semibold text-ink">{props.title}</h2>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-base font-semibold text-ink">{props.title}</h2>
+        {props.aside}
+      </div>
       {props.children}
     </div>
   );

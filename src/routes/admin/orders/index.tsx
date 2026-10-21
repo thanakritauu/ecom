@@ -31,8 +31,12 @@ import {
   type OrderStatus,
   type PaymentStatus,
   type FulfillmentStatus,
+  taxInvoiceStatusOf,
+  formatOrderAddress,
+  formatOrderDateLabel,
 } from "~/lib/adminOrders";
 import { useAdminOrders } from "~/lib/adminOrderStore";
+import { formatTaxBranch, formatTaxId, TAX_INVOICE_STATUS_META, TAX_INVOICE_TYPE_LABEL, vatBreakdown, type TaxInvoiceStatus } from "~/lib/taxInvoice";
 import { pushToast } from "~/lib/toast";
 import type { AsyncStatus } from "~/lib/types";
 
@@ -62,6 +66,8 @@ export default function AdminOrderListPage() {
   const [fulfillmentFilter, setFulfillmentFilterRaw] = createSignal<FulfillmentStatus | "all">("all");
   const [valueFilter, setValueFilterRaw] = createSignal("all");
   const [methodFilter, setMethodFilterRaw] = createSignal("all");
+  // ใบกำกับภาษี: all / asked for (any) / still to email / emailed.
+  const [taxFilter, setTaxFilterRaw] = createSignal<"all" | "requested" | TaxInvoiceStatus>("all");
   const [dateFilter, setDateFilter] = createSignal<DashboardPeriodKey>("30d");
   const [customRange, setCustomRange] = createSignal<DateRange>();
   const [sort, setSortRaw] = createSignal("date-desc");
@@ -87,12 +93,13 @@ export default function AdminOrderListPage() {
   const setFulfillmentFilter = (v: string) => { setFulfillmentFilterRaw(v as FulfillmentStatus | "all"); resetPage(); };
   const setValueFilter = (v: string) => { setValueFilterRaw(v); resetPage(); };
   const setMethodFilter = (v: string) => { setMethodFilterRaw(v); resetPage(); };
+  const setTaxFilter = (v: string) => { setTaxFilterRaw(v as "all" | "requested" | TaxInvoiceStatus); resetPage(); };
   const setDateFilterAndReset = (v: DashboardPeriodKey, range?: DateRange) => { setDateFilter(v); if (range) setCustomRange(range); resetPage(); };
   const setSort = (v: string) => { setSortRaw(v); resetPage(); };
   const setPageSize = (v: number) => { setPageSizeRaw(v); resetPage(); };
 
   const hasActiveFilters = () =>
-    search().trim() !== "" || statusFilter() !== "all" || paymentFilter() !== "all" || fulfillmentFilter() !== "all" || valueFilter() !== "all" || methodFilter() !== "all";
+    search().trim() !== "" || statusFilter() !== "all" || paymentFilter() !== "all" || fulfillmentFilter() !== "all" || valueFilter() !== "all" || methodFilter() !== "all" || taxFilter() !== "all";
 
   const clearFilters = () => {
     setSearchRaw("");
@@ -100,6 +107,7 @@ export default function AdminOrderListPage() {
     setFulfillmentFilterRaw("all");
     setValueFilterRaw("all");
     setMethodFilterRaw("all");
+    setTaxFilterRaw("all");
     resetPage();
   };
 
@@ -115,6 +123,7 @@ export default function AdminOrderListPage() {
     const fulfillment = fulfillmentFilter();
     const valueBucket = valueFilter();
     const method = methodFilter();
+    const tax = taxFilter();
     const range = resolvePeriodRange(dateFilter(), customRange());
     const q = search().trim().toLowerCase();
     const bucket = ORDER_VALUE_BUCKETS.find((b) => b.value === valueBucket);
@@ -125,6 +134,7 @@ export default function AdminOrderListPage() {
       if (fulfillment !== "all" && order.fulfillmentStatus !== fulfillment) return false;
       if (bucket && (order.totals.grandTotal < bucket.min || order.totals.grandTotal >= bucket.max)) return false;
       if (method !== "all" && order.payment.methodId !== method) return false;
+      if (tax !== "all" && (tax === "requested" ? !order.taxInvoice : taxInvoiceStatusOf(order) !== tax)) return false;
       if (!isWithinRange(order, range)) return false;
       if (q) {
         const haystack = `${order.orderNumber} ${order.customer.name} ${order.customer.email} ${order.customer.phone} ${order.shipping.trackingNumber ?? ""} ${order.items
@@ -167,6 +177,19 @@ export default function AdminOrderListPage() {
     { header: "สถานะคำสั่งซื้อ", value: (o) => ORDER_STATUS_META[o.orderStatus].label },
     { header: "การชำระเงิน", value: (o) => PAYMENT_STATUS_META[o.paymentStatus].label },
     { header: "การจัดส่ง", value: (o) => FULFILLMENT_STATUS_META[o.fulfillmentStatus].label },
+    // For the sales-tax report: VAT on paid orders (prices include 7%), and the buyer details of a requested tax invoice.
+    { header: "มูลค่าก่อนภาษีมูลค่าเพิ่ม", value: (o) => (o.paymentStatus === "paid" ? vatBreakdown(o.totals.grandTotal).beforeVat : "") },
+    { header: "ภาษีมูลค่าเพิ่ม 7%", value: (o) => (o.paymentStatus === "paid" ? vatBreakdown(o.totals.grandTotal).vat : "") },
+    { header: "ขอใบกำกับภาษี", value: (o) => (o.taxInvoice ? "ขอ" : "") },
+    { header: "ประเภทผู้ขอใบกำกับภาษี", value: (o) => (o.taxInvoice ? TAX_INVOICE_TYPE_LABEL[o.taxInvoice.type] : "") },
+    { header: "ชื่อในใบกำกับภาษี", value: (o) => o.taxInvoice?.name ?? "" },
+    // Dashed form keeps the leading 0 when the file is opened in Excel.
+    { header: "เลขประจำตัวผู้เสียภาษี", value: (o) => (o.taxInvoice ? formatTaxId(o.taxInvoice.taxId) : "") },
+    { header: "สาขา", value: (o) => (o.taxInvoice ? (formatTaxBranch(o.taxInvoice) ?? "") : "") },
+    { header: "ที่อยู่ออกใบกำกับภาษี", value: (o) => (o.taxInvoice ? formatOrderAddress(o.billingAddress ?? o.shipping.address) : "") },
+    { header: "อีเมลรับใบกำกับภาษี", value: (o) => o.taxInvoice?.email ?? "" },
+    { header: "สถานะใบกำกับภาษี", value: (o) => { const st = taxInvoiceStatusOf(o); return st ? TAX_INVOICE_STATUS_META[st].label : ""; } },
+    { header: "วันที่ส่งใบกำกับภาษี", value: (o) => (o.taxInvoiceSentAt ? formatOrderDateLabel(o.taxInvoiceSentAt) : "") },
   ];
 
   const totalPages = createMemo(() => Math.max(1, Math.ceil(sorted().length / pageSize())));
@@ -236,9 +259,17 @@ export default function AdminOrderListPage() {
       key: "order",
       label: "คำสั่งซื้อ",
       render: (row) => (
-        <div>
+        <div class="flex flex-col items-start">
           <p class="font-medium text-ink">{row.orderNumber}</p>
           <p class="text-xs text-ink-gray">{row.createdAt}</p>
+          {/* Asked for a tax invoice: still to email, or emailed. */}
+          <Show when={taxInvoiceStatusOf(row)}>
+            {(st) => (
+              <StatusBadge tone={TAX_INVOICE_STATUS_META[st()].tone} class="mt-1">
+                {TAX_INVOICE_STATUS_META[st()].label}
+              </StatusBadge>
+            )}
+          </Show>
         </div>
       ),
     },
@@ -310,6 +341,17 @@ export default function AdminOrderListPage() {
                 options: METHOD_FILTER_OPTIONS,
               },
               {
+                id: "tax",
+                label: "ใบกำกับภาษี",
+                value: taxFilter(),
+                options: [
+                  { value: "all", label: "ทุกคำสั่งซื้อ" },
+                  { value: "requested", label: "ขอใบกำกับภาษี" },
+                  { value: "pending", label: TAX_INVOICE_STATUS_META.pending.label },
+                  { value: "sent", label: TAX_INVOICE_STATUS_META.sent.label },
+                ],
+              },
+              {
                 id: "value",
                 label: "ยอดสั่งซื้อ",
                 value: valueFilter(),
@@ -321,6 +363,7 @@ export default function AdminOrderListPage() {
               if (id === "fulfillment") setFulfillmentFilter(value);
               if (id === "value") setValueFilter(value);
               if (id === "method") setMethodFilter(value);
+              if (id === "tax") setTaxFilter(value);
             }}
             sort={{ value: sort(), options: SORT_OPTIONS, onChange: setSort }}
           />
