@@ -44,6 +44,10 @@ type PerksProps = {
 };
 
 export function CheckoutOrderSummary(props: {
+  /** The carrier picked in "เลือกการจัดส่ง", named on the ค่าจัดส่ง row (default DHL). */
+  carrierName?: string;
+  /** That carrier's fee, struck through when shipping is free (default `SHIPPING_FEE`). */
+  carrierFee?: number;
   /** The cart lines as shown (their own price). */
   lines: ResolvedCartLine[];
   /** The same lines after every promo (`CartPricing.pricedLines`): what the coupon picker counts. */
@@ -169,11 +173,11 @@ export function CheckoutOrderSummary(props: {
           </div>
         </Show>
         <div class="flex items-center justify-between">
-          <span class="text-ink-gray">ค่าจัดส่ง: จัดส่งโดย DHL</span>
-          {/* Struck ฿60.00 + "ส่งฟรี" once `computeShippingFee` → 0 (the DHL box shows carrier + ETA only). */}
+          <span class="text-ink-gray">ค่าจัดส่ง: จัดส่งโดย {props.carrierName ?? "DHL"}</span>
+          {/* Struck ฿60.00 + "ส่งฟรี" once `computeShippingFee` → 0 (the delivery tiles show carrier + ETA only). */}
           <Show when={props.totals.shippingFee === 0} fallback={<span class="font-bold text-ink">{formatTHB(props.totals.shippingFee)}</span>}>
             <span class="flex items-baseline gap-1.5">
-              <span class="text-xs text-ink-gray line-through">{formatTHB(SHIPPING_FEE)}</span>
+              <span class="text-xs text-ink-gray line-through">{formatTHB(props.carrierFee ?? SHIPPING_FEE)}</span>
               <span class="font-bold text-success">ส่งฟรี</span>
             </span>
           </Show>

@@ -138,8 +138,20 @@ export function computeCartTotal(resolved: ResolvedCartLine[]): number {
  * coupon, Charmiss Coin), instead of three separate screens each re-deriving
  * a total their own way.
  */
-/** One carrier, no shipping choice at checkout — every order ships DHL standard (shown with its logo); the fee is `computeShippingFee`. */
+/** The default carrier (DHL standard): orders, help pages and FAQ name it; the fee is `computeShippingFee`. */
 export const DELIVERY = { carrier: "DHL", label: "จัดส่งโดย DHL", method: "จัดส่งมาตรฐาน", etaLabel: "ได้รับภายใน 2-3 วันทำการ" } as const;
+
+/**
+ * Checkout's delivery choice (mock until the other carriers are contracted): DHL first and picked by
+ * default. `fee` = that carrier's shipping fee; a free-shipping promo makes every option free.
+ */
+export const DELIVERY_OPTIONS = [
+  { id: "dhl", name: "DHL", fee: SHIPPING_FEE },
+  { id: "flash", name: "Flash Express", fee: 50 },
+  { id: "kerry", name: "Kerry Express", fee: 55 },
+  { id: "ems", name: "EMS", fee: 45 },
+] as const;
+export type DeliveryOptionId = (typeof DELIVERY_OPTIONS)[number]["id"];
 
 /** Paid on the Checkout page itself (no separate payment step). No installments / cash on delivery. Order = display order; the first is the default pick. */
 export const PAYMENT_METHODS = [

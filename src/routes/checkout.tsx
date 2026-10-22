@@ -16,7 +16,9 @@ import {
   couponUsageBlock,
   maxRedeemableCoins,
   MOCK_COIN_BALANCE,
+  DELIVERY_OPTIONS,
   type Coupon,
+  type DeliveryOptionId,
 } from "~/lib/cartSelectors";
 import { createAddressBook, createLocalAddressRepository, type AddressMockState } from "~/lib/addressBook";
 import { createMockOrderRepository, createOrderHistory } from "~/lib/orderHistory";
@@ -38,6 +40,7 @@ import {
   type TaxInvoiceProfile,
 } from "~/lib/taxInvoiceProfiles";
 import { PaymentSection } from "~/components/checkout/PaymentSection";
+import { DeliverySection } from "~/components/checkout/DeliverySection";
 import { createCheckoutPayment, type PaidResult } from "~/components/checkout/checkoutPayment";
 import { generateOrderNumber } from "~/lib/orderNumber";
 import { CheckoutOrderSummary, CheckoutPerks } from "~/components/checkout/CheckoutOrderSummary";
@@ -128,6 +131,11 @@ export default function CheckoutPage() {
   };
   const setDefaultTaxProfile = (id: string) =>
     setTaxProfiles((list) => (auth.isAuthenticated() ? setDefaultTaxInvoiceProfile(accountState(), id) : withDefaultTaxInvoiceProfile(list, id)));
+  const [deliveryId, setDeliveryId] = createSignal<DeliveryOptionId>("dhl");
+  const delivery = () => DELIVERY_OPTIONS.find((o) => o.id === deliveryId()) ?? DELIVERY_OPTIONS[0];
+  // The picked carrier's fee, unless a free-shipping promo is unlocked (then every carrier is free).
+  const freeShipping = () => promos.shippingFee() === 0;
+  const shippingFee = () => (freeShipping() ? 0 : delivery().fee);
   const [pickedCoupon, setCoupon] = createSignal<Coupon>();
   const [coinsPicked, setCoinsPicked] = createSignal(0);
 
@@ -166,7 +174,7 @@ export default function CheckoutPage() {
   );
   const coinsRedeemed = () => Math.min(coinsPicked(), maxCoins());
   const totals = createMemo(() =>
-    computeCheckoutTotals({ subtotal: subtotal(), promoDiscount: promoDiscount(), lines: pricedLines(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: promos.shippingFee() }),
+    computeCheckoutTotals({ subtotal: subtotal(), promoDiscount: promoDiscount(), lines: pricedLines(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: shippingFee() }),
   );
 
   const tier = () => resolveTier(yearlySpend(orderHistory.orders())).current;
@@ -374,7 +382,8 @@ export default function CheckoutPage() {
                       </section>
                     </Show>
                   </Show>
-                  {/* Delivery (DHL) box hidden for now: the carrier is named on the summary's "ค่าจัดส่ง" row instead. */}
+                  {/* Carrier choice: same tiles as the payment methods; DHL by default. */}
+                  <DeliverySection value={deliveryId()} onChange={setDeliveryId} free={freeShipping()} disabled={payment.waiting()} />
 
                   {/* Payment — paid here; its button ends the form. */}
                   <PaymentSection
@@ -413,6 +422,8 @@ export default function CheckoutPage() {
                 </div>
 
                 <CheckoutOrderSummary
+                  carrierName={delivery().name}
+                  carrierFee={delivery().fee}
                   lines={resolvedLines()}
                   pricedLines={pricedLines()}
                   promoRows={promos.pricing().rows}
