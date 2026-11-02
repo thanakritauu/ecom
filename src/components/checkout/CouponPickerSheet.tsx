@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, on, Show } from "solid-js";
+import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
 import {
   couponCartBlock,
   couponDiscountAmount,
@@ -85,10 +85,27 @@ export function CouponPickerSheet(props: {
   ];
   const [tab, setTab] = createSignal<Tab>("usable");
   createEffect(on(() => props.open, (open) => open && setTab(tabLists.usable().length > 0 ? "usable" : "all")));
+  // Ticking reorders the list (the coupon in use leads it): each moved ticket slides from where it was to its new
+  // place (FLIP, ~0.3s), so a swapped-in coupon is seen rising to the top and the replaced one dropping back.
+  const itemEls = new Map<string, HTMLElement>();
+  const withSlide = (change: () => void, focusCode?: string) => {
+    const before = new Map([...itemEls].map(([code, el]) => [code, el.getBoundingClientRect().top] as const));
+    change();
+    if (typeof window === "undefined" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    for (const [code, el] of itemEls) {
+      const from = before.get(code);
+      if (from === undefined || !el.isConnected) continue;
+      const dy = from - el.getBoundingClientRect().top;
+      if (Math.abs(dy) >= 1) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "translateY(0)" }], { duration: 320, easing: "cubic-bezier(0.2, 0, 0, 1)" });
+    }
+    // Bring the coupon just ticked into view at its new place (it may have moved above the scrolled area).
+    if (focusCode) itemEls.get(focusCode)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
+
   // The popup stays open so a second coupon that stacks can be ticked too; "ตกลง" closes it.
   const apply = (coupon: Coupon, via: "code" | "pick") => {
     const replaces = props.applied.length > 0 && !canAddCoupon(props.applied, coupon);
-    props.onApply(coupon);
+    withSlide(() => props.onApply(coupon), coupon.code);
     props.onCollect?.(coupon.code);
     if (via === "code") setCode("");
     pushToast(
@@ -126,7 +143,7 @@ export function CouponPickerSheet(props: {
   // A round check on each ticket (ticked = in use): tap to use, tap the ticked one to stop using it.
   // One that can't be used has a grey ring; the reason is written under it.
   const action = (coupon: Coupon): CouponCardAction => {
-    if (isApplied(coupon)) return { label: "ยกเลิกการใช้คูปอง", variant: "outline", onClick: () => props.onRemove(coupon.code), check: { checked: true } };
+    if (isApplied(coupon)) return { label: "ยกเลิกการใช้คูปอง", variant: "outline", onClick: () => withSlide(() => props.onRemove(coupon.code)), check: { checked: true } };
     return { label: "ใช้คูปองนี้", variant: "primary", disabled: !canUse(coupon), onClick: () => apply(coupon, "pick"), check: { checked: false } };
   };
 
@@ -208,7 +225,13 @@ export function CouponPickerSheet(props: {
               const replaces = () => !applied() && canUse(coupon) && props.applied.length > 0 && !canAddCoupon(props.applied, coupon);
               const blocked = () => blockOf(coupon);
               return (
-                <li class="flex list-none flex-col gap-4">
+                <li
+                  class="flex list-none flex-col gap-4"
+                  ref={(el) => {
+                    itemEls.set(coupon.code, el);
+                    onCleanup(() => itemEls.get(coupon.code) === el && itemEls.delete(coupon.code));
+                  }}
+                >
                   {/* Can't be used: faded; expired: black and white instead (`CouponCard`'s own look). */}
                   <div classList={{ "opacity-50": (!!cartBlocked() || !!blocked()) && !applied() && !isCouponExpired(coupon) }}>
                     <CouponCard coupon={couponTicket(coupon)} action={action(coupon)} expired={isCouponExpired(coupon)} />
