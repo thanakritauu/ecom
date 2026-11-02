@@ -5,8 +5,10 @@ import {
   couponEligibleSubtotal,
   couponStackBlocked,
   couponUsageBlock,
+  canAddCoupon,
   isCouponActive,
   isCouponExpired,
+  MAX_COUPONS_PER_ORDER,
   isCouponNotStarted,
   isCouponScoped,
   type Coupon,
@@ -23,9 +25,9 @@ import { pushToast } from "~/lib/toast";
 
 /**
  * Checkout coupon picker — the shared modal frame (`SheetModal`, same as the
- * Product Option Modal) listing Home's coupon ticket (`CouponCard`). One
- * coupon per order: "ใช้เลย" applies it, closes and confirms with a toast; the applied one shows
- * "ยกเลิก". A coupon whose minimum spend isn't met yet stays visible but
+ * Product Option Modal) listing Home's coupon ticket (`CouponCard`). Up to 2
+ * coupons per order when both stack with coupons (else one): ticking a coupon's round check applies it, closes and confirms with a toast; the
+ * applied one is ticked (tap again to stop using it) and always first in its tab. A coupon whose minimum spend isn't met yet stays visible but
  * can't be used, with how much more to buy. A code can also be typed in
  * (top of the modal), case-insensitive: any switched-on coupon in
  * `codeCoupons`, listed or not, same rules. A coupon outside its dates is
@@ -46,9 +48,10 @@ export function CouponPickerSheet(props: {
   lines: ResolvedCartLine[];
   /** How many of this shopper's own (non-cancelled) orders used the code; 0 for a guest. */
   usedByShopper?: (code: string) => number;
-  applied: Coupon | undefined;
+  /** The coupons in use (up to 2 when they stack). */
+  applied: Coupon[];
   onApply: (coupon: Coupon) => void;
-  onRemove: () => void;
+  onRemove: (code: string) => void;
   /** Codes this shopper has collected (Home / /coupons); the "เก็บแล้ว" tab. */
   collectedCodes?: Set<string>;
   /** Collected coupons past their dates: listed last under "เก็บแล้ว" as หมดอายุแล้ว (never usable). */
@@ -67,10 +70,13 @@ export function CouponPickerSheet(props: {
 
   // Tabs: ใช้ได้ (usable now) / เก็บแล้ว (collected) / ทั้งหมด (every listed coupon). Opens on ใช้ได้, or ทั้งหมด when none is.
   type Tab = "usable" | "collected" | "all";
+  // The coupon in use always leads its tab.
+  const isApplied = (c: Coupon) => props.applied.some((a) => a.code === c.code);
+  const appliedFirst = (list: Coupon[]) => [...list.filter(isApplied), ...list.filter((c) => !isApplied(c))];
   const tabLists: Record<Tab, () => Coupon[]> = {
-    usable: () => listed().filter((c) => canUse(c) || props.applied?.code === c.code),
-    collected: () => [...listed().filter((c) => props.collectedCodes?.has(c.code) || props.applied?.code === c.code), ...(props.expiredCollected ?? [])],
-    all: listed,
+    usable: () => appliedFirst(listed().filter((c) => canUse(c) || isApplied(c))),
+    collected: () => appliedFirst([...listed().filter((c) => props.collectedCodes?.has(c.code) || isApplied(c)), ...(props.expiredCollected ?? [])]),
+    all: () => appliedFirst(listed()),
   };
   const TABS: { key: Tab; label: string; empty: string }[] = [
     { key: "usable", label: "ใช้ได้", empty: "ยังไม่มีคูปองที่ใช้กับคำสั่งซื้อนี้ได้" },
@@ -79,12 +85,14 @@ export function CouponPickerSheet(props: {
   ];
   const [tab, setTab] = createSignal<Tab>("usable");
   createEffect(on(() => props.open, (open) => open && setTab(tabLists.usable().length > 0 ? "usable" : "all")));
+  // The popup stays open so a second coupon that stacks can be ticked too; "ตกลง" closes it.
   const apply = (coupon: Coupon, via: "code" | "pick") => {
+    const replaces = props.applied.length > 0 && !canAddCoupon(props.applied, coupon);
     props.onApply(coupon);
     props.onCollect?.(coupon.code);
-    props.onOpenChange(false);
+    if (via === "code") setCode("");
     pushToast(
-      via === "code" ? `ใช้โค้ด ${coupon.code} แล้ว` : "ใช้คูปองแล้ว",
+      via === "code" ? `ใช้โค้ด ${coupon.code} แล้ว` : replaces ? "เปลี่ยนคูปองแล้ว" : "ใช้คูปองแล้ว",
       "success",
       `ลด ${formatTHB(couponDiscountAmount(coupon, couponEligibleSubtotal(coupon, props.lines)))} จากยอดสั่งซื้อนี้`,
     );
@@ -115,16 +123,11 @@ export function CouponPickerSheet(props: {
     apply(coupon, "code");
   };
 
+  // A round check on each ticket (ticked = in use): tap to use, tap the ticked one to stop using it.
+  // One that can't be used has a grey ring; the reason is written under it.
   const action = (coupon: Coupon): CouponCardAction => {
-    if (props.applied?.code === coupon.code) return { label: "ยกเลิก", variant: "outline", onClick: props.onRemove };
-    if (isCouponExpired(coupon)) return { label: "หมดอายุแล้ว", variant: "outline", disabled: true, onClick: () => {} };
-    if (coupon.audienceBlock) return { label: "ไม่ตรงเงื่อนไข", variant: "outline", disabled: true, onClick: () => {} };
-    return {
-      label: "ใช้เลย",
-      variant: "primary",
-      disabled: !canUse(coupon),
-      onClick: () => apply(coupon, "pick"),
-    };
+    if (isApplied(coupon)) return { label: "ยกเลิกการใช้คูปอง", variant: "outline", onClick: () => props.onRemove(coupon.code), check: { checked: true } };
+    return { label: "ใช้คูปองนี้", variant: "primary", disabled: !canUse(coupon), onClick: () => apply(coupon, "pick"), check: { checked: false } };
   };
 
   return (
@@ -133,7 +136,12 @@ export function CouponPickerSheet(props: {
       onOpenChange={props.onOpenChange}
       height="auto"
       title="คูปองส่วนลด"
-      description="เลือกได้ 1 คูปองต่อคำสั่งซื้อ"
+      description={`ใช้ร่วมกันได้สูงสุด ${MAX_COUPONS_PER_ORDER} คูปอง สำหรับคูปองที่ใช้ร่วมกับคูปองอื่นได้`}
+      footer={
+        <Button type="button" variant="primary" size="lg" class="w-full" onClick={() => props.onOpenChange(false)}>
+          ตกลง
+        </Button>
+      }
     >
       <form onSubmit={applyCode} novalidate class="flex flex-col gap-1.5">
         <div class="flex items-start gap-2">
@@ -195,12 +203,15 @@ export function CouponPickerSheet(props: {
           <For each={tabLists[tab()]()}>
             {(coupon) => {
               const cartBlocked = () => couponCartBlock(coupon, props.lines);
-              const applied = () => props.applied?.code === coupon.code;
+              const applied = () => isApplied(coupon);
+              // Usable, but it can't go with what's ticked: ticking it swaps them out.
+              const replaces = () => !applied() && canUse(coupon) && props.applied.length > 0 && !canAddCoupon(props.applied, coupon);
               const blocked = () => blockOf(coupon);
               return (
                 <li class="flex list-none flex-col gap-4">
-                  <div classList={{ "opacity-50": (!!cartBlocked() || !!blocked()) && !applied() }}>
-                    <CouponCard coupon={couponTicket(coupon)} action={action(coupon)} />
+                  {/* Can't be used: faded; expired: black and white instead (`CouponCard`'s own look). */}
+                  <div classList={{ "opacity-50": (!!cartBlocked() || !!blocked()) && !applied() && !isCouponExpired(coupon) }}>
+                    <CouponCard coupon={couponTicket(coupon)} action={action(coupon)} expired={isCouponExpired(coupon)} />
                   </div>
                   <Show when={applied()}>
                     <p class="px-1 text-xs font-medium text-brand-pink">กำลังใช้คูปองนี้</p>
@@ -210,6 +221,9 @@ export function CouponPickerSheet(props: {
                   </Show>
                   <Show when={!applied() && !blocked() && cartBlocked()}>
                     <p class="px-1 text-xs text-ink-gray">{cartBlocked()}</p>
+                  </Show>
+                  <Show when={replaces()}>
+                    <p class="px-1 text-xs text-ink-gray">ใช้ร่วมกับคูปองที่เลือกอยู่ไม่ได้ เลือกแล้วจะใช้แทน</p>
                   </Show>
                 </li>
               );

@@ -1,4 +1,5 @@
 import { createMemo, createSignal, Show } from "solid-js";
+import { couponCombinable } from "~/lib/adminMarketing";
 import { couponAudienceBadge } from "~/lib/marketingAudience";
 import { TextField } from "~/components/shared/TextField";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
@@ -15,7 +16,6 @@ import {
   SettingRow as ToggleRow,
   audienceError,
   fromAudienceDraft,
-  fromCombinableDraft,
   toAudienceDraft,
   toCombinableDraft,
   type AudienceDraft,
@@ -93,7 +93,8 @@ export function CouponForm(props: {
   const isNewCustomerTool = props.tool === "coupon_new";
   const isCodeTool = props.tool === "coupon_code";
   const [audience, setAudience] = createSignal<AudienceDraft>(isNewCustomerTool ? { kind: "new", tiers: [] } : toAudienceDraft(props.initial?.audience));
-  const [combinable, setCombinable] = createSignal(toCombinableDraft(props.initial?.combinableWith));
+  // A coupon's unset = every promo kind but not other coupons; saved as ticked, so "คูปอง" stays exactly as chosen.
+  const [combinable, setCombinable] = createSignal(toCombinableDraft(couponCombinable(props.initial?.combinableWith)));
   const [discountType, setDiscountType] = createSignal<CouponDiscountType>(props.initial?.discountType ?? "baht");
   const [discount, setDiscount] = createSignal(props.initial ? String(props.initial.discount) : "");
   const [maxDiscount, setMaxDiscount] = createSignal(props.initial?.maxDiscount ? String(props.initial.maxDiscount) : "");
@@ -206,7 +207,7 @@ export function CouponForm(props: {
     showOnHome: isCodeTool ? false : showOnHome(),
     showAtCheckout: isCodeTool ? false : showAtCheckout(),
     audience: fromAudienceDraft(audience()),
-    combinableWith: fromCombinableDraft(combinable()),
+    combinableWith: [...combinable()],
     tool: props.tool,
     startDate: startDate(),
     startTime: startTime(),
@@ -254,7 +255,11 @@ export function CouponForm(props: {
   /** The same values as the storefront coupon, for the conditions sheet preview. */
   const previewSheetCoupon = createMemo(() => {
     const v = values();
-    return { ...buildCoupon({ ...v, code: v.code, endDate: v.endDate, usedCount: 0 }), audienceLabel: couponAudienceBadge(fromAudienceDraft(audience())) };
+    return {
+      ...buildCoupon({ ...v, code: v.code, endDate: v.endDate, usedCount: 0 }),
+      audienceLabel: couponAudienceBadge(fromAudienceDraft(audience())),
+      combinableWith: [...combinable()],
+    };
   });
 
   const couponForm = (
@@ -385,7 +390,7 @@ export function CouponForm(props: {
             {discountType() === "percent"
               ? "ลดเป็นเปอร์เซ็นต์ของยอดสินค้า ปัดเศษลงเป็นบาท ไม่รวมค่าจัดส่ง เว้นลดสูงสุดว่างไว้ถ้าไม่จำกัด"
               : "ลดจากยอดสินค้า ไม่รวมค่าจัดส่ง"}{" "}
-            ใช้ได้ 1 คูปองต่อคำสั่งซื้อ เว้นยอดขั้นต่ำว่างไว้ถ้าไม่มีขั้นต่ำ
+            เว้นยอดขั้นต่ำว่างไว้ถ้าไม่มีขั้นต่ำ
           </p>
         </Section>
 
@@ -501,6 +506,7 @@ export function CouponForm(props: {
         {/* 6) การใช้ร่วมกับโปรอื่น */}
         <Section title="การใช้ร่วมกับโปรอื่น" description="คูปองนี้ใช้ร่วมกับโปรประเภทไหนได้บ้างในคำสั่งซื้อเดียวกัน">
           <CombinableField value={combinable()} onChange={setCombinable} disabled={saving()} />
+          <p class="text-xs text-ink-gray">ติ๊ก "คูปอง" เพื่อให้ใช้ร่วมกับคูปองอื่นที่ติ๊กไว้เหมือนกันได้ สูงสุด 2 คูปองต่อคำสั่งซื้อ</p>
         </Section>
       </div>
 

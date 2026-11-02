@@ -24,7 +24,7 @@ import {
   couponPublishProblems,
 } from "~/lib/adminMarketing";
 import { useAdminMarketing } from "~/lib/adminMarketingStore";
-import { MARKETING_TOOL_META, formatCombinable, marketingHubListHref, couponTool } from "~/lib/adminMarketing";
+import { MARKETING_TOOL_META, formatCouponCombinable, marketingHubListHref, couponTool } from "~/lib/adminMarketing";
 import { formatAudience } from "~/lib/marketingAudience";
 import { useAdminOrders } from "~/lib/adminOrderStore";
 import { formatOrderDateLabel } from "~/lib/adminOrders";
@@ -217,7 +217,7 @@ export default function AdminCouponDetailPage() {
                   <dl class="flex flex-col gap-1.5 text-sm">
                     <Row label="เครื่องมือ" value={MARKETING_TOOL_META[couponTool(c())].label} />
                     <Row label="กลุ่มลูกค้า" value={formatAudience(c().audience)} />
-                    <Row label="ใช้ร่วมกับโปรอื่น" value={formatCombinable(c().combinableWith)} />
+                    <Row label="ใช้ร่วมกับโปรอื่น" value={formatCouponCombinable(c().combinableWith)} />
                     <Row label="เริ่ม" value={formatMarketingDateTime(c().startDate, c().startTime)} />
                     <Row label="สิ้นสุด" value={formatMarketingDateTime(c().endDate, c().endTime)} />
                   </dl>

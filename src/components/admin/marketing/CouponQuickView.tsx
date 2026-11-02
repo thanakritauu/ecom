@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
 import { couponAudienceBadge, formatAudience } from "~/lib/marketingAudience";
-import { formatCombinable, MARKETING_TOOL_META, couponTool } from "~/lib/adminMarketing";
+import { formatCouponCombinable, MARKETING_TOOL_META, couponTool } from "~/lib/adminMarketing";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { ProductSkuRefList } from "~/components/admin/ProductSkuPicker";
 import { CouponCard, type Coupon as TicketCoupon } from "~/components/shared/CouponCard";
@@ -65,7 +65,7 @@ export function CouponQuickView(props: { coupon: Coupon; usageCount: number }) {
         <Field label="จำกัดต่อลูกค้า" value={formatCouponLimit(c().perCustomerLimit)} />
         <Field label="เครื่องมือ" value={MARKETING_TOOL_META[couponTool(c())].label} />
         <Field label="กลุ่มลูกค้า" value={formatAudience(c().audience)} />
-        <Field label="ใช้ร่วมกับโปรอื่น" value={formatCombinable(c().combinableWith)} />
+        <Field label="ใช้ร่วมกับโปรอื่น" value={formatCouponCombinable(c().combinableWith)} />
         <Field label="เริ่ม" value={formatMarketingDateTime(c().startDate, c().startTime)} />
         <Field label="สิ้นสุด" value={formatMarketingDateTime(c().endDate, c().endTime)} />
       </div>

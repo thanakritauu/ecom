@@ -2,7 +2,7 @@ import { createSignal, createUniqueId, For, onCleanup, Show, type JSX } from "so
 import { SheetModal } from "./SheetModal";
 import { CheckIcon } from "./icons";
 import { pushToast } from "~/lib/toast";
-import { isCouponScoped, type Coupon } from "~/lib/cartSelectors";
+import { isCouponScoped, MAX_COUPONS_PER_ORDER, stacksWithCoupons, type Coupon } from "~/lib/cartSelectors";
 import { useProductCatalog } from "~/lib/productCatalog";
 import type { Product } from "~/lib/types";
 import type { ProductSkuRef } from "~/lib/productSkuRef";
@@ -41,7 +41,7 @@ function expiryText(expiresAt: string) {
  * Coupon details + usage conditions, opened by tapping a `CouponCard`. The
  * conditions mirror how Checkout actually prices an order (`computeCheckoutTotals`;
  * a coupon limited to some products counts only those lines):
- * one coupon per order, discount taken off the product subtotal (shipping
+ * up to 2 coupons per order when both stack, discount taken off the product subtotal (shipping
  * untouched, a % coupon capped by its max), min spend checked against that subtotal, and Charmiss Coin
  * redemption stacks on top. `ticket` is the same coupon ticket the shopper
  * tapped (picture only) shown as the header; `action` is the card's own
@@ -87,7 +87,8 @@ export function CouponDetailBody(props: { coupon: Coupon; ticket?: JSX.Element }
       c.minSpend > 0 ? `${what} เมื่อ${base}ครบ ${baht(c.minSpend)} ขึ้นไป` : `${what} ไม่มียอดซื้อขั้นต่ำ`,
       `คำนวณจาก${base} ไม่รวมค่าจัดส่งและของแถม`,
       scoped ? scopeText(c.productScope!, catalog.products()) : "ใช้ได้กับสินค้าทุกรายการ",
-      "ใช้ได้ 1 คูปองต่อคำสั่งซื้อ ใช้ร่วมกับคูปองอื่นไม่ได้",
+      // Stacks only when Admin ticked "คูปอง" in its "การใช้ร่วมกับโปรอื่น".
+      stacksWithCoupons(c) ? `ใช้ร่วมกับคูปองอื่นที่ใช้ร่วมกันได้ สูงสุด ${MAX_COUPONS_PER_ORDER} คูปองต่อคำสั่งซื้อ` : "ใช้ร่วมกับคูปองอื่นไม่ได้",
     ];
     // Group-only coupon: "สำหรับลูกค้าใหม่เท่านั้น", right after what it's for.
     if (c.audienceLabel && c.audienceLabel !== EVERYONE_COUPON_BADGE) list.splice(3, 0, `${c.audienceLabel}เท่านั้น`);

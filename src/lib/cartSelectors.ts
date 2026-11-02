@@ -297,6 +297,25 @@ const couponScopeLines = (c: Pick<Coupon, "productScope">, lines: ResolvedCartLi
 /** Whether the coupon may add its discount on this line, given the promos already on it (`promoStacking.ts`). */
 export const couponStacksOn = (c: Pick<Coupon, "combinableWith">, line: ResolvedCartLine) => canStack({ kind: "coupon", combinableWith: c.combinableWith }, line.promoTags);
 
+/** Most coupons one order can use (only coupons that stack with each other: `stacksWithCoupons`). */
+export const MAX_COUPONS_PER_ORDER = 2;
+
+/**
+ * Whether this coupon may be used together with other coupons: only when Admin ticked "คูปอง" in its
+ * "การใช้ร่วมกับโปรอื่น" (unset = not with other coupons, unlike the promo kinds, which default to all).
+ */
+export const stacksWithCoupons = (c: Pick<Coupon, "combinableWith">): boolean => !!c.combinableWith?.includes("coupon");
+
+/** Can `c` join the coupons already picked (room left, and it and every picked one stack with coupons)? */
+export const canAddCoupon = (picked: Pick<Coupon, "combinableWith">[], c: Pick<Coupon, "combinableWith">): boolean =>
+  picked.length === 0 || (picked.length < MAX_COUPONS_PER_ORDER && stacksWithCoupons(c) && picked.every(stacksWithCoupons));
+
+/** Picking `c`: added beside the picked ones when it can join them, otherwise it replaces them. */
+export function withCouponPicked<T extends Pick<Coupon, "code" | "combinableWith">>(picked: T[], c: T): T[] {
+  if (picked.some((p) => p.code === c.code)) return picked;
+  return canAddCoupon(picked, c) ? [...picked, c] : [c];
+}
+
 /** In-scope lines exist, but every one of them got a promo this coupon can't be used with. */
 export function couponStackBlocked(c: Pick<Coupon, "productScope" | "combinableWith">, lines: ResolvedCartLine[]): boolean {
   const inScope = couponScopeLines(c, lines);
@@ -421,14 +440,22 @@ export function computeCheckoutTotals(opts: {
   promoDiscount?: number;
   lines?: ResolvedCartLine[];
   coupon?: Coupon;
+  /** Several coupons (they stack: each one's discount from its own base, the sum never past the product total). Wins over `coupon`. */
+  coupons?: Coupon[];
   coinsRedeemed?: number;
   shippingFee: number;
 }): CheckoutTotals {
-  const c = opts.coupon;
+  const list = opts.coupons ?? (opts.coupon ? [opts.coupon] : []);
   const promoDiscount = Math.min(Math.max(0, opts.promoDiscount ?? 0), opts.subtotal);
   const afterPromos = opts.subtotal - promoDiscount;
-  const couponBase = !c ? 0 : opts.lines ? couponEligibleSubtotal(c, opts.lines) : isCouponScoped(c) ? 0 : afterPromos;
-  const couponDiscount = c && isCouponActive(c) ? couponDiscountAmount(c, Math.min(couponBase, afterPromos)) : 0;
+  const oneCoupon = (c: Coupon) => {
+    const base = opts.lines ? couponEligibleSubtotal(c, opts.lines) : isCouponScoped(c) ? 0 : afterPromos;
+    return isCouponActive(c) ? couponDiscountAmount(c, Math.min(base, afterPromos)) : 0;
+  };
+  const couponDiscount = Math.min(
+    list.reduce((sum, c) => sum + oneCoupon(c), 0),
+    afterPromos,
+  );
   const coinDiscount = Math.round((opts.coinsRedeemed ?? 0) * COIN_TO_BAHT_RATE);
   const total = Math.max(0, afterPromos - couponDiscount - coinDiscount + opts.shippingFee);
   return { subtotal: opts.subtotal, promoDiscount, couponDiscount, coinDiscount, shippingFee: opts.shippingFee, total };

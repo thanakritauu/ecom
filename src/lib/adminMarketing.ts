@@ -190,6 +190,12 @@ export function formatCombinable(list: CombinableKind[] | undefined): string {
   return `ใช้ร่วมไม่ได้กับ ${excluded.map((k) => COMBINABLE_META[k].label).join(", ")}`;
 }
 
+/** A coupon's own "การใช้ร่วมกับโปรอื่น": unset = every promo kind but not other coupons (`stacksWithCoupons`). */
+export const couponCombinable = (list: CombinableKind[] | undefined): CombinableKind[] => list ?? COMBINABLE_KINDS.filter((k) => k !== "coupon");
+
+/** `formatCombinable` for a coupon (its unset means "not with other coupons"). */
+export const formatCouponCombinable = (list: CombinableKind[] | undefined): string => formatCombinable(couponCombinable(list));
+
 /** "฿590" or "3 ชิ้น". */
 export function formatPromotionThreshold(condition: PromotionCondition, value: number): string {
   return condition === "qty" ? `${value.toLocaleString("th-TH")} ชิ้น` : formatBaht(value);
@@ -445,8 +451,9 @@ const PROMOTION_SEEDS: Omit<Promotion, "id" | "createdAt" | "updatedAt">[] = [
  * v10: กลุ่มลูกค้า (`audience`), การใช้ร่วมกับโปรอื่น (`combinableWith`), ยิ่งซื้อยิ่งคุ้ม; seeds NEW100 (ลูกค้าใหม่) and a tiered promo.
  * v11: coupon seeds for every กลุ่มลูกค้า (COMEBACK80, MEMBER50, RADIANCE12, ICON300).
  * v12: an expired coupon the demo member had collected (HALLOWEEN60).
+ * v13: coupons may stack (up to 2) when both tick "คูปอง"; COMEBACK80 + MEMBER50 do.
  */
-export const MARKETING_SEED_VERSION = 12;
+export const MARKETING_SEED_VERSION = 13;
 
 // ---------------------------------------------------------------------------
 // Coupons: baht or % off the product subtotal, one per order
@@ -563,7 +570,8 @@ export function normalizeCoupons(list: Coupon[]): Coupon[] {
       showOnHome: !!c.showOnHome,
       showAtCheckout: !!c.showAtCheckout,
       audience: normalizeAudience(c.audience),
-      combinableWith: normalizeCombinable(c.combinableWith),
+      // Kept as ticked (every kind ticked included): for a coupon, unset means "not with other coupons".
+      combinableWith: Array.isArray(c.combinableWith) ? COMBINABLE_KINDS.filter((k) => c.combinableWith!.includes(k)) : undefined,
       tool: c.tool && COUPON_TOOLS.includes(c.tool) ? c.tool : undefined,
       status: normalizeMarketingStatus(c.status),
     };
@@ -602,8 +610,8 @@ const COUPON_SEEDS: Omit<Coupon, "id" | "createdAt" | "updatedAt">[] = [
   // v10: คูปองลูกค้าใหม่, only for shoppers with no paid order yet (guests included).
   { code: "NEW100", tool: "coupon_new", audience: { kind: "new" }, discountType: "baht", discount: 100, minSpend: 500, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
   // v11: one coupon per กลุ่มลูกค้า, as TikTok Shop offers them (comeback, every member, member tiers), so the storefront shows each badge.
-  { code: "COMEBACK80", audience: { kind: "returning" }, discountType: "baht", discount: 80, minSpend: 600, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
-  { code: "MEMBER50", audience: { kind: "tiers", tiers: ["glow", "radiance", "icon"] }, discountType: "baht", discount: 50, minSpend: 400, perCustomerLimit: 2, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  { code: "COMEBACK80", audience: { kind: "returning" }, combinableWith: [...COMBINABLE_KINDS], discountType: "baht", discount: 80, minSpend: 600, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  { code: "MEMBER50", audience: { kind: "tiers", tiers: ["glow", "radiance", "icon"] }, combinableWith: [...COMBINABLE_KINDS], discountType: "baht", discount: 50, minSpend: 400, perCustomerLimit: 2, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
   { code: "RADIANCE12", audience: { kind: "tiers", tiers: ["radiance", "icon"] }, discountType: "percent", discount: 12, maxDiscount: 250, minSpend: 800, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
   { code: "ICON300", audience: { kind: "tiers", tiers: ["icon"] }, discountType: "baht", discount: 300, minSpend: 2000, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
   // v12: ended on 31 Oct; the demo member collected it before then, so Checkout's "เก็บแล้ว" shows a หมดอายุแล้ว coupon.

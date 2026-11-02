@@ -17,9 +17,9 @@ import {
   maxRedeemableCoins,
   MOCK_COIN_BALANCE,
   DELIVERY_OPTIONS,
-  couponDiscountAmount,
-  couponEligibleSubtotal,
+  canAddCoupon,
   isCouponActive,
+  withCouponPicked,
   type Coupon,
   type DeliveryOptionId,
 } from "~/lib/cartSelectors";
@@ -139,7 +139,7 @@ export default function CheckoutPage() {
   // The picked carrier's fee, unless a free-shipping promo is unlocked (then every carrier is free).
   const freeShipping = () => promos.shippingFee() === 0;
   const shippingFee = () => (freeShipping() ? 0 : delivery().fee);
-  const [pickedCoupon, setCoupon] = createSignal<Coupon>();
+  const [pickedCoupons, setPickedCoupons] = createSignal<Coupon[]>([]);
   const [coinsPicked, setCoinsPicked] = createSignal(0);
 
   let formColumn: HTMLDivElement | undefined;
@@ -160,43 +160,52 @@ export default function CheckoutPage() {
     auth.isAuthenticated() ? orderHistory.orders().filter((o) => o.status !== "cancelled" && o.payment.couponCode?.toUpperCase() === code.toUpperCase()).length : 0;
   // A picked coupon stops counting the moment its usage limit is reached (e.g. order history loaded after it was picked),
   // or the cart no longer qualifies (its products removed, or under the minimum); it comes back if the cart qualifies again.
-  // Until the shopper picks or removes a coupon themselves, Checkout uses the listed coupon that takes the most off this
-  // order (this shopper's group, uses left, cart meets its conditions), re-checked as the cart changes. Their own choice
-  // (including "ยกเลิก" = no coupon) then sticks.
+  // Up to 2 coupons, and only ones that stack with coupons (`canAddCoupon`). Until the shopper picks or removes a coupon
+  // themselves, Checkout uses the set that takes the most off this order (this shopper's group, uses left, cart meets
+  // their conditions), re-checked as the cart changes. Their own choice (including none) then sticks.
   const [couponChosenByShopper, setCouponChosenByShopper] = createSignal(false);
-  const bestCoupon = createMemo(() => {
-    let best: Coupon | undefined;
+  const couponUsable = (c: Coupon) =>
+    isCouponActive(c) &&
+    !storefrontMarketing.codeCoupons().find((x) => x.code === c.code)?.audienceBlock &&
+    !couponUsageBlock(c, couponUsesByShopper(c.code)) &&
+    !couponCartBlock(c, pricedLines());
+  const couponsOff = (list: Coupon[]) =>
+    computeCheckoutTotals({ subtotal: subtotal(), promoDiscount: promoDiscount(), lines: pricedLines(), coupons: list, shippingFee: 0 }).couponDiscount;
+  const bestCoupons = createMemo(() => {
+    const usable = storefrontMarketing.checkoutCoupons().filter(couponUsable);
+    // Every single coupon, and every pair that may stack; the most off wins (a single one on a tie).
+    const sets: Coupon[][] = usable.map((c) => [c]);
+    for (let i = 0; i < usable.length; i++) for (let j = i + 1; j < usable.length; j++) if (canAddCoupon([usable[i]], usable[j])) sets.push([usable[i], usable[j]]);
+    let best: Coupon[] = [];
     let bestOff = 0;
-    for (const c of storefrontMarketing.checkoutCoupons()) {
-      if (!isCouponActive(c) || c.audienceBlock || couponUsageBlock(c, couponUsesByShopper(c.code)) || couponCartBlock(c, pricedLines())) continue;
-      const off = couponDiscountAmount(c, couponEligibleSubtotal(c, pricedLines()));
-      if (off > bestOff) [best, bestOff] = [c, off];
+    for (const set of sets) {
+      const off = couponsOff(set);
+      if (off > bestOff) [best, bestOff] = [set, off];
     }
     return best;
   });
-  const chooseCoupon = (c: Coupon | undefined) => {
+  const chooseCoupons = (list: Coupon[]) => {
     setCouponChosenByShopper(true);
-    setCoupon(c);
+    setPickedCoupons(list);
   };
-  const couponAutoPicked = () => !couponChosenByShopper() && !!coupon();
-  const coupon = () => {
-    const c = couponChosenByShopper() ? pickedCoupon() : bestCoupon();
-    // กลุ่มลูกค้า is checked against the current shopper (e.g. a guest who picked a new-customer coupon, then signed in as a returning member).
-    const outsideAudience = c && storefrontMarketing.codeCoupons().find((x) => x.code === c.code)?.audienceBlock;
-    return c && !outsideAudience && !couponUsageBlock(c, couponUsesByShopper(c.code)) && !couponCartBlock(c, pricedLines()) ? c : undefined;
+  const coupons = (): Coupon[] => {
+    const list = (couponChosenByShopper() ? pickedCoupons() : bestCoupons()).filter(couponUsable);
+    // Stacking rules can change in Admin after a pick: keep only what may still go together.
+    return list.reduce<Coupon[]>((kept, c) => (canAddCoupon(kept, c) ? [...kept, c] : kept), []);
   };
+  const couponAutoPicked = () => !couponChosenByShopper() && coupons().length > 0;
 
   // Coins the order can take — the coupon/cart can change after coins were picked, so the pick is capped (not reset).
   const maxCoins = createMemo(() =>
     maxRedeemableCoins({
       balance: MOCK_COIN_BALANCE,
       subtotal: promos.pricing().total,
-      couponDiscount: computeCheckoutTotals({ subtotal: subtotal(), promoDiscount: promoDiscount(), lines: pricedLines(), coupon: coupon(), shippingFee: 0 }).couponDiscount,
+      couponDiscount: couponsOff(coupons()),
     }),
   );
   const coinsRedeemed = () => Math.min(coinsPicked(), maxCoins());
   const totals = createMemo(() =>
-    computeCheckoutTotals({ subtotal: subtotal(), promoDiscount: promoDiscount(), lines: pricedLines(), coupon: coupon(), coinsRedeemed: coinsRedeemed(), shippingFee: shippingFee() }),
+    computeCheckoutTotals({ subtotal: subtotal(), promoDiscount: promoDiscount(), lines: pricedLines(), coupons: coupons(), coinsRedeemed: coinsRedeemed(), shippingFee: shippingFee() }),
   );
 
   const tier = () => resolveTier(yearlySpend(orderHistory.orders())).current;
@@ -420,10 +429,10 @@ export default function CheckoutPage() {
                         class="flex rounded-card lg:hidden"
                         lines={pricedLines()}
                         totals={totals()}
-                        coupon={coupon()}
+                        coupons={coupons()}
                         couponAutoPicked={couponAutoPicked()}
-                        onApplyCoupon={chooseCoupon}
-                        onRemoveCoupon={() => chooseCoupon(undefined)}
+                        onApplyCoupon={(c) => chooseCoupons(withCouponPicked(coupons(), c))}
+                        onRemoveCoupon={(code) => chooseCoupons(coupons().filter((c) => c.code !== code))}
                         couponUsesByShopper={couponUsesByShopper}
                         coinsRedeemed={coinsRedeemed()}
                         maxCoins={maxCoins()}
@@ -452,10 +461,10 @@ export default function CheckoutPage() {
                   promoRows={promos.pricing().rows}
                   gifts={promos.giftLines()}
                   totals={totals()}
-                  coupon={coupon()}
+                  coupons={coupons()}
                   couponAutoPicked={couponAutoPicked()}
-                  onApplyCoupon={chooseCoupon}
-                  onRemoveCoupon={() => chooseCoupon(undefined)}
+                  onApplyCoupon={(c) => chooseCoupons(withCouponPicked(coupons(), c))}
+                  onRemoveCoupon={(code) => chooseCoupons(coupons().filter((c) => c.code !== code))}
                   couponUsesByShopper={couponUsesByShopper}
                   coinsRedeemed={coinsRedeemed()}
                   maxCoins={maxCoins()}

@@ -24,6 +24,7 @@ import {
   couponTool,
   couponUsageCount,
   formatCombinable,
+  formatCouponCombinable,
   formatCouponDiscount,
   formatCouponMinSpend,
   formatCouponUsage,
@@ -150,7 +151,7 @@ export function MarketingManageList(props: { tool: ToolFilter; onToolChange: (to
   const audienceOf = (r: Row) => formatAudience(r.item.audience);
   const periodOf = (r: Row) =>
     r.kind === "flash_sale" ? formatFlashSchedule(r.item) : `${formatMarketingDate(r.item.startDate)} - ${formatMarketingDate(r.item.endDate)}`;
-  const combinableOf = (r: Row) => formatCombinable(r.item.combinableWith);
+  const combinableOf = (r: Row) => (r.kind === "coupon" ? formatCouponCombinable(r.item.combinableWith) : formatCombinable(r.item.combinableWith));
   const startOf = (r: Row) => r.item.startDate;
   const endOf = (r: Row) => r.item.endDate || "9999";
   const basePath = (r: ItemRow) => (r.kind === "promotion" ? "/admin/marketing/promotions" : r.kind === "coupon" ? "/admin/marketing/coupons" : FLASH_SALE_PATH);

@@ -36,9 +36,10 @@ type PerksProps = {
   /** Paid cart lines: a coupon limited to some products counts only those. */
   lines: ResolvedCartLine[];
   totals: CheckoutTotals;
-  coupon: Coupon | undefined;
+  /** The coupons in use (up to 2 when they stack). */
+  coupons: Coupon[];
   onApplyCoupon: (coupon: Coupon) => void;
-  onRemoveCoupon: () => void;
+  onRemoveCoupon: (code: string) => void;
   /** How many of this shopper's own orders used a code (coupon "จำกัดต่อลูกค้า"); 0 for a guest. */
   couponUsesByShopper?: (code: string) => number;
   coinsRedeemed: number;
@@ -63,9 +64,10 @@ export function CheckoutOrderSummary(props: {
   /** Unlocked free gifts (one per unlocked tier of every active gift promo), shown as ฿0 lines, never added to the totals. */
   gifts: GiftLine[];
   totals: CheckoutTotals;
-  coupon: Coupon | undefined;
+  /** The coupons in use (up to 2 when they stack). */
+  coupons: Coupon[];
   onApplyCoupon: (coupon: Coupon) => void;
-  onRemoveCoupon: () => void;
+  onRemoveCoupon: (code: string) => void;
   /** How many of this shopper's own orders used a code (coupon "จำกัดต่อลูกค้า"); 0 for a guest. */
   couponUsesByShopper?: (code: string) => number;
   coinsRedeemed: number;
@@ -167,7 +169,7 @@ export function CheckoutOrderSummary(props: {
         </div>
         <PromoDiscountRows rows={props.promoRows} />
         <div class="flex items-center justify-between">
-          <span class="text-ink-gray">{props.coupon ? `คูปอง ${props.coupon.code}` : "คูปอง"}</span>
+          <span class="text-ink-gray">{props.coupons.length > 0 ? `คูปอง ${props.coupons.map((c) => c.code).join(", ")}` : "คูปอง"}</span>
           <span class="font-bold" classList={{ "text-success": props.totals.couponDiscount > 0, "text-ink": props.totals.couponDiscount <= 0 }}>
             {props.totals.couponDiscount > 0 ? `-${formatTHB(props.totals.couponDiscount)}` : formatTHB(0)}
           </span>
@@ -242,14 +244,20 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
             <TagIcon />
           </span>
           <div class="min-w-0">
-            <p class="text-sm font-semibold text-ink">{props.coupon ? `ใช้คูปอง ${props.coupon.label} อยู่` : "เลือกคูปองเพื่อรับส่วนลด"}</p>
-            <Show when={props.coupon && props.couponAutoPicked}>
+            <p class="text-sm font-semibold text-ink">
+              {props.coupons.length > 1
+                ? `ใช้ ${props.coupons.length} คูปอง ลดรวม ${formatTHB(props.totals.couponDiscount)} อยู่`
+                : props.coupons[0]
+                  ? `ใช้คูปอง ${props.coupons[0].label} อยู่`
+                  : "เลือกคูปองเพื่อรับส่วนลด"}
+            </p>
+            <Show when={props.coupons.length > 0 && props.couponAutoPicked}>
               <p class="text-xs text-ink-gray">เลือกคูปองที่ลดได้มากที่สุดให้แล้ว</p>
             </Show>
           </div>
         </div>
         <PerkButton onClick={() => setCouponPickerOpen(true)} aria-haspopup="dialog">
-          {props.coupon ? "เปลี่ยนคูปอง" : "เลือกคูปอง"}
+          {props.coupons.length > 0 ? "เปลี่ยนคูปอง" : "เลือกคูปอง"}
         </PerkButton>
       </div>
       <CouponPickerSheet
@@ -259,7 +267,7 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
         codeCoupons={storeCoupons.codeCoupons()}
         lines={props.lines}
         usedByShopper={props.couponUsesByShopper}
-        applied={props.coupon}
+        applied={props.coupons}
         onApply={props.onApplyCoupon}
         onRemove={props.onRemoveCoupon}
         collectedCodes={auth.isAuthenticated() ? collectedCoupons.collected() : undefined}

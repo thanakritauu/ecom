@@ -1,5 +1,6 @@
 import { createSignal, Show } from "solid-js";
 import { Button } from "./Button";
+import { CheckBadge } from "./icons";
 import { CouponDetailSheet } from "./CouponDetailSheet";
 import dashedLine from "~/assets/icons/coupon-dashed-line.svg";
 import percentIcon from "~/assets/icons/coupon-percent.svg";
@@ -38,8 +39,12 @@ export function couponTicket(c: StoreCoupon): Coupon {
  * background/clipping of its own. % icon at (31, 20), dashed divider at
  * x=100, content area from x=100 with 16px padding.
  */
-/** Replaces the default "เก็บเลย" collect button — e.g. Checkout's "ใช้เลย" / "ยกเลิก". */
-export type CouponCardAction = { label: string; variant: "primary" | "outline"; disabled?: boolean; onClick: () => void };
+/**
+ * Replaces the default "เก็บเลย" collect button, e.g. Home's "ไม่ตรงเงื่อนไข".
+ * `check`: Checkout's picker, a round check instead of a button (ticked = the coupon in use); `label` is its
+ * accessible name and the detail sheet's full-width button text.
+ */
+export type CouponCardAction = { label: string; variant: "primary" | "outline"; disabled?: boolean; onClick: () => void; check?: { checked: boolean } };
 
 export function CouponCard(props: {
   coupon: Coupon;
@@ -48,6 +53,8 @@ export function CouponCard(props: {
   action?: CouponCardAction;
   /** Picture-only ticket (no tap target, no button) — the coupon detail sheet's header. */
   display?: boolean;
+  /** Past its dates: black and white, faded, like an out-of-stock product photo. */
+  expired?: boolean;
 }) {
   const [status, setStatus] = createSignal<"idle" | "loading" | "error">("idle");
 
@@ -86,17 +93,46 @@ export function CouponCard(props: {
         }
       >
         {(action) => (
-          <Button
-            variant={action().variant}
-            class={cls()}
-            disabled={action().disabled}
-            onClick={() => {
-              setDetailOpen(false);
-              action().onClick();
-            }}
+          <Show
+            when={action().check && !p.full}
+            fallback={
+              <Button
+                variant={action().variant}
+                class={cls()}
+                disabled={action().disabled}
+                onClick={() => {
+                  setDetailOpen(false);
+                  action().onClick();
+                }}
+              >
+                {action().label}
+              </Button>
+            }
           >
-            {action().label}
-          </Button>
+            {/* 44px tap area; the shared pink CheckBadge when ticked, an empty ring otherwise (grey when it can't be used). */}
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={action().check!.checked}
+              aria-label={action().label}
+              disabled={action().disabled}
+              onClick={() => action().onClick()}
+              class="-mr-2 flex size-11 shrink-0 items-center justify-center disabled:cursor-not-allowed"
+            >
+              <Show
+                when={action().check!.checked}
+                fallback={
+                  <span
+                    class="size-6 rounded-pill border-2"
+                    classList={{ "border-ink-placeholder bg-white": !action().disabled, "border-border bg-surface-gray": !!action().disabled }}
+                    aria-hidden="true"
+                  />
+                }
+              >
+                <CheckBadge />
+              </Show>
+            </button>
+          </Show>
         )}
       </Show>
     );
@@ -108,7 +144,7 @@ export function CouponCard(props: {
    * the collect/use button on top — so that button never opens the sheet.
    */
   return (
-    <div class="relative h-[104px] w-full">
+    <div class="relative h-[104px] w-full" classList={{ "opacity-70 grayscale": props.expired }}>
       {/* Ticket outline drawn in CSS (was a 369px SVG stretched to fit, which bent the notches and corners at other
           widths): 16px corners, 8px notches centred on the dashed line at 100px, Figma's shadow (y 2, blur 12, 10%). */}
       <div aria-hidden="true" class="pointer-events-none absolute inset-0 [filter:drop-shadow(0_2px_12px_rgba(90,106,133,0.1))]">
