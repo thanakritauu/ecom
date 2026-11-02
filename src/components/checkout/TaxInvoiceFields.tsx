@@ -2,7 +2,7 @@ import { For, Show } from "solid-js";
 import { TextField } from "../shared/TextField";
 import { Badge } from "../shared/Badge";
 import { formatTaxBranch, formatTaxId, TAX_INVOICE_TYPE_LABEL, taxIdError, taxIdLabel, taxNameLabel, type TaxInvoiceBuyer, type TaxInvoiceType } from "~/lib/taxInvoice";
-import { formatAddress, type Address } from "~/lib/checkoutData";
+import { formatAddress, formatAddressPhone, type Address } from "~/lib/checkoutData";
 import type { TaxInvoiceProfile } from "~/lib/taxInvoiceProfiles";
 import { EMAIL_PATTERN } from "~/lib/validators";
 
@@ -163,7 +163,7 @@ function RadioCards<T extends string>(props: { label: string; options: { value: 
   );
 }
 
-/** One saved entry as Checkout and the popup show it: name (สาขา), ประเภท + เลข, อีเมล, address. */
+/** One saved entry as Checkout and the popup show it: name (สาขา) + phone, ประเภท + เลข, อีเมล, address. */
 export function TaxInvoiceSummary(props: { profile: TaxInvoiceProfile; address?: Address }) {
   return (
     <span class="flex min-w-0 flex-col gap-0.5 text-sm">
@@ -172,6 +172,8 @@ export function TaxInvoiceSummary(props: { profile: TaxInvoiceProfile; address?:
           {props.profile.name}
           <Show when={formatTaxBranch(props.profile)}>{(branch) => ` (${branch()})`}</Show>
         </span>
+        {/* The invoice address's phone, beside the name as on the shipping address card. */}
+        <Show when={props.address}>{(a) => <span class="text-sm text-ink-gray">{formatAddressPhone(a())}</span>}</Show>
         {/* Same badge as the default shipping address. */}
         <Show when={props.profile.isDefault}>
           <Badge tone="success">ค่าเริ่มต้น</Badge>
