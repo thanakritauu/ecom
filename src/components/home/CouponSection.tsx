@@ -1,12 +1,14 @@
-import { createSignal, For, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, on, Show, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Container } from "../shared/Container";
 import { EmptyState } from "../shared/EmptyState";
 import { TagIcon } from "../shared/icons";
 import { Button } from "../shared/Button";
-import { CouponCard, couponTicket } from "../shared/CouponCard";
+import { CouponCard, couponTicket, type Coupon as TicketCoupon } from "../shared/CouponCard";
 import { pushToast } from "~/lib/toast";
 import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
+import { useAuth } from "~/lib/auth";
+import { useCollectedCoupons } from "~/lib/collectedCoupons";
 import glowEllipse from "~/assets/icons/coupon-glow-ellipse.svg";
 import blurShape from "~/assets/images/coupon/blur-shape.png";
 import ticketDeco1 from "~/assets/images/coupon/coupon-ticket-deco-1.svg";
@@ -25,18 +27,26 @@ async function simulateCollect() {
  * instead of hiding the section.
  */
 export function CouponSection(props: { page?: boolean; /** Home heading override from the page's section settings; empty = "คูปองส่วนลด". */ title?: string; /** Extra content under the coupons, on the purple (the page's "วิธีใช้คูปอง" box). */ after?: JSX.Element }) {
-  /** Home: the coupons Admin shows on Home (switched on, inside their dates), one ticket per code, the same ticket Checkout's picker uses. */
+  /** Home: the coupons Admin shows on Home (switched on, inside their dates, every กลุ่มลูกค้า), one ticket per code, the same ticket Checkout's picker uses. */
   const { homeCoupons, checkoutCoupons } = useStorefrontPromotions();
-  const coupons = () => {
-    if (!props.page) return homeCoupons().map(couponTicket);
+  const auth = useAuth();
+  const store = useCollectedCoupons();
+  const all = () => {
+    if (!props.page) return homeCoupons();
     const byCode = new Map([...homeCoupons(), ...checkoutCoupons()].map((c) => [c.code, c] as const));
-    return [...byCode.values()].map(couponTicket);
+    return [...byCode.values()];
   };
-  const [collected, setCollected] = createSignal<Set<string>>(new Set());
+  // Signed in: the ones this shopper can use first, then the other groups' (shown, not collectable).
+  const coupons = () => {
+    const list = all();
+    const ordered = auth.isAuthenticated() ? [...list.filter((c) => !c.audienceBlock), ...list.filter((c) => c.audienceBlock)] : list;
+    return ordered.map(couponTicket);
+  };
+  const eligible = (code: string) => !all().find((c) => c.code === code)?.audienceBlock;
 
   const collect = async (id: string) => {
     await simulateCollect();
-    setCollected((prev) => new Set(prev).add(id));
+    store.collect(id);
   };
 
   const collectOne = async (id: string) => {
@@ -44,13 +54,49 @@ export function CouponSection(props: { page?: boolean; /** Home heading override
     pushToast("เก็บคูปองสำเร็จ");
   };
 
-  // One toast for the whole batch, never one per coupon.
+  // One toast for the whole batch, never one per coupon. Only this shopper's own groups' coupons are collected.
   const collectAll = async () => {
-    const remaining = coupons().filter((c) => !collected().has(c.id));
+    const remaining = coupons().filter((c) => !store.isCollected(c.id) && eligible(c.id));
+    if (remaining.length === 0) return pushToast("เก็บคูปองที่ใช้ได้ครบแล้ว");
     const results = await Promise.allSettled(remaining.map((c) => collect(c.id)));
     if (results.every((r) => r.status === "fulfilled")) pushToast("เก็บคูปองทั้งหมดสำเร็จ");
     else pushToast("เก็บคูปองบางใบไม่สำเร็จ ลองอีกครั้ง", "error");
   };
+
+  // Not signed in: "เก็บเลย" / "เก็บคูปองทั้งหมด" open the sign-in popup and finish the collect once signed in.
+  const [pending, setPending] = createSignal<string | "all">();
+  const signInToCollect = (what: string | "all") => {
+    setPending(what);
+    auth.openAuthModal();
+  };
+  createEffect(
+    on(auth.isAuthenticated, (signedIn) => {
+      const what = pending();
+      if (!signedIn || !what) return;
+      setPending(undefined);
+      if (what === "all") return void collectAll();
+      if (!eligible(what)) return pushToast("คูปองนี้ไม่ตรงกับกลุ่มลูกค้าของบัญชีคุณ", "error");
+      if (!store.isCollected(what)) void collectOne(what).catch(() => pushToast("เก็บคูปองไม่สำเร็จ ลองอีกครั้ง", "error"));
+    }),
+  );
+  // Closing the popup without signing in drops the pending collect.
+  createEffect(on(auth.isAuthModalOpen, (open, wasOpen) => wasOpen && !open && !auth.isAuthenticated() && setPending(undefined), { defer: true }));
+
+  /** The ticket's button: sign in first, "ไม่ตรงเงื่อนไข" for another group's coupon, else the usual collect. */
+  const Ticket = (p: { coupon: TicketCoupon }) => (
+    <CouponCard
+      coupon={p.coupon}
+      collected={store.isCollected(p.coupon.id)}
+      onCollect={() => collectOne(p.coupon.id)}
+      action={
+        !auth.isAuthenticated()
+          ? { label: "เก็บเลย", variant: "primary", onClick: () => signInToCollect(p.coupon.id) }
+          : !eligible(p.coupon.id)
+            ? { label: "ไม่ตรงเงื่อนไข", variant: "outline", disabled: true, onClick: () => {} }
+            : undefined
+      }
+    />
+  );
 
   /*
    * Figma 124:6557, painted in the same order as the Figma layers: #7650ff +
@@ -121,7 +167,7 @@ export function CouponSection(props: { page?: boolean; /** Home heading override
                       {(coupon) => (
                         // Sideways rail until xl: three across only once each ticket gets its full ~350px (narrower squeezes the button).
                         <div class="w-[88%] min-w-[330px] max-w-[369px] shrink-0 xl:w-auto xl:min-w-0 xl:max-w-none">
-                          <CouponCard coupon={coupon} collected={collected().has(coupon.id)} onCollect={() => collectOne(coupon.id)} />
+                          <Ticket coupon={coupon} />
                         </div>
                       )}
                     </For>
@@ -131,12 +177,12 @@ export function CouponSection(props: { page?: boolean; /** Home heading override
                 {/* Page: every coupon visible at once; as many columns as fit with each ticket at least 330px wide (1 on phones, up to 3). */}
                 <div class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,330px),1fr))] gap-x-4 gap-y-6">
                   <For each={coupons()}>
-                    {(coupon) => <CouponCard coupon={coupon} collected={collected().has(coupon.id)} onCollect={() => collectOne(coupon.id)} />}
+                    {(coupon) => <Ticket coupon={coupon} />}
                   </For>
                 </div>
               </Show>
 
-              <Button variant="white" class="w-full !px-8 !py-2 !text-lg !font-medium !leading-[normal] sm:!text-xl sm:!leading-[normal]" onClick={collectAll}>
+              <Button variant="white" class="w-full !px-8 !py-2 !text-lg !font-medium !leading-[normal] sm:!text-xl sm:!leading-[normal]" onClick={() => (auth.isAuthenticated() ? collectAll() : signInToCollect("all"))}>
                 เก็บคูปองทั้งหมด
               </Button>
             </Show>

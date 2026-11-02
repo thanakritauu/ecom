@@ -443,8 +443,9 @@ const PROMOTION_SEEDS: Omit<Promotion, "id" | "createdAt" | "updatedAt">[] = [
  * v8: a coupon limited to some products / SKUs (`productScope`).
  * v9: promo badges can be switched off (`showBadge`); seeds show cards with 0, 1 and 2 badges.
  * v10: กลุ่มลูกค้า (`audience`), การใช้ร่วมกับโปรอื่น (`combinableWith`), ยิ่งซื้อยิ่งคุ้ม; seeds NEW100 (ลูกค้าใหม่) and a tiered promo.
+ * v11: coupon seeds for every กลุ่มลูกค้า (COMEBACK80, MEMBER50, RADIANCE12, ICON300).
  */
-export const MARKETING_SEED_VERSION = 10;
+export const MARKETING_SEED_VERSION = 11;
 
 // ---------------------------------------------------------------------------
 // Coupons: baht or % off the product subtotal, one per order
@@ -599,6 +600,11 @@ const COUPON_SEEDS: Omit<Coupon, "id" | "createdAt" | "updatedAt">[] = [
   { code: "LIPLOVE15", discountType: "percent", discount: 15, maxDiscount: 100, minSpend: 300, perCustomerLimit: 1, productScope: [{ productId: "best-1", variantIds: ["lip-tint-01", "lip-tint-02"] }, { productId: "best-9", variantIds: [] }], showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
   // v10: คูปองลูกค้าใหม่, only for shoppers with no paid order yet (guests included).
   { code: "NEW100", tool: "coupon_new", audience: { kind: "new" }, discountType: "baht", discount: 100, minSpend: 500, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  // v11: one coupon per กลุ่มลูกค้า, as TikTok Shop offers them (comeback, every member, member tiers), so the storefront shows each badge.
+  { code: "COMEBACK80", audience: { kind: "returning" }, discountType: "baht", discount: 80, minSpend: 600, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  { code: "MEMBER50", audience: { kind: "tiers", tiers: ["glow", "radiance", "icon"] }, discountType: "baht", discount: 50, minSpend: 400, perCustomerLimit: 2, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  { code: "RADIANCE12", audience: { kind: "tiers", tiers: ["radiance", "icon"] }, discountType: "percent", discount: 12, maxDiscount: 250, minSpend: 800, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  { code: "ICON300", audience: { kind: "tiers", tiers: ["icon"] }, discountType: "baht", discount: 300, minSpend: 2000, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
 ];
 
 const TODAY_LABEL = "17 ก.ย. 2569";

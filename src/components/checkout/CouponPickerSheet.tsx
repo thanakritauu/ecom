@@ -48,11 +48,34 @@ export function CouponPickerSheet(props: {
   applied: Coupon | undefined;
   onApply: (coupon: Coupon) => void;
   onRemove: () => void;
+  /** Codes this shopper has collected (Home / /coupons); the "เก็บแล้ว" tab. */
+  collectedCodes?: Set<string>;
+  /** Using a coupon also collects it. */
+  onCollect?: (code: string) => void;
 }) {
-  const usable = () => props.coupons.filter((c) => isCouponActive(c));
-  const blockOf = (coupon: Coupon) => couponUsageBlock(coupon, props.usedByShopper?.(coupon.code) ?? 0);
+  // Every listed coupon inside its dates (any กลุ่มลูกค้า: another group's is shown under "ทั้งหมด", not usable).
+  const listed = () => props.coupons.filter((c) => isCouponActive(c));
+  const blockOf = (coupon: Coupon) => coupon.audienceBlock ?? couponUsageBlock(coupon, props.usedByShopper?.(coupon.code) ?? 0);
+  /** Can go on this order right now: this shopper's group, uses left, and the cart meets its conditions. */
+  const canUse = (coupon: Coupon) => !blockOf(coupon) && !couponCartBlock(coupon, props.lines);
+
+  // Tabs: ใช้ได้ (usable now) / เก็บแล้ว (collected) / ทั้งหมด (every listed coupon). Opens on ใช้ได้, or ทั้งหมด when none is.
+  type Tab = "usable" | "collected" | "all";
+  const tabLists: Record<Tab, () => Coupon[]> = {
+    usable: () => listed().filter((c) => canUse(c) || props.applied?.code === c.code),
+    collected: () => listed().filter((c) => props.collectedCodes?.has(c.code) || props.applied?.code === c.code),
+    all: listed,
+  };
+  const TABS: { key: Tab; label: string; empty: string }[] = [
+    { key: "usable", label: "ใช้ได้", empty: "ยังไม่มีคูปองที่ใช้กับคำสั่งซื้อนี้ได้" },
+    { key: "collected", label: "เก็บแล้ว", empty: "ยังไม่ได้เก็บคูปอง เก็บคูปองได้ที่หน้าแรกหรือหน้าคูปอง" },
+    { key: "all", label: "ทั้งหมด", empty: "ยังไม่มีคูปองในตอนนี้" },
+  ];
+  const [tab, setTab] = createSignal<Tab>("usable");
+  createEffect(on(() => props.open, (open) => open && setTab(tabLists.usable().length > 0 ? "usable" : "all")));
   const apply = (coupon: Coupon, via: "code" | "pick") => {
     props.onApply(coupon);
+    props.onCollect?.(coupon.code);
     props.onOpenChange(false);
     pushToast(
       via === "code" ? `ใช้โค้ด ${coupon.code} แล้ว` : "ใช้คูปองแล้ว",
@@ -88,10 +111,11 @@ export function CouponPickerSheet(props: {
 
   const action = (coupon: Coupon): CouponCardAction => {
     if (props.applied?.code === coupon.code) return { label: "ยกเลิก", variant: "outline", onClick: props.onRemove };
+    if (coupon.audienceBlock) return { label: "ไม่ตรงเงื่อนไข", variant: "outline", disabled: true, onClick: () => {} };
     return {
       label: "ใช้เลย",
       variant: "primary",
-      disabled: !!couponCartBlock(coupon, props.lines) || !!blockOf(coupon),
+      disabled: !canUse(coupon),
       onClick: () => apply(coupon, "pick"),
     };
   };
@@ -102,7 +126,7 @@ export function CouponPickerSheet(props: {
       onOpenChange={props.onOpenChange}
       height="auto"
       title="คูปองส่วนลด"
-      description={usable().some((c) => !blockOf(c)) ? `มี ${usable().filter((c) => !blockOf(c)).length} คูปองที่ใช้ได้ เลือกได้ 1 คูปองต่อคำสั่งซื้อ` : "เลือกได้ 1 คูปองต่อคำสั่งซื้อ"}
+      description="เลือกได้ 1 คูปองต่อคำสั่งซื้อ"
     >
       <form onSubmit={applyCode} novalidate class="flex flex-col gap-1.5">
         <div class="flex items-start gap-2">
@@ -131,18 +155,37 @@ export function CouponPickerSheet(props: {
       </form>
 
       <Show
-        when={usable().length > 0}
-        fallback={<EmptyState size="compact" icon={TagIcon} title="ยังไม่มีคูปองที่ใช้ได้ตอนนี้" description="ถ้ามีโค้ดส่วนลด กรอกได้ที่ช่องด้านบน" />}
+        when={listed().length > 0}
+        fallback={<EmptyState size="compact" icon={TagIcon} title="ยังไม่มีคูปองในตอนนี้" description="ถ้ามีโค้ดส่วนลด กรอกได้ที่ช่องด้านบน" />}
       >
-        <div class="flex items-center gap-3 text-xs text-ink-gray" aria-hidden="true">
-          <span class="h-px flex-1 bg-border" />
-          หรือเลือกคูปองที่มี
-          <span class="h-px flex-1 bg-border" />
+        {/* Same underline tabs as Purchase History, each with its count. */}
+        <div role="tablist" aria-label="ประเภทคูปอง" class="-mx-6 flex h-11 shrink-0 items-start overflow-x-auto border-b border-surface-gray px-6">
+          <For each={TABS}>
+            {(t) => (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab() === t.key}
+                onClick={() => setTab(t.key)}
+                class="flex h-full shrink-0 items-center justify-center whitespace-nowrap border-b-2 px-4 text-sm font-medium transition-colors duration-150"
+                classList={{
+                  "border-brand-pink text-ink": tab() === t.key,
+                  "border-transparent text-ink-placeholder lg:hover:text-ink-gray": tab() !== t.key,
+                }}
+              >
+                {t.label} ({tabLists[t.key]().length})
+              </button>
+            )}
+          </For>
         </div>
 
+        <Show
+          when={tabLists[tab()]().length > 0}
+          fallback={<EmptyState size="compact" icon={TagIcon} title={TABS.find((t) => t.key === tab())!.empty} />}
+        >
         {/* gap-6 between tickets / gap-4 to a note: each ticket's artwork (with its shadow) is drawn ~10px above and ~14px below its box. */}
-        <ul class="flex flex-col gap-6 pt-1" aria-label="คูปองที่ใช้ได้">
-          <For each={usable()}>
+        <ul class="flex flex-col gap-6 pt-1" aria-label={`คูปอง${TABS.find((t) => t.key === tab())!.label}`}>
+          <For each={tabLists[tab()]()}>
             {(coupon) => {
               const cartBlocked = () => couponCartBlock(coupon, props.lines);
               const applied = () => props.applied?.code === coupon.code;
@@ -166,6 +209,7 @@ export function CouponPickerSheet(props: {
             }}
           </For>
         </ul>
+        </Show>
       </Show>
     </SheetModal>
   );

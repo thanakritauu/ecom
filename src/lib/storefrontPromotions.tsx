@@ -15,7 +15,7 @@ import { useProductCatalog } from "./productCatalog";
 import { useCart } from "./cart";
 import { MOCK_ORDERS as ADMIN_MOCK_ORDERS } from "./adminOrders";
 import { priceCart } from "./promotionEngine";
-import { couponAudienceBlock, matchesAudience, type Shopper } from "./marketingAudience";
+import { couponAudienceBadge, couponAudienceBlock, matchesAudience, type Shopper } from "./marketingAudience";
 
 import { MARKETING_CHANGED_EVENT } from "./marketingEvents";
 import { COUPONS_STORAGE_KEY, PROMOTIONS_STORAGE_KEY, readStoredMarketing, readStoredPromotions } from "./storefrontMarketingStore";
@@ -56,15 +56,15 @@ function toStorefrontCoupon(c: AdminCoupon, orders: UsageOrder[], shopper: Shopp
     extraConditions: c.extraConditions,
     productScope: c.productScope,
   });
-  return { ...coupon, audienceBlock: couponAudienceBlock(c.audience, shopper), combinableWith: c.combinableWith };
+  return { ...coupon, audienceBlock: couponAudienceBlock(c.audience, shopper), audienceLabel: couponAudienceBadge(c.audience), combinableWith: c.combinableWith };
 }
 
 type StorefrontPromotionsValue = {
   /** Promotions running right now (switched on and inside their date-time window). */
   promotions: Accessor<Promotion[]>;
-  /** Live coupons shown as tickets on Home. */
+  /** Live coupons shown as tickets on Home (every กลุ่มลูกค้า; `audienceBlock` marks the ones this shopper can't use). */
   homeCoupons: Accessor<Coupon[]>;
-  /** Live coupons listed in Checkout's picker. */
+  /** Live coupons listed in Checkout's picker (every กลุ่มลูกค้า, as above). */
   checkoutCoupons: Accessor<Coupon[]>;
   /** Every switched-on coupon, for typed codes (the picker tells "not started" / "expired" apart from "not found"). */
   codeCoupons: Accessor<Coupon[]>;
@@ -112,9 +112,11 @@ export function StorefrontPromotionsProvider(props: { children: JSX.Element }) {
   });
 
   // Every promotion type runs on the storefront (`priceCart`).
-  // Promotions and listed coupons outside the shopper's กลุ่มลูกค้า don't apply and aren't shown (no badge, no cart banner, no ticket).
+  // Promotions outside the shopper's กลุ่มลูกค้า don't apply and aren't shown (no badge, no cart banner).
   const promotions = createMemo(() => allPromotions().filter((p) => isStorefrontPromotion(p) && isMarketingLive(p, now()) && matchesAudience(p.audience, shopper())));
-  const liveCoupons = createMemo(() => allCoupons().filter((c) => isMarketingLive(c, now()) && matchesAudience(c.audience, shopper())));
+  // Coupons are listed for every group (each with its group badge); one outside this shopper's group carries
+  // `audienceBlock`, so Home shows "ไม่ตรงเงื่อนไข" and Checkout lists it under "ทั้งหมด" only.
+  const liveCoupons = createMemo(() => allCoupons().filter((c) => isMarketingLive(c, now())));
   const homeCoupons = createMemo(() => liveCoupons().filter((c) => c.showOnHome).map((c) => toStorefrontCoupon(c, usageOrders(), shopper())));
   const checkoutCoupons = createMemo(() => liveCoupons().filter((c) => c.showAtCheckout).map((c) => toStorefrontCoupon(c, usageOrders(), shopper())));
   // Typed codes: every switched-on coupon, so one outside the shopper's group is refused with its reason (`audienceBlock`) instead of "not found".

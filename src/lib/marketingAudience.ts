@@ -51,6 +51,23 @@ export function formatAudience(audience: Audience | undefined): string {
   return tiers.length > 0 ? `สมาชิก ${tiers.map(tierName).join(", ")}` : "ยังไม่ได้เลือกระดับ";
 }
 
+/** The badge of a coupon anyone can use. */
+export const EVERYONE_COUPON_BADGE = "สำหรับทุกคน";
+
+/**
+ * Every coupon ticket's กลุ่มลูกค้า badge: "สำหรับทุกคน" / "สำหรับลูกค้าใหม่" /
+ * "สำหรับลูกค้าเก่า" / "สำหรับสมาชิก Radiance, Icon" ("สมาชิก Charmiss Club"
+ * when every tier is picked).
+ */
+export function couponAudienceBadge(audience: Audience | undefined): string {
+  if (!audience || audience.kind === "all") return EVERYONE_COUPON_BADGE;
+  if (audience.kind === "new") return "สำหรับลูกค้าใหม่";
+  if (audience.kind === "returning") return "สำหรับลูกค้าเก่า";
+  const tiers = orderedTiers(audience.tiers);
+  if (tiers.length === 0) return EVERYONE_COUPON_BADGE;
+  return tiers.length === TIERS.length ? "สำหรับสมาชิก Charmiss Club" : `สำหรับสมาชิก ${tiers.map(tierName).join(", ")}`;
+}
+
 /** Why a typed coupon code is refused for this shopper, or undefined when they're in its audience. */
 export function couponAudienceBlock(audience: Audience | undefined, shopper: Shopper): string | undefined {
   if (matchesAudience(audience, shopper) || !audience) return undefined;

@@ -200,6 +200,8 @@ export type Coupon = {
   productScope?: ProductSkuRef[];
   /** Set when this shopper is outside the coupon's กลุ่มลูกค้า: the reason a typed code is refused ("คูปองนี้สำหรับลูกค้าใหม่เท่านั้น"). */
   audienceBlock?: string;
+  /** The ticket's กลุ่มลูกค้า badge ("สำหรับทุกคน" / "สำหรับลูกค้าใหม่", `couponAudienceBadge`). */
+  audienceLabel?: string;
   /** "การใช้ร่วมกับโปรอื่น" (unset = stacks with all): lines that got a promo it can't stack with don't count (`couponEligibleSubtotal`). */
   combinableWith?: CombinableKind[];
 };

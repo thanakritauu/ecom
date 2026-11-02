@@ -17,6 +17,9 @@ import {
   maxRedeemableCoins,
   MOCK_COIN_BALANCE,
   DELIVERY_OPTIONS,
+  couponDiscountAmount,
+  couponEligibleSubtotal,
+  isCouponActive,
   type Coupon,
   type DeliveryOptionId,
 } from "~/lib/cartSelectors";
@@ -157,8 +160,27 @@ export default function CheckoutPage() {
     auth.isAuthenticated() ? orderHistory.orders().filter((o) => o.status !== "cancelled" && o.payment.couponCode?.toUpperCase() === code.toUpperCase()).length : 0;
   // A picked coupon stops counting the moment its usage limit is reached (e.g. order history loaded after it was picked),
   // or the cart no longer qualifies (its products removed, or under the minimum); it comes back if the cart qualifies again.
+  // Until the shopper picks or removes a coupon themselves, Checkout uses the listed coupon that takes the most off this
+  // order (this shopper's group, uses left, cart meets its conditions), re-checked as the cart changes. Their own choice
+  // (including "ยกเลิก" = no coupon) then sticks.
+  const [couponChosenByShopper, setCouponChosenByShopper] = createSignal(false);
+  const bestCoupon = createMemo(() => {
+    let best: Coupon | undefined;
+    let bestOff = 0;
+    for (const c of storefrontMarketing.checkoutCoupons()) {
+      if (!isCouponActive(c) || c.audienceBlock || couponUsageBlock(c, couponUsesByShopper(c.code)) || couponCartBlock(c, pricedLines())) continue;
+      const off = couponDiscountAmount(c, couponEligibleSubtotal(c, pricedLines()));
+      if (off > bestOff) [best, bestOff] = [c, off];
+    }
+    return best;
+  });
+  const chooseCoupon = (c: Coupon | undefined) => {
+    setCouponChosenByShopper(true);
+    setCoupon(c);
+  };
+  const couponAutoPicked = () => !couponChosenByShopper() && !!coupon();
   const coupon = () => {
-    const c = pickedCoupon();
+    const c = couponChosenByShopper() ? pickedCoupon() : bestCoupon();
     // กลุ่มลูกค้า is checked against the current shopper (e.g. a guest who picked a new-customer coupon, then signed in as a returning member).
     const outsideAudience = c && storefrontMarketing.codeCoupons().find((x) => x.code === c.code)?.audienceBlock;
     return c && !outsideAudience && !couponUsageBlock(c, couponUsesByShopper(c.code)) && !couponCartBlock(c, pricedLines()) ? c : undefined;
@@ -399,8 +421,9 @@ export default function CheckoutPage() {
                         lines={pricedLines()}
                         totals={totals()}
                         coupon={coupon()}
-                        onApplyCoupon={setCoupon}
-                        onRemoveCoupon={() => setCoupon(undefined)}
+                        couponAutoPicked={couponAutoPicked()}
+                        onApplyCoupon={chooseCoupon}
+                        onRemoveCoupon={() => chooseCoupon(undefined)}
                         couponUsesByShopper={couponUsesByShopper}
                         coinsRedeemed={coinsRedeemed()}
                         maxCoins={maxCoins()}
@@ -430,8 +453,9 @@ export default function CheckoutPage() {
                   gifts={promos.giftLines()}
                   totals={totals()}
                   coupon={coupon()}
-                  onApplyCoupon={setCoupon}
-                  onRemoveCoupon={() => setCoupon(undefined)}
+                  couponAutoPicked={couponAutoPicked()}
+                  onApplyCoupon={chooseCoupon}
+                  onRemoveCoupon={() => chooseCoupon(undefined)}
                   couponUsesByShopper={couponUsesByShopper}
                   coinsRedeemed={coinsRedeemed()}
                   maxCoins={maxCoins()}

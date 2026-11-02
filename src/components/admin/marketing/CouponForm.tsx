@@ -1,4 +1,5 @@
 import { createMemo, createSignal, Show } from "solid-js";
+import { couponAudienceBadge } from "~/lib/marketingAudience";
 import { TextField } from "~/components/shared/TextField";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
@@ -224,6 +225,7 @@ export function CouponForm(props: {
       capLabel: formatCouponCap(v),
       image: v.image,
       minSpendLabel: formatCouponMinSpend(v),
+      audienceLabel: couponAudienceBadge(fromAudienceDraft(audience())),
       expiryLabel: v.endDate ? `หมดอายุ ${formatMarketingDateShort(v.endDate)}` : "ยังไม่ได้ตั้งวันหมดอายุ",
     };
   });
@@ -252,7 +254,7 @@ export function CouponForm(props: {
   /** The same values as the storefront coupon, for the conditions sheet preview. */
   const previewSheetCoupon = createMemo(() => {
     const v = values();
-    return buildCoupon({ ...v, code: v.code, endDate: v.endDate, usedCount: 0 });
+    return { ...buildCoupon({ ...v, code: v.code, endDate: v.endDate, usedCount: 0 }), audienceLabel: couponAudienceBadge(fromAudienceDraft(audience())) };
   });
 
   const couponForm = (

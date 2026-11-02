@@ -3,6 +3,8 @@ import type { ResolvedCartLine, CheckoutTotals, Coupon } from "~/lib/cartSelecto
 import type { GiftLine, PromoDiscountRow } from "~/lib/promotionEngine";
 import { MOCK_COIN_BALANCE, SHIPPING_FEE, flashLimitNote } from "~/lib/cartSelectors";
 import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
+import { useAuth } from "~/lib/auth";
+import { useCollectedCoupons } from "~/lib/collectedCoupons";
 import { formatTHB } from "../shared/PriceDisplay";
 import { ChevronIcon } from "../shared/ChevronIcon";
 import { CheckIcon } from "../shared/icons";
@@ -29,6 +31,8 @@ const CoinRedeemSheet = clientOnly(() => import("./CoinRedeemSheet").then((m) =>
  * the same totals Cart Page and the Drawer already share.
  */
 type PerksProps = {
+  /** The coupon was picked by Checkout (the best usable one), not by the shopper: the row says so. */
+  couponAutoPicked?: boolean;
   /** Paid cart lines: a coupon limited to some products counts only those. */
   lines: ResolvedCartLine[];
   totals: CheckoutTotals;
@@ -44,6 +48,8 @@ type PerksProps = {
 };
 
 export function CheckoutOrderSummary(props: {
+  /** See `PerksProps.couponAutoPicked`. */
+  couponAutoPicked?: boolean;
   /** The carrier picked in "เลือกการจัดส่ง", named on the ค่าจัดส่ง row (default DHL). */
   carrierName?: string;
   /** That carrier's fee, struck through when shipping is free (default `SHIPPING_FEE`). */
@@ -211,6 +217,9 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
   const [couponPickerOpen, setCouponPickerOpen] = createSignal(false);
   // Coupons come from Admin (Marketing > คูปอง): the listed ones, plus every switched-on code for typing in.
   const storeCoupons = useStorefrontPromotions();
+  // "เก็บแล้ว" tab: a signed-in shopper's collected coupons (using one collects it too); a guest has none.
+  const auth = useAuth();
+  const collectedCoupons = useCollectedCoupons();
   const [coinSheetOpen, setCoinSheetOpen] = createSignal(false);
 
   // `isolate` + `-z-10` decos: the Home coupon section's yellow light shapes and floating tickets (same assets)
@@ -232,7 +241,12 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
           <span class="flex size-7 shrink-0 items-center justify-center rounded-pill bg-surface-pink text-brand-pink sm:size-8" aria-hidden="true">
             <TagIcon />
           </span>
-          <p class="min-w-0 text-sm font-semibold text-ink">{props.coupon ? `ใช้คูปอง ${props.coupon.label} อยู่` : "เลือกคูปองเพื่อรับส่วนลด"}</p>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-ink">{props.coupon ? `ใช้คูปอง ${props.coupon.label} อยู่` : "เลือกคูปองเพื่อรับส่วนลด"}</p>
+            <Show when={props.coupon && props.couponAutoPicked}>
+              <p class="text-xs text-ink-gray">เลือกคูปองที่ลดได้มากที่สุดให้แล้ว</p>
+            </Show>
+          </div>
         </div>
         <PerkButton onClick={() => setCouponPickerOpen(true)} aria-haspopup="dialog">
           {props.coupon ? "เปลี่ยนคูปอง" : "เลือกคูปอง"}
@@ -248,6 +262,8 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
         applied={props.coupon}
         onApply={props.onApplyCoupon}
         onRemove={props.onRemoveCoupon}
+        collectedCodes={auth.isAuthenticated() ? collectedCoupons.collected() : undefined}
+        onCollect={(code) => auth.isAuthenticated() && collectedCoupons.collect(code)}
       />
 
       <div class="flex items-center gap-2">

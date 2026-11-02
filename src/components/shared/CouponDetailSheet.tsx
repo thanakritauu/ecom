@@ -7,6 +7,7 @@ import { useProductCatalog } from "~/lib/productCatalog";
 import type { Product } from "~/lib/types";
 import type { ProductSkuRef } from "~/lib/productSkuRef";
 import { isRichTextEmpty } from "~/lib/richText";
+import { EVERYONE_COUPON_BADGE } from "~/lib/marketingAudience";
 import { RichTextContent } from "./RichTextContent";
 
 const baht = (n: number) => `฿${n.toLocaleString("th-TH")}`;
@@ -88,6 +89,8 @@ export function CouponDetailBody(props: { coupon: Coupon; ticket?: JSX.Element }
       scoped ? scopeText(c.productScope!, catalog.products()) : "ใช้ได้กับสินค้าทุกรายการ",
       "ใช้ได้ 1 คูปองต่อคำสั่งซื้อ ใช้ร่วมกับคูปองอื่นไม่ได้",
     ];
+    // Group-only coupon: "สำหรับลูกค้าใหม่เท่านั้น", right after what it's for.
+    if (c.audienceLabel && c.audienceLabel !== EVERYONE_COUPON_BADGE) list.splice(3, 0, `${c.audienceLabel}เท่านั้น`);
     if (c.perCustomerLimit) list.push(`ใช้ได้ ${c.perCustomerLimit.toLocaleString("th-TH")} ครั้งต่อบัญชี`);
     if (c.usageLimit) list.push(`จำนวนจำกัด ${c.usageLimit.toLocaleString("th-TH")} สิทธิ์ เมื่อครบแล้วจะใช้ไม่ได้`);
     list.push("ใช้ร่วมกับส่วนลดจาก Charmiss Coin ได้", "เลือกคูปองหรือกรอกโค้ดได้ที่หน้าชำระเงิน");

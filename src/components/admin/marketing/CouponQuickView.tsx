@@ -1,5 +1,5 @@
 import { Show } from "solid-js";
-import { formatAudience } from "~/lib/marketingAudience";
+import { couponAudienceBadge, formatAudience } from "~/lib/marketingAudience";
 import { formatCombinable, MARKETING_TOOL_META, couponTool } from "~/lib/adminMarketing";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { ProductSkuRefList } from "~/components/admin/ProductSkuPicker";
@@ -28,6 +28,7 @@ export function adminCouponTicket(c: Coupon): TicketCoupon {
     capLabel: formatCouponCap(c),
     image: c.image,
     minSpendLabel: formatCouponMinSpend(c),
+    audienceLabel: couponAudienceBadge(c.audience),
     expiryLabel: `หมดอายุ ${formatMarketingDateShort(c.endDate)}`,
   };
 }
