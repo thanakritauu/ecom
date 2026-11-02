@@ -41,6 +41,7 @@ export function AccountSidebar(props: { counts?: AccountCounts }) {
       <ul ref={rail} class="no-scrollbar flex gap-2 overflow-x-auto p-3 lg:flex-col lg:gap-1 lg:overflow-visible lg:p-0">
         <NavItem href="/account" end label="ประวัติการซื้อ" count={orderCount()} />
         <NavItem href="/account/points" label="Charmiss Club" />
+        <NavItem href="/account/coupons" label="คูปองและสิทธิพิเศษ" />
         <NavItem href="/account/profile" label="ข้อมูลส่วนตัว" />
         <NavItem href="/account/wishlist" label="รายการโปรด" />
         <NavItem href="/account/address" label="ที่อยู่จัดส่ง" />

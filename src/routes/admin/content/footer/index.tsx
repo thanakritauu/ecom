@@ -35,7 +35,7 @@ const LINK_STATUS_META: Record<"live" | "missing", { label: string; tone: Status
 };
 
 /** Static mirror of `src/routes` (storefront side). Anything else falls through to the `[...path]` catch-all screen. */
-const LIVE_EXACT = new Set(["/", "/products", "/cart", "/checkout", "/coupons", "/account", "/login", "/register", "/account/address", "/account/cards", "/account/points", "/account/profile", "/account/wishlist"]);
+const LIVE_EXACT = new Set(["/", "/products", "/cart", "/checkout", "/coupons", "/account", "/login", "/register", "/account/address", "/account/cards", "/account/coupons", "/account/points", "/account/profile", "/account/wishlist"]);
 const LIVE_PREFIXES = ["/promotion/", "/product/", "/account/orders/"];
 const INFO_PAGE_HREFS = new Set<string>(Object.values(INFO_PAGES).map((p) => p.href));
 

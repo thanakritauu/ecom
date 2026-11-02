@@ -74,7 +74,7 @@ export function CouponCard(props: {
   const ActionButton = (p: { full?: boolean }) => {
     // A disabled action ("ไม่ตรงเงื่อนไข") is a longer word: one size smaller on the ticket so the amount keeps its room.
     const cls = () =>
-      p.full ? "w-full" : props.action?.disabled ? "!min-h-0 shrink-0 !px-3 !py-2 !text-sm !leading-[normal]" : "!min-h-0 shrink-0 !px-4 !py-2 !text-base !leading-[normal]";
+      p.full ? "w-full" : props.action?.disabled ? "!min-h-0 shrink-0 !px-2.5 !py-2 !text-sm !leading-[normal]" : "!min-h-0 shrink-0 !px-4 !py-2 !text-base !leading-[normal]";
     return (
       <Show
         when={props.action}
