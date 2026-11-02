@@ -1,7 +1,7 @@
 import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
 import type { ResolvedCartLine, CheckoutTotals, Coupon } from "~/lib/cartSelectors";
 import type { GiftLine, PromoDiscountRow } from "~/lib/promotionEngine";
-import { MOCK_COIN_BALANCE, SHIPPING_FEE, flashLimitNote } from "~/lib/cartSelectors";
+import { MOCK_COIN_BALANCE, SHIPPING_FEE, flashLimitNote, isCouponExpired } from "~/lib/cartSelectors";
 import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
 import { useAuth } from "~/lib/auth";
 import { useCollectedCoupons } from "~/lib/collectedCoupons";
@@ -263,6 +263,9 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
         onApply={props.onApplyCoupon}
         onRemove={props.onRemoveCoupon}
         collectedCodes={auth.isAuthenticated() ? collectedCoupons.collected() : undefined}
+        expiredCollected={
+          auth.isAuthenticated() ? storeCoupons.codeCoupons().filter((c) => collectedCoupons.isCollected(c.code) && isCouponExpired(c)) : undefined
+        }
         onCollect={(code) => auth.isAuthenticated() && collectedCoupons.collect(code)}
       />
 

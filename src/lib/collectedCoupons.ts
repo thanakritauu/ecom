@@ -8,6 +8,8 @@ import { isServer } from "solid-js/web";
  * browser's localStorage (mock: no account API yet, one member persona).
  */
 const STORAGE_KEY = "charmiss:collected-coupons:v1";
+/** Mock: the demo member collected the Halloween coupon before it ended, so "เก็บแล้ว" has an expired one to show. */
+const SEED = ["HALLOWEEN60"];
 
 const [codes, setCodes] = createSignal<Set<string>>(new Set());
 let loaded = false;
@@ -17,13 +19,14 @@ function load() {
   loaded = true;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) setCodes(new Set(JSON.parse(raw) as string[]));
+    setCodes(new Set(raw ? (JSON.parse(raw) as string[]) : SEED));
   } catch {
     // storage unavailable: collected for this visit only.
   }
 }
 
 function add(more: string[]) {
+  load();
   const next = new Set(codes());
   for (const code of more) next.add(code);
   setCodes(next);

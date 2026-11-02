@@ -6,6 +6,7 @@ import {
   couponStackBlocked,
   couponUsageBlock,
   isCouponActive,
+  isCouponExpired,
   isCouponNotStarted,
   isCouponScoped,
   type Coupon,
@@ -50,12 +51,17 @@ export function CouponPickerSheet(props: {
   onRemove: () => void;
   /** Codes this shopper has collected (Home / /coupons); the "เก็บแล้ว" tab. */
   collectedCodes?: Set<string>;
+  /** Collected coupons past their dates: listed last under "เก็บแล้ว" as หมดอายุแล้ว (never usable). */
+  expiredCollected?: Coupon[];
   /** Using a coupon also collects it. */
   onCollect?: (code: string) => void;
 }) {
   // Every listed coupon inside its dates (any กลุ่มลูกค้า: another group's is shown under "ทั้งหมด", not usable).
   const listed = () => props.coupons.filter((c) => isCouponActive(c));
-  const blockOf = (coupon: Coupon) => coupon.audienceBlock ?? couponUsageBlock(coupon, props.usedByShopper?.(coupon.code) ?? 0);
+  const blockOf = (coupon: Coupon) =>
+    (isCouponExpired(coupon) ? `คูปองนี้${coupon.expiresLabel.replace("หมดอายุ", "หมดอายุเมื่อ")}` : undefined) ??
+    coupon.audienceBlock ??
+    couponUsageBlock(coupon, props.usedByShopper?.(coupon.code) ?? 0);
   /** Can go on this order right now: this shopper's group, uses left, and the cart meets its conditions. */
   const canUse = (coupon: Coupon) => !blockOf(coupon) && !couponCartBlock(coupon, props.lines);
 
@@ -63,7 +69,7 @@ export function CouponPickerSheet(props: {
   type Tab = "usable" | "collected" | "all";
   const tabLists: Record<Tab, () => Coupon[]> = {
     usable: () => listed().filter((c) => canUse(c) || props.applied?.code === c.code),
-    collected: () => listed().filter((c) => props.collectedCodes?.has(c.code) || props.applied?.code === c.code),
+    collected: () => [...listed().filter((c) => props.collectedCodes?.has(c.code) || props.applied?.code === c.code), ...(props.expiredCollected ?? [])],
     all: listed,
   };
   const TABS: { key: Tab; label: string; empty: string }[] = [
@@ -111,6 +117,7 @@ export function CouponPickerSheet(props: {
 
   const action = (coupon: Coupon): CouponCardAction => {
     if (props.applied?.code === coupon.code) return { label: "ยกเลิก", variant: "outline", onClick: props.onRemove };
+    if (isCouponExpired(coupon)) return { label: "หมดอายุแล้ว", variant: "outline", disabled: true, onClick: () => {} };
     if (coupon.audienceBlock) return { label: "ไม่ตรงเงื่อนไข", variant: "outline", disabled: true, onClick: () => {} };
     return {
       label: "ใช้เลย",

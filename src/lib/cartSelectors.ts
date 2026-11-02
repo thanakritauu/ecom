@@ -348,6 +348,11 @@ export function isCouponActive(c: Pick<Coupon, "expiresAt" | "startsAt">, now = 
   return Date.parse(c.expiresAt) >= now && (!c.startsAt || Date.parse(c.startsAt) <= now);
 }
 
+/** Past its last valid minute (a collected coupon can outlive its dates: "เก็บแล้ว" shows it as หมดอายุแล้ว). */
+export function isCouponExpired(c: Pick<Coupon, "expiresAt">, now = Date.now()): boolean {
+  return Date.parse(c.expiresAt) < now;
+}
+
 export function isCouponNotStarted(c: Pick<Coupon, "startsAt">, now = Date.now()): boolean {
   return !!c.startsAt && Date.parse(c.startsAt) > now;
 }

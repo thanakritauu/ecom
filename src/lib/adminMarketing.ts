@@ -444,8 +444,9 @@ const PROMOTION_SEEDS: Omit<Promotion, "id" | "createdAt" | "updatedAt">[] = [
  * v9: promo badges can be switched off (`showBadge`); seeds show cards with 0, 1 and 2 badges.
  * v10: กลุ่มลูกค้า (`audience`), การใช้ร่วมกับโปรอื่น (`combinableWith`), ยิ่งซื้อยิ่งคุ้ม; seeds NEW100 (ลูกค้าใหม่) and a tiered promo.
  * v11: coupon seeds for every กลุ่มลูกค้า (COMEBACK80, MEMBER50, RADIANCE12, ICON300).
+ * v12: an expired coupon the demo member had collected (HALLOWEEN60).
  */
-export const MARKETING_SEED_VERSION = 11;
+export const MARKETING_SEED_VERSION = 12;
 
 // ---------------------------------------------------------------------------
 // Coupons: baht or % off the product subtotal, one per order
@@ -605,6 +606,8 @@ const COUPON_SEEDS: Omit<Coupon, "id" | "createdAt" | "updatedAt">[] = [
   { code: "MEMBER50", audience: { kind: "tiers", tiers: ["glow", "radiance", "icon"] }, discountType: "baht", discount: 50, minSpend: 400, perCustomerLimit: 2, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
   { code: "RADIANCE12", audience: { kind: "tiers", tiers: ["radiance", "icon"] }, discountType: "percent", discount: 12, maxDiscount: 250, minSpend: 800, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
   { code: "ICON300", audience: { kind: "tiers", tiers: ["icon"] }, discountType: "baht", discount: 300, minSpend: 2000, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  // v12: ended on 31 Oct; the demo member collected it before then, so Checkout's "เก็บแล้ว" shows a หมดอายุแล้ว coupon.
+  { code: "HALLOWEEN60", discountType: "baht", discount: 60, minSpend: 300, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-25", startTime: "00:00", endDate: "2026-10-31", endTime: "23:59", status: "active" },
 ];
 
 const TODAY_LABEL = "17 ก.ย. 2569";

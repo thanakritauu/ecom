@@ -101,14 +101,6 @@ export function TaxInvoiceSheet(props: {
     }));
   };
 
-  // "+ เพิ่มที่อยู่ใหม่" starts from the shipping address (a company's name in place of the recipient's).
-  const addressPrefill = () => {
-    const a = props.shippingAddress;
-    if (!a) return undefined;
-    const { id, label, isDefault, kind, ...fields } = a;
-    return draft().type === "company" && draft().name.trim() ? { ...fields, recipientName: draft().name.trim() } : fields;
-  };
-
   const save = () => {
     const e: TaxInvoiceErrors & { address?: string } = validateTaxInvoiceDraft(draft());
     if (!sameAsShipping()) {
@@ -247,7 +239,6 @@ export function TaxInvoiceSheet(props: {
                 // บุคคลธรรมดา: plain ชื่อ + นามสกุล; only นิติบุคคล gets "ชื่อ หรือชื่อบริษัท".
                 companyAllowed={draft().type === "company"}
                 kind="billing"
-                prefill={addressPrefill()}
                 addresses={props.addresses}
                 selectedId={pickedAddressId()}
                 onSelect={(id) => {

@@ -43,8 +43,6 @@ export function AddressSection(props: {
   embedded?: boolean;
   /** Kind given to addresses added here. */
   kind?: Address["kind"];
-  /** Starting values for "+ เพิ่มที่อยู่ใหม่" (billing: the shipping address, to review and adjust). */
-  prefill?: Partial<Address>;
   /** Checkout's pay button checks an open form through this (see `AddressForm`'s `onRegisterValidate`). */
   onRegisterValidate?: (validate: () => boolean) => void;
 }) {
@@ -100,7 +98,6 @@ export function AddressSection(props: {
         </Show>
         <AddressForm
           initial={mode() === "edit" ? editingAddress() : undefined}
-          prefill={mode() === "add" ? props.prefill : undefined}
           newAddressLabel={props.newAddressLabel}
           companyAllowed={props.companyAllowed}
           kind={props.kind}
@@ -282,8 +279,6 @@ const FOREIGN_PHONE_PATTERN = /^(?=(?:\D*\d){6,12}\D*$)\d[\d-]*$/;
 
 export function AddressForm(props: {
   initial?: Address;
-  /** A new address's starting values (e.g. the shipping address copied into the billing form); still saved as a new address. */
-  prefill?: Partial<Address>;
   newAddressLabel: string;
   companyAllowed?: boolean;
   showDefaultOption?: boolean;
@@ -311,10 +306,9 @@ export function AddressForm(props: {
 }) {
   const formId = createUniqueId();
   const fieldId = (key: FieldKey) => `${formId}-${key}`;
-  // Editing shows the address itself; a new one may start from `prefill`.
-  const seed = props.initial ?? props.prefill;
-  // A prefilled company name stays whole in "ชื่อ หรือชื่อบริษัท" instead of being split at its first space.
-  const initialName = props.companyAllowed && !props.initial && props.prefill?.recipientName ? { first: props.prefill.recipientName, last: "" } : splitName(seed?.recipientName);
+  // Editing shows the address itself; a new address always starts empty (nothing is prefilled).
+  const seed = props.initial;
+  const initialName = splitName(seed?.recipientName);
   const [values, setValues] = createSignal<Record<FieldKey, string>>({
     firstName: initialName.first,
     lastName: initialName.last,
