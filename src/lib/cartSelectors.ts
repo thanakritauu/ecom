@@ -204,6 +204,11 @@ export type Coupon = {
   audienceLabel?: string;
   /** "การใช้ร่วมกับโปรอื่น" (unset = stacks with all): lines that got a promo it can't stack with don't count (`couponEligibleSubtotal`). */
   combinableWith?: CombinableKind[];
+  /**
+   * โค้ดจากภายนอก (`externalCodes.ts`): typed in only, members only, never collected. It never stacks with
+   * coupons (no "คูปอง" in `combinableWith`), so `canAddCoupon` keeps it alone on the order.
+   */
+  external?: boolean;
 };
 
 const THAI_SHORT_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];

@@ -5,6 +5,7 @@ import { MOCK_COIN_BALANCE, SHIPPING_FEE, flashLimitNote, isCouponExpired } from
 import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
 import { useAuth } from "~/lib/auth";
 import { useCollectedCoupons } from "~/lib/collectedCoupons";
+import { checkExternalCode } from "~/lib/externalCodes";
 import { formatTHB } from "../shared/PriceDisplay";
 import { ChevronIcon } from "../shared/ChevronIcon";
 import { CheckIcon } from "../shared/icons";
@@ -169,7 +170,7 @@ export function CheckoutOrderSummary(props: {
         </div>
         <PromoDiscountRows rows={props.promoRows} />
         <div class="flex items-center justify-between">
-          <span class="text-ink-gray">{props.coupons.length > 0 ? `คูปอง ${props.coupons.map((c) => c.code).join(", ")}` : "คูปอง"}</span>
+          <span class="text-ink-gray">{props.coupons.length > 0 ? `${props.coupons.some((c) => c.external) ? "โค้ด" : "คูปอง"} ${props.coupons.map((c) => c.code).join(", ")}` : "คูปอง"}</span>
           <span class="font-bold" classList={{ "text-success": props.totals.couponDiscount > 0, "text-ink": props.totals.couponDiscount <= 0 }}>
             {props.totals.couponDiscount > 0 ? `-${formatTHB(props.totals.couponDiscount)}` : formatTHB(0)}
           </span>
@@ -248,8 +249,10 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
               {props.coupons.length > 1
                 ? `ใช้ ${props.coupons.length} คูปอง ลดรวม ${formatTHB(props.totals.couponDiscount)} อยู่`
                 : props.coupons[0]
-                  ? `ใช้คูปอง ${props.coupons[0].label} อยู่`
-                  : "เลือกคูปองเพื่อรับส่วนลด"}
+                  ? props.coupons[0].external
+                    ? `ใช้โค้ด ${props.coupons[0].code} ${props.coupons[0].label} อยู่`
+                    : `ใช้คูปอง ${props.coupons[0].label} อยู่`
+                  : "เลือกคูปองหรือกรอกโค้ดส่วนลด"}
             </p>
             <Show when={props.coupons.length > 0 && props.couponAutoPicked}>
               <p class="text-xs text-ink-gray">เลือกคูปองที่ลดได้มากที่สุดให้แล้ว</p>
@@ -275,6 +278,7 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
           auth.isAuthenticated() ? storeCoupons.codeCoupons().filter((c) => collectedCoupons.isCollected(c.code) && isCouponExpired(c)) : undefined
         }
         onCollect={(code) => auth.isAuthenticated() && collectedCoupons.collect(code)}
+        checkExternalCode={(code) => checkExternalCode(code, auth.user()?.id)}
       />
 
       <div class="flex items-center gap-2">

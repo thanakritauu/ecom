@@ -29,6 +29,9 @@ export type Coupon = {
 /** The ticket for one storefront coupon: Home's section and Checkout's picker print the exact same three lines. */
 export function couponTicket(c: StoreCoupon): Coupon {
   const minSpendLabel = c.minSpend > 0 ? `ขั้นต่ำ ฿${c.minSpend.toLocaleString("th-TH")}` : "ไม่มีขั้นต่ำ";
+  // โค้ดจากภายนอก: the ticket shows only its name ("โค้ด FREE50"), no badge, amount or minimum, and there's
+  // no detail sheet (no `source`): the other system owns its conditions.
+  if (c.external) return { id: c.code, amountLabel: `โค้ด ${c.code}`, minSpendLabel: "" };
   return { id: c.code, amountLabel: c.amountLabel, capLabel: c.capLabel, image: c.image, minSpendLabel, audienceLabel: c.audienceLabel, expiryLabel: c.expiresLabel, source: c };
 }
 
@@ -188,7 +191,9 @@ export function CouponCard(props: {
             <Show when={props.coupon.capLabel}>
               <p class="whitespace-nowrap text-xs font-medium leading-4 text-system-red">{props.coupon.capLabel}</p>
             </Show>
-            <p class="whitespace-nowrap text-sm font-medium leading-5 text-ink">{props.coupon.minSpendLabel}</p>
+            <Show when={props.coupon.minSpendLabel}>
+              <p class="whitespace-nowrap text-sm font-medium leading-5 text-ink">{props.coupon.minSpendLabel}</p>
+            </Show>
           </div>
           <Show when={!props.display}>
             <div class="pointer-events-auto shrink-0">

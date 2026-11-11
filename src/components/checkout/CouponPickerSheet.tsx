@@ -22,6 +22,7 @@ import { EmptyState } from "../shared/EmptyState";
 import { TagIcon } from "../shared/icons";
 import { TextField } from "../shared/TextField";
 import { pushToast } from "~/lib/toast";
+import type { ExternalCodeResult } from "~/lib/externalCodes";
 
 /**
  * Checkout coupon picker — the shared modal frame (`SheetModal`, same as the
@@ -56,11 +57,15 @@ export function CouponPickerSheet(props: {
   collectedCodes?: Set<string>;
   /** Collected coupons past their dates: listed last under "เก็บแล้ว" as หมดอายุแล้ว (never usable). */
   expiredCollected?: Coupon[];
-  /** Using a coupon also collects it. */
+  /** Using a coupon also collects it (never a โค้ดจากภายนอก). */
   onCollect?: (code: string) => void;
+  /** A typed code that isn't one of ours: asks the other system (`externalCodes.ts`). Unset = not found. */
+  checkExternalCode?: (code: string) => Promise<ExternalCodeResult>;
 }) {
   // Every listed coupon inside its dates (any กลุ่มลูกค้า: another group's is shown under "ทั้งหมด", not usable).
   const listed = () => props.coupons.filter((c) => isCouponActive(c));
+  // A โค้ดจากภายนอก in use: a ticket under "ใช้ได้" only (never listed otherwise, so taking it off drops its ticket).
+  const externalApplied = () => props.applied.filter((c) => c.external);
   const blockOf = (coupon: Coupon) =>
     (isCouponExpired(coupon) ? `คูปองนี้${coupon.expiresLabel.replace("หมดอายุ", "หมดอายุเมื่อ")}` : undefined) ??
     coupon.audienceBlock ??
@@ -74,7 +79,7 @@ export function CouponPickerSheet(props: {
   const isApplied = (c: Coupon) => props.applied.some((a) => a.code === c.code);
   const appliedFirst = (list: Coupon[]) => [...list.filter(isApplied), ...list.filter((c) => !isApplied(c))];
   const tabLists: Record<Tab, () => Coupon[]> = {
-    usable: () => appliedFirst(listed().filter((c) => canUse(c) || isApplied(c))),
+    usable: () => [...externalApplied(), ...appliedFirst(listed().filter((c) => canUse(c) || isApplied(c)))],
     collected: () => appliedFirst([...listed().filter((c) => props.collectedCodes?.has(c.code) || isApplied(c)), ...(props.expiredCollected ?? [])]),
     all: () => appliedFirst(listed()),
   };
@@ -106,10 +111,10 @@ export function CouponPickerSheet(props: {
   const apply = (coupon: Coupon, via: "code" | "pick") => {
     const replaces = props.applied.length > 0 && !canAddCoupon(props.applied, coupon);
     withSlide(() => props.onApply(coupon), coupon.code);
-    props.onCollect?.(coupon.code);
+    if (!coupon.external) props.onCollect?.(coupon.code);
     if (via === "code") setCode("");
     pushToast(
-      via === "code" ? `ใช้โค้ด ${coupon.code} แล้ว` : replaces ? "เปลี่ยนคูปองแล้ว" : "ใช้คูปองแล้ว",
+      via === "code" ? (replaces ? `ใช้โค้ด ${coupon.code} แทนคูปองเดิมแล้ว` : `ใช้โค้ด ${coupon.code} แล้ว`) : replaces ? "เปลี่ยนคูปองแล้ว" : "ใช้คูปองแล้ว",
       "success",
       `ลด ${formatTHB(couponDiscountAmount(coupon, couponEligibleSubtotal(coupon, props.lines)))} จากยอดสั่งซื้อนี้`,
     );
@@ -119,13 +124,26 @@ export function CouponPickerSheet(props: {
   const [code, setCode] = createSignal("");
   const [codeError, setCodeError] = createSignal<string>();
   const [codeTried, setCodeTried] = createSignal(false);
+  // Waiting on the other system for a โค้ดจากภายนอก.
+  const [codeChecking, setCodeChecking] = createSignal(false);
   createEffect(on(() => props.open, (open) => open && (setCode(""), setCodeError(undefined), setCodeTried(false))));
-  const applyCode = (e: SubmitEvent) => {
+  const applyCode = async (e: SubmitEvent) => {
     e.preventDefault();
+    if (codeChecking()) return;
     setCodeTried(true);
     const typed = code().trim().toUpperCase();
     if (!typed) return setCodeError("กรุณากรอกโค้ดส่วนลด");
-    const coupon = (props.codeCoupons ?? props.coupons).find((c) => c.code.toUpperCase() === typed);
+    if (props.applied.some((c) => c.code.toUpperCase() === typed)) return setCodeError("กำลังใช้โค้ดนี้อยู่แล้ว");
+    let coupon = (props.codeCoupons ?? props.coupons).find((c) => c.code.toUpperCase() === typed);
+    // Not one of ours: ask the other system (it says not found / not started / expired / sign in / used up itself).
+    if (!coupon && props.checkExternalCode) {
+      setCodeChecking(true);
+      const result = await props.checkExternalCode(typed).finally(() => setCodeChecking(false));
+      // The field changed or the popup closed while waiting: this answer is for a code no longer there.
+      if (!props.open || code().trim().toUpperCase() !== typed) return;
+      if (!result.ok) return setCodeError(result.reason);
+      coupon = result.coupon;
+    }
     if (!coupon) return setCodeError("ไม่พบโค้ดส่วนลดนี้ กรุณาตรวจสอบอีกครั้ง");
     if (isCouponNotStarted(coupon)) return setCodeError("โค้ดส่วนลดนี้ยังไม่เริ่มใช้งาน");
     if (!isCouponActive(coupon)) return setCodeError("โค้ดส่วนลดนี้หมดอายุแล้ว");
@@ -143,7 +161,16 @@ export function CouponPickerSheet(props: {
   // A round check on each ticket (ticked = in use): tap to use, tap the ticked one to stop using it.
   // One that can't be used has a grey ring; the reason is written under it.
   const action = (coupon: Coupon): CouponCardAction => {
-    if (isApplied(coupon)) return { label: "ยกเลิกการใช้คูปอง", variant: "outline", onClick: () => withSlide(() => props.onRemove(coupon.code)), check: { checked: true } };
+    if (isApplied(coupon))
+      return {
+        label: "ยกเลิกการใช้คูปอง",
+        variant: "outline",
+        onClick: () => {
+          withSlide(() => props.onRemove(coupon.code));
+          if (coupon.external) pushToast(`เอาโค้ด ${coupon.code} ออกแล้ว`, "success");
+        },
+        check: { checked: true },
+      };
     return { label: "ใช้คูปองนี้", variant: "primary", disabled: !canUse(coupon), onClick: () => apply(coupon, "pick"), check: { checked: false } };
   };
 
@@ -180,14 +207,14 @@ export function CouponPickerSheet(props: {
             />
           </div>
           {/* Lined up with the input (label 20px + 6px gap), so a message under the input doesn't drag the button down. */}
-          <Button type="submit" variant="primary" class="mt-[26px] h-11 shrink-0 !px-5">
+          <Button type="submit" variant="primary" loading={codeChecking()} class="mt-[26px] h-11 shrink-0 !px-5">
             ใช้โค้ด
           </Button>
         </div>
       </form>
 
       <Show
-        when={listed().length > 0}
+        when={listed().length > 0 || externalApplied().length > 0}
         fallback={<EmptyState size="compact" icon={TagIcon} title="ยังไม่มีคูปองในตอนนี้" description="ถ้ามีโค้ดส่วนลด กรอกได้ที่ช่องด้านบน" />}
       >
         {/* Same underline tabs as Purchase History, each with its count. */}
@@ -246,7 +273,9 @@ export function CouponPickerSheet(props: {
                     <p class="px-1 text-xs text-ink-gray">{cartBlocked()}</p>
                   </Show>
                   <Show when={replaces()}>
-                    <p class="px-1 text-xs text-ink-gray">ใช้ร่วมกับคูปองที่เลือกอยู่ไม่ได้ เลือกแล้วจะใช้แทน</p>
+                    <p class="px-1 text-xs text-ink-gray">
+                      {props.applied.some((c) => c.external) ? "ใช้ร่วมกับโค้ดที่กรอกไม่ได้ เลือกแล้วจะใช้แทน" : "ใช้ร่วมกับคูปองที่เลือกอยู่ไม่ได้ เลือกแล้วจะใช้แทน"}
+                    </p>
                   </Show>
                 </li>
               );

@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { A, useSearchParams } from "@solidjs/router";
 import { Header } from "~/components/shared/Header";
 import { Footer } from "~/components/shared/Footer";
@@ -51,6 +51,8 @@ import { METHOD_ICONS } from "~/components/checkout/paymentMarks";
 import coinMark from "~/assets/icons/charmiss-coin.png";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
 import { focusFirstInvalid } from "~/lib/validators";
+import { recordExternalCodeUse } from "~/lib/externalCodes";
+import { pushToast } from "~/lib/toast";
 
 /**
  * Figma node 146:8484. Reuses the exact same shared cart state and pricing
@@ -165,6 +167,8 @@ export default function CheckoutPage() {
   // their conditions), re-checked as the cart changes. Their own choice (including none) then sticks.
   const [couponChosenByShopper, setCouponChosenByShopper] = createSignal(false);
   const couponUsable = (c: Coupon) =>
+    // A โค้ดจากภายนอก is for signed-in members only.
+    (!c.external || auth.isAuthenticated()) &&
     isCouponActive(c) &&
     !storefrontMarketing.codeCoupons().find((x) => x.code === c.code)?.audienceBlock &&
     !couponUsageBlock(c, couponUsesByShopper(c.code)) &&
@@ -194,6 +198,15 @@ export default function CheckoutPage() {
     return list.reduce<Coupon[]>((kept, c) => (canAddCoupon(kept, c) ? [...kept, c] : kept), []);
   };
   const couponAutoPicked = () => !couponChosenByShopper() && coupons().length > 0;
+  // A โค้ดจากภายนอก that stops qualifying (signed out, cart under its minimum, past its end) is taken off with a toast,
+  // not kept on hold like our coupons: it's never listed, so the shopper couldn't see or remove it otherwise.
+  createEffect(() => {
+    const dropped = pickedCoupons().filter((c) => c.external && !couponUsable(c));
+    if (dropped.length === 0) return;
+    setPickedCoupons(pickedCoupons().filter((c) => !dropped.includes(c)));
+    for (const c of dropped)
+      pushToast(`ยกเลิกโค้ด ${c.code} แล้ว`, "info", couponCartBlock(c, pricedLines()) ?? "โค้ดนี้ใช้กับคำสั่งซื้อนี้ไม่ได้แล้ว");
+  });
 
   // Coins the order can take — the coupon/cart can change after coins were picked, so the pick is capped (not reset).
   const maxCoins = createMemo(() =>
@@ -248,6 +261,9 @@ export default function CheckoutPage() {
     // (shipping fee excluded) and tier multiplier as the account's order pages.
     // The amount Beam charged — in same-tab mode this page reloaded and lost coupon/coin picks, so not `totals()`.
     const coinsEarned = computeCoinsEarned(payment.amount - totals().shippingFee, tier().id);
+    // The other system counts a โค้ดจากภายนอก against the member once the order is paid.
+    const memberId = auth.user()?.id;
+    if (memberId) recordExternalCodeUse(memberId, coupons().filter((c) => c.external).map((c) => c.code));
     setOrder({ number: payment.orderNumber, total: payment.amount, coinsEarned, payment });
     cart.clearCart();
     window.scrollTo({ top: 0 });
