@@ -51,7 +51,7 @@ export function buildDefaultFooterContent(): FooterContent {
         id: "help",
         title: "ช่วยเหลือ",
         links: [
-          link("help-track", { label: "ติดตามคำสั่งซื้อ", href: "/account" }),
+          link("help-track", INFO_PAGES.tracking),
           link("help-how-to-order", INFO_PAGES.howToOrder),
           link("help-shipping", INFO_PAGES.shipping),
           link("help-faq", INFO_PAGES.faq),
@@ -92,6 +92,9 @@ export function footerPhoneHref(phoneLabel: string): string {
 }
 
 /** Fills anything missing from an older / partial save with the seed. */
+/** "ติดตามคำสั่งซื้อ" used to point at /account; a footer saved before its own page existed follows it there. */
+const footerHref = (l: FooterLink) => (l.id === "help-track" && l.href === "/account" ? INFO_PAGES.tracking.href : String(l.href ?? ""));
+
 export function normalizeFooterContent(raw: Partial<FooterContent> | undefined): FooterContent {
   const seed = buildDefaultFooterContent();
   if (!raw) return seed;
@@ -99,7 +102,7 @@ export function normalizeFooterContent(raw: Partial<FooterContent> | undefined):
     Array.isArray(links)
       ? links
           .filter((l): l is FooterLink => !!l && typeof l === "object")
-          .map((l) => ({ id: l.id || newFooterLinkId(), label: String(l.label ?? ""), href: String(l.href ?? "") }))
+          .map((l) => ({ id: l.id || newFooterLinkId(), label: String(l.label ?? ""), href: footerHref(l) }))
       : [];
   const social = FOOTER_SOCIAL_PLATFORMS.map((platform) => {
     const saved = Array.isArray(raw.social) ? raw.social.find((s) => s?.platform === platform) : undefined;
