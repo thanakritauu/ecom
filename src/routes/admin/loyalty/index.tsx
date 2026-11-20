@@ -22,12 +22,13 @@ export default function AdminLoyaltyPage() {
   const multipliers = TIERS.map((t) => `${t.shortName} x${t.coinMultiplier}`).join(", ");
 
   const COIN_RULES: { label: string; value: string }[] = [
-    { label: "การได้รับคอยน์", value: `ทุก ${formatAdminCurrency(bahtPerCoin)} ที่ชำระ ได้ 1 คอยน์ ไม่รวมค่าจัดส่ง` },
+    { label: "การได้รับคะแนน", value: `ทุก ${formatAdminCurrency(bahtPerCoin)} ที่ชำระ ได้ 1 คะแนน ไม่รวมค่าจัดส่ง` },
     { label: "ตัวคูณตามระดับสมาชิก", value: multipliers },
-    { label: "คอยน์เข้าบัญชี", value: "เมื่อคำสั่งซื้อส่งสำเร็จ" },
-    { label: "มูลค่าคอยน์", value: `${coinsPerBaht.toLocaleString("th-TH")} คอยน์ เท่ากับ ${formatAdminCurrency(1)}` },
-    { label: "ใช้คอยน์ทีละ", value: `${COIN_REDEMPTION_STEP.toLocaleString("th-TH")} คอยน์` },
-    { label: "ใช้ได้สูงสุดต่อคำสั่งซื้อ", value: `${MAX_COIN_REDEMPTION.toLocaleString("th-TH")} คอยน์ หรือ ${formatAdminCurrency(MAX_COIN_REDEMPTION * COIN_TO_BAHT_RATE)}` },
+    { label: "คะแนนเข้าบัญชี", value: "ทันทีเมื่อลูกค้ากดยืนยันรับสินค้า หรือภายใน 7-15 วันทำการหลังจัดส่งสำเร็จ" },
+    { label: "การคืนสินค้า", value: "ยืนยันรับสินค้าแล้วคืนไม่ได้ หากคืนสินค้า คะแนนจากคำสั่งซื้อนั้นจะถูกหักออก" },
+    { label: "มูลค่าคะแนน", value: `${coinsPerBaht.toLocaleString("th-TH")} คะแนน เท่ากับ ${formatAdminCurrency(1)}` },
+    { label: "ใช้คะแนนทีละ", value: `${COIN_REDEMPTION_STEP.toLocaleString("th-TH")} คะแนน` },
+    { label: "ใช้ได้สูงสุดต่อคำสั่งซื้อ", value: `${MAX_COIN_REDEMPTION.toLocaleString("th-TH")} คะแนน หรือ ${formatAdminCurrency(MAX_COIN_REDEMPTION * COIN_TO_BAHT_RATE)}` },
     { label: "ใช้จ่ายค่าจัดส่ง", value: "ไม่ได้" },
     { label: "วันหมดอายุ", value: "ไม่มีวันหมดอายุ" },
   ];
@@ -46,7 +47,7 @@ export default function AdminLoyaltyPage() {
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "Charmiss Club" }]} />
       <PageHeader
         title="Charmiss Club"
-        description="ดูระดับสมาชิกและกติกาคอยน์ที่ลูกค้าเห็นบนเว็บไซต์"
+        description="ดูระดับสมาชิกและกติกาคะแนนที่ลูกค้าเห็นบนเว็บไซต์"
         actions={
           <div class="flex flex-wrap items-center gap-2">
             <Button variant="outline" href="/admin/customers">
@@ -63,7 +64,7 @@ export default function AdminLoyaltyPage() {
           <h2 class="text-base font-semibold text-ink">ภาพรวมสมาชิก</h2>
           <dl class="flex flex-col">
             <Stat label="สมาชิกทั้งหมด" value={`${stats().members.toLocaleString("th-TH")} คน`} />
-            <Stat label="คอยน์คงเหลือรวม" value={`${stats().coins.toLocaleString("th-TH")} คอยน์`} />
+            <Stat label="คะแนนคงเหลือรวม" value={`${stats().coins.toLocaleString("th-TH")} คะแนน`} />
             <Stat label="ย้ายมาจาก CRM" value={`${stats().fromCrm.toLocaleString("th-TH")} คน`} />
           </dl>
         </section>
@@ -73,8 +74,8 @@ export default function AdminLoyaltyPage() {
 
           <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
             <div class="flex flex-col gap-1">
-              <h2 class="text-base font-semibold text-ink">กติกาคอยน์</h2>
-              <p class="text-sm text-ink-gray">กติกาเดียวกับหน้าตะกร้า หน้าชำระเงิน และหน้าคอยน์ของลูกค้า</p>
+              <h2 class="text-base font-semibold text-ink">กติกาคะแนน</h2>
+              <p class="text-sm text-ink-gray">กติกาเดียวกับหน้าตะกร้า หน้าชำระเงิน และหน้าคะแนนของลูกค้า</p>
             </div>
             <dl class="flex flex-col gap-1.5 text-sm">
               <For each={COIN_RULES}>

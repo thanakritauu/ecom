@@ -211,4 +211,11 @@ export type Order = {
   /** Why it was cancelled, when known — e.g. the payment-deadline auto-cancel (`applyPaymentDeadline`). */
   cancelReason?: string;
   returnRequest?: ReturnRequest;
+  /** ISO 8601 — the shopper pressed "ยืนยันรับสินค้า" (no return after this). */
+  receivedAt?: string;
+  /**
+   * ISO 8601 — when the order's คะแนน Charmiss Club were credited: at once on "ยืนยันรับสินค้า", else by the
+   * loyalty system 7-15 days after delivery. Set by that system; the UI only reads it (`orderPointsState`).
+   */
+  pointsCreditedAt?: string;
 };

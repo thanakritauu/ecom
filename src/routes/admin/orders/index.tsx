@@ -169,7 +169,7 @@ export default function AdminOrderListPage() {
     { header: "จำนวนรายการ", value: (o) => o.items.length },
     { header: "ยอดรวมสินค้า", value: (o) => o.totals.subtotal },
     { header: "คูปอง", value: (o) => (o.totals.couponDiscount > 0 ? `${o.totals.couponCode ?? ""} -${o.totals.couponDiscount}` : "") },
-    { header: "Charmiss Coin", value: (o) => (o.totals.coinDiscount > 0 ? `${o.totals.coinsRedeemed} คอยน์ -${o.totals.coinDiscount}` : "") },
+    { header: "คะแนน Charmiss Club", value: (o) => (o.totals.coinDiscount > 0 ? `${o.totals.coinsRedeemed} คะแนน -${o.totals.coinDiscount}` : "") },
     { header: "ค่าจัดส่ง", value: (o) => o.totals.shippingFee },
     { header: "ยอดชำระ", value: (o) => o.totals.grandTotal },
     { header: "ช่องทางชำระเงิน", value: (o) => o.payment.method },

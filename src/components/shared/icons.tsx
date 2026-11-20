@@ -235,7 +235,7 @@ export function CardIcon(props: { class?: string }) {
   );
 }
 
-/** Coin — Charmiss Coin history (line style, for the empty state; the brand coin artwork stays a PNG elsewhere). */
+/** Coin — คะแนน Charmiss Club history (line style, for the empty state; the brand coin artwork stays a PNG elsewhere). */
 export function CoinIcon(props: { class?: string }) {
   return (
     <svg viewBox="0 0 24 24" class={props.class ?? "size-5"} fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">

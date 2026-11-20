@@ -5,7 +5,7 @@ import type { PaymentFailureReason } from "./payment";
 import { FAILURE_MESSAGES } from "./payment";
 import { allProducts } from "./products";
 import { formatAdminCurrency } from "./adminDashboard";
-import { applyPaymentDeadline, AUTO_CANCEL_REASON, getPaymentDeadline, MOCK_ORDERS as ACCOUNT_ORDERS, getPaymentStatus as getAccountPaymentStatus } from "./accountData";
+import { applyPaymentDeadline, AUTO_CANCEL_REASON, getPaymentDeadline, MOCK_ORDERS as ACCOUNT_ORDERS, getPaymentStatus as getAccountPaymentStatus, ORDERS_MOCK_NOW_ISO } from "./accountData";
 import { AVAILABLE_COUPONS, COIN_TO_BAHT_RATE, computeCoinsEarned, computeShippingFee, DELIVERY, GIFT_PROMOTION, PAYMENT_METHODS, type PaymentMethodId } from "./cartSelectors";
 import type { TierId } from "./membership";
 import { getShipmentStatus, SHIPMENT_STATUS_META } from "./orderTracking";
@@ -197,6 +197,10 @@ export type AdminOrder = {
   taxInvoice?: TaxInvoiceBuyer;
   /** ISO time staff marked the tax invoice as emailed (Order Detail "บันทึกว่าส่งแล้ว"). */
   taxInvoiceSentAt?: string;
+  /** ISO — the customer pressed "ยืนยันรับสินค้า" on the website (no return after this). */
+  receivedConfirmedAt?: string;
+  /** ISO — when this order's คะแนน Charmiss Club were credited: on "ยืนยันรับสินค้า", else 7-15 days after delivery. */
+  pointsCreditedAt?: string;
   orderStatus: OrderStatus;
   paymentStatus: PaymentStatus;
   fulfillmentStatus: FulfillmentStatus;
@@ -518,8 +522,19 @@ function buildAdminSeedOrder(seed: OrderSeed): AdminOrder {
     orderStatus: seed.orderStatus,
     paymentStatus,
     fulfillmentStatus: deriveFulfillmentStatus(shipping),
+    pointsCreditedAt: seedPointsCreditedAt(events),
     cancellation: seed.cancellation && { by: seed.cancellation.by, reason: seed.cancellation.reason, at: addHours(seed.placedAt, seed.cancellation.afterHours) },
   };
+}
+
+/**
+ * Seed orders nobody confirmed on the website: the loyalty system credited their คะแนน 7 days after delivery,
+ * when that day has come by the mock "now"; a later one is still waiting.
+ */
+function seedPointsCreditedAt(events: { status: string; timestamp: string }[]): string | undefined {
+  const delivered = events.find((e) => e.status === "delivered")?.timestamp;
+  const credited = delivered ? addHours(delivered, 7 * 24) : undefined;
+  return credited && Date.parse(credited) <= Date.parse(ORDERS_MOCK_NOW_ISO) ? credited : undefined;
 }
 
 /** Admin-facing SKUs for the account orders' snapshot items (they were never added to the PDP catalog — see accountData.ts). */
@@ -598,6 +613,8 @@ function buildFromAccountOrder(order: Order): AdminOrder {
     orderStatus: order.status,
     paymentStatus: accountPayment,
     fulfillmentStatus: deriveFulfillmentStatus(shipping),
+    receivedConfirmedAt: order.receivedAt,
+    pointsCreditedAt: order.pointsCreditedAt,
     // The storefront's payment-deadline auto-cancel reads as a system cancel with the storefront's own reason.
     cancellation: order.cancelledAt ? (order.cancelReason ? { by: "system", reason: AUTO_CANCEL_REASON, at: order.cancelledAt } : { by: "admin", reason: "ลูกค้าแจ้งยกเลิกทาง LINE", at: order.cancelledAt }) : undefined,
   };
@@ -609,7 +626,7 @@ export const MOCK_ORDERS: AdminOrder[] = [...ADMIN_ORDER_SEEDS.map(buildAdminSee
 );
 
 /**
- * One order's Charmiss Coin movements, with the storefront's own rules
+ * One order's คะแนน Charmiss Club movements, with the storefront's own rules
  * (`/account/points`): redeemed coins unless the order was cancelled; earned
  * on the amount paid excl. shipping × the customer's tier multiplier —
  * credited once delivered ("earned"), until then "pending"; nothing on an
@@ -619,7 +636,8 @@ export function orderCoinMovements(order: AdminOrder, tier: TierId): { used: num
   const used = order.orderStatus === "cancelled" ? 0 : order.totals.coinsRedeemed;
   const earns = order.orderStatus !== "cancelled" && order.orderStatus !== "pending_payment";
   if (!earns) return { used, earned: 0 };
-  return { used, earned: computeCoinsEarned(order.totals.grandTotal - order.totals.shippingFee, tier), state: order.orderStatus === "completed" ? "earned" : "pending" };
+  // Credited on "ยืนยันรับสินค้า" or after the waiting period (`pointsCreditedAt`); until then pending.
+  return { used, earned: computeCoinsEarned(order.totals.grandTotal - order.totals.shippingFee, tier), state: order.pointsCreditedAt ? "earned" : "pending" };
 }
 
 /** Coins a customer's seed orders add to their balance: delivered earnings minus redemptions (pending earnings aren't credited yet). */

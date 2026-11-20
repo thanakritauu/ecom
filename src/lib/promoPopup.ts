@@ -81,7 +81,7 @@ export const HOME_PROMO_POPUP: PromoPopupContent = {
   enabled: true,
   media: { src: membershipBg, alt: "Charmiss Club" },
   title: "สมาชิกใหม่รับส่วนลด ฿100",
-  description: "สมัคร Charmiss Club วันนี้ รับคูปองส่วนลดทันที\nพร้อมสะสมคอยน์ทุกการช้อป",
+  description: "สมัคร Charmiss Club วันนี้ รับคูปองส่วนลดทันที\nพร้อมสะสมคะแนนทุกการช้อป",
   ctaLabel: "สมัครสมาชิกเลย",
   audience: { kind: "new" },
   pages: ["/"],

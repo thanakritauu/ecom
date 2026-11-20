@@ -26,9 +26,10 @@ const STORAGE_KEY = "charmiss:admin:orders";
  * customer's own address — older copies reseed the same way. v4 = returns
  * and refunds cut (storefront has none), mobile banking seeds, staff-only
  * cancellation — older copies reseed. v5 = tax invoice details
- * (`taxInvoice`) on the seeds. v6 = `taxInvoiceSentAt` — older copies reseed.
+ * (`taxInvoice`) on the seeds. v6 = `taxInvoiceSentAt` — older copies reseed. v7 = `receivedConfirmedAt` /
+ * `pointsCreditedAt` (คะแนน credited on "ยืนยันรับสินค้า" or after the waiting period) — older copies reseed.
  */
-const STORAGE_VERSION = 6;
+const STORAGE_VERSION = 7;
 
 function persist(orders: AdminOrder[]) {
   if (isServer) return;

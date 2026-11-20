@@ -11,7 +11,7 @@ import orderItemBlush from "~/assets/images/account/order-item-blush.png";
  * Figma's own single example persona ("Nutcha S."). She's an existing
  * Charmiss Club member moved over from the CRM (`crm.ts` CRM-000071, Admin's
  * cust-2). Coin balance reuses the exact same mock constant Checkout's
- * Charmiss Coin card already reads, not a second invented number.
+ * คะแนน Charmiss Club card already reads, not a second invented number.
  */
 export const MOCK_USER: User = {
   id: "user-1",
@@ -140,6 +140,26 @@ function priced(paid: OrderItem[], method: string, opts: { couponCode?: string; 
 }
 
 const STANDARD = DELIVERY.method;
+
+/** `iso` + `hours`, written in Bangkok time (+07:00) like every other seed timestamp. */
+const bkk = (iso: string, hours: number) => new Date(Date.parse(iso) + (hours + 7) * 3_600_000).toISOString().slice(0, 19) + "+07:00";
+
+/** A full DHL run from payment to delivery (about two days), for the extra delivered orders below. */
+function deliveredShipment(placedAt: string, trackingNumber: string, branch: string, recipient: string): Order["shipment"] {
+  return {
+    carrier: "dhl",
+    method: STANDARD,
+    trackingNumber,
+    events: [
+      { status: "ordered", timestamp: placedAt, description: "ได้รับคำสั่งซื้อและชำระเงินเรียบร้อย" },
+      { status: "preparing", timestamp: bkk(placedAt, 5), description: "Charmiss กำลังแพ็กสินค้าของคุณ" },
+      { status: "shipped", timestamp: bkk(placedAt, 24), description: "ส่งมอบพัสดุให้ DHL แล้ว", location: "คลังสินค้า Charmiss บางนา" },
+      { status: "in_transit", timestamp: bkk(placedAt, 34), description: "พัสดุถึงศูนย์คัดแยก", location: "DHL Hub บางพลี" },
+      { status: "out_for_delivery", timestamp: bkk(placedAt, 47), description: "พนักงานกำลังนำส่งพัสดุ", location: branch },
+      { status: "delivered", timestamp: bkk(placedAt, 52), description: `จัดส่งสำเร็จ ผู้รับ: ${recipient}`, location: "กรุงเทพมหานคร" },
+    ],
+  };
+}
 
 /**
  * Phase 05 mock purchase history — covers every tracking state for UX
@@ -286,5 +306,52 @@ export const MOCK_ORDERS: Order[] = [
     ...priced([lipTint("03 Cherry Coke")], "บัตรเครดิต / เดบิต"),
     shippingAddress: HOME,
     shipment: { carrier: "dhl", method: STANDARD, events: [{ status: "ordered", timestamp: "2026-09-11T11:03:00+07:00" }] },
+  },
+  // More delivered orders for testing "ยืนยันรับสินค้า": three not confirmed yet (the button shows), one credited by
+  // the loyalty system after its waiting period (review open, no button), one credited and then returned (points taken back).
+  {
+    id: "ORD-2026-1006",
+    status: "completed",
+    placedAt: "2026-09-24T19:20:00+07:00",
+    ...priced([lipTint("02 Rosy Mauve"), lipTint("05 Berry Jam")], "พร้อมเพย์"),
+    shippingAddress: HOME,
+    shipment: deliveredShipment("2026-09-24T19:20:00+07:00", "5093744105", "DHL สาขาวัฒนา", HOME.recipientName),
+  },
+  {
+    id: "ORD-2026-1005",
+    status: "completed",
+    placedAt: "2026-09-22T12:05:00+07:00",
+    ...priced([foundation(2), blush()], "บัตรเครดิต / เดบิต"),
+    shippingAddress: OFFICE,
+    shipment: deliveredShipment("2026-09-22T12:05:00+07:00", "5093731882", "DHL สาขาสาทร", OFFICE.recipientName),
+  },
+  {
+    id: "ORD-2026-1004",
+    status: "completed",
+    placedAt: "2026-09-19T09:40:00+07:00",
+    ...priced([blush()], "TrueMoney Wallet"),
+    shippingAddress: HOME,
+    shipment: deliveredShipment("2026-09-19T09:40:00+07:00", "5093716640", "DHL สาขาวัฒนา", HOME.recipientName),
+  },
+  {
+    // Not confirmed: the loyalty system credited it 7 days after delivery.
+    id: "ORD-2026-1003",
+    status: "completed",
+    placedAt: "2026-09-06T15:30:00+07:00",
+    ...priced([foundation(), lipTint("01 Melody Pink")], "พร้อมเพย์"),
+    shippingAddress: HOME,
+    shipment: deliveredShipment("2026-09-06T15:30:00+07:00", "5093658217", "DHL สาขาวัฒนา", HOME.recipientName),
+    pointsCreditedAt: bkk("2026-09-06T15:30:00+07:00", 52 + 7 * 24),
+  },
+  {
+    // Credited after the waiting period, then returned through LINE: its points are taken back.
+    id: "ORD-2026-1002",
+    status: "completed",
+    placedAt: "2026-09-03T10:15:00+07:00",
+    ...priced([lipTint("03 Cherry Coke")], "บัตรเครดิต / เดบิต"),
+    shippingAddress: OFFICE,
+    shipment: deliveredShipment("2026-09-03T10:15:00+07:00", "5093633051", "DHL สาขาสาทร", OFFICE.recipientName),
+    pointsCreditedAt: bkk("2026-09-03T10:15:00+07:00", 52 + 7 * 24),
+    returnRequest: { itemIndexes: [0], reason: "สินค้าชำรุดหรือเสียหาย", requestedAt: bkk("2026-09-03T10:15:00+07:00", 52 + 9 * 24) },
   },
 ];

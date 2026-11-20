@@ -377,7 +377,7 @@ export function PromotionForm(props: {
           )}
         </For>
       </div>
-      <p class="text-xs text-ink-gray">นับเฉพาะสินค้าที่เข้าร่วม ราคาก่อนหักคูปองและคอยน์ ไม่นับของแถม</p>
+      <p class="text-xs text-ink-gray">นับเฉพาะสินค้าที่เข้าร่วม ราคาก่อนหักคูปองและคะแนน ไม่นับของแถม</p>
     </fieldset>
   );
 

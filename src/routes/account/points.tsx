@@ -12,18 +12,18 @@ import charmissCardLogo from "~/assets/images/charmiss-club-card-logo.png";
 import rotateIcon from "~/assets/icons/rotate-cw.svg";
 import { useAuth } from "~/lib/auth";
 import { COIN_TO_BAHT_RATE, computeCoinsEarned } from "~/lib/cartSelectors";
-import { createMockOrderRepository, createOrderHistory } from "~/lib/orderHistory";
+import { createMockOrderRepository, createOrderHistory, orderPointsState } from "~/lib/orderHistory";
 import { formatOrderDate } from "~/lib/orderTracking";
 import { MOCK_CRM_CARRY_OVER_AT } from "~/lib/accountData";
 import { resolveTier, tierPosition, TIERS, yearlySpend, type Tier } from "~/lib/membership";
 
 const HISTORY_TABS = [
-  { key: "earned", label: "คอยน์ที่ได้รับ" },
-  { key: "used", label: "คอยน์ที่แลก" },
+  { key: "earned", label: "คะแนนที่ได้รับ" },
+  { key: "used", label: "คะแนนที่แลก" },
 ] as const;
 
 /** `orderId` unset = the Charmiss Club CRM carry-over. */
-type CoinEntry = { orderId?: string; date: string; label: string; coins: number; state: "earned" | "pending" | "used" };
+type CoinEntry = { orderId?: string; date: string; label: string; coins: number; state: "earned" | "pending" | "used" | "deducted" };
 
 /**
  * Charmiss Club — coins + member tier (Glow → Radiance → Icon) — display-only mockup, no loyalty backend: the
@@ -46,24 +46,24 @@ export default function AccountPointsPage() {
       const list: CoinEntry[] = [];
       if (o.payment.coinDiscount > 0 && o.status !== "cancelled")
         list.push({ orderId: o.id, date: o.placedAt, label: "ใช้เป็นส่วนลด", coins: -Math.round(o.payment.coinDiscount / COIN_TO_BAHT_RATE), state: "used" });
-      if (o.status !== "cancelled" && o.status !== "pending_payment")
-        list.push({
-          orderId: o.id,
-          date: o.placedAt,
-          label: o.status === "completed" ? "ได้รับจากคำสั่งซื้อ" : "รอรับเมื่อได้รับสินค้า",
-          coins: computeCoinsEarned(o.total - o.payment.shippingFee, tier().id),
-          state: o.status === "completed" ? "earned" : "pending",
-        });
+      const points = computeCoinsEarned(o.total - o.payment.shippingFee, tier().id);
+      const state = orderPointsState(o);
+      if (state === "earned" || state === "deducted")
+        list.push({ orderId: o.id, date: o.pointsCreditedAt ?? o.placedAt, label: o.receivedAt ? "ได้รับจากการยืนยันรับสินค้า" : "ได้รับจากคำสั่งซื้อ", coins: points, state: "earned" });
+      // A return takes the order's points back.
+      if (state === "deducted") list.push({ orderId: o.id, date: o.returnRequest!.requestedAt, label: "หักคะแนนจากการคืนสินค้า", coins: -points, state: "deducted" });
+      if (state === "awaiting_confirm") list.push({ orderId: o.id, date: o.placedAt, label: "รอยืนยันรับสินค้า", coins: points, state: "pending" });
+      if (state === "awaiting_delivery") list.push({ orderId: o.id, date: o.placedAt, label: "รอรับเมื่อได้รับสินค้า", coins: points, state: "pending" });
       return list;
     });
     // Pending coins aren't in the balance yet, so they don't count against the carry-over.
     const credited = fromOrders.filter((e) => e.state !== "pending").reduce((sum, e) => sum + e.coins, 0);
     const carryOver = balance() - credited;
     if (auth.user()?.memberSource !== "crm" || carryOver <= 0) return fromOrders;
-    return [...fromOrders, { date: MOCK_CRM_CARRY_OVER_AT, label: "ย้ายคอยน์จาก Charmiss Club CRM", coins: carryOver, state: "earned" }];
+    return [...fromOrders, { date: MOCK_CRM_CARRY_OVER_AT, label: "ย้ายคะแนนจาก Charmiss Club CRM", coins: carryOver, state: "earned" }];
   });
   const [historyTab, setHistoryTab] = createSignal<"earned" | "used">("earned");
-  // "คอยน์ที่ได้รับ" includes coins still waiting for delivery.
+  // "คะแนนที่ได้รับ" includes coins still waiting for delivery.
   const shownEntries = () => entries().filter((e) => (historyTab() === "used" ? e.state === "used" : e.state !== "used"));
 
   return (
@@ -75,9 +75,9 @@ export default function AccountPointsPage() {
 
         {/* History — earned (incl. pending) | redeemed */}
         <h2 id="coin-history" class="scroll-mt-24 text-lg font-semibold text-ink">
-          ประวัติคอยน์
+          ประวัติคะแนน
         </h2>
-        <div role="tablist" aria-label="ประวัติคอยน์" class="-mx-4 flex h-11 items-start overflow-x-auto border-b border-surface-gray px-4 sm:-mx-6 sm:px-6">
+        <div role="tablist" aria-label="ประวัติคะแนน" class="-mx-4 flex h-11 items-start overflow-x-auto border-b border-surface-gray px-4 sm:-mx-6 sm:px-6">
           <For each={HISTORY_TABS}>
             {(tab) => (
               <button
@@ -103,8 +103,8 @@ export default function AccountPointsPage() {
               <EmptyState
                 size="compact"
                 icon={CoinIcon}
-                title={historyTab() === "earned" ? "ยังไม่มีคอยน์ที่ได้รับ" : "ยังไม่มีการแลกคอยน์"}
-                description={historyTab() === "earned" ? "สั่งซื้อสินค้าแล้วรับคอยน์ เมื่อได้รับสินค้า" : "ใช้คอยน์เป็นส่วนลดได้ตอนชำระเงิน"}
+                title={historyTab() === "earned" ? "ยังไม่มีคะแนนที่ได้รับ" : "ยังไม่มีการแลกคะแนน"}
+                description={historyTab() === "earned" ? "สั่งซื้อสินค้าแล้วรับคะแนน เมื่อได้รับสินค้า" : "ใช้คะแนนเป็นส่วนลดได้ตอนชำระเงิน"}
               />
             }
           >
@@ -121,7 +121,7 @@ export default function AccountPointsPage() {
                     </div>
                     <p
                       class="shrink-0 text-sm font-semibold"
-                      classList={{ "text-success": entry.state === "earned", "text-ink-gray": entry.state === "pending", "text-system-red": entry.state === "used" }}
+                      classList={{ "text-success": entry.state === "earned", "text-ink-gray": entry.state === "pending", "text-system-red": entry.state === "used" || entry.state === "deducted" }}
                     >
                       {entry.coins > 0 ? "+" : ""}
                       {entry.coins.toLocaleString("th-TH")}
@@ -135,9 +135,12 @@ export default function AccountPointsPage() {
         </Show>
 
         <div class="flex flex-col gap-1 rounded-card border border-surface-gray p-4">
-          <p class="font-semibold text-ink">เงื่อนไขการรับคอยน์</p>
+          <p class="font-semibold text-ink">เงื่อนไขการรับคะแนน</p>
           <p class="text-sm text-ink-gray">
-            ทุกการสั่งซื้อสินค้า 10 บาท (ไม่รวมค่าจัดส่ง) จะได้รับ 1 คอยน์ และได้รับเพิ่มตามระดับสมาชิก ({TIERS.map((t) => `${t.shortName} x${t.coinMultiplier}`).join(", ")}) คอยน์จะถูกสะสมให้อัตโนมัติเมื่อได้รับสินค้า
+            ทุกการสั่งซื้อสินค้า 10 บาท (ไม่รวมค่าจัดส่ง) จะได้รับ 1 คะแนน และได้รับเพิ่มตามระดับสมาชิก ({TIERS.map((t) => `${t.shortName} x${t.coinMultiplier}`).join(", ")})
+          </p>
+          <p class="text-sm text-ink-gray">
+            กดยืนยันรับสินค้าในคำสั่งซื้อเพื่อรับคะแนนทันที หากไม่ได้กดยืนยัน คะแนนจะเข้าบัญชีภายใน 7-15 วันทำการหลังจัดส่งสำเร็จ เมื่อยืนยันรับสินค้าแล้วจะขอคืนสินค้าไม่ได้ และหากมีการคืนสินค้า คะแนนจากคำสั่งซื้อนั้นจะถูกหักออก
           </p>
         </div>
       </AccountPanel>
@@ -181,17 +184,17 @@ function MemberCard(props: { name: string; memberCode?: string; balance: number 
 
       <div class="flex flex-col">
         <p class="flex items-center gap-1 text-sm font-bold leading-[1.5]">
-          คอยน์ทั้งหมด
+          คะแนนทั้งหมด
           <img src={rotateIcon} alt="" width="11" height="11" class="size-[11px]" />
         </p>
         <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-          <p class="text-2xl font-bold leading-[1.5]">{props.balance.toLocaleString("th-TH")} คอยน์</p>
+          <p class="text-2xl font-bold leading-[1.5]">{props.balance.toLocaleString("th-TH")} คะแนน</p>
           <button
             type="button"
             onClick={toHistory}
             class="relative flex items-center justify-center rounded-pill bg-white px-3 py-1.5 text-sm font-medium leading-[1.5] text-brand-pink transition-colors duration-150 before:absolute before:-inset-y-1.5 before:inset-x-0 lg:hover:bg-white/90"
           >
-            ดูประวัติคอยน์
+            ดูประวัติคะแนน
           </button>
         </div>
       </div>

@@ -42,7 +42,7 @@ function expiryText(expiresAt: string) {
  * conditions mirror how Checkout actually prices an order (`computeCheckoutTotals`;
  * a coupon limited to some products counts only those lines):
  * up to 2 coupons per order when both stack, discount taken off the product subtotal (shipping
- * untouched, a % coupon capped by its max), min spend checked against that subtotal, and Charmiss Coin
+ * untouched, a % coupon capped by its max), min spend checked against that subtotal, and คะแนน Charmiss Club
  * redemption stacks on top. `ticket` is the same coupon ticket the shopper
  * tapped (picture only) shown as the header; `action` is the card's own
  * collect/use button.
@@ -109,7 +109,7 @@ export function CouponDetailBody(props: { coupon: Coupon; ticket?: JSX.Element }
     if (c.audienceLabel && c.audienceLabel !== EVERYONE_COUPON_BADGE) list.splice(3, 0, `${c.audienceLabel}เท่านั้น`);
     if (c.perCustomerLimit) list.push(`ใช้ได้ ${c.perCustomerLimit.toLocaleString("th-TH")} ครั้งต่อบัญชี`);
     if (c.usageLimit) list.push(`จำนวนจำกัด ${c.usageLimit.toLocaleString("th-TH")} สิทธิ์ เมื่อครบแล้วจะใช้ไม่ได้`);
-    list.push("ใช้ร่วมกับส่วนลดจาก Charmiss Coin ได้", "เลือกคูปองหรือกรอกโค้ดได้ที่หน้าชำระเงิน");
+    list.push("ใช้ร่วมกับส่วนลดจากคะแนน Charmiss Club ได้", "เลือกคูปองหรือกรอกโค้ดได้ที่หน้าชำระเงิน");
     return list;
   };
 

@@ -47,7 +47,7 @@ export function normalizeTier(value: unknown): CustomerTier {
   return typeof value === "string" ? (LEGACY_TIER[value] ?? "glow") : "glow";
 }
 
-/** Coin multiplier per tier — `membership.ts`'s own `coinMultiplier` (the "รับคอยน์ x1.5" / "x2" perks; Glow earns the base rate). */
+/** Coin multiplier per tier — `membership.ts`'s own `coinMultiplier` (the "รับคะแนน x1.5" / "x2" perks; Glow earns the base rate). */
 export const TIER_COIN_MULTIPLIER: Record<CustomerTier, number> = Object.fromEntries(TIERS.map((t) => [t.id, t.coinMultiplier])) as Record<CustomerTier, number>;
 
 /** How a member account came to exist — moved over from the old Charmiss Club CRM, or a brand-new sign-up on the website (storefront `memberRegistry.ts`). */

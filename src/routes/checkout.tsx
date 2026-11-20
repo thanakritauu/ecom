@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
-import { A, useSearchParams } from "@solidjs/router";
+import { A, useNavigate, useSearchParams } from "@solidjs/router";
 import { Header } from "~/components/shared/Header";
 import { Footer } from "~/components/shared/Footer";
 import { Container } from "~/components/shared/Container";
@@ -49,8 +49,7 @@ import { DeliverySection } from "~/components/checkout/DeliverySection";
 import { createCheckoutPayment, type PaidResult } from "~/components/checkout/checkoutPayment";
 import { generateOrderNumber } from "~/lib/orderNumber";
 import { CheckoutOrderSummary, CheckoutPerks } from "~/components/checkout/CheckoutOrderSummary";
-import { METHOD_ICONS } from "~/components/checkout/paymentMarks";
-import coinMark from "~/assets/icons/charmiss-coin.png";
+import { saveOrderSuccess } from "~/components/checkout/OrderSuccess";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
 import { focusFirstInvalid } from "~/lib/validators";
 import { recordExternalCodeUse } from "~/lib/externalCodes";
@@ -69,6 +68,7 @@ const TaxInvoiceSheet = clientOnly(() => import("~/components/checkout/TaxInvoic
 export default function CheckoutPage() {
   const cart = useCart();
   const auth = useAuth();
+  const navigate = useNavigate();
   const catalog = useProductCatalog();
   const resolvedLines = createMemo(() => resolveCartLines(cart.lines(), catalog.products()));
   const promos = useCartPromotions(resolvedLines);
@@ -273,9 +273,12 @@ export default function CheckoutPage() {
     // The other system counts a โค้ดจากภายนอก against the member once the order is paid.
     const memberId = auth.user()?.id;
     if (memberId) recordExternalCodeUse(memberId, coupons().filter((c) => c.external).map((c) => c.code));
-    setOrder({ number: payment.orderNumber, total: payment.amount, coinsEarned, payment });
+    const paid = { number: payment.orderNumber, total: payment.amount, coinsEarned, payment };
+    setOrder(paid);
     cart.clearCart();
-    window.scrollTo({ top: 0 });
+    // "ชำระเงินสำเร็จ" has its own URL; replace, so Back doesn't land on an emptied checkout.
+    saveOrderSuccess(paid);
+    navigate(`/order-success/${paid.number}`, { replace: true });
   };
 
   const payment = createCheckoutPayment({
@@ -313,15 +316,8 @@ export default function CheckoutPage() {
         <Container width="wide">
           <Show
             when={!order()}
-            fallback={
-              <OrderSuccess
-                number={order()!.number}
-                total={order()!.total}
-                coinsEarned={order()!.coinsEarned}
-                payment={order()!.payment}
-                isMember={auth.isAuthenticated()}
-              />
-            }
+            // Paid: on its way to `/order-success/:id`.
+            fallback={null}
           >
             <Show when={resolvedLines().length > 0} fallback={<EmptyCheckout />}>
               {/* Phones / tablets: form + order summary are one white card (no gap, summary continues below the form). */}
@@ -541,69 +537,6 @@ function EmptyCheckout() {
         description="เพิ่มสินค้าลงตะกร้าก่อน แล้วกลับมาชำระเงินได้เลย"
         action={{ label: "เลือกซื้อสินค้า", href: "/products" }}
       />
-    </div>
-  );
-}
-
-function OrderSuccess(props: { number: string; total: number; coinsEarned: number; payment: PaidResult; isMember: boolean }) {
-  return (
-    <div class="mx-auto flex w-full max-w-[560px] flex-col items-center justify-center gap-4 rounded-card bg-white px-4 py-12 text-center shadow-card sm:py-16" role="status">
-      {/* Pops in, a soft ring pulses out once, then the DSL tick draws itself (app.css `success-check-*`; still under reduced motion). */}
-      <div class="relative flex size-16 items-center justify-center" aria-hidden="true">
-        <span class="success-check-ring absolute inset-0 rounded-pill bg-success/30" />
-        <span class="success-check-pop relative flex size-16 items-center justify-center rounded-pill bg-success text-white">
-          <svg viewBox="0 0 16 16" fill="none" class="size-9">
-            <path class="success-check-path" pathLength="1" d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </span>
-      </div>
-      <h1 class="text-2xl font-bold text-ink">ชำระเงินสำเร็จ</h1>
-      <p class="text-ink-gray">ขอบคุณสำหรับคำสั่งซื้อของคุณ</p>
-      <dl class="flex w-full max-w-sm flex-col gap-2 rounded-card bg-surface-gray/60 px-5 py-4 text-sm">
-        <div class="flex justify-between gap-3">
-          <dt class="text-ink-gray">หมายเลขคำสั่งซื้อ</dt>
-          <dd class="font-semibold text-ink">{props.number}</dd>
-        </div>
-        <div class="flex justify-between gap-3">
-          <dt class="text-ink-gray">ยอดชำระ</dt>
-          <dd class="font-semibold text-brand-pink">{formatTHB(props.total)}</dd>
-        </div>
-        <div class="flex justify-between gap-3">
-          <dt class="text-ink-gray">ช่องทางชำระเงิน</dt>
-          <dd class="flex flex-col items-end gap-1 text-right text-ink">
-            {/* The method's own icons (same artwork as the payment picker), then its name. */}
-            <span class="flex items-center gap-2">
-              <span class="flex shrink-0 items-center -space-x-1.5">
-                <For each={METHOD_ICONS[props.payment.method]}>
-                  {(src) => <img src={src} alt="" class="size-6 rounded-md ring-2 ring-surface-gray" />}
-                </For>
-              </span>
-              {props.payment.methodLabel}
-            </span>
-            <Show when={props.payment.detail}>
-              <span class="block text-xs text-ink-gray">{props.payment.detail}</span>
-            </Show>
-          </dd>
-        </div>
-      </dl>
-      {/* Charmiss Coin is a member-account balance (`auth.tsx`'s `User.coinBalance`)
-          — a guest checkout has no account to credit, so this only shows once
-          actually signed in, same gate as anywhere else this balance appears. */}
-      <Show when={props.isMember && props.coinsEarned > 0}>
-        <div class="flex items-center gap-2 rounded-pill bg-surface-pink py-2 pl-2 pr-4 text-sm font-semibold text-ink">
-          <img src={coinMark} alt="" class="size-6 shrink-0" />
-          คุณได้รับ {props.coinsEarned.toLocaleString("th-TH")} คอยน์จากคำสั่งซื้อนี้
-        </div>
-      </Show>
-      <div class="flex w-full max-w-sm flex-col gap-2">
-        {/* Paid: straight to the "กำลังจัดส่ง" tab, where this order now sits. */}
-        <Button href="/account?tab=in_progress" variant="primary" size="lg" class="w-full">
-          ดูประวัติการซื้อ
-        </Button>
-        <Button href="/" variant="outline" size="lg" class="w-full">
-          กลับไปช้อปต่อ
-        </Button>
-      </div>
     </div>
   );
 }

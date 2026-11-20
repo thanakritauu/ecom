@@ -44,7 +44,7 @@ type CustomerRow = Customer & { orderCount: number; totalSpent: number; lastOrde
 const SORT_OPTIONS = [
   { value: "name-asc", label: "ชื่อลูกค้า A-Z" },
   { value: "name-desc", label: "ชื่อลูกค้า Z-A" },
-  { value: "coins-desc", label: "คอยน์ มากไปน้อย" },
+  { value: "coins-desc", label: "คะแนน มากไปน้อย" },
   { value: "orders-desc", label: "คำสั่งซื้อ มากไปน้อย" },
   { value: "orders-asc", label: "คำสั่งซื้อ น้อยไปมาก" },
   { value: "spent-desc", label: "ยอดซื้อสะสม มากไปน้อย" },
@@ -94,7 +94,7 @@ export default function AdminCustomerListPage() {
     { header: "อีเมล", value: (c) => c.email },
     { header: "เบอร์โทรศัพท์", value: (c) => c.phone },
     { header: "ระดับสมาชิก", value: (c) => CUSTOMER_TIER_META[c.tier ?? "glow"].name },
-    { header: "Charmiss Coin", value: (c) => c.loyaltyPoints ?? 0 },
+    { header: "คะแนน Charmiss Club", value: (c) => c.loyaltyPoints ?? 0 },
     { header: "ที่มา", value: (c) => CUSTOMER_SOURCE_META[c.source].label },
     { header: "รหัส CRM", value: (c) => c.crmMemberId ?? "" },
     { header: "คำสั่งซื้อ", value: (c) => c.orderCount },
@@ -268,7 +268,7 @@ export default function AdminCustomerListPage() {
       render: (row) => <StatusBadge tone={CUSTOMER_SOURCE_META[row.source].tone}>{CUSTOMER_SOURCE_META[row.source].label}</StatusBadge>,
     },
     { key: "tier", label: "ระดับสมาชิก", render: (row) => <TierBadge tier={row.tier ?? "glow"} short /> },
-    { key: "coins", label: "คอยน์", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink">{(row.loyaltyPoints ?? 0).toLocaleString("th-TH")}</span> },
+    { key: "coins", label: "คะแนน", align: "right", hideBelowXl: true, render: (row) => <span class="text-ink">{(row.loyaltyPoints ?? 0).toLocaleString("th-TH")}</span> },
     { key: "email", label: "อีเมล", hideBelowXl: true, render: (row) => <span class="truncate text-ink-gray">{row.email}</span> },
     { key: "phone", label: "เบอร์โทร", hideBelowXl: true, render: (row) => <span class="whitespace-nowrap text-ink-gray">{row.phone}</span> },
     { key: "orders", label: "คำสั่งซื้อ", align: "right", render: (row) => <span class="text-ink">{row.orderCount.toLocaleString("th-TH")}</span> },
@@ -288,7 +288,7 @@ export default function AdminCustomerListPage() {
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "ลูกค้า" }]} />
       <PageHeader
         title="ลูกค้า"
-        description="ดูข้อมูลลูกค้า ระดับสมาชิก คอยน์ และประวัติการสั่งซื้อ"
+        description="ดูข้อมูลลูกค้า ระดับสมาชิก คะแนน และประวัติการสั่งซื้อ"
         actions={
           <div class="flex flex-wrap items-center gap-2">
             <ExportMenu filenameBase="customers-report" columns={customerExportColumns} rows={sorted()} />
@@ -391,7 +391,7 @@ export default function AdminCustomerListPage() {
                         <StatusBadge tone={CUSTOMER_SOURCE_META[row.source].tone}>{CUSTOMER_SOURCE_META[row.source].label}</StatusBadge>
                       </div>
                       <p class="mt-1 text-xs text-ink-placeholder">
-                        คำสั่งซื้อ {row.orderCount.toLocaleString("th-TH")} รายการ คอยน์ {(row.loyaltyPoints ?? 0).toLocaleString("th-TH")}
+                        คำสั่งซื้อ {row.orderCount.toLocaleString("th-TH")} รายการ คะแนน {(row.loyaltyPoints ?? 0).toLocaleString("th-TH")}
                       </p>
                     </div>
                   </button>

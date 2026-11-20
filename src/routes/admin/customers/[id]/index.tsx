@@ -59,7 +59,7 @@ export default function AdminCustomerDetailPage() {
   /** Same movements and wording as the member's own /account/points history. */
   const coinHistory = createMemo(() => (customer() ? getCustomerCoinHistory(customer()!, orderStore.orders()) : undefined));
   const scrollToCoinHistory = () => document.getElementById("coin-history")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  // Quick View's "ประวัติคอยน์" links here with #coin-history.
+  // Quick View's "ประวัติคะแนน" links here with #coin-history.
   const location = useLocation();
   let scrolledToHash = false;
   createEffect(() => {
@@ -128,7 +128,7 @@ export default function AdminCustomerDetailPage() {
         </div>
       ),
     },
-    { key: "coins", label: "คอยน์", align: "right", render: (row) => <span class={`whitespace-nowrap font-semibold ${coinToneClass(row)}`}>{signedCoins(row)}</span> },
+    { key: "coins", label: "คะแนน", align: "right", render: (row) => <span class={`whitespace-nowrap font-semibold ${coinToneClass(row)}`}>{signedCoins(row)}</span> },
     { key: "balance", label: "คงเหลือ", align: "right", render: (row) => <span class="whitespace-nowrap text-ink">{formatCoins(row.balance)}</span> },
   ];
 
@@ -200,19 +200,19 @@ export default function AdminCustomerDetailPage() {
                 </Show>
               </Section>
 
-              {/* Same movements as the member's /account/points "ประวัติคอยน์" */}
+              {/* Same movements as the member's /account/points "ประวัติคะแนน" */}
               <section id="coin-history" class="flex scroll-mt-24 flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
-                <h2 class="text-base font-semibold text-ink">ประวัติคอยน์</h2>
+                <h2 class="text-base font-semibold text-ink">ประวัติคะแนน</h2>
                 <Show when={coinHistory()}>
                   {(h) => (
                     <>
                       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        <SummaryStat label="คอยน์คงเหลือ" value={formatCoins(h().balance)} />
+                        <SummaryStat label="คะแนนคงเหลือ" value={formatCoins(h().balance)} />
                         <SummaryStat label="ได้รับทั้งหมด" value={formatCoins(h().totalEarned)} />
                         <SummaryStat label="ใช้ไปแล้ว" value={formatCoins(h().totalUsed)} />
                         <SummaryStat label="รอรับ" value={formatCoins(h().pending)} />
                       </div>
-                      <Show when={h().entries.length > 0} fallback={<p class="text-sm text-ink-gray">ลูกค้ารายนี้ยังไม่มีประวัติคอยน์</p>}>
+                      <Show when={h().entries.length > 0} fallback={<p class="text-sm text-ink-gray">ลูกค้ารายนี้ยังไม่มีประวัติคะแนน</p>}>
                         <DataTable
                           columns={coinColumns}
                           rows={h().entries}
@@ -308,11 +308,11 @@ export default function AdminCustomerDetailPage() {
               <Section title="Charmiss Club">
                 <TierBadge tier={current().tier ?? "glow"} />
                 <div>
-                  <p class="text-xs text-ink-placeholder">Charmiss Coin คงเหลือ</p>
-                  <p class="text-2xl font-bold text-ink">{(current().loyaltyPoints ?? 0).toLocaleString("th-TH")} คอยน์</p>
+                  <p class="text-xs text-ink-placeholder">คะแนน Charmiss Club คงเหลือ</p>
+                  <p class="text-2xl font-bold text-ink">{(current().loyaltyPoints ?? 0).toLocaleString("th-TH")} คะแนน</p>
                 </div>
                 <Button variant="outline" size="sm" class="self-start" onClick={scrollToCoinHistory}>
-                  ดูประวัติคอยน์
+                  ดูประวัติคะแนน
                 </Button>
               </Section>
 
@@ -355,7 +355,7 @@ export default function AdminCustomerDetailPage() {
                   <Row label="เข้าสู่ระบบด้วย" value={current().signupMethod ? SIGNUP_METHOD_LABEL[current().signupMethod!] : "-"} />
                   <Row label="รหัส CRM" value={current().crmMemberId ?? "-"} />
                   <Show when={current().crmCoinsTransferred !== undefined}>
-                    <Row label="คอยน์ที่ย้ายมาจาก CRM" value={`${current().crmCoinsTransferred!.toLocaleString("th-TH")} คอยน์`} />
+                    <Row label="คะแนนที่ย้ายมาจาก CRM" value={`${current().crmCoinsTransferred!.toLocaleString("th-TH")} คะแนน`} />
                   </Show>
                   <Row label="เป็นสมาชิกตั้งแต่" value={current().memberSince || "-"} />
                   <Row label="แก้ไขล่าสุด" value={current().updatedAt || "-"} />

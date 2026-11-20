@@ -139,7 +139,7 @@ export function OrderReviewDialog(props: { order: Order; open: boolean; onOpenCh
             {saving() ? "กำลังส่งรีวิว..." : "ส่งรีวิว"}
           </Button>
           <Show when={missing() > 0 && !tried()}>
-            <p class="text-center text-xs text-ink-gray">ให้คะแนนสินค้าให้ครบทุกรายการก่อนส่งรีวิว</p>
+            <p class="text-center text-xs text-ink-gray">ให้ดาวสินค้าให้ครบทุกรายการก่อนส่งรีวิว</p>
           </Show>
         </>
       }
@@ -149,7 +149,7 @@ export function OrderReviewDialog(props: { order: Order; open: boolean; onOpenCh
           const key = orderItemKey(item);
           const rating = () => ratings()[key] ?? 0;
           const text = () => texts()[key] ?? "";
-          const ratingError = () => (tried() && rating() === 0 ? "กรุณาให้คะแนนดาว" : undefined);
+          const ratingError = () => (tried() && rating() === 0 ? "กรุณาเลือกจำนวนดาว" : undefined);
           return (
             <section class="flex flex-col gap-3" classList={{ "border-t border-surface-gray pt-5": i() > 0 }} aria-label={`รีวิว ${item.name}`}>
               <div class="flex items-center gap-3">
@@ -167,7 +167,7 @@ export function OrderReviewDialog(props: { order: Order; open: boolean; onOpenCh
                 <div class="flex items-center gap-2">
                   <div
                     role="radiogroup"
-                    aria-label={`คะแนน ${item.name}`}
+                    aria-label={`ดาว ${item.name}`}
                     aria-required="true"
                     aria-invalid={!!ratingError()}
                     aria-describedby={ratingError() ? `${ratingId(i())}-error` : undefined}

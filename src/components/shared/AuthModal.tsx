@@ -262,7 +262,7 @@ export function AuthModal() {
                     เข้าสู่ระบบ หรือสมัครสมาชิก
                   </Dialog.Title>
                   <p class="text-base text-ink">
-                    <Phrases text="เพื่อเป็นสมาชิก Charmiss Club สะสมคอยน์ และรับสิทธิพิเศษอื่นๆ อีกมากมาย" />
+                    <Phrases text="เพื่อเป็นสมาชิก Charmiss Club สะสมคะแนน และรับสิทธิพิเศษอื่นๆ อีกมากมาย" />
                   </p>
                 </div>
 
@@ -333,7 +333,7 @@ export function AuthModal() {
                   <p class="flex items-center gap-1.5 rounded-lg bg-surface-pink px-4 py-2 text-xs text-ink sm:whitespace-nowrap">
                     <InfoIcon />
                     <span>
-                      <Phrases text="สมาชิก Charmiss Club ระบบจะนำคอยน์เดิม มารวมให้อัตโนมัติ" />
+                      <Phrases text="สมาชิก Charmiss Club ระบบจะนำคะแนนเดิม มารวมให้อัตโนมัติ" />
                     </span>
                   </p>
                   <p class="text-center text-xs text-ink">
@@ -441,7 +441,7 @@ export function AuthModal() {
                     กำลังตรวจสอบบัญชี Charmiss Club...
                   </Dialog.Title>
                   <p class="text-sm text-ink-gray">
-                    <Phrases text="หากคุณเคยเป็นสมาชิก เราจะนำคอยน์เดิมมารวมให้อัตโนมัติ" />
+                    <Phrases text="หากคุณเคยเป็นสมาชิก เราจะนำคะแนนเดิมมารวมให้อัตโนมัติ" />
                   </p>
                 </div>
               </Match>
@@ -530,10 +530,10 @@ export function AuthModal() {
                       <p class="text-base text-ink-gray">คุณ{res().name}</p>
                     </div>
                     <div class="flex w-full flex-col items-center gap-1 rounded-card bg-surface-pink px-4 py-5">
-                      <p class="text-sm text-ink-gray">คอยน์จากบัญชีเดิมของคุณ</p>
-                      <p class="text-3xl font-bold text-brand-pink">+{res().coinsTransferred.toLocaleString("th-TH")} คอยน์</p>
+                      <p class="text-sm text-ink-gray">คะแนนจากบัญชีเดิมของคุณ</p>
+                      <p class="text-3xl font-bold text-brand-pink">+{res().coinsTransferred.toLocaleString("th-TH")} คะแนน</p>
                       <p class="mt-1 text-sm text-ink">
-                        <Phrases text="เรานำคอยน์ Charmiss Club เดิมมารวมไว้ในบัญชีเว็บไซต์ ให้เรียบร้อยแล้ว" />
+                        <Phrases text="เรานำคะแนน Charmiss Club เดิมมารวมไว้ในบัญชีเว็บไซต์ ให้เรียบร้อยแล้ว" />
                       </p>
                     </div>
                     <div class="flex w-full flex-col gap-2">
@@ -545,7 +545,7 @@ export function AuthModal() {
                         เริ่มช้อปเลย
                       </button>
                       <A href="/account/points" onClick={close} class="flex min-h-11 items-center justify-center text-sm font-medium text-brand-pink underline">
-                        ดูคอยน์ของฉัน
+                        ดูคะแนนของฉัน
                       </A>
                     </div>
                   </div>

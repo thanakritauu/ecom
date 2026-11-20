@@ -5,7 +5,7 @@ import { SELLER } from "~/lib/sellerInfo";
 
 /**
  * The downloadable receipt: a self-contained printable HTML file built only
- * from `ReceiptData` — coupon and Charmiss Coin as separate lines, the
+ * from `ReceiptData` — coupon and คะแนน Charmiss Club as separate lines, the
  * free-gift line, payment detail/reference and the ที่อยู่ออกใบกำกับภาษี
  * (billing address, or the shipping address when none was given), headed by
  * the buyer's name, เลขประจำตัวผู้เสียภาษี and สาขา when a tax invoice was asked for.
@@ -88,7 +88,7 @@ export function buildOrderReceiptHtml(data: ReceiptData, formatCurrency: (n: num
   <div class="totals">
     ${line("ยอดรวมสินค้า", formatCurrency(totals.subtotal))}
     ${totals.couponDiscount > 0 ? line(`ส่วนลดคูปอง${totals.couponCode ? ` (${totals.couponCode})` : ""}`, `-${formatCurrency(totals.couponDiscount)}`) : ""}
-    ${totals.coinDiscount > 0 ? line(`ส่วนลด Charmiss Coin (${totals.coinsRedeemed.toLocaleString("th-TH")} คอยน์)`, `-${formatCurrency(totals.coinDiscount)}`) : ""}
+    ${totals.coinDiscount > 0 ? line(`ส่วนลดจากคะแนน Charmiss Club (${totals.coinsRedeemed.toLocaleString("th-TH")} คะแนน)`, `-${formatCurrency(totals.coinDiscount)}`) : ""}
     ${line("ค่าจัดส่ง (DHL)", totals.shippingFee > 0 ? formatCurrency(totals.shippingFee) : "ฟรี")}
     <div class="grand"><span>ยอดรวมทั้งหมด</span><span>${escapeHtml(formatCurrency(totals.grandTotal))}</span></div>
     ${vat ? `${line("มูลค่าก่อนภาษีมูลค่าเพิ่ม", formatCurrency(vat.beforeVat))}${line("ภาษีมูลค่าเพิ่ม 7%", formatCurrency(vat.vat))}` : ""}

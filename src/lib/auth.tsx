@@ -45,6 +45,8 @@ type AuthContextValue = {
   isAuthModalOpen: () => boolean;
   openAuthModal: () => void;
   closeAuthModal: () => void;
+  /** Adds คะแนน to the signed-in member's balance ("ยืนยันรับสินค้า" credits the order's points at once). */
+  creditPoints: (points: number) => void;
 };
 
 export type ProfilePatch = Partial<Pick<User, "name" | "email" | "phone" | "birthDate" | "gender">>;
@@ -189,6 +191,20 @@ export function AuthProvider(props: { children: JSX.Element }) {
     }
   };
 
+  // คะแนน credited by "ยืนยันรับสินค้า": the balance goes up at once (mock: kept with this browser's session).
+  const creditPoints = (points: number) => {
+    const u = user();
+    if (!u || points <= 0) return;
+    const coinBalance = u.coinBalance + points;
+    setUser({ ...u, coinBalance });
+    if (isServer) return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const session = raw && raw !== "1" ? (JSON.parse(raw) as StoredSession) : {};
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...session, coinBalance }));
+    } catch {}
+  };
+
   // `createDialogOpenState` (not a plain signal) — this modal is controlled
   // externally (a plain button calls `openAuthModal()`, not Kobalte's own
   // `<Dialog.Trigger>`), so Kobalte has no trigger reference to restore
@@ -207,6 +223,7 @@ export function AuthProvider(props: { children: JSX.Element }) {
         isAuthModalOpen: authModalOpen,
         openAuthModal: () => setAuthModalOpen(true),
         closeAuthModal: () => setAuthModalOpen(false),
+        creditPoints,
       }}
     >
       {props.children}

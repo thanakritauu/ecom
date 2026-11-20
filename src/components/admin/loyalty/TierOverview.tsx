@@ -39,7 +39,7 @@ export function TierOverview() {
                 </div>
                 <div class="flex flex-wrap gap-x-4 gap-y-1 rounded-card bg-surface-gray/60 px-3 py-2 text-sm">
                   <span class="text-ink-gray">
-                    ตัวคูณคอยน์ <span class="font-semibold text-ink">x{TIER_COIN_MULTIPLIER[tier.id]}</span>
+                    ตัวคูณคะแนน <span class="font-semibold text-ink">x{TIER_COIN_MULTIPLIER[tier.id]}</span>
                   </span>
                   <span class="text-ink-gray">
                     สมาชิก <span class="font-semibold text-ink">{countIn(tier.id).toLocaleString("th-TH")}</span> คน

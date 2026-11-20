@@ -6,14 +6,14 @@ import coinMark from "~/assets/icons/charmiss-coin.png";
 /**
  * Top of the account menu (every breakpoint): the name, then the Charmiss
  * Coin mark with the coin balance on a plain white card, the same
- * "name … [C] คอยน์" read as the top-bar member badge. Tier medals live only on the Charmiss Club page
+ * "name … [C] คะแนน" read as the top-bar member badge. Tier medals live only on the Charmiss Club page
  * this taps through to (`/account/points`).
  */
 export function ProfileHeaderCard(props: { user: User }) {
   return (
     <A
       href="/account/points"
-      aria-label={`${props.user.name} มี ${props.user.coinBalance.toLocaleString("th-TH")} คอยน์ ไปที่ Charmiss Club`}
+      aria-label={`${props.user.name} มี ${props.user.coinBalance.toLocaleString("th-TH")} คะแนน ไปที่ Charmiss Club`}
       // Below `lg` it's the top of AccountShell's shared card (no card chrome of its own); from `lg` its own card across the top.
       class="flex w-full items-center gap-3 bg-white p-4 font-normal sm:gap-4 sm:p-6 lg:col-span-2 lg:rounded-card lg:border lg:border-surface-gray lg:shadow-card"
     >
@@ -21,7 +21,7 @@ export function ProfileHeaderCard(props: { user: User }) {
       {/* Balance at the same size/weight as the name beside it. */}
       <span class="flex shrink-0 items-center gap-1.5 text-lg font-semibold text-ink sm:gap-2 sm:text-2xl">
         <img src={coinMark} alt="" class="size-6 shrink-0 sm:size-8" />
-        {props.user.coinBalance.toLocaleString("th-TH")} คอยน์
+        {props.user.coinBalance.toLocaleString("th-TH")} คะแนน
         <ChevronIcon direction="right" class="size-5 text-ink-gray sm:size-6" />
       </span>
     </A>

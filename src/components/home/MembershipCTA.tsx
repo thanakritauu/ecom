@@ -30,7 +30,7 @@ export function MembershipCTA() {
                 Charmiss Club
               </h2>
               <p class="text-lg font-medium text-ink lg:text-2xl">
-                สะสม Charmiss Coins ทุกการสั่งซื้อ
+                สะสมคะแนน Charmiss Club ทุกการสั่งซื้อ
                 <br />
                 แลกรับของรางวัล ส่วนลด และสิทธิพิเศษ
               </p>

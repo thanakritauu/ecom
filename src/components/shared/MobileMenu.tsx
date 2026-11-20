@@ -65,7 +65,7 @@ export function MobileMenu(props: { open: boolean; onOpenChange: (open: boolean)
 }
 
 /**
- * Signed-in row: "[C] name | N คอยน์" + "v" (Charmiss Coin mark, no tier medal) — an accordion that reveals the same
+ * Signed-in row: "[C] name | N คะแนน" + "v" (คะแนน Charmiss Club mark, no tier medal) — an accordion that reveals the same
  * two account actions as the desktop member badge (ดูโปรไฟล์ / ออกจากระบบ).
  */
 function MobileAccountRow(props: { onNavigate: () => void }) {
@@ -83,7 +83,7 @@ function MobileAccountRow(props: { onNavigate: () => void }) {
         <img src={coinMark} alt="" class="size-6 shrink-0" />
         <span class="min-w-0 truncate">{auth.user()?.name}</span>
         <span aria-hidden="true" class="text-ink-placeholder">|</span>
-        <span class="shrink-0 whitespace-nowrap">{(auth.user()?.coinBalance ?? 0).toLocaleString("th-TH")} คอยน์</span>
+        <span class="shrink-0 whitespace-nowrap">{(auth.user()?.coinBalance ?? 0).toLocaleString("th-TH")} คะแนน</span>
         <ChevronIcon class={`ml-auto size-5 text-ink-gray transition-transform duration-150 ${expanded() ? "rotate-180" : ""}`} />
       </button>
       <Show when={expanded()}>

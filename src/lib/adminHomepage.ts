@@ -127,7 +127,7 @@ export function buildHomepageSectionBaseline(): HomepageSection[] {
       type: "content",
       name: "รูปพร้อมข้อความ (ตัวอย่าง)",
       enabled: false,
-      title: "สะสม Charmiss Coins",
+      title: "สะสมคะแนน Charmiss Club",
       description: "แลกรับของรางวัล ส่วนลด และสิทธิพิเศษทุกการสั่งซื้อ",
       cta: { label: "สมัครฟรี", destination: { type: "internal", path: "/account" } },
     }),

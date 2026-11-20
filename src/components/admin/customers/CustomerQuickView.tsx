@@ -45,14 +45,14 @@ export function CustomerQuickView(props: { customer: Customer }) {
         <Field label="เป็นสมาชิกตั้งแต่" value={c().memberSince || "-"} />
         <Field label="คำสั่งซื้อ" value={`${orderCount().toLocaleString("th-TH")} รายการ`} />
         <Field label="ยอดซื้อสะสม" value={formatAdminCurrency(totalSpent())} />
-        <Field label="Charmiss Coin" value={`${(c().loyaltyPoints ?? 0).toLocaleString("th-TH")} คอยน์`} />
+        <Field label="คะแนน Charmiss Club" value={`${(c().loyaltyPoints ?? 0).toLocaleString("th-TH")} คะแนน`} />
       </div>
 
       <a
         href={`/admin/customers/${c().id}#coin-history`}
         class="flex items-center justify-between gap-3 rounded-card border border-border p-3 text-sm transition-colors duration-150 lg:hover:bg-surface-pink/40"
       >
-        <span class="font-medium text-ink">ประวัติคอยน์</span>
+        <span class="font-medium text-ink">ประวัติคะแนน</span>
         <span class="flex items-center gap-1 text-ink-gray">
           {coinEntryCount().toLocaleString("th-TH")} รายการ
           <ChevronRightIcon class="size-5" />

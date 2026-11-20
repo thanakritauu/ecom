@@ -87,7 +87,7 @@ export function getCustomerCoinHistory(customer: Customer, orders: AdminOrder[])
         list.push({
           key: `${o.id}-earned`,
           date: o.createdAt,
-          label: m.state === "earned" ? "ได้รับจากคำสั่งซื้อ" : "รอรับเมื่อได้รับสินค้า",
+          label: m.state === "earned" ? (o.receivedConfirmedAt ? "ได้รับจากการยืนยันรับสินค้า" : "ได้รับจากคำสั่งซื้อ") : o.orderStatus === "completed" ? "รอยืนยันรับสินค้า" : "รอรับเมื่อได้รับสินค้า",
           orderId: o.id,
           orderNumber: o.orderNumber,
           coins: m.earned,
@@ -104,8 +104,8 @@ export function getCustomerCoinHistory(customer: Customer, orders: AdminOrder[])
       ? []
       : [
           customer.source === "crm_migrated" && gap > 0
-            ? { key: "crm-carry-over", date: customer.memberSince || "-", label: "ย้ายคอยน์จาก Charmiss Club CRM", coins: gap, state: "earned" }
-            : { key: "adjustment", date: customer.memberSince || "-", label: "ปรับยอดคอยน์", coins: gap, state: gap > 0 ? "earned" : "used" },
+            ? { key: "crm-carry-over", date: customer.memberSince || "-", label: "ย้ายคะแนนจาก Charmiss Club CRM", coins: gap, state: "earned" }
+            : { key: "adjustment", date: customer.memberSince || "-", label: "ปรับยอดคะแนน", coins: gap, state: gap > 0 ? "earned" : "used" },
         ];
 
   let running = 0;

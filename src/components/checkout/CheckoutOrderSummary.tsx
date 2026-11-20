@@ -26,7 +26,7 @@ const CoinRedeemSheet = clientOnly(() => import("./CoinRedeemSheet").then((m) =>
  * coupons ("เลือกคูปองส่วนลด" / "ใช้ได้ 3 คูปอง"), not a type-in code field —
  * followed here over the generic "กรอกโค้ดส่วนลด" example in the brief,
  * since Figma is the visual source of truth when the two disagree. Same for
- * "Charmiss Coin": no loyalty-points backend exists anywhere in this
+ * "คะแนน Charmiss Club": no loyalty-points backend exists anywhere in this
  * project, so the balance is mock data (documented in cartSelectors.ts)
  * with a real redeem sheet (`CoinRedeemSheet` — pick the amount) wired into
  * the same totals Cart Page and the Drawer already share.
@@ -181,7 +181,7 @@ export function CheckoutOrderSummary(props: {
         </div>
         <Show when={props.totals.coinDiscount > 0}>
           <div class="flex items-center justify-between">
-            <span class="text-ink-gray">Charmiss Coin ({props.coinsRedeemed.toLocaleString("th-TH")} คอยน์)</span>
+            <span class="text-ink-gray">คะแนน Charmiss Club ({props.coinsRedeemed.toLocaleString("th-TH")} คะแนน)</span>
             <span class="font-bold text-success">-{formatTHB(props.totals.coinDiscount)}</span>
           </div>
         </Show>
@@ -223,7 +223,7 @@ export function CheckoutOrderSummary(props: {
 }
 
 /**
- * "ส่วนลดและสิทธิพิเศษ": coupon + Charmiss Coin rows with their sheets. In
+ * "ส่วนลดและสิทธิพิเศษ": coupon + คะแนน Charmiss Club rows with their sheets. In
  * the order summary on desktop; in the form column right after the payment
  * methods below `lg`, so phones see the coupons before paying.
  */
@@ -249,7 +249,7 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
       </div>
       <p class="text-center text-lg font-semibold text-white">ส่วนลดและสิทธิพิเศษ</p>
 
-      {/* Same row pattern + pill button as the Charmiss Coin row below; the button opens the coupon modal. */}
+      {/* Same row pattern + pill button as the คะแนน Charmiss Club row below; the button opens the coupon modal. */}
       <div class="flex items-center justify-between gap-1.5 rounded-card bg-white p-3 sm:gap-2 sm:p-4">
         <div class="flex min-w-0 items-center gap-1.5 sm:gap-2">
           <span class="flex size-7 shrink-0 items-center justify-center rounded-pill bg-surface-pink text-brand-pink sm:size-8" aria-hidden="true">
@@ -297,24 +297,24 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
 
       <div class="flex items-center gap-2">
         <div class="h-px flex-1 bg-white/40" />
-        <p class="text-xs text-white">ใช้คอยน์แลกส่วนลด</p>
+        <p class="text-xs text-white">ใช้คะแนนแลกส่วนลด</p>
         <div class="h-px flex-1 bg-white/40" />
       </div>
 
-      {/* Both perk rows: 12px padding / 6px gaps / 28px icons below `sm` so "Charmiss Coin" + its pill fit a 360px phone.
+      {/* Both perk rows: 12px padding / 6px gaps / 28px icons below `sm` so "คะแนน Charmiss Club" + its pill fit a 360px phone.
           The coin row is the coupon row's pink (pink tint, pink pill) with the real coin artwork. */}
       <div class="flex items-center justify-between gap-1.5 rounded-card bg-surface-pink p-3 sm:gap-2 sm:p-4">
         <div class="flex min-w-0 items-center gap-1.5 sm:gap-2">
           <img src={coinMark} alt="" class="size-7 shrink-0 sm:size-8" aria-hidden="true" />
           <p class="min-w-0 text-sm font-semibold text-ink">
               {props.coinsRedeemed > 0
-                ? `ใช้ ${props.coinsRedeemed.toLocaleString("th-TH")} คอยน์ ลด ${formatTHB(props.totals.coinDiscount)}`
-                : `คุณมี ${MOCK_COIN_BALANCE.toLocaleString("th-TH")} คอยน์`}
+                ? `ใช้ ${props.coinsRedeemed.toLocaleString("th-TH")} คะแนน ลด ${formatTHB(props.totals.coinDiscount)}`
+                : `คุณมี ${MOCK_COIN_BALANCE.toLocaleString("th-TH")} คะแนน`}
           </p>
         </div>
-        {/* Same 14px as the row's "Charmiss Coin" / "คูปองส่วนลด" label; opens the amount picker. */}
+        {/* Same 14px as the row's "คะแนน Charmiss Club" / "คูปองส่วนลด" label; opens the amount picker. */}
         <PerkButton onClick={() => setCoinSheetOpen(true)} aria-haspopup="dialog">
-          {props.coinsRedeemed > 0 ? "แก้ไขคอยน์" : "ใช้คอยน์"}
+          {props.coinsRedeemed > 0 ? "แก้ไขคะแนน" : "ใช้คะแนน"}
         </PerkButton>
       </div>
       <CoinRedeemSheet
@@ -330,7 +330,7 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
 }
 
 /**
- * The pill used by both perk rows (coupon, Charmiss Coin) — one definition so
+ * The pill used by both perk rows (coupon, คะแนน Charmiss Club) — one definition so
  * they always match: brand pink, 14px (`text-sm`, the rows' own label size).
  * `active` = the perk is in use (gray, "cancel").
  */

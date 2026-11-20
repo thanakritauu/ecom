@@ -135,7 +135,7 @@ export function computeCartTotal(resolved: ResolvedCartLine[]): number {
  * pricing module — so Checkout's Order Summary computes its total with the
  * exact same `computeCartTotal`-derived subtotal the Drawer and Cart Page
  * use, extended with the three things only Checkout adds (shipping fee,
- * coupon, Charmiss Coin), instead of three separate screens each re-deriving
+ * coupon, คะแนน Charmiss Club), instead of three separate screens each re-deriving
  * a total their own way.
  */
 /** The default carrier (DHL standard): orders, help pages and FAQ name it; the fee is `computeShippingFee`. */
@@ -476,9 +476,9 @@ export function maxRedeemableCoins(opts: { balance: number; subtotal: number; co
 }
 
 /**
- * Earn side of the same mock Charmiss Coin program (no backend exists here
+ * Earn side of the same mock คะแนน Charmiss Club program (no backend exists here
  * either — same status as `COIN_TO_BAHT_RATE` above, just the other
- * direction): ทุก ฿10 ที่ชำระจริง (ไม่รวมค่าจัดส่ง) ได้รับ 1 คอยน์, the same
+ * direction): ทุก ฿10 ที่ชำระจริง (ไม่รวมค่าจัดส่ง) ได้รับ 1 คะแนน, the same
  * 10:1 ratio the redemption side already uses, rounded down so a partial
  * ฿10 never earns a fractional coin. The member's tier multiplies it
  * (`membership.ts` `coinMultiplier`: Glow ×1, Radiance ×1.5, Icon ×2) before

@@ -33,7 +33,7 @@ export default function ShippingPage() {
         <Prose>
           <p>
             ค่าจัดส่ง {formatTHB(SHIPPING_FEE)} ต่อคำสั่งซื้อ และ<strong class="font-semibold">จัดส่งฟรีทั่วประเทศ</strong>เมื่อยอดสินค้าครบ{" "}
-            {formatTHB(FREE_SHIPPING_THRESHOLD)} (คิดจากราคาสินค้าก่อนหักคูปองและ Charmiss Coin)
+            {formatTHB(FREE_SHIPPING_THRESHOLD)} (คิดจากราคาสินค้าก่อนหักคูปองและคะแนน Charmiss Club)
           </p>
           <p>ค่าจัดส่งจะแสดงในสรุปคำสั่งซื้อหน้าชำระเงินก่อนยืนยันทุกครั้ง</p>
         </Prose>

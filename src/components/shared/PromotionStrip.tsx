@@ -142,7 +142,7 @@ export function UtilityBar(props: { state?: PromotionStripState }) {
 }
 
 /**
- * Signed-in badge: name | Charmiss Coin mark + coin balance + "v", on a plain
+ * Signed-in badge: name | คะแนน Charmiss Club mark + coin balance + "v", on a plain
  * white pill (tier medals live only on the Charmiss Club page). Opens a small
  * account menu (ดูโปรไฟล์ / ออกจากระบบ) on hover — with a short close delay so
  * the pointer can cross the gap — and on click / Enter / Space / ArrowDown
@@ -156,7 +156,7 @@ export function UtilityBar(props: { state?: PromotionStripState }) {
 function MemberBadge() {
   const auth = useAuth();
   const navigate = useNavigate();
-  const coins = () => `${(auth.user()?.coinBalance ?? 0).toLocaleString("th-TH")} คอยน์`;
+  const coins = () => `${(auth.user()?.coinBalance ?? 0).toLocaleString("th-TH")} คะแนน`;
 
   const [open, setOpen] = createSignal(false);
   let hoverOpened = false; // opened by hover → don't steal focus into the menu / back to the trigger
@@ -206,7 +206,7 @@ function MemberBadge() {
       >
         <span class="max-w-[160px] truncate">{auth.user()?.name}</span>
         <span aria-hidden="true" class="text-ink-placeholder">|</span>
-        {/* Coin mark sits with the balance it belongs to: "name | [C] 3,500 คอยน์". */}
+        {/* Coin mark sits with the balance it belongs to: "name | [C] 3,500 คะแนน". */}
         <span class="flex shrink-0 items-center gap-1">
           <img src={coinMark} alt="" class="size-4 shrink-0" />
           {coins()}

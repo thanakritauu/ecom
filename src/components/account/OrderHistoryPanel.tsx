@@ -1,6 +1,7 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import type { Order } from "~/lib/types";
+import { canReviewOrder, isOrderReviewed } from "~/lib/orderHistory";
 import { EmptyState } from "../shared/EmptyState";
 import { DocumentIcon } from "../shared/icons";
 import { OrderCard } from "./OrderCard";
@@ -32,7 +33,20 @@ const EMPTY_TAB_TITLE: Record<TabKey, string> = {
   cancelled: "ไม่มีคำสั่งซื้อที่ยกเลิก",
 };
 
-export function OrderHistoryPanel(props: { orders: Order[]; ready: boolean }) {
+export function OrderHistoryPanel(props: {
+  orders: Order[];
+  ready: boolean;
+  /** คะแนน an order earns (for "ยืนยันรับสินค้า"). */
+  pointsFor?: (order: Order) => number;
+  onConfirmReceived?: (orderId: string) => Promise<Order>;
+}) {
+  // "ยืนยันรับสินค้า" replaces the order, so its card re-renders: the new card opens the review next (optional).
+  const [reviewNext, setReviewNext] = createSignal<string>();
+  const confirmReceived = async (orderId: string) => {
+    const order = await props.onConfirmReceived!(orderId);
+    if (canReviewOrder(order) && !isOrderReviewed(order)) setReviewNext(orderId);
+    return order;
+  };
   // `?tab=...` opens a tab directly: Checkout's success page links `in_progress` (กำลังจัดส่ง), its failed notices `pending_payment`.
   const [searchParams] = useSearchParams();
   const initialTab = () => {
@@ -79,7 +93,15 @@ export function OrderHistoryPanel(props: { orders: Order[]; ready: boolean }) {
             fallback={<EmptyState icon={DocumentIcon} title={EMPTY_TAB_TITLE[activeTab()]} description="ดูคำสั่งซื้ออื่นได้ที่แท็บทั้งหมด" />}
           >
             <div class="flex flex-col gap-4">
-              <For each={filteredOrders()}>{(order) => <OrderCard order={order} />}</For>
+              <For each={filteredOrders()}>{(order) => (
+                <OrderCard
+                  order={order}
+                  points={props.pointsFor?.(order)}
+                  onConfirmReceived={props.onConfirmReceived && confirmReceived}
+                  openReviewNow={reviewNext() === order.id}
+                  onReviewOpened={() => setReviewNext(undefined)}
+                />
+              )}</For>
             </div>
             <LineContactNote />
           </Show>

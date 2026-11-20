@@ -18,7 +18,7 @@ export type Tier = {
   /** Yearly spend (฿) that unlocks this tier. */
   minSpend: number;
   perks: string[];
-  /** Coin earn multiplier on top of the base rate (`computeCoinsEarned` in cartSelectors.ts) — what the "รับคอยน์ x…" perk promises. */
+  /** Coin earn multiplier on top of the base rate (`computeCoinsEarned` in cartSelectors.ts) — what the "รับคะแนน x…" perk promises. */
   coinMultiplier: number;
   /** Tier colour (fills, badges, ladder dot) and the text colour that sits on it. */
   bg: string;
@@ -37,7 +37,7 @@ export const TIERS: Tier[] = [
     bg: "#F6B7C8",
     fg: "#713B50",
     mark: tierGlowMark,
-    perks: ["รับ 1 คอยน์ ทุก ฿10", "คูปองวันเกิด ฿50"],
+    perks: ["รับ 1 คะแนน ทุก ฿10", "คูปองวันเกิด ฿50"],
   },
   {
     id: "radiance",
@@ -48,7 +48,7 @@ export const TIERS: Tier[] = [
     bg: "#D982A1",
     fg: "#FFFFFF",
     mark: tierRadianceMark,
-    perks: ["รับคอยน์ x1.5", "คูปองวันเกิด ฿100", "ส่วนลดพิเศษเฉพาะสมาชิก"],
+    perks: ["รับคะแนน x1.5", "คูปองวันเกิด ฿100", "ส่วนลดพิเศษเฉพาะสมาชิก"],
   },
   {
     id: "icon",
@@ -59,7 +59,7 @@ export const TIERS: Tier[] = [
     bg: "#8E4667",
     fg: "#FFFFFF",
     mark: tierIconMark,
-    perks: ["รับคอยน์ x2", "คูปองวันเกิด ฿300", "สิทธิ์ช้อปสินค้าใหม่ก่อนใคร"],
+    perks: ["รับคะแนน x2", "คูปองวันเกิด ฿300", "สิทธิ์ช้อปสินค้าใหม่ก่อนใคร"],
   },
 ];
 
