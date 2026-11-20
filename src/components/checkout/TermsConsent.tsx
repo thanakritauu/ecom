@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import { SheetModal } from "../shared/SheetModal";
 import { Button } from "../shared/Button";
 import { CheckIcon } from "../shared/icons";
@@ -15,7 +15,8 @@ const POLICY_TITLE: Record<Policy, string> = { shipping: INFO_PAGES.shipping.lab
  * scrolled to the end (or fits without scrolling). Accepting the first opens the second; with both accepted the
  * box ticks itself. The box can't be ticked directly: tapping it (or the sentence) opens what's still unread.
  * Unticking clears both, so ticking again means reading again. Paying without it shows `error` here (Checkout's
- * `validateOrder`).
+ * `validateOrder`). Checkout passes `checked` already true for a member who accepted this version before
+ * (`termsAcceptance.ts`): the box shows ticked with both policies accepted, read-only unless they untick it.
  */
 export function TermsConsent(props: { checked: boolean; onChange: (checked: boolean) => void; error?: string }) {
   const [open, setOpen] = createSignal<Policy>();
@@ -26,6 +27,9 @@ export function TermsConsent(props: { checked: boolean; onChange: (checked: bool
   const [mounted, setMounted] = createSignal(false);
   onMount(() => setMounted(true));
   const errorId = "terms-consent-error";
+
+  // Ticked from outside (a member's earlier acceptance): both policies count as accepted.
+  createEffect(on(() => props.checked, (checked) => checked && setAccepted({ shipping: true, returns: true })));
 
   const acceptedCount = () => POLICIES.filter((p) => accepted()[p]).length;
   const openPolicy = (p: Policy) => {
@@ -88,6 +92,8 @@ export function TermsConsent(props: { checked: boolean; onChange: (checked: bool
     </button>
   );
 
+  /** Nothing to accept in the popup: already accepted (by this member before, or in this order). */
+  const readOnly = () => (open() ? accepted()[open()!] : false);
   const footerLabel = () => {
     const current = open();
     if (current && accepted()[current]) return "ยอมรับแล้ว";
@@ -140,8 +146,8 @@ export function TermsConsent(props: { checked: boolean; onChange: (checked: bool
               variant="primary"
               size="lg"
               class="w-full"
-              disabled={!readToEnd() && !(open() && accepted()[open()!])}
-              onClick={() => (open() && accepted()[open()!] ? setOpen(undefined) : accept())}
+              disabled={!readToEnd() && !readOnly()}
+              onClick={() => (readOnly() ? setOpen(undefined) : accept())}
             >
               {footerLabel()}
             </Button>

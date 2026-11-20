@@ -51,6 +51,7 @@ import { generateOrderNumber } from "~/lib/orderNumber";
 import { CheckoutOrderSummary, CheckoutPerks } from "~/components/checkout/CheckoutOrderSummary";
 import { saveOrderSuccess } from "~/components/checkout/OrderSuccess";
 import { TermsConsent } from "~/components/checkout/TermsConsent";
+import { readCurrentTermsAcceptance, saveTermsAcceptance } from "~/lib/termsAcceptance";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
 import { focusFirstInvalid } from "~/lib/validators";
 import { recordExternalCodeUse } from "~/lib/externalCodes";
@@ -110,6 +111,14 @@ export default function CheckoutPage() {
   // `CHECKOUT_TERMS.version` + the time, which the order keeps (`Order.termsAccepted`).
   const [termsAccepted, setTermsAccepted] = createSignal(false);
   const [termsError, setTermsError] = createSignal<string>();
+  // A signed-in member who already accepted this version gets the box ticked for them (`termsAcceptance.ts`); guests
+  // always tick it themselves. Read after the session loads (auth fills in on mount), and again on sign in / out.
+  const [termsRemembered, setTermsRemembered] = createSignal(false);
+  createEffect(() => {
+    const remembered = !!readCurrentTermsAcceptance(auth.user());
+    setTermsRemembered(remembered);
+    setTermsAccepted(remembered);
+  });
   // Signed-in members' entries persist (`taxInvoiceProfiles`); a guest's live for this visit only. Read on tick (client only).
   const [taxProfiles, setTaxProfiles] = createSignal<TaxInvoiceProfile[]>([]);
   const [taxProfileId, setTaxProfileId] = createSignal<string | undefined>();
@@ -274,6 +283,9 @@ export default function CheckoutPage() {
       document.getElementById("terms-consent-box")?.focus({ preventScroll: true });
       return false;
     }
+    // A member accepting this version: remembered for their next orders.
+    const member = auth.user();
+    if (member && !termsRemembered()) saveTermsAcceptance(member);
     return true;
   };
 
