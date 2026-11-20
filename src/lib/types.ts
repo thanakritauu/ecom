@@ -229,4 +229,13 @@ export type Order = {
   /** Why it was cancelled, when known — e.g. the payment-deadline auto-cancel (`applyPaymentDeadline`). */
   cancelReason?: string;
   returnRequest?: ReturnRequest;
+  /** The shipping terms + return policy the customer ticked at Checkout: when, and which text (`CHECKOUT_TERMS`). */
+  termsAccepted?: TermsAcceptance;
+};
+
+export type TermsAcceptance = {
+  /** ISO 8601. */
+  at: string;
+  /** `CHECKOUT_TERMS.version` at the time. */
+  version: string;
 };

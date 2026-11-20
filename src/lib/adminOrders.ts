@@ -1,6 +1,7 @@
 import type { StatusTone } from "~/components/admin/StatusBadge";
 import type { TaxInvoiceBuyer, TaxInvoiceStatus } from "./taxInvoice";
-import type { Order, ProofOfDelivery, ShipmentStatus, TrackingEvent, TrackingStatus } from "./types";
+import type { Order, ProofOfDelivery, ShipmentStatus, TermsAcceptance, TrackingEvent, TrackingStatus } from "./types";
+import { CHECKOUT_TERMS } from "./siteInfo";
 import podPhoto from "~/assets/images/pod/pod-photo.svg";
 import podSignature from "~/assets/images/pod/pod-signature.svg";
 import type { PaymentFailureReason } from "./payment";
@@ -201,6 +202,8 @@ export type AdminOrder = {
   taxInvoice?: TaxInvoiceBuyer;
   /** ISO time staff marked the tax invoice as emailed (Order Detail "บันทึกว่าส่งแล้ว"). */
   taxInvoiceSentAt?: string;
+  /** The shipping terms + return policy the customer ticked at Checkout. */
+  termsAccepted?: TermsAcceptance;
   orderStatus: OrderStatus;
   paymentStatus: PaymentStatus;
   fulfillmentStatus: FulfillmentStatus;
@@ -523,6 +526,7 @@ function buildAdminSeedOrder(seed: OrderSeed): AdminOrder {
     orderStatus: seed.orderStatus,
     paymentStatus,
     fulfillmentStatus: deriveFulfillmentStatus(shipping),
+    termsAccepted: { at: seed.placedAt, version: CHECKOUT_TERMS.version },
     cancellation: seed.cancellation && { by: seed.cancellation.by, reason: seed.cancellation.reason, at: addHours(seed.placedAt, seed.cancellation.afterHours) },
   };
 }
@@ -610,6 +614,7 @@ function buildFromAccountOrder(order: Order): AdminOrder {
     orderStatus: order.status,
     paymentStatus: accountPayment,
     fulfillmentStatus: deriveFulfillmentStatus(shipping),
+    termsAccepted: order.termsAccepted,
     // The storefront's payment-deadline auto-cancel reads as a system cancel with the storefront's own reason.
     cancellation: order.cancelledAt ? (order.cancelReason ? { by: "system", reason: AUTO_CANCEL_REASON, at: order.cancelledAt } : { by: "admin", reason: "ลูกค้าแจ้งยกเลิกทาง LINE", at: order.cancelledAt }) : undefined,
   };

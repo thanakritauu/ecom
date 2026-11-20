@@ -50,6 +50,7 @@ import { createCheckoutPayment, type PaidResult } from "~/components/checkout/ch
 import { generateOrderNumber } from "~/lib/orderNumber";
 import { CheckoutOrderSummary, CheckoutPerks } from "~/components/checkout/CheckoutOrderSummary";
 import { saveOrderSuccess } from "~/components/checkout/OrderSuccess";
+import { TermsConsent } from "~/components/checkout/TermsConsent";
 import { FloatingOrderSummary } from "~/components/shared/FloatingOrderSummary";
 import { focusFirstInvalid } from "~/lib/validators";
 import { recordExternalCodeUse } from "~/lib/externalCodes";
@@ -105,6 +106,10 @@ export default function CheckoutPage() {
   // Tax invoice — off by default. Ticked: a summary of the chosen details (most recent saved entry) with "เปลี่ยน",
   // which opens `TaxInvoiceSheet` (pick from the saved list, or add / edit). No saved entry yet: the popup opens on its form.
   const [wantsTaxInvoice, setWantsTaxInvoice] = createSignal(false);
+  // ยอมรับเงื่อนไขการจัดส่งและการคืนสินค้า: unticked, for every order (`TermsConsent`). Sent with the order as
+  // `CHECKOUT_TERMS.version` + the time, which the order keeps (`Order.termsAccepted`).
+  const [termsAccepted, setTermsAccepted] = createSignal(false);
+  const [termsError, setTermsError] = createSignal<string>();
   // Signed-in members' entries persist (`taxInvoiceProfiles`); a guest's live for this visit only. Read on tick (client only).
   const [taxProfiles, setTaxProfiles] = createSignal<TaxInvoiceProfile[]>([]);
   const [taxProfileId, setTaxProfileId] = createSignal<string | undefined>();
@@ -261,7 +266,15 @@ export default function CheckoutPage() {
       return false;
     }
     setSubmitError(undefined);
-    return validate();
+    if (!validate()) return false;
+    // Asked last, right above the pay button: address / tax invoice first.
+    if (!termsAccepted()) {
+      setTermsError("กรุณาอ่านและกดยอมรับเงื่อนไขการจัดส่งและนโยบายคืนสินค้าก่อนชำระเงิน");
+      document.getElementById("terms-consent")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document.getElementById("terms-consent-box")?.focus({ preventScroll: true });
+      return false;
+    }
+    return true;
   };
 
   const onPaid = (payment: PaidResult) => {
@@ -461,6 +474,15 @@ export default function CheckoutPage() {
                       />
                     }
                     notice={
+                      <>
+                      <TermsConsent
+                        checked={termsAccepted()}
+                        onChange={(v) => {
+                          setTermsAccepted(v);
+                          if (v) setTermsError(undefined);
+                        }}
+                        error={termsError()}
+                      />
                       <Show when={hasUnavailableItem()}>
                         <p class="rounded-card bg-danger-soft p-3 text-sm text-danger-strong" role="alert">
                           มีสินค้าในตะกร้าที่หมดสต็อก กรุณา
@@ -470,6 +492,7 @@ export default function CheckoutPage() {
                           เพื่อแก้ไขก่อนสั่งซื้อ
                         </p>
                       </Show>
+                      </>
                     }
                   />
                 </div>

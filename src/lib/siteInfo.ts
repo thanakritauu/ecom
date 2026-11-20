@@ -36,6 +36,12 @@ export const INFO_PAGES = {
   privacy: { label: "นโยบายความเป็นส่วนตัว", href: "/legal/privacy" },
 } satisfies Record<string, InfoPageLink>;
 
+/**
+ * The shipping terms + return policy a customer accepts at Checkout (`TermsConsent`). Bump `version` whenever
+ * either page's wording changes, so each order records which text was agreed to.
+ */
+export const CHECKOUT_TERMS = { version: "2026-09-01", label: "ฉบับ 1 ก.ย. 2569" } as const;
+
 /** Sidebar groups on the info pages — same grouping as the Footer's columns, plus the legal pair from the Footer's bottom row. */
 export const INFO_PAGE_GROUPS: { title: string; links: InfoPageLink[] }[] = [
   { title: "ช่วยเหลือ", links: [INFO_PAGES.tracking, INFO_PAGES.howToOrder, INFO_PAGES.shipping, INFO_PAGES.faq] },

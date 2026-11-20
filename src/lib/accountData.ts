@@ -1,6 +1,7 @@
 import type { Order, OrderItem, OrderPayment, OrderStatus, User } from "./types";
 import { MOCK_ADDRESSES } from "./checkoutData";
 import { allProducts } from "./products";
+import { CHECKOUT_TERMS } from "./siteInfo";
 import { AVAILABLE_COUPONS, COIN_TO_BAHT_RATE, computeShippingFee, DELIVERY, GIFT_PROMOTION, MOCK_COIN_BALANCE } from "./cartSelectors";
 import orderItemLipTint from "~/assets/images/account/order-item-lip-tint.png";
 import orderItemFoundation from "~/assets/images/account/order-item-foundation.png";
@@ -175,7 +176,7 @@ function deliveredShipment(placedAt: string, trackingNumber: string, branch: str
  * numbers are mock (DHL's site won't find them). Read only through
  * `orderHistory.ts`'s repository, never directly by UI.
  */
-export const MOCK_ORDERS: Order[] = [
+const ORDER_SEEDS: Order[] = [
   {
     // Pending payment, still inside its PAYMENT_WINDOW_HOURS window at the mock now (deadline 3 ต.ค. 14:30)
     id: "ORD-2026-1037",
@@ -357,3 +358,6 @@ export const MOCK_ORDERS: Order[] = [
     returnRequest: { itemIndexes: [0], reason: "สินค้าชำรุดหรือเสียหาย", requestedAt: bkk("2026-09-03T10:15:00+07:00", 52 + 9 * 24) },
   },
 ];
+
+/** Every order was placed with the shipping terms + return policy ticked (Checkout's `TermsConsent`). */
+export const MOCK_ORDERS: Order[] = ORDER_SEEDS.map((o) => ({ ...o, termsAccepted: { at: o.placedAt, version: CHECKOUT_TERMS.version } }));

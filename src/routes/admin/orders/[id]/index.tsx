@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { CHECKOUT_TERMS } from "~/lib/siteInfo";
 import { useNavigate, useParams } from "@solidjs/router";
 import { Breadcrumb } from "~/components/shared/Breadcrumb";
 import { PageHeader } from "~/components/shared/PageHeader";
@@ -149,6 +150,14 @@ export default function AdminOrderDetailPage() {
                   <div class="border-t border-border pt-3">
                     <OrderTotalsBreakdown order={o()} />
                   </div>
+                  {/* What the customer agreed to at Checkout, for return disputes. */}
+                  <Show when={o().termsAccepted}>
+                    {(t) => (
+                      <dl class="flex flex-col gap-1.5 border-t border-border pt-3 text-sm">
+                        <Row label="ยอมรับเงื่อนไขการจัดส่งและการคืนสินค้า" value={`${termsVersionLabel(t().version)} เมื่อ ${formatOrderDateTimeLabel(t().at)}`} />
+                      </dl>
+                    )}
+                  </Show>
                   <Show when={o().cancellation}>
                     {(c) => (
                       <dl class="flex flex-col gap-1.5 border-t border-border pt-3 text-sm">
@@ -374,6 +383,9 @@ function Section(props: { title: string; aside?: import("solid-js").JSX.Element;
     </div>
   );
 }
+
+/** "ฉบับ 1 ก.ย. 2569" for the current version; an older one shows its date code as stored. */
+const termsVersionLabel = (version: string) => (version === CHECKOUT_TERMS.version ? CHECKOUT_TERMS.label : `ฉบับ ${version}`);
 
 function Row(props: { label: string; value: string }) {
   return (
