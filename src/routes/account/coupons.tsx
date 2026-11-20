@@ -69,9 +69,10 @@ export default function AccountCouponsPage() {
           when={lists[tab()]().length > 0}
           fallback={<EmptyState icon={TagIcon} title={TABS.find((t) => t.key === tab())!.empty.title} description={TABS.find((t) => t.key === tab())!.empty.description} />}
         >
-          {/* 1 column on phones, 2 across from md; the gap leaves room for each ticket's shadow.
+          {/* 1 column until xl (a 2-across ticket beside the account menu is too narrow for "ขั้นต่ำ | ใช้ได้ถึง"),
+              2 across from xl; the gap leaves room for each ticket's shadow.
               Phones: the list reaches 12px into the panel's padding so a ticket keeps room for its amount beside "ไม่ตรงเงื่อนไข". */}
-          <ul class="-mx-3 grid grid-cols-1 gap-x-4 gap-y-6 pt-2 sm:mx-0 md:grid-cols-2">
+          <ul class="-mx-3 grid grid-cols-1 gap-x-4 gap-y-6 pt-2 sm:mx-0 xl:grid-cols-2">
             <For each={lists[tab()]()}>
               {(c) => (
                 <li class="flex list-none flex-col gap-3">
