@@ -7,15 +7,13 @@ import { TagIcon } from "~/components/shared/icons";
 import { couponStamp, isCouponExpired, type Coupon } from "~/lib/cartSelectors";
 import { useCollectedCoupons } from "~/lib/collectedCoupons";
 import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
-import { pushToast } from "~/lib/toast";
 
-type Tab = "mine" | "more" | "expired";
+type Tab = "mine" | "expired";
 
 /**
  * คูปองและสิทธิพิเศษ (profile menu, after Charmiss Club): the member's own
  * coupons, from the same collected list Home and Checkout's "เก็บแล้ว" use.
  * - คูปองของฉัน: collected and still valid ("ใช้คูปอง"; another group's shows a grey "เฉพาะ ..." pill).
- * - เก็บคูปองเพิ่ม: live coupons not collected yet (every group, same rules as /coupons).
  * - หมดอายุ: collected ones past their dates, in black and white.
  */
 export default function AccountCouponsPage() {
@@ -31,23 +29,15 @@ export default function AccountCouponsPage() {
   const eligibleFirst = (list: Coupon[]) => [...list.filter((c) => !c.audienceBlock), ...list.filter((c) => c.audienceBlock)];
   const lists: Record<Tab, () => Coupon[]> = {
     mine: () => eligibleFirst(live().filter((c) => store.isCollected(c.code))),
-    more: () => eligibleFirst(live().filter((c) => !store.isCollected(c.code))),
     expired: () => promos.codeCoupons().filter((c) => store.isCollected(c.code) && isCouponExpired(c)),
   };
   const TABS: { key: Tab; label: string; empty: { title: string; description: string } }[] = [
-    { key: "mine", label: "คูปองของฉัน", empty: { title: "ยังไม่มีคูปองที่เก็บไว้", description: "เก็บคูปองได้ที่แท็บเก็บคูปองเพิ่ม หรือหน้าคูปอง" } },
-    { key: "more", label: "เก็บคูปองเพิ่ม", empty: { title: "เก็บคูปองครบแล้ว", description: "คูปองใหม่จะขึ้นที่นี่ แวะมาดูอีกครั้งนะ" } },
+    { key: "mine", label: "คูปองของฉัน", empty: { title: "ยังไม่มีคูปองที่เก็บไว้", description: "เก็บคูปองได้ที่หน้าแรกหรือหน้าคูปอง" } },
     { key: "expired", label: "หมดอายุ", empty: { title: "ไม่มีคูปองที่หมดอายุ", description: "คูปองที่เก็บไว้แล้วหมดอายุจะแสดงที่นี่" } },
   ];
   const [tab, setTab] = createSignal<Tab>("mine");
 
-  const collect = async (code: string) => {
-    await new Promise((r) => setTimeout(r, 350));
-    store.collect(code);
-    pushToast("เก็บคูปองสำเร็จ");
-  };
-
-  /** Another group's coupon: the grey "เฉพาะ ..." pill (collected or not); otherwise the ticket's own "เก็บ" / "ใช้คูปอง". */
+  /** Another group's coupon: the grey "เฉพาะ ..." pill; otherwise the ticket's own "ใช้คูปอง" (every coupon here is collected). */
   const action = (c: Coupon): CouponCardAction | undefined =>
     c.audienceBlock ? { label: `เฉพาะ${c.audienceOnly ?? ""}`, variant: "outline", disabled: true, onClick: () => {}, onlyFor: c.audienceOnly ?? "กลุ่มอื่น" } : undefined;
 
@@ -88,7 +78,6 @@ export default function AccountCouponsPage() {
                   <CouponCard
                     coupon={couponTicket(c)}
                     collected={store.isCollected(c.code)}
-                    onCollect={() => collect(c.code)}
                     onUse={() => navigate("/products")}
                     action={action(c)}
                     stamp={couponStamp(c)}
