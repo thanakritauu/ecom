@@ -12,9 +12,9 @@ import { pushToast } from "~/lib/toast";
 
 type Variant = "purple" | "pink";
 
-const VARIANT_META: Record<Variant, { title: string; note: string; swatch: string }> = {
-  purple: { title: "แถบสีม่วง", note: "แถบบนสุดของทุกหน้า แสดงทั้งมือถือและเดสก์ท็อป ลูกค้ากดปิดได้", swatch: "bg-brand-purple" },
-  pink: { title: "แถบสีชมพู", note: "แถบใต้แถบสีม่วง แสดงเฉพาะบนเดสก์ท็อป คู่กับปุ่มเข้าสู่ระบบและเลือกภาษา", swatch: "bg-surface-pink ring-1 ring-inset ring-brand-pink/40" },
+const VARIANT_META: Record<Variant, { title: string; note: string }> = {
+  purple: { title: "แถบประกาศที่ 1 (บนสุด)", note: "แถบบนสุดของทุกหน้า แสดงทั้งมือถือและเดสก์ท็อป ลูกค้ากดปิดได้" },
+  pink: { title: "แถบประกาศที่ 2", note: "แถบใต้แถบที่ 1 แสดงเฉพาะบนเดสก์ท็อป คู่กับปุ่มเข้าสู่ระบบและเลือกภาษา" },
 };
 
 /** The storefront's two top bars. Edits here show on the storefront right after saving. */
@@ -50,7 +50,7 @@ export default function AdminNotificationsPage() {
     setToggling(true);
     try {
       await bar.setPurpleEnabled(next);
-      pushToast(next ? "เปิดแถบสีม่วงแล้ว" : "ปิดแถบสีม่วงแล้ว", "success");
+      pushToast(next ? "แสดงแถบประกาศที่ 1 แล้ว" : "ซ่อนแถบประกาศที่ 1 แล้ว", "success");
       setConfirmToggle(null);
     } catch {
       pushToast("เปลี่ยนสถานะแถบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
@@ -62,7 +62,7 @@ export default function AdminNotificationsPage() {
   return (
     <div class="flex flex-col gap-6">
       <Breadcrumb items={[{ label: "แดชบอร์ด", href: "/admin" }, { label: "จัดการเนื้อหา", href: "/admin/promotion-pages" }, { label: "แถบประกาศด้านบน" }]} />
-      <PageHeader title="แถบประกาศด้านบน" description="แก้ไขข้อความแถบด้านบนของหน้าร้าน" />
+      <PageHeader title="แถบประกาศด้านบน" description="แก้ไขข้อความและสีของแถบด้านบนหน้าร้าน" />
 
       <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <For each={["purple", "pink"] as Variant[]}>
@@ -71,12 +71,13 @@ export default function AdminNotificationsPage() {
               <div class="flex items-start justify-between gap-3">
                 <div>
                   <h2 class="flex items-center gap-2 text-base font-semibold text-ink">
-                    <span class={`size-3 rounded-pill ${VARIANT_META[variant].swatch}`} /> {VARIANT_META[variant].title}
+                    {/* The bar's own colour. */}
+                    <span class="size-3 rounded-pill ring-1 ring-inset ring-border" style={{ "background-color": content(variant).bgColor }} /> {VARIANT_META[variant].title}
                   </h2>
                   <p class="mt-1 text-xs text-ink-gray">{VARIANT_META[variant].note}</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => setEditingVariant(variant)}>
-                  แก้ไขข้อความ
+                <Button variant="outline" size="sm" class="shrink-0 whitespace-nowrap" onClick={() => setEditingVariant(variant)}>
+                  แก้ไขแถบ
                 </Button>
               </div>
 
@@ -100,7 +101,7 @@ export default function AdminNotificationsPage() {
                 <label class="flex flex-col gap-1.5">
                   <span class="text-sm font-medium text-ink">การแสดงผล</span>
                   <Toggle checked={bar.state().purple.enabled} onChange={(v) => setConfirmToggle(v)} onLabel="แสดง" offLabel="ไม่แสดง" />
-                  <span class="text-xs text-ink-gray">ปิดแล้วแถบสีม่วงจะหายจากหน้าร้านทุกหน้า</span>
+                  <span class="text-xs text-ink-gray">ปิดแล้วแถบนี้จะหายจากหน้าร้านทุกหน้า</span>
                 </label>
               </Show>
             </section>
@@ -110,7 +111,7 @@ export default function AdminNotificationsPage() {
 
       <section class="flex flex-col gap-3 rounded-card bg-surface-card p-4 shadow-card sm:p-5">
         <h2 class="text-base font-semibold text-ink">ตัวอย่างบนหน้าร้าน</h2>
-        <p class="text-xs text-ink-gray">แถบสีชมพูแสดงเฉพาะหน้าจอเดสก์ท็อป</p>
+        <p class="text-xs text-ink-gray">แถบประกาศที่ 2 แสดงเฉพาะหน้าจอเดสก์ท็อป</p>
         {/* Look only: `inert` + no pointer events so the bars' own hover menus (account, language) never open in Admin. */}
         <div class="pointer-events-none select-none overflow-hidden rounded-card border border-border" inert>
           <PromoStrip state={bar.state()} />
@@ -130,8 +131,8 @@ export default function AdminNotificationsPage() {
       <ConfirmDialog
         open={confirmToggle() !== null}
         onOpenChange={(open) => !open && setConfirmToggle(null)}
-        title={confirmToggle() ? "แสดงแถบสีม่วง?" : "ซ่อนแถบสีม่วง?"}
-        description={confirmToggle() ? "แถบสีม่วงจะกลับมาแสดงบนหน้าร้านทุกหน้า" : "แถบสีม่วงจะถูกซ่อนจากหน้าร้านทุกหน้า"}
+        title={confirmToggle() ? "แสดงแถบประกาศที่ 1?" : "ซ่อนแถบประกาศที่ 1?"}
+        description={confirmToggle() ? "แถบนี้จะกลับมาแสดงบนหน้าร้านทุกหน้า" : "แถบนี้จะถูกซ่อนจากหน้าร้านทุกหน้า"}
         confirmLabel={confirmToggle() ? "แสดงแถบ" : "ซ่อนแถบ"}
         loading={toggling()}
         onConfirm={applyToggle}

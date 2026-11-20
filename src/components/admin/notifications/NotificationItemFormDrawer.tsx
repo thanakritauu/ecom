@@ -1,17 +1,18 @@
-import { createEffect, createSignal, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 import { Dialog } from "@kobalte/core/dialog";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { CloseXIcon } from "~/components/admin/icons";
 import { IconImageUploader } from "~/components/admin/IconImageUploader";
-import type { PromotionStripContent } from "~/lib/adminNotificationBar";
+import { isStripColor, STRIP_COLOR_PRESETS, stripTone, type PromotionStripContent } from "~/lib/adminNotificationBar";
+import { CheckIcon } from "~/components/shared/icons";
 import { FormErrorSummary } from "~/components/admin/FormErrorSummary";
 import { clearFieldError, reportFormErrors, type FormErrors } from "~/lib/adminFormValidation";
 import { scrollToFirstErrorIn } from "~/lib/adminDrawerScroll";
 
-const LABELS: Record<string, string> = { text: "ข้อความ", linkUrl: "ลิงก์ปลายทาง" };
+const LABELS: Record<string, string> = { text: "ข้อความ", linkUrl: "ลิงก์ปลายทาง", bgColor: "สีแถบ" };
 
-/** Edits one top bar (icon, text, link). The purple bar's on/off lives on the page. */
+/** Edits one top bar (icon, text, link, colour). The first bar's on/off lives on the page. */
 export function NotificationItemFormDrawer(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -24,6 +25,15 @@ export function NotificationItemFormDrawer(props: {
   const [text, setText] = createSignal(props.initial.text);
   const [linkLabel, setLinkLabel] = createSignal(props.initial.linkLabel ?? "");
   const [linkUrl, setLinkUrl] = createSignal(props.initial.linkUrl ?? "");
+  const [bgColor, setBgColor] = createSignal(props.initial.bgColor);
+  /** The hex box while typing (may be half a colour); `bgColor` takes it once it's a full `#rrggbb`. */
+  const [hexDraft, setHexDraft] = createSignal(props.initial.bgColor);
+  const pickColor = (hex: string) => {
+    setBgColor(hex.toLowerCase());
+    setHexDraft(hex.toLowerCase());
+    clearError("bgColor");
+  };
+  const isPreset = () => STRIP_COLOR_PRESETS.some((c) => c.value === bgColor());
   const [errors, setErrors] = createSignal<FormErrors>({});
   const clearError = (key: string) => setErrors((prev) => clearFieldError(prev, key));
   let bodyRef: HTMLDivElement | undefined;
@@ -34,14 +44,17 @@ export function NotificationItemFormDrawer(props: {
     setText(props.initial.text);
     setLinkLabel(props.initial.linkLabel ?? "");
     setLinkUrl(props.initial.linkUrl ?? "");
+    setBgColor(props.initial.bgColor);
+    setHexDraft(props.initial.bgColor);
     setErrors({});
   });
 
-  const title = () => (props.variant === "purple" ? "แก้ไขแถบสีม่วง" : "แก้ไขแถบสีชมพู");
+  const title = () => (props.variant === "purple" ? "แก้ไขแถบประกาศที่ 1" : "แก้ไขแถบประกาศที่ 2");
 
   const validate = () => {
     const next: FormErrors = {};
     if (!text().trim()) next.text = "กรุณากรอกข้อความ";
+    if (!isStripColor(hexDraft().trim())) next.bgColor = "กรุณากรอกรหัสสีให้ครบ 6 หลัก เช่น #7650ff";
     const url = linkUrl().trim();
     if (linkLabel().trim() && !url) next.linkUrl = "กรุณากรอกลิงก์ปลายทาง";
     else if (linkLabel().trim() && !url.startsWith("/") && !/^https?:\/\/\S+$/i.test(url)) next.linkUrl = "ลิงก์ต้องขึ้นต้นด้วย / หรือ https://";
@@ -59,6 +72,7 @@ export function NotificationItemFormDrawer(props: {
       text: text().trim(),
       linkLabel: linkLabel().trim() || undefined,
       linkUrl: linkLabel().trim() ? linkUrl().trim() : undefined,
+      bgColor: bgColor(),
     });
   };
 
@@ -109,6 +123,82 @@ export function NotificationItemFormDrawer(props: {
                     <p class="text-sm text-system-red">{errors().text}</p>
                   </Show>
                 </label>
+
+                <div data-field="bgColor" class="flex flex-col gap-2">
+                  <span class="text-sm font-medium text-ink">
+                    สีแถบ<span class="text-system-red"> *</span>
+                  </span>
+                  <div class="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="สีแถบ">
+                    <For each={STRIP_COLOR_PRESETS}>
+                      {(c) => (
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={bgColor() === c.value}
+                          aria-label={c.label}
+                          title={c.label}
+                          disabled={props.saving}
+                          onClick={() => pickColor(c.value)}
+                          style={{ "background-color": c.value }}
+                          class="flex size-9 items-center justify-center rounded-pill ring-1 ring-inset ring-border transition-shadow duration-150 disabled:cursor-not-allowed"
+                          classList={{ "outline outline-2 outline-offset-2 outline-brand-pink": bgColor() === c.value }}
+                        >
+                          <Show when={bgColor() === c.value}>
+                            <CheckIcon class={`size-4 ${stripTone(c.value) === "dark" ? "text-white" : "text-ink"}`} />
+                          </Show>
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                  {/* Any other colour: the system picker, or a hex typed in. */}
+                  <div class="flex items-center gap-2">
+                    <label
+                      class="relative flex size-9 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-pill ring-1 ring-inset ring-border"
+                      classList={{ "outline outline-2 outline-offset-2 outline-brand-pink": !isPreset() }}
+                      style={{ "background-color": bgColor() }}
+                      title="เลือกสีเอง"
+                    >
+                      <input
+                        type="color"
+                        value={bgColor()}
+                        disabled={props.saving}
+                        onInput={(e) => pickColor(e.currentTarget.value)}
+                        aria-label="เลือกสีเอง"
+                        class="absolute inset-0 size-full cursor-pointer opacity-0"
+                      />
+                    </label>
+                    <div class="min-w-0 flex-1">
+                      <TextField
+                        label="กำหนดเอง"
+                        value={hexDraft()}
+                        disabled={props.saving}
+                        placeholder="#7650ff"
+                        maxLength={7}
+                        onInput={(e) => {
+                          const v = e.currentTarget.value.trim();
+                          setHexDraft(v);
+                          if (isStripColor(v)) pickColor(v);
+                        }}
+                        error={errors().bgColor}
+                      />
+                    </div>
+                  </div>
+                  {/* How it reads: text turns white on a dark colour, dark on a light one. */}
+                  <div
+                    class="flex min-h-10 items-center justify-center rounded-card px-4 py-2 text-center text-xs ring-1 ring-inset ring-border sm:text-sm"
+                    classList={{ "text-white": stripTone(bgColor()) === "dark", "text-ink": stripTone(bgColor()) === "light" }}
+                    style={{ "background-color": bgColor() }}
+                  >
+                    <span class="line-clamp-2">
+                      {text().trim() || "ตัวอย่างข้อความบนแถบ"}
+                      <Show when={linkLabel().trim()}>
+                        {" "}
+                        <span class="font-bold underline">{linkLabel().trim()}</span>
+                      </Show>
+                    </span>
+                  </div>
+                  <span class="text-xs text-ink-gray">สีตัวอักษรปรับเป็นขาวหรือเข้มให้อ่านง่ายอัตโนมัติ</span>
+                </div>
 
                 <TextField
                   label="ข้อความลิงก์"

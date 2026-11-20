@@ -244,7 +244,7 @@ export default function AdminComponentPreviewPage() {
         </Show>
       </Gallery>
 
-      <Gallery title="แถบประกาศด้านบน" description="แถบสีม่วงและแถบสีชมพู แถบสีชมพูแสดงเฉพาะหน้าจอเดสก์ท็อป">
+      <Gallery title="แถบประกาศด้านบน" description="แถบประกาศที่ 1 และ 2 แถบที่ 2 แสดงเฉพาะหน้าจอเดสก์ท็อป">
         <SectionFrame>
           <PromoStrip />
           <UtilityBar />

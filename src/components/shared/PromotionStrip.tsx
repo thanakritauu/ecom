@@ -8,12 +8,13 @@ import { pushToast } from "~/lib/toast";
 import coinMark from "~/assets/icons/charmiss-coin.png";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { useStorefrontPromotionStrip } from "~/lib/storefrontPromotionStrip";
-import type { PromotionStripContent, PromotionStripState } from "~/lib/adminNotificationBar";
+import { stripTone, type PromotionStripContent, type PromotionStripState } from "~/lib/adminNotificationBar";
 
 /**
- * The purple "Promo strip" and pink "Utility bar" at the top of every
- * storefront page. Their copy comes from Admin (/admin/notifications) via
- * `useStorefrontPromotionStrip`; Admin's own preview passes `state` directly.
+ * The "Promo strip" (แถบประกาศที่ 1) and "Utility bar" (แถบประกาศที่ 2) at the top of every
+ * storefront page. Their copy and background colour come from Admin (/admin/notifications) via
+ * `useStorefrontPromotionStrip`; Admin's own preview passes `state` directly. The text is white on a
+ * dark colour and ink on a light one (`stripTone`).
  */
 function StripText(props: { content: PromotionStripContent; linkClass: string }) {
   return (
@@ -55,6 +56,7 @@ function readStripClosed(): string | null {
 export function PromoStrip(props: { state?: PromotionStripState }) {
   const stored = useStorefrontPromotionStrip();
   const purple = () => (props.state ?? stored()).purple;
+  const dark = () => stripTone(purple().bgColor) === "dark";
   // Admin's preview (`state` passed in) always shows the strip.
   const live = () => !props.state;
   const [mounted, setMounted] = createSignal(false);
@@ -83,7 +85,9 @@ export function PromoStrip(props: { state?: PromotionStripState }) {
     <Show when={purple().enabled && !closedToday()}>
       <div
         data-promo-strip={live() ? "" : undefined}
-        class="relative flex min-h-[40px] items-center justify-center bg-brand-purple px-4 py-2 text-white lg:h-10 lg:min-h-0 lg:py-0">
+        style={{ "background-color": purple().bgColor }}
+        class="relative flex min-h-[40px] items-center justify-center px-4 py-2 lg:h-10 lg:min-h-0 lg:py-0"
+        classList={{ "text-white": dark(), "text-ink": !dark() }}>
         <div class="flex min-w-0 max-w-full items-center gap-2 px-[60px] lg:px-10">
           <Show when={purple().icon}>
             <img src={purple().icon} alt="" class="h-6 w-auto shrink-0" />
@@ -109,14 +113,15 @@ export function UtilityBar(props: { state?: PromotionStripState }) {
   const auth = useAuth();
   const stored = useStorefrontPromotionStrip();
   const pink = () => (props.state ?? stored()).pink;
+  const dark = () => stripTone(pink().bgColor) === "dark";
   return (
-    <div class="hidden bg-surface-pink px-[150px] py-2 lg:flex lg:items-center lg:justify-between">
+    <div style={{ "background-color": pink().bgColor }} class="hidden px-[150px] py-2 lg:flex lg:items-center lg:justify-between">
       <div class="flex items-center gap-2">
         <Show when={pink().icon}>
           <img src={pink().icon} alt="" class="size-6" />
         </Show>
-        <p class="text-sm text-ink">
-          <StripText content={pink()} linkClass="font-medium text-brand-pink underline" />
+        <p class="text-sm" classList={{ "text-white": dark(), "text-ink": !dark() }}>
+          <StripText content={pink()} linkClass={dark() ? "font-medium underline" : "font-medium text-brand-pink underline"} />
         </p>
       </div>
       <div class="flex items-center gap-6">
@@ -126,7 +131,8 @@ export function UtilityBar(props: { state?: PromotionStripState }) {
             <button
               type="button"
               onClick={() => auth.openAuthModal()}
-              class="flex items-center gap-1.5 whitespace-nowrap text-sm text-ink transition-colors duration-150 hover:text-brand-pink"
+              class="flex items-center gap-1.5 whitespace-nowrap text-sm transition-colors duration-150"
+              classList={{ "text-white lg:hover:text-white/80": dark(), "text-ink hover:text-brand-pink": !dark() }}
             >
               <UserIcon class="size-[18px] shrink-0" />
               เข้าสู่ระบบ / สมัครสมาชิก
@@ -135,7 +141,7 @@ export function UtilityBar(props: { state?: PromotionStripState }) {
         >
           <MemberBadge />
         </Show>
-        <LanguageSwitcher />
+        <LanguageSwitcher onDark={dark()} />
       </div>
     </div>
   );

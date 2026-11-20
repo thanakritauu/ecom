@@ -23,7 +23,8 @@ const LANGUAGES: { id: Language; label: string; flag: () => any }[] = [
  * English doesn't translate the pages yet. `tone="menu"` is the full-width
  * row used inside the mobile menu.
  */
-export function LanguageSwitcher(props: { tone?: "bar" | "menu" }) {
+/** `onDark`: on a dark top bar (Admin's colour) the trigger is white. */
+export function LanguageSwitcher(props: { tone?: "bar" | "menu"; onDark?: boolean }) {
   const current = () => LANGUAGES.find((l) => l.id === language()) ?? LANGUAGES[0];
 
   onMount(() => {
@@ -49,7 +50,7 @@ export function LanguageSwitcher(props: { tone?: "bar" | "menu" }) {
         class={
           props.tone === "menu"
             ? "flex min-h-[44px] w-full items-center gap-2 rounded-pill bg-surface-pink px-4 text-ink"
-            : "flex min-h-[32px] items-center gap-1 rounded-pill px-1 text-sm text-ink transition-colors duration-150 hover:text-brand-pink"
+            : `flex min-h-[32px] items-center gap-1 rounded-pill px-1 text-sm transition-colors duration-150 ${props.onDark ? "text-white hover:text-white/80" : "text-ink hover:text-brand-pink"}`
         }
       >
         {current().flag()}
