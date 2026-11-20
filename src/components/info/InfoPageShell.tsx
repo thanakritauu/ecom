@@ -16,7 +16,13 @@ import { INFO_PAGE_GROUPS } from "~/lib/siteInfo";
  * goes in `InfoCard`s; the blocks below are the shared pieces those pages
  * compose instead of each styling its own lists/steps.
  */
-export function InfoPageShell(props: { title: string; subtitle?: string; children: JSX.Element }) {
+export function InfoPageShell(props: {
+  title: string;
+  subtitle?: string;
+  /** A small line under the subtitle, e.g. which version of a policy this is ("ฉบับ 1 ก.ย. 2569"). */
+  note?: string;
+  children: JSX.Element;
+}) {
   return (
     <>
       <Header />
@@ -27,6 +33,9 @@ export function InfoPageShell(props: { title: string; subtitle?: string; childre
             <h1 class="text-2xl font-bold text-ink lg:text-3xl">{props.title}</h1>
             <Show when={props.subtitle}>
               <p class="text-sm leading-[1.75] text-ink-gray">{props.subtitle}</p>
+            </Show>
+            <Show when={props.note}>
+              <p class="text-xs text-ink-placeholder">{props.note}</p>
             </Show>
           </header>
           <div class="flex flex-col gap-4 lg:flex-row lg:items-start">

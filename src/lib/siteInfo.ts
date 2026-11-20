@@ -26,7 +26,7 @@ export type InfoPageLink = { label: string; href: string };
 export const INFO_PAGES = {
   tracking: { label: "ติดตามคำสั่งซื้อ", href: "/tracking" },
   howToOrder: { label: "วิธีสั่งซื้อ", href: "/help/how-to-order" },
-  shipping: { label: "การจัดส่ง", href: "/help/shipping" },
+  shipping: { label: "เงื่อนไขการจัดส่ง", href: "/help/shipping" },
   faq: { label: "คำถามที่พบบ่อย", href: "/help/faq" },
   contact: { label: "ติดต่อเรา", href: "/about/contact" },
   about: { label: "เกี่ยวกับเรา", href: "/about" },
@@ -44,7 +44,7 @@ export const CHECKOUT_TERMS = { version: "2026-09-01", label: "ฉบับ 1 �
 
 /** Sidebar groups on the info pages — same grouping as the Footer's columns, plus the legal pair from the Footer's bottom row. */
 export const INFO_PAGE_GROUPS: { title: string; links: InfoPageLink[] }[] = [
-  { title: "ช่วยเหลือ", links: [INFO_PAGES.tracking, INFO_PAGES.howToOrder, INFO_PAGES.shipping, INFO_PAGES.faq] },
-  { title: "เกี่ยวกับ Charmiss", links: [INFO_PAGES.about, INFO_PAGES.contact, INFO_PAGES.returnPolicy, INFO_PAGES.careers] },
+  { title: "ช่วยเหลือ", links: [INFO_PAGES.tracking, INFO_PAGES.howToOrder, INFO_PAGES.shipping, INFO_PAGES.returnPolicy, INFO_PAGES.faq] },
+  { title: "เกี่ยวกับ Charmiss", links: [INFO_PAGES.about, INFO_PAGES.contact, INFO_PAGES.careers] },
   { title: "ข้อกำหนด", links: [INFO_PAGES.terms, INFO_PAGES.privacy] },
 ];

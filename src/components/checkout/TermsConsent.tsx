@@ -7,7 +7,7 @@ import { CHECKOUT_TERMS, INFO_PAGES } from "~/lib/siteInfo";
 
 type Policy = "shipping" | "returns";
 const POLICIES: Policy[] = ["shipping", "returns"];
-const POLICY_TITLE: Record<Policy, string> = { shipping: "เงื่อนไขการจัดส่ง", returns: INFO_PAGES.returnPolicy.label };
+const POLICY_TITLE: Record<Policy, string> = { shipping: INFO_PAGES.shipping.label, returns: INFO_PAGES.returnPolicy.label };
 
 /**
  * Checkout's "ยอมรับเงื่อนไข", right above the pay button, for every order. Each policy opens in a popup (the same

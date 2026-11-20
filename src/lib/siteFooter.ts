@@ -22,6 +22,8 @@ export type FooterContent = {
   copyright: string;
   legalLinks: FooterLink[];
   updatedAt?: string;
+  /** 2 = the policy pages sit together under ช่วยเหลือ (`migrateFooterLayout`). Unset = saved before that. */
+  layoutVersion?: number;
 };
 
 /** Fixed icon order on the storefront (LINE first). */
@@ -54,6 +56,7 @@ export function buildDefaultFooterContent(): FooterContent {
           link("help-track", INFO_PAGES.tracking),
           link("help-how-to-order", INFO_PAGES.howToOrder),
           link("help-shipping", INFO_PAGES.shipping),
+          link("about-return", INFO_PAGES.returnPolicy),
           link("help-faq", INFO_PAGES.faq),
         ],
       },
@@ -73,7 +76,6 @@ export function buildDefaultFooterContent(): FooterContent {
         links: [
           link("about-contact", INFO_PAGES.contact),
           link("about-about", INFO_PAGES.about),
-          link("about-return", INFO_PAGES.returnPolicy),
           link("about-careers", INFO_PAGES.careers),
         ],
       },
@@ -82,7 +84,34 @@ export function buildDefaultFooterContent(): FooterContent {
     social: FOOTER_SOCIAL_PLATFORMS.map((platform) => ({ platform, href: SOCIAL_LINKS[platform].href, enabled: true })),
     copyright: "© 2026 Charmiss. All Rights Reserved.",
     legalLinks: [link("legal-terms", INFO_PAGES.terms), link("legal-privacy", INFO_PAGES.privacy)],
+    layoutVersion: FOOTER_LAYOUT_VERSION,
   };
+}
+
+const FOOTER_LAYOUT_VERSION = 2;
+
+/**
+ * A footer saved before layout 2: "การจัดส่ง" becomes "เงื่อนไขการจัดส่ง" (the name Checkout's consent uses) and
+ * "นโยบายคืนสินค้า" moves from เกี่ยวกับ Charmiss to ช่วยเหลือ, right after it. Once only: the result carries
+ * layout 2, so whatever Admin saves after that is kept as is.
+ */
+function migrateFooterLayout(columns: FooterColumn[]): FooterColumn[] {
+  const help = columns.find((c) => c.id === "help");
+  const rename = (l: FooterLink) => (l.id === "help-shipping" && l.label === "การจัดส่ง" ? { ...l, label: INFO_PAGES.shipping.label } : l);
+  let moved: FooterLink | undefined;
+  const without = columns.map((c) => {
+    if (c === help) return c;
+    const found = c.links.find((l) => l.id === "about-return");
+    if (found) moved = found;
+    return found ? { ...c, links: c.links.filter((l) => l !== found) } : c;
+  });
+  return without.map((c) => {
+    if (c !== help) return { ...c, links: c.links.map(rename) };
+    const links = c.links.map(rename);
+    if (!moved || links.some((l) => l.id === moved!.id)) return { ...c, links };
+    const at = links.findIndex((l) => l.id === "help-shipping");
+    return { ...c, links: at < 0 ? [...links, moved] : [...links.slice(0, at + 1), moved, ...links.slice(at + 1)] };
+  });
 }
 
 /** "(+66) 61 172 7257" -> "tel:+66611727257". */
@@ -111,13 +140,16 @@ export function normalizeFooterContent(raw: Partial<FooterContent> | undefined):
   });
   return {
     columns: Array.isArray(raw.columns)
-      ? raw.columns.map((c, i) => ({ id: c?.id || `col-${i}`, title: String(c?.title ?? ""), links: cleanLinks(c?.links) }))
+      ? ((cols) => (raw.layoutVersion === FOOTER_LAYOUT_VERSION ? cols : migrateFooterLayout(cols)))(
+          raw.columns.map((c, i) => ({ id: c?.id || `col-${i}`, title: String(c?.title ?? ""), links: cleanLinks(c?.links) })),
+        )
       : seed.columns,
     contact: { ...seed.contact, ...raw.contact },
     social,
     copyright: typeof raw.copyright === "string" ? raw.copyright : seed.copyright,
     legalLinks: Array.isArray(raw.legalLinks) ? cleanLinks(raw.legalLinks) : seed.legalLinks,
     updatedAt: raw.updatedAt,
+    layoutVersion: FOOTER_LAYOUT_VERSION,
   };
 }
 
