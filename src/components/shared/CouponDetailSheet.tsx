@@ -2,7 +2,7 @@ import { createSignal, createUniqueId, For, onCleanup, Show, type JSX } from "so
 import { SheetModal } from "./SheetModal";
 import { CheckIcon } from "./icons";
 import { pushToast } from "~/lib/toast";
-import { isCouponScoped, MAX_COUPONS_PER_ORDER, stacksWithCoupons, type Coupon } from "~/lib/cartSelectors";
+import { isCouponScoped, isShippingCoupon, MAX_COUPONS_PER_ORDER, stacksWithCoupons, type Coupon } from "~/lib/cartSelectors";
 import { useProductCatalog } from "~/lib/productCatalog";
 import type { Product } from "~/lib/types";
 import type { ProductSkuRef } from "~/lib/productSkuRef";
@@ -80,6 +80,21 @@ export function CouponDetailBody(props: { coupon: Coupon; ticket?: JSX.Element }
   const catalog = useProductCatalog();
   const conditions = () => {
     const c = props.coupon;
+    // คูปองส่งฟรี: off the shipping fee, its own slot beside the discount coupons.
+    if (isShippingCoupon(c)) {
+      const what = c.shippingCap ? `ลดค่าจัดส่งสูงสุด ${baht(c.shippingCap)}` : "ส่งฟรีทั้งหมด ไม่เสียค่าจัดส่ง";
+      const list = [
+        c.minSpend > 0 ? `${what} เมื่อยอดสินค้าครบ ${baht(c.minSpend)} ขึ้นไป` : `${what} ไม่มียอดซื้อขั้นต่ำ`,
+        "ใช้ได้กับทุกขนส่งที่เลือกตอนชำระเงิน",
+        "ใช้ได้ 1 คูปองส่งฟรีต่อคำสั่งซื้อ และใช้คู่กับคูปองส่วนลดได้",
+        "ถ้าคำสั่งซื้อได้ส่งฟรีอยู่แล้ว จะไม่ใช้คูปองนี้",
+      ];
+      if (c.audienceLabel && c.audienceLabel !== EVERYONE_COUPON_BADGE) list.splice(1, 0, `${c.audienceLabel}เท่านั้น`);
+      if (c.perCustomerLimit) list.push(`ใช้ได้ ${c.perCustomerLimit.toLocaleString("th-TH")} ครั้งต่อบัญชี`);
+      if (c.usageLimit) list.push(`จำนวนจำกัด ${c.usageLimit.toLocaleString("th-TH")} สิทธิ์ เมื่อครบแล้วจะใช้ไม่ได้`);
+      list.push("เลือกคูปองหรือกรอกโค้ดได้ที่หน้าชำระเงิน");
+      return list;
+    }
     const scoped = isCouponScoped(c);
     const base = scoped ? "ยอดสินค้าที่ร่วมรายการ" : "ยอดสินค้า";
     const what = c.discountType === "percent" ? `ส่วนลด ${c.discount}% ของ${base}${c.maxDiscount ? ` สูงสุด ${baht(c.maxDiscount)}` : ""}` : `ส่วนลด ${baht(c.discount)}`;
@@ -109,7 +124,7 @@ export function CouponDetailBody(props: { coupon: Coupon; ticket?: JSX.Element }
       </Show>
 
       <dl class="flex flex-col gap-3 text-sm">
-        <Row label="โค้ดส่วนลด">
+        <Row label="โค้ดคูปอง">
           <span class="flex items-center justify-end gap-1">
             <span class="select-all rounded-pill border border-dashed border-brand-pink px-3 py-0.5 font-semibold tracking-wide text-brand-pink">{props.coupon.code || "-"}</span>
             {/* Icon-only copy — 44px tap area; the tick (DSL CheckIcon) shows for 2s after copying. */}
@@ -136,6 +151,9 @@ export function CouponDetailBody(props: { coupon: Coupon; ticket?: JSX.Element }
         </Row>
         <Show when={props.coupon.discountType === "percent" && props.coupon.maxDiscount}>
           {(cap) => <Row label="ลดสูงสุด">{baht(cap())}</Row>}
+        </Show>
+        <Show when={isShippingCoupon(props.coupon)}>
+          <Row label="ส่วนลดค่าจัดส่ง">{props.coupon.shippingCap ? `สูงสุด ${baht(props.coupon.shippingCap)}` : "ส่งฟรีทั้งหมด"}</Row>
         </Show>
         <Row label="ยอดซื้อขั้นต่ำ">{props.coupon.minSpend > 0 ? baht(props.coupon.minSpend) : "ไม่มีขั้นต่ำ"}</Row>
         <Show when={props.coupon.usageLimit}>

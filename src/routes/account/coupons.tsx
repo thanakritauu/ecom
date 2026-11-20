@@ -4,7 +4,7 @@ import { AccountShell, AccountPanel } from "~/components/account/AccountShell";
 import { CouponCard, couponTicket, type CouponCardAction } from "~/components/shared/CouponCard";
 import { EmptyState } from "~/components/shared/EmptyState";
 import { TagIcon } from "~/components/shared/icons";
-import { isCouponExpired, type Coupon } from "~/lib/cartSelectors";
+import { couponStamp, isCouponExpired, type Coupon } from "~/lib/cartSelectors";
 import { useCollectedCoupons } from "~/lib/collectedCoupons";
 import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
 import { pushToast } from "~/lib/toast";
@@ -14,7 +14,7 @@ type Tab = "mine" | "more" | "expired";
 /**
  * คูปองและสิทธิพิเศษ (profile menu, after Charmiss Club): the member's own
  * coupons, from the same collected list Home and Checkout's "เก็บแล้ว" use.
- * - คูปองของฉัน: collected and still valid ("ใช้คูปอง"; another group's shows why it can't be used).
+ * - คูปองของฉัน: collected and still valid ("ใช้คูปอง"; another group's shows a grey "เฉพาะ ..." pill).
  * - เก็บคูปองเพิ่ม: live coupons not collected yet (every group, same rules as /coupons).
  * - หมดอายุ: collected ones past their dates, in black and white.
  */
@@ -47,13 +47,9 @@ export default function AccountCouponsPage() {
     pushToast("เก็บคูปองสำเร็จ");
   };
 
-  /** The ticket's button per tab: shop with a usable one, collect a new one, or say why not. */
-  const action = (c: Coupon): CouponCardAction | undefined => {
-    if (isCouponExpired(c)) return { label: "หมดอายุแล้ว", variant: "outline", disabled: true, onClick: () => {} };
-    if (c.audienceBlock) return { label: "ไม่ตรงเงื่อนไข", variant: "outline", disabled: true, onClick: () => {} };
-    if (tab() === "mine") return { label: "ใช้คูปอง", variant: "primary", onClick: () => navigate("/products") };
-    return undefined; // เก็บคูปองเพิ่ม: the ticket's own "เก็บเลย"
-  };
+  /** Another group's coupon: the grey "เฉพาะ ..." pill (collected or not); otherwise the ticket's own "เก็บ" / "ใช้คูปอง". */
+  const action = (c: Coupon): CouponCardAction | undefined =>
+    c.audienceBlock ? { label: `เฉพาะ${c.audienceOnly ?? ""}`, variant: "outline", disabled: true, onClick: () => {}, onlyFor: c.audienceOnly ?? "กลุ่มอื่น" } : undefined;
 
   return (
     <AccountShell>
@@ -83,9 +79,9 @@ export default function AccountCouponsPage() {
           when={lists[tab()]().length > 0}
           fallback={<EmptyState icon={TagIcon} title={TABS.find((t) => t.key === tab())!.empty.title} description={TABS.find((t) => t.key === tab())!.empty.description} />}
         >
-          {/* As many columns as fit with each ticket at least 330px (1 on phones); the gap leaves room for each ticket's shadow and reason line.
+          {/* 1 column on phones, 2 across from md; the gap leaves room for each ticket's shadow.
               Phones: the list reaches 12px into the panel's padding so a ticket keeps room for its amount beside "ไม่ตรงเงื่อนไข". */}
-          <ul class="-mx-3 grid grid-cols-[repeat(auto-fill,minmax(min(100%,330px),1fr))] gap-x-4 gap-y-6 pt-2 sm:mx-0">
+          <ul class="-mx-3 grid grid-cols-1 gap-x-4 gap-y-6 pt-2 sm:mx-0 md:grid-cols-2">
             <For each={lists[tab()]()}>
               {(c) => (
                 <li class="flex list-none flex-col gap-3">
@@ -93,12 +89,10 @@ export default function AccountCouponsPage() {
                     coupon={couponTicket(c)}
                     collected={store.isCollected(c.code)}
                     onCollect={() => collect(c.code)}
+                    onUse={() => navigate("/products")}
                     action={action(c)}
-                    expired={isCouponExpired(c)}
+                    stamp={couponStamp(c)}
                   />
-                  <Show when={isCouponExpired(c) || c.audienceBlock}>
-                    <p class="px-1 text-xs text-ink-gray">{isCouponExpired(c) ? `คูปองนี้${c.expiresLabel.replace("หมดอายุ", "หมดอายุเมื่อ")}` : c.audienceBlock}</p>
-                  </Show>
                 </li>
               )}
             </For>

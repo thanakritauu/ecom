@@ -165,13 +165,19 @@ export type PaymentMethodId = (typeof PAYMENT_METHODS)[number]["id"];
 
 export type CouponDiscountKind = "baht" | "percent";
 
+/** "discount" = โค้ดส่วนลด (off the products); "shipping" = คูปองส่งฟรี (off the shipping fee, its own slot beside the discount coupons). */
+export type CouponKind = "discount" | "shipping";
+
 export type Coupon = {
   code: string;
+  kind: CouponKind;
+  /** "shipping" only: most baht off the shipping fee. Unset = ส่งฟรีทั้งหมด (the whole fee). */
+  shippingCap?: number;
   /** "ลด ฿100" / "ลด 10% (สูงสุด ฿200)": the one-line label every coupon surface prints (`couponLabels`). */
   label: string;
   /** "ลด ฿100" / "ลด 10%": the ticket's big line. */
   amountLabel: string;
-  /** "ลดสูงสุด ฿200": a capped % coupon's extra ticket line. */
+  /** "สูงสุด ฿200": the small badge beside a capped coupon's amount on the ticket. */
   capLabel?: string;
   discountType: CouponDiscountKind;
   /** Baht off, or the percent for a "percent" coupon (see `couponDiscountAmount`). */
@@ -200,21 +206,36 @@ export type Coupon = {
   productScope?: ProductSkuRef[];
   /** Set when this shopper is outside the coupon's กลุ่มลูกค้า: the reason a typed code is refused ("คูปองนี้สำหรับลูกค้าใหม่เท่านั้น"). */
   audienceBlock?: string;
-  /** The ticket's กลุ่มลูกค้า badge ("สำหรับทุกคน" / "สำหรับลูกค้าใหม่", `couponAudienceBadge`). */
+  /** The กลุ่มลูกค้า line in the conditions ("สำหรับลูกค้าใหม่", `couponAudienceBadge`). */
   audienceLabel?: string;
+  /** The ticket's short group tag ("ทุกคน" / "ลูกค้าใหม่", `couponAudienceTag`). */
+  audienceTag?: string;
+  /** For the grey "เฉพาะ ..." pill a shopper outside the group sees (`couponAudienceOnly`). */
+  audienceOnly?: string;
   /** "การใช้ร่วมกับโปรอื่น" (unset = stacks with all): lines that got a promo it can't stack with don't count (`couponEligibleSubtotal`). */
   combinableWith?: CombinableKind[];
+  /** โค้ดจากภายนอก (`externalCodes.ts`): typed in only, members only, never with another coupon, never collected. */
+  external?: boolean;
 };
 
 const THAI_SHORT_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
 /** The coupon's printed labels: big line ("ลด 10%"), cap line ("ลดสูงสุด ฿200") and one-line label ("ลด 10% (สูงสุด ฿200)"). */
-export function couponLabels(c: { discountType?: CouponDiscountKind; discount: number; maxDiscount?: number }): { amount: string; cap?: string; label: string } {
+export function couponLabels(c: { discountType?: CouponDiscountKind; discount: number; maxDiscount?: number; kind?: CouponKind; shippingCap?: number }): {
+  amount: string;
+  cap?: string;
+  label: string;
+} {
   const baht = (n: number) => `฿${n.toLocaleString("th-TH")}`;
+  // คูปองส่งฟรี: "ส่งฟรี", plus "ลดค่าส่งสูงสุด ฿60" when it covers only part of the fee.
+  if (c.kind === "shipping")
+    return c.shippingCap
+      ? { amount: "ส่งฟรี", cap: `สูงสุด ${baht(c.shippingCap)}`, label: `ส่งฟรี (ลดค่าส่งสูงสุด ${baht(c.shippingCap)})` }
+      : { amount: "ส่งฟรี", cap: "ทุกขนส่ง", label: "ส่งฟรีทั้งหมด" };
   if (c.discountType !== "percent") return { amount: `ลด ${baht(c.discount ?? 0)}`, label: `ลด ${baht(c.discount ?? 0)}` };
   const amount = `ลด ${c.discount ?? 0}%`;
   if (!c.maxDiscount) return { amount, label: amount };
-  return { amount, cap: `ลดสูงสุด ${baht(c.maxDiscount)}`, label: `${amount} (สูงสุด ${baht(c.maxDiscount)})` };
+  return { amount, cap: `สูงสุด ${baht(c.maxDiscount)}`, label: `${amount} (สูงสุด ${baht(c.maxDiscount)})` };
 }
 
 /**
@@ -223,6 +244,8 @@ export function couponLabels(c: { discountType?: CouponDiscountKind; discount: n
  */
 export function buildCoupon(c: {
   code: string;
+  kind?: CouponKind;
+  shippingCap?: number;
   discount: number;
   discountType?: CouponDiscountKind;
   maxDiscount?: number;
@@ -239,11 +262,15 @@ export function buildCoupon(c: {
   productScope?: ProductSkuRef[];
 }): Coupon {
   const [, month, day] = c.endDate.split("-").map(Number);
-  const discountType = c.discountType ?? "baht";
+  const kind: CouponKind = c.kind === "shipping" ? "shipping" : "discount";
+  const discountType = kind === "shipping" ? "baht" : (c.discountType ?? "baht");
   const maxDiscount = discountType === "percent" ? c.maxDiscount || undefined : undefined;
-  const labels = couponLabels({ discountType, discount: c.discount, maxDiscount });
+  const shippingCap = kind === "shipping" ? c.shippingCap || undefined : undefined;
+  const labels = couponLabels({ discountType, discount: c.discount, maxDiscount, kind, shippingCap });
   return {
     code: c.code,
+    kind,
+    shippingCap,
     label: labels.label,
     amountLabel: labels.amount,
     capLabel: labels.cap,
@@ -259,8 +286,24 @@ export function buildCoupon(c: {
     expiresAt: `${c.endDate}T${c.endTime || "23:59"}:59+07:00`,
     expiresLabel: `หมดอายุ ${day} ${THAI_SHORT_MONTHS[month - 1]}`,
     extraConditions: c.extraConditions || undefined,
-    productScope: c.productScope && c.productScope.length > 0 ? c.productScope : undefined,
+    productScope: kind === "discount" && c.productScope && c.productScope.length > 0 ? c.productScope : undefined,
   };
+}
+
+export const isShippingCoupon = (c: Pick<Coupon, "kind">): boolean => c.kind === "shipping";
+
+/**
+ * Baht a คูปองส่งฟรี takes off this order's shipping fee: the whole fee (ส่งฟรีทั้งหมด) or up to its cap,
+ * once the product total (after promos) reaches its minimum; 0 when shipping is already free.
+ */
+export function shippingCouponAmount(c: Pick<Coupon, "minSpend" | "shippingCap">, productTotal: number, shippingFee: number): number {
+  if (shippingFee <= 0 || productTotal <= 0 || productTotal < c.minSpend) return 0;
+  return Math.min(shippingFee, c.shippingCap ?? shippingFee);
+}
+
+/** Why a คูปองส่งฟรี does nothing on this order: shipping is already free (a free-shipping promo, or the carrier). */
+export function couponShippingBlock(c: Pick<Coupon, "kind">, shippingFee: number | undefined): string | undefined {
+  return isShippingCoupon(c) && shippingFee !== undefined && shippingFee <= 0 ? "ค่าจัดส่งฟรีอยู่แล้ว" : undefined;
 }
 
 /**
@@ -297,6 +340,18 @@ const couponScopeLines = (c: Pick<Coupon, "productScope">, lines: ResolvedCartLi
 /** Whether the coupon may add its discount on this line, given the promos already on it (`promoStacking.ts`). */
 export const couponStacksOn = (c: Pick<Coupon, "combinableWith">, line: ResolvedCartLine) => canStack({ kind: "coupon", combinableWith: c.combinableWith }, line.promoTags);
 
+/**
+ * A coupon that can't be taken any more, shown as a stamp instead of its button: past its dates, every use
+ * across customers gone, or this shopper's own uses gone (`usedByShopper` only where Checkout knows it).
+ */
+export type CouponStamp = "expired" | "soldout" | "used";
+export function couponStamp(c: Pick<Coupon, "expiresAt" | "usageLimit" | "usedCount" | "perCustomerLimit">, usedByShopper?: number, now = Date.now()): CouponStamp | undefined {
+  if (Date.parse(c.expiresAt) < now) return "expired";
+  if (c.usageLimit !== undefined && c.usedCount >= c.usageLimit) return "soldout";
+  if (usedByShopper !== undefined && c.perCustomerLimit !== undefined && usedByShopper >= c.perCustomerLimit) return "used";
+  return undefined;
+}
+
 /** Most coupons one order can use (only coupons that stack with each other: `stacksWithCoupons`). */
 export const MAX_COUPONS_PER_ORDER = 2;
 
@@ -306,14 +361,28 @@ export const MAX_COUPONS_PER_ORDER = 2;
  */
 export const stacksWithCoupons = (c: Pick<Coupon, "combinableWith">): boolean => !!c.combinableWith?.includes("coupon");
 
-/** Can `c` join the coupons already picked (room left, and it and every picked one stack with coupons)? */
-export const canAddCoupon = (picked: Pick<Coupon, "combinableWith">[], c: Pick<Coupon, "combinableWith">): boolean =>
-  picked.length === 0 || (picked.length < MAX_COUPONS_PER_ORDER && stacksWithCoupons(c) && picked.every(stacksWithCoupons));
+type StackFields = Pick<Coupon, "combinableWith"> & { kind?: CouponKind; external?: boolean };
 
-/** Picking `c`: added beside the picked ones when it can join them, otherwise it replaces them. */
-export function withCouponPicked<T extends Pick<Coupon, "code" | "combinableWith">>(picked: T[], c: T): T[] {
+/**
+ * Can `c` join the coupons already picked? A โค้ดจากภายนอก goes alone (no coupon of ours, คูปองส่งฟรี included).
+ * One คูปองส่งฟรี always goes with the discount coupons (its own slot, one per order). Discount coupons: room left
+ * (`MAX_COUPONS_PER_ORDER`), and it and every picked one stack with coupons.
+ */
+export function canAddCoupon(picked: StackFields[], c: StackFields): boolean {
+  if (c.external || picked.some((p) => p.external)) return picked.length === 0;
+  if (c.kind === "shipping") return !picked.some((p) => p.kind === "shipping");
+  const discounts = picked.filter((p) => p.kind !== "shipping");
+  return discounts.length === 0 || (discounts.length < MAX_COUPONS_PER_ORDER && stacksWithCoupons(c) && discounts.every(stacksWithCoupons));
+}
+
+/** Picking `c`: added beside the picked ones when it can join them, otherwise it replaces the ones of its own kind. */
+export function withCouponPicked<T extends Pick<Coupon, "code"> & StackFields>(picked: T[], c: T): T[] {
   if (picked.some((p) => p.code === c.code)) return picked;
-  return canAddCoupon(picked, c) ? [...picked, c] : [c];
+  // A โค้ดจากภายนอก replaces every coupon picked; picking one of ours drops it.
+  if (c.external) return [c];
+  picked = picked.filter((p) => !p.external);
+  if (canAddCoupon(picked, c)) return [...picked, c];
+  return [...picked.filter((p) => (p.kind === "shipping") !== (c.kind === "shipping")), c];
 }
 
 /** In-scope lines exist, but every one of them got a promo this coupon can't be used with. */
@@ -327,7 +396,13 @@ export function couponStackBlocked(c: Pick<Coupon, "productScope" | "combinableW
  * coupon with no item in the cart from its list, or the eligible total (all
  * products for a store-wide coupon) under the minimum spend.
  */
-export function couponCartBlock(c: Pick<Coupon, "productScope" | "minSpend" | "combinableWith">, lines: ResolvedCartLine[]): string | undefined {
+export function couponCartBlock(c: Pick<Coupon, "productScope" | "minSpend" | "combinableWith"> & { kind?: CouponKind }, lines: ResolvedCartLine[]): string | undefined {
+  // คูปองส่งฟรี: only the order's product total against its minimum.
+  if (c.kind === "shipping") {
+    const total = lines.reduce((sum, l) => sum + l.lineTotal, 0);
+    if (total >= c.minSpend) return undefined;
+    return `ซื้อเพิ่มอีก ฿${(c.minSpend - total).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} เพื่อใช้คูปองส่งฟรีนี้`;
+  }
   const scoped = isCouponScoped(c);
   if (couponStackBlocked(c, lines)) return "คูปองนี้ใช้ร่วมกับโปรโมชั่นของสินค้าในตะกร้าไม่ได้";
   const eligible = couponEligibleSubtotal(c, lines);
@@ -424,7 +499,10 @@ export type CheckoutTotals = {
   promoDiscount: number;
   couponDiscount: number;
   coinDiscount: number;
+  /** The carrier's fee (0 when a free-shipping promo applies). */
   shippingFee: number;
+  /** Taken off `shippingFee` by the คูปองส่งฟรี in use: "คูปองส่งฟรี -฿60". */
+  shippingDiscount: number;
   total: number;
 };
 
@@ -445,7 +523,9 @@ export function computeCheckoutTotals(opts: {
   coinsRedeemed?: number;
   shippingFee: number;
 }): CheckoutTotals {
-  const list = opts.coupons ?? (opts.coupon ? [opts.coupon] : []);
+  const all = opts.coupons ?? (opts.coupon ? [opts.coupon] : []);
+  const list = all.filter((c) => !isShippingCoupon(c));
+  const shipping = all.find((c) => isShippingCoupon(c) && isCouponActive(c));
   const promoDiscount = Math.min(Math.max(0, opts.promoDiscount ?? 0), opts.subtotal);
   const afterPromos = opts.subtotal - promoDiscount;
   const oneCoupon = (c: Coupon) => {
@@ -457,6 +537,8 @@ export function computeCheckoutTotals(opts: {
     afterPromos,
   );
   const coinDiscount = Math.round((opts.coinsRedeemed ?? 0) * COIN_TO_BAHT_RATE);
-  const total = Math.max(0, afterPromos - couponDiscount - coinDiscount + opts.shippingFee);
-  return { subtotal: opts.subtotal, promoDiscount, couponDiscount, coinDiscount, shippingFee: opts.shippingFee, total };
+  // The คูปองส่งฟรี's minimum counts the products after promos (before other coupons and coins).
+  const shippingDiscount = shipping ? shippingCouponAmount(shipping, afterPromos, opts.shippingFee) : 0;
+  const total = Math.max(0, afterPromos - couponDiscount - coinDiscount + opts.shippingFee - shippingDiscount);
+  return { subtotal: opts.subtotal, promoDiscount, couponDiscount, coinDiscount, shippingFee: opts.shippingFee, shippingDiscount, total };
 }

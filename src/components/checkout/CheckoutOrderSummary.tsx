@@ -1,10 +1,11 @@
 import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
 import type { ResolvedCartLine, CheckoutTotals, Coupon } from "~/lib/cartSelectors";
 import type { GiftLine, PromoDiscountRow } from "~/lib/promotionEngine";
-import { MOCK_COIN_BALANCE, SHIPPING_FEE, flashLimitNote, isCouponExpired } from "~/lib/cartSelectors";
+import { MOCK_COIN_BALANCE, SHIPPING_FEE, flashLimitNote, isCouponExpired, isShippingCoupon } from "~/lib/cartSelectors";
 import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
 import { useAuth } from "~/lib/auth";
 import { useCollectedCoupons } from "~/lib/collectedCoupons";
+import { checkExternalCode } from "~/lib/externalCodes";
 import { formatTHB } from "../shared/PriceDisplay";
 import { ChevronIcon } from "../shared/ChevronIcon";
 import { CheckIcon } from "../shared/icons";
@@ -77,6 +78,8 @@ export function CheckoutOrderSummary(props: {
 }) {
   // Collapsed by default — the item list opens from the header.
   const [itemsExpanded, setItemsExpanded] = createSignal(false);
+  const discountCodes = () => props.coupons.filter((c) => !isShippingCoupon(c)).map((c) => c.code);
+  const saved = () => props.totals.promoDiscount + props.totals.couponDiscount + props.totals.coinDiscount + props.totals.shippingDiscount;
 
   return (
     // Below `lg` this continues the form column's white card (one block, see checkout.tsx); from `lg` it's the bordered sticky box.
@@ -169,7 +172,9 @@ export function CheckoutOrderSummary(props: {
         </div>
         <PromoDiscountRows rows={props.promoRows} />
         <div class="flex items-center justify-between">
-          <span class="text-ink-gray">{props.coupons.length > 0 ? `คูปอง ${props.coupons.map((c) => c.code).join(", ")}` : "คูปอง"}</span>
+          <span class="text-ink-gray">
+            {props.coupons.some((c) => c.external) ? `โค้ด ${discountCodes().join(", ")}` : discountCodes().length > 0 ? `คูปอง ${discountCodes().join(", ")}` : "คูปอง"}
+          </span>
           <span class="font-bold" classList={{ "text-success": props.totals.couponDiscount > 0, "text-ink": props.totals.couponDiscount <= 0 }}>
             {props.totals.couponDiscount > 0 ? `-${formatTHB(props.totals.couponDiscount)}` : formatTHB(0)}
           </span>
@@ -190,9 +195,16 @@ export function CheckoutOrderSummary(props: {
             </span>
           </Show>
         </div>
-        <Show when={props.totals.promoDiscount + props.totals.couponDiscount + props.totals.coinDiscount > 0}>
+        {/* คูปองส่งฟรี: its own row under ค่าจัดส่ง, taken off the fee above. */}
+        <Show when={props.totals.shippingDiscount > 0}>
+          <div class="flex items-center justify-between">
+            <span class="text-ink-gray">คูปองส่งฟรี {props.coupons.find(isShippingCoupon)?.code ?? ""}</span>
+            <span class="font-bold text-success">-{formatTHB(props.totals.shippingDiscount)}</span>
+          </div>
+        </Show>
+        <Show when={saved() > 0}>
           <div class="flex items-center gap-2 rounded-card bg-success-soft px-3 py-2 text-xs font-medium text-success">
-            <CheckIcon class="size-4 shrink-0" /> คุณประหยัดไป {formatTHB(props.totals.promoDiscount + props.totals.couponDiscount + props.totals.coinDiscount)} จากออเดอร์นี้
+            <CheckIcon class="size-4 shrink-0" /> คุณประหยัดไป {formatTHB(saved())} จากออเดอร์นี้
           </div>
         </Show>
       </div>
@@ -246,10 +258,14 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
           <div class="min-w-0">
             <p class="text-sm font-semibold text-ink">
               {props.coupons.length > 1
-                ? `ใช้ ${props.coupons.length} คูปอง ลดรวม ${formatTHB(props.totals.couponDiscount)} อยู่`
+                ? `ใช้คูปองส่วนลด ${props.coupons.filter((c) => !isShippingCoupon(c)).length} ใบ${props.coupons.some(isShippingCoupon) ? " และคูปองส่งฟรี" : ""} ลดรวม ${formatTHB(props.totals.couponDiscount + props.totals.shippingDiscount)} อยู่`
                 : props.coupons[0]
-                  ? `ใช้คูปอง ${props.coupons[0].label} อยู่`
-                  : "เลือกคูปองเพื่อรับส่วนลด"}
+                  ? isShippingCoupon(props.coupons[0])
+                    ? `ใช้คูปองส่งฟรี ลดค่าส่ง ${formatTHB(props.totals.shippingDiscount)} อยู่`
+                    : props.coupons[0].external
+                      ? `ใช้โค้ด ${props.coupons[0].code} ${props.coupons[0].label} อยู่`
+                      : `ใช้คูปอง ${props.coupons[0].label} อยู่`
+                  : "เลือกคูปองหรือกรอกโค้ดส่วนลด"}
             </p>
             <Show when={props.coupons.length > 0 && props.couponAutoPicked}>
               <p class="text-xs text-ink-gray">เลือกคูปองที่ลดได้มากที่สุดให้แล้ว</p>
@@ -267,6 +283,7 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
         codeCoupons={storeCoupons.codeCoupons()}
         lines={props.lines}
         usedByShopper={props.couponUsesByShopper}
+        shippingFee={props.totals.shippingFee}
         applied={props.coupons}
         onApply={props.onApplyCoupon}
         onRemove={props.onRemoveCoupon}
@@ -275,6 +292,7 @@ export function CheckoutPerks(props: PerksProps & { class?: string }) {
           auth.isAuthenticated() ? storeCoupons.codeCoupons().filter((c) => collectedCoupons.isCollected(c.code) && isCouponExpired(c)) : undefined
         }
         onCollect={(code) => auth.isAuthenticated() && collectedCoupons.collect(code)}
+        checkExternalCode={(code) => checkExternalCode(code, auth.user()?.id)}
       />
 
       <div class="flex items-center gap-2">

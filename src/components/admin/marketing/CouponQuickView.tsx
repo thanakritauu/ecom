@@ -1,12 +1,12 @@
 import { Show } from "solid-js";
-import { couponAudienceBadge, formatAudience } from "~/lib/marketingAudience";
+import { couponAudienceTag, formatAudience } from "~/lib/marketingAudience";
 import { formatCouponCombinable, MARKETING_TOOL_META, couponTool } from "~/lib/adminMarketing";
 import { StatusBadge } from "~/components/admin/StatusBadge";
 import { ProductSkuRefList } from "~/components/admin/ProductSkuPicker";
 import { CouponCard, type Coupon as TicketCoupon } from "~/components/shared/CouponCard";
 import {
   MARKETING_PHASE_META,
-  COUPON_DISCOUNT_TYPE_META,
+  formatCouponType,
   formatCouponAmount,
   formatCouponCap,
   formatCouponDiscount,
@@ -28,8 +28,9 @@ export function adminCouponTicket(c: Coupon): TicketCoupon {
     capLabel: formatCouponCap(c),
     image: c.image,
     minSpendLabel: formatCouponMinSpend(c),
-    audienceLabel: couponAudienceBadge(c.audience),
-    expiryLabel: `หมดอายุ ${formatMarketingDateShort(c.endDate)}`,
+    audienceTag: couponAudienceTag(c.audience),
+    kind: c.kind,
+    expiryNote: { text: `ใช้ได้ถึง ${formatMarketingDateShort(c.endDate)}` },
   };
 }
 
@@ -59,13 +60,13 @@ export function CouponQuickView(props: { coupon: Coupon; usageCount: number }) {
 
       <div class="grid grid-cols-2 gap-3 rounded-card bg-surface-gray/60 p-3 text-sm">
         <Field label="แสดงที่" value={formatCouponPlacement(c())} />
-        <Field label="ประเภทส่วนลด" value={COUPON_DISCOUNT_TYPE_META[c().discountType].label} />
+        <Field label="ประเภทส่วนลด" value={formatCouponType(c())} />
         <Field label="ใช้แล้ว" value={`${formatCouponUsage(props.usageCount, c().usageLimit)} ครั้ง`} />
         <Field label="จำกัดจำนวนครั้ง" value={formatCouponLimit(c().usageLimit)} />
         <Field label="จำกัดต่อลูกค้า" value={formatCouponLimit(c().perCustomerLimit)} />
         <Field label="เครื่องมือ" value={MARKETING_TOOL_META[couponTool(c())].label} />
         <Field label="กลุ่มลูกค้า" value={formatAudience(c().audience)} />
-        <Field label="ใช้ร่วมกับโปรอื่น" value={formatCouponCombinable(c().combinableWith)} />
+        <Field label="ใช้ร่วมกับโปรอื่น" value={formatCouponCombinable(c().combinableWith, c().kind)} />
         <Field label="เริ่ม" value={formatMarketingDateTime(c().startDate, c().startTime)} />
         <Field label="สิ้นสุด" value={formatMarketingDateTime(c().endDate, c().endTime)} />
       </div>

@@ -193,8 +193,9 @@ export function formatCombinable(list: CombinableKind[] | undefined): string {
 /** A coupon's own "การใช้ร่วมกับโปรอื่น": unset = every promo kind but not other coupons (`stacksWithCoupons`). */
 export const couponCombinable = (list: CombinableKind[] | undefined): CombinableKind[] => list ?? COMBINABLE_KINDS.filter((k) => k !== "coupon");
 
-/** `formatCombinable` for a coupon (its unset means "not with other coupons"). */
-export const formatCouponCombinable = (list: CombinableKind[] | undefined): string => formatCombinable(couponCombinable(list));
+/** `formatCombinable` for a coupon (its unset means "not with other coupons"); a คูปองส่งฟรี always goes with everything. */
+export const formatCouponCombinable = (list: CombinableKind[] | undefined, kind?: "discount" | "shipping"): string =>
+  kind === "shipping" ? "ใช้ร่วมกับโปรและคูปองส่วนลดได้" : formatCombinable(couponCombinable(list));
 
 /** "฿590" or "3 ชิ้น". */
 export function formatPromotionThreshold(condition: PromotionCondition, value: number): string {
@@ -452,8 +453,9 @@ const PROMOTION_SEEDS: Omit<Promotion, "id" | "createdAt" | "updatedAt">[] = [
  * v11: coupon seeds for every กลุ่มลูกค้า (COMEBACK80, MEMBER50, RADIANCE12, ICON300).
  * v12: an expired coupon the demo member had collected (HALLOWEEN60).
  * v13: coupons may stack (up to 2) when both tick "คูปอง"; COMEBACK80 + MEMBER50 do.
+ * v14: คูปองส่งฟรี (`kind: "shipping"`): SHIPFREE60 (ลดค่าส่งสูงสุด ฿60, everyone) and NEWSHIP (ส่งฟรีทั้งหมด, new customers).
  */
-export const MARKETING_SEED_VERSION = 13;
+export const MARKETING_SEED_VERSION = 14;
 
 // ---------------------------------------------------------------------------
 // Coupons: baht or % off the product subtotal, one per order
@@ -466,9 +468,21 @@ export const COUPON_DISCOUNT_TYPE_META: Record<CouponDiscountType, { label: stri
   percent: { label: "ลดเป็น %" },
 };
 
+/** "discount" = โค้ดส่วนลด (off the products); "shipping" = คูปองส่งฟรี (off the shipping fee). */
+export type CouponKind = "discount" | "shipping";
+
+export const COUPON_KIND_META: Record<CouponKind, { label: string; hint: string }> = {
+  discount: { label: "คูปองส่วนลด", hint: "ลดจากยอดสินค้า" },
+  shipping: { label: "คูปองส่งฟรี", hint: "ลดค่าจัดส่ง ใช้ร่วมกับคูปองส่วนลดได้เสมอ" },
+};
+
 export type Coupon = {
   id: string;
   code: string;
+  /** Missing reads as "discount" (records saved before คูปองส่งฟรี). */
+  kind?: CouponKind;
+  /** "shipping" only: most baht it takes off the shipping fee ("ลดค่าส่งสูงสุด ฿60"). Empty = ส่งฟรีทั้งหมด (the whole fee, any carrier). */
+  shippingCap?: number;
   /** Missing reads as "baht" (records saved before % coupons came back). */
   discountType: CouponDiscountType;
   /** Baht off, or the percent (1 to 100) for a "percent" coupon. Taken off the product subtotal; shipping untouched. */
@@ -506,7 +520,11 @@ export type Coupon = {
   updatedAt: string;
 };
 
-type CouponDiscountFields = Pick<Coupon, "discount"> & { discountType?: CouponDiscountType; maxDiscount?: number };
+type CouponDiscountFields = Pick<Coupon, "discount"> & { discountType?: CouponDiscountType; maxDiscount?: number; kind?: CouponKind; shippingCap?: number };
+
+/** "คูปองส่งฟรี" for a shipping coupon, else "ลดเป็นเงิน" / "ลดเป็น %". */
+export const formatCouponType = (c: Pick<Coupon, "discountType" | "kind">): string =>
+  c.kind === "shipping" ? COUPON_KIND_META.shipping.label : COUPON_DISCOUNT_TYPE_META[c.discountType].label;
 
 /** "ลด ฿100" / "ลด 10%": the big line on the ticket. */
 export const formatCouponAmount = (c: CouponDiscountFields): string => couponLabels(c).amount;
@@ -555,8 +573,11 @@ type StoredCoupon = Omit<Coupon, "discountType"> & { discountType?: string; disc
 export function normalizeCoupons(list: Coupon[]): Coupon[] {
   return (list as StoredCoupon[]).map(({ discountType, discountValue, description: _d, usageCount: _u, ...c }) => {
     const type: CouponDiscountType = discountType === "percent" || discountType === "percentage" ? "percent" : "baht";
+    const kind: CouponKind = c.kind === "shipping" ? "shipping" : "discount";
     return {
       ...c,
+      kind,
+      shippingCap: kind === "shipping" && c.shippingCap ? c.shippingCap : undefined,
       discountType: type,
       discount: c.discount ?? discountValue ?? 0,
       maxDiscount: type === "percent" && c.maxDiscount ? c.maxDiscount : undefined,
@@ -566,7 +587,8 @@ export function normalizeCoupons(list: Coupon[]): Coupon[] {
       image: c.image && !c.image.startsWith("blob:") ? c.image : undefined,
       extraConditions: typeof c.extraConditions === "string" && c.extraConditions.trim() ? c.extraConditions : undefined,
       // An empty list reads as ทั้งร้าน (unset); a draft can keep it, `couponPublishProblems` stops it going live.
-      productScope: c.productScope === undefined ? undefined : normalizeSkuRefs(c.productScope),
+      // A shipping code works on the whole order, never on chosen products.
+      productScope: c.productScope === undefined || kind === "shipping" ? undefined : normalizeSkuRefs(c.productScope),
       showOnHome: !!c.showOnHome,
       showAtCheckout: !!c.showAtCheckout,
       audience: normalizeAudience(c.audience),
@@ -616,6 +638,9 @@ const COUPON_SEEDS: Omit<Coupon, "id" | "createdAt" | "updatedAt">[] = [
   { code: "ICON300", audience: { kind: "tiers", tiers: ["icon"] }, discountType: "baht", discount: 300, minSpend: 2000, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
   // v12: ended on 31 Oct; the demo member collected it before then, so Checkout's "เก็บแล้ว" shows a หมดอายุแล้ว coupon.
   { code: "HALLOWEEN60", discountType: "baht", discount: 60, minSpend: 300, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-10-25", startTime: "00:00", endDate: "2026-10-31", endTime: "23:59", status: "active" },
+  // v14: คูปองส่งฟรี, both kinds: a capped one for everyone (carriers charge ฿45-60) and a full one for new customers.
+  { code: "SHIPFREE60", kind: "shipping", shippingCap: 60, discountType: "baht", discount: 0, minSpend: 299, perCustomerLimit: 3, showOnHome: true, showAtCheckout: true, startDate: "2026-11-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
+  { code: "NEWSHIP", kind: "shipping", tool: "coupon_new", audience: { kind: "new" }, discountType: "baht", discount: 0, perCustomerLimit: 1, showOnHome: true, showAtCheckout: true, startDate: "2026-11-01", startTime: "00:00", endDate: "2026-12-31", endTime: "23:59", status: "active" },
 ];
 
 const TODAY_LABEL = "17 ก.ย. 2569";
@@ -668,7 +693,12 @@ export function promotionPublishProblems(p: Promotion): string[] {
 export function couponPublishProblems(c: Coupon): string[] {
   const missing: string[] = [];
   if (!c.code.trim()) missing.push("โค้ดคูปอง");
-  const okDiscount = c.discountType === "percent" ? Number.isInteger(c.discount) && c.discount >= 1 && c.discount <= 100 : Number.isInteger(c.discount) && c.discount > 0;
+  const okDiscount =
+    c.kind === "shipping"
+      ? c.shippingCap === undefined || (Number.isInteger(c.shippingCap) && c.shippingCap > 0)
+      : c.discountType === "percent"
+        ? Number.isInteger(c.discount) && c.discount >= 1 && c.discount <= 100
+        : Number.isInteger(c.discount) && c.discount > 0;
   if (!okDiscount) missing.push("ส่วนลด");
   // ทั้งร้าน is sent as unset; a set but empty list means "เฉพาะสินค้าที่เลือก" with nothing picked.
   if (c.productScope !== undefined && c.productScope.length === 0) missing.push("สินค้าที่ร่วมรายการ");

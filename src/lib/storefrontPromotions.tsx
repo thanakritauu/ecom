@@ -15,7 +15,7 @@ import { useProductCatalog } from "./productCatalog";
 import { useCart } from "./cart";
 import { MOCK_ORDERS as ADMIN_MOCK_ORDERS } from "./adminOrders";
 import { priceCart } from "./promotionEngine";
-import { couponAudienceBadge, couponAudienceBlock, matchesAudience, type Shopper } from "./marketingAudience";
+import { couponAudienceBadge, couponAudienceBlock, couponAudienceOnly, couponAudienceTag, matchesAudience, type Shopper } from "./marketingAudience";
 
 import { MARKETING_CHANGED_EVENT } from "./marketingEvents";
 import { COUPONS_STORAGE_KEY, PROMOTIONS_STORAGE_KEY, readStoredMarketing, readStoredPromotions } from "./storefrontMarketingStore";
@@ -41,6 +41,8 @@ function readOrdersForUsage(): UsageOrder[] {
 function toStorefrontCoupon(c: AdminCoupon, orders: UsageOrder[], shopper: Shopper): Coupon {
   const coupon = buildCoupon({
     code: c.code,
+    kind: c.kind,
+    shippingCap: c.shippingCap,
     discountType: c.discountType,
     discount: c.discount,
     maxDiscount: c.maxDiscount,
@@ -56,7 +58,7 @@ function toStorefrontCoupon(c: AdminCoupon, orders: UsageOrder[], shopper: Shopp
     extraConditions: c.extraConditions,
     productScope: c.productScope,
   });
-  return { ...coupon, audienceBlock: couponAudienceBlock(c.audience, shopper), audienceLabel: couponAudienceBadge(c.audience), combinableWith: c.combinableWith };
+  return { ...coupon, audienceBlock: couponAudienceBlock(c.audience, shopper), audienceLabel: couponAudienceBadge(c.audience), audienceTag: couponAudienceTag(c.audience), audienceOnly: couponAudienceOnly(c.audience), combinableWith: c.combinableWith };
 }
 
 type StorefrontPromotionsValue = {

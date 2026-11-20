@@ -8,6 +8,9 @@ import { CouponCard, couponTicket, type Coupon as TicketCoupon } from "../shared
 import { pushToast } from "~/lib/toast";
 import { useStorefrontPromotions } from "~/lib/storefrontPromotions";
 import { useAuth } from "~/lib/auth";
+import { A, useNavigate } from "@solidjs/router";
+import { couponStamp, isShippingCoupon, type Coupon as StoreCoupon } from "~/lib/cartSelectors";
+import { ChevronIcon } from "../shared/ChevronIcon";
 import { useCollectedCoupons } from "~/lib/collectedCoupons";
 import glowEllipse from "~/assets/icons/coupon-glow-ellipse.svg";
 import blurShape from "~/assets/images/coupon/blur-shape.png";
@@ -20,29 +23,61 @@ async function simulateCollect() {
   if (Math.random() < 0.05) throw new Error("COLLECT_FAILED");
 }
 
+/** /coupons sections, one per กลุ่มลูกค้า (by the ticket's group tag, `couponAudienceTag`). */
+const GROUPS = [
+  { tag: "ทุกคน", title: "สำหรับทุกคน" },
+  { tag: "ลูกค้าใหม่", title: "สำหรับลูกค้าใหม่" },
+  { tag: "เคยสั่งซื้อ", title: "สำหรับลูกค้าที่เคยสั่งซื้อแล้ว" },
+  { tag: "สมาชิก", title: "สำหรับสมาชิก Charmiss Club" },
+] as const;
+
+/** A section's "เก็บทั้งหมด (n)": plain white underlined text beside the group title. */
+const GROUP_COLLECT_TEXT =
+  "-my-2 -mr-1 flex min-h-11 shrink-0 items-center px-1 text-base font-medium text-white underline decoration-white/60 underline-offset-4 transition-opacity lg:hover:decoration-white disabled:cursor-wait disabled:opacity-70";
+
+type Filter = "all" | "discount" | "shipping";
+const FILTERS: { key: Filter; label: string; empty: string }[] = [
+  { key: "all", label: "ทั้งหมด", empty: "ยังไม่มีคูปองในตอนนี้" },
+  { key: "discount", label: "คูปองส่วนลด", empty: "ยังไม่มีคูปองส่วนลดในตอนนี้" },
+  { key: "shipping", label: "คูปองส่งฟรี", empty: "ยังไม่มีคูปองส่งฟรีในตอนนี้" },
+];
+
 /**
- * `page` = the /coupons page (nav menu "คูปอง"): same purple and yellow artwork,
- * but every live coupon (the ones on Home and the ones offered at Checkout),
- * an h1, a wrapping grid instead of the sideways rail, and an empty state
- * instead of hiding the section.
+ * Home: only the coupons this shopper can collect now (their own groups, uses left), a "เก็บคูปองทั้งหมด (n)"
+ * button and "ดูคูปองทั้งหมด" to /coupons.
+ * `page` = the /coupons page (nav menu "คูปอง"): same purple and yellow artwork, every live coupon (Home's and
+ * Checkout's) with chips ทั้งหมด / โค้ดส่วนลด / คูปองส่งฟรี, one section per กลุ่มลูกค้า (the shopper's own first),
+ * each with its own "เก็บทั้งหมด (n)", an h1, a wrapping grid instead of the sideways rail, and an empty state.
  */
 export function CouponSection(props: { page?: boolean; /** Home heading override from the page's section settings; empty = "คูปองส่วนลด". */ title?: string; /** Extra content under the coupons, on the purple (the page's "วิธีใช้คูปอง" box). */ after?: JSX.Element }) {
-  /** Home: the coupons Admin shows on Home (switched on, inside their dates, every กลุ่มลูกค้า), one ticket per code, the same ticket Checkout's picker uses. */
+  /** Live coupons Admin shows (switched on, inside their dates, every กลุ่มลูกค้า), one per code, the same ticket Checkout's picker uses. */
   const { homeCoupons, checkoutCoupons } = useStorefrontPromotions();
   const auth = useAuth();
+  const navigate = useNavigate();
   const store = useCollectedCoupons();
   const all = () => {
     if (!props.page) return homeCoupons();
     const byCode = new Map([...homeCoupons(), ...checkoutCoupons()].map((c) => [c.code, c] as const));
     return [...byCode.values()];
   };
-  // Signed in: the ones this shopper can use first, then the other groups' (shown, not collectable).
-  const coupons = () => {
-    const list = all();
-    const ordered = auth.isAuthenticated() ? [...list.filter((c) => !c.audienceBlock), ...list.filter((c) => c.audienceBlock)] : list;
-    return ordered.map(couponTicket);
-  };
   const eligible = (code: string) => !all().find((c) => c.code === code)?.audienceBlock;
+  /** Can be collected right now: this shopper's group, not collected yet, uses left. */
+  const collectable = (list: StoreCoupon[]) => list.filter((c) => !store.isCollected(c.code) && !c.audienceBlock && !couponStamp(c));
+
+  const [filter, setFilter] = createSignal<Filter>("all");
+  const byFilter = (f: Filter) => all().filter((c) => f === "all" || (f === "shipping") === isShippingCoupon(c));
+  /** Home: only what this shopper can use (other groups' and used-up ones are on /coupons). */
+  const homeList = () => all().filter((c) => !c.audienceBlock && !couponStamp(c));
+  const sectionsOf = (list: StoreCoupon[]) => {
+    const secs = GROUPS.map((g) => ({ ...g, coupons: list.filter((c) => (c.audienceTag ?? "ทุกคน") === g.tag) })).filter((s) => s.coupons.length > 0);
+    // Signed in: the groups with a coupon this shopper can use come first.
+    if (!auth.isAuthenticated()) return secs;
+    const mine = (s: (typeof secs)[number]) => s.coupons.some((c) => !c.audienceBlock);
+    return [...secs.filter(mine), ...secs.filter((s) => !mine(s))];
+  };
+  const sections = () => sectionsOf(byFilter(filter()));
+  /** What the big button collects: Home's list, or the page's current filter. */
+  const bulkList = () => (props.page ? byFilter(filter()) : homeList());
 
   const collect = async (id: string) => {
     await simulateCollect();
@@ -54,18 +89,24 @@ export function CouponSection(props: { page?: boolean; /** Home heading override
     pushToast("เก็บคูปองสำเร็จ");
   };
 
-  // One toast for the whole batch, never one per coupon. Only this shopper's own groups' coupons are collected.
-  const collectAll = async () => {
-    const remaining = coupons().filter((c) => !store.isCollected(c.id) && eligible(c.id));
-    if (remaining.length === 0) return pushToast("เก็บคูปองที่ใช้ได้ครบแล้ว");
-    const results = await Promise.allSettled(remaining.map((c) => collect(c.id)));
-    if (results.every((r) => r.status === "fulfilled")) pushToast("เก็บคูปองทั้งหมดสำเร็จ");
-    else pushToast("เก็บคูปองบางใบไม่สำเร็จ ลองอีกครั้ง", "error");
+  // One toast for the whole batch with the result, never one per coupon. Only this shopper's own groups' coupons are collected.
+  const [busy, setBusy] = createSignal<string>();
+  const collectMany = async (list: StoreCoupon[], key: string) => {
+    const todo = collectable(list);
+    const skipped = list.filter((c) => c.audienceBlock && !store.isCollected(c.code)).length;
+    if (todo.length === 0) return pushToast("เก็บคูปองที่ใช้ได้ครบแล้ว");
+    setBusy(key);
+    const results = await Promise.allSettled(todo.map((c) => collect(c.code)));
+    setBusy(undefined);
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    if (ok === todo.length) pushToast(`เก็บคูปองแล้ว ${ok} ใบ`, "success", skipped > 0 ? `คูปองของกลุ่มอื่น ${skipped} ใบ เก็บไม่ได้` : undefined);
+    else pushToast(`เก็บได้ ${ok} จาก ${todo.length} ใบ`, "error", "กดเก็บอีกครั้งเพื่อเก็บใบที่เหลือ");
   };
 
-  // Not signed in: "เก็บเลย" / "เก็บคูปองทั้งหมด" open the sign-in popup and finish the collect once signed in.
-  const [pending, setPending] = createSignal<string | "all">();
-  const signInToCollect = (what: string | "all") => {
+  // Not signed in: "เก็บ" / "เก็บทั้งหมด" open the sign-in popup and finish the collect once signed in.
+  // `pending`: a code, "all" (the big button) or "group:<tag>" (a section's button).
+  const [pending, setPending] = createSignal<string>();
+  const signInToCollect = (what: string) => {
     setPending(what);
     auth.openAuthModal();
   };
@@ -74,7 +115,8 @@ export function CouponSection(props: { page?: boolean; /** Home heading override
       const what = pending();
       if (!signedIn || !what) return;
       setPending(undefined);
-      if (what === "all") return void collectAll();
+      if (what === "all") return void collectMany(bulkList(), "all");
+      if (what.startsWith("group:")) return void collectMany(byFilter(filter()).filter((c) => `group:${c.audienceTag ?? "ทุกคน"}` === what), what);
       if (!eligible(what)) return pushToast("คูปองนี้ไม่ตรงกับกลุ่มลูกค้าของบัญชีคุณ", "error");
       if (!store.isCollected(what)) void collectOne(what).catch(() => pushToast("เก็บคูปองไม่สำเร็จ ลองอีกครั้ง", "error"));
     }),
@@ -82,21 +124,30 @@ export function CouponSection(props: { page?: boolean; /** Home heading override
   // Closing the popup without signing in drops the pending collect.
   createEffect(on(auth.isAuthModalOpen, (open, wasOpen) => wasOpen && !open && !auth.isAuthenticated() && setPending(undefined), { defer: true }));
 
-  /** The ticket's button: sign in first, "ไม่ตรงเงื่อนไข" for another group's coupon, else the usual collect. */
-  const Ticket = (p: { coupon: TicketCoupon }) => (
-    <CouponCard
-      coupon={p.coupon}
-      collected={store.isCollected(p.coupon.id)}
-      onCollect={() => collectOne(p.coupon.id)}
-      action={
-        !auth.isAuthenticated()
-          ? { label: "เก็บเลย", variant: "primary", onClick: () => signInToCollect(p.coupon.id) }
-          : !eligible(p.coupon.id)
-            ? { label: "ไม่ตรงเงื่อนไข", variant: "outline", disabled: true, onClick: () => {} }
-            : undefined
-      }
-    />
-  );
+  /**
+   * The ticket's button: "เก็บ" (a guest signs in first), "ใช้คูปอง" once collected (goes shopping), a grey
+   * "เฉพาะ ..." pill for another group's coupon, or a stamp when no use is left.
+   */
+  const Ticket = (p: { coupon: TicketCoupon }) => {
+    const source = () => all().find((c) => c.code === p.coupon.id);
+    return (
+      <CouponCard
+        coupon={p.coupon}
+        wide
+        collected={store.isCollected(p.coupon.id)}
+        onCollect={() => collectOne(p.coupon.id)}
+        onUse={() => navigate("/products")}
+        stamp={source() ? couponStamp(source()!) : undefined}
+        action={
+          !auth.isAuthenticated()
+            ? { label: "เก็บ", variant: "primary", onClick: () => signInToCollect(p.coupon.id) }
+            : !eligible(p.coupon.id)
+              ? { label: `เฉพาะ${source()?.audienceOnly ?? ""}`, variant: "outline", disabled: true, onClick: () => {}, onlyFor: source()?.audienceOnly ?? "กลุ่มอื่น" }
+              : undefined
+        }
+      />
+    );
+  };
 
   /*
    * Figma 124:6557, painted in the same order as the Figma layers: #7650ff +
@@ -112,7 +163,7 @@ export function CouponSection(props: { page?: boolean; /** Home heading override
    */
   // Nothing to collect once every code has expired — drop the whole section rather than an empty ticket row.
   return (
-    <Show when={props.page || coupons().length > 0}>
+    <Show when={props.page || homeList().length > 0}>
       <section
         aria-labelledby="coupon-heading"
         class="relative overflow-hidden bg-[#7650ff] pb-11 pt-10 [background-image:linear-gradient(rgba(255,255,255,0.1),rgba(255,255,255,0.1))] sm:pb-14 sm:pt-[52px] lg:pb-[72px] lg:pt-[65px]"
@@ -126,7 +177,11 @@ export function CouponSection(props: { page?: boolean; /** Home heading override
         />
 
         <Container width="wide" class="flex flex-col items-center gap-4">
-          <div class="relative mb-9 flex flex-col items-center text-center sm:mb-[52px] lg:mb-[75px]">
+          {/* /coupons: the coupons sit closer under the heading than on Home. */}
+          <div
+            class="relative flex flex-col items-center text-center"
+            classList={{ "mb-9 sm:mb-[52px] lg:mb-[75px]": !props.page, "mb-4 sm:mb-6 lg:mb-8": !!props.page }}
+          >
             <Dynamic component={props.page ? "h1" : "h2"} id="coupon-heading" class="text-4xl font-bold leading-[normal] text-white sm:text-[48px] lg:text-[62px]">
               {props.title || "คูปองส่วนลด"}
             </Dynamic>
@@ -150,9 +205,8 @@ export function CouponSection(props: { page?: boolean; /** Home heading override
           </Deco>
 
           <div class="relative flex w-full flex-col gap-4 lg:max-w-[1140px]">
-            {/* Phone/tablet rail gets vertical room so the ticket shadows aren't clipped by its overflow; the three tickets sit in one row from lg. */}
             <Show
-              when={coupons().length > 0}
+              when={(props.page ? all() : homeList()).length > 0}
               fallback={
                 <div class="rounded-card bg-white p-6">
                   <EmptyState size="compact" icon={TagIcon} title="ยังไม่มีคูปองในตอนนี้" description="คูปองใหม่จะขึ้นที่หน้านี้ แวะมาดูอีกครั้งนะ" />
@@ -162,29 +216,116 @@ export function CouponSection(props: { page?: boolean; /** Home heading override
               <Show
                 when={props.page}
                 fallback={
-                  <div class="scroll-rail -mb-4 -mt-2 pb-4 !pr-0 pt-2 xl:mx-0 xl:w-full xl:grid xl:grid-cols-3 xl:overflow-visible xl:m-0 xl:!p-0">
-                    <For each={coupons()}>
+                  // Phone/tablet rail gets vertical room so the ticket shadows aren't clipped by its overflow; two across from lg.
+                  <div class="scroll-rail -mb-4 -mt-2 pb-4 !pr-0 pt-2 lg:m-0 lg:grid lg:w-full lg:grid-cols-2 lg:gap-x-4 lg:gap-y-6 lg:overflow-visible lg:!p-0">
+                    <For each={homeList()}>
                       {(coupon) => (
-                        // Sideways rail until xl: three across only once each ticket gets its full ~350px (narrower squeezes the button).
-                        <div class="w-[88%] min-w-[330px] max-w-[369px] shrink-0 xl:w-auto xl:min-w-0 xl:max-w-none">
-                          <Ticket coupon={coupon} />
+                        // Sideways rail until lg, then a 2-across grid of the wider desktop ticket.
+                        <div class="w-[88%] min-w-[330px] max-w-[369px] shrink-0 lg:w-auto lg:min-w-0 lg:max-w-none">
+                          <Ticket coupon={couponTicket(coupon)} />
                         </div>
                       )}
                     </For>
                   </div>
                 }
               >
-                {/* Page: every coupon visible at once; as many columns as fit with each ticket at least 330px wide (1 on phones, up to 3). */}
-                <div class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,330px),1fr))] gap-x-4 gap-y-6">
-                  <For each={coupons()}>
-                    {(coupon) => <Ticket coupon={coupon} />}
+                {/* Page: ทั้งหมด / โค้ดส่วนลด / คูปองส่งฟรี, each with its count. */}
+                <div class="no-scrollbar -mx-4 flex justify-start gap-2 overflow-x-auto px-4 sm:mx-0 sm:justify-center sm:px-0" role="group" aria-label="ประเภทคูปอง">
+                  <For each={FILTERS}>
+                    {(f) => (
+                      <button
+                        type="button"
+                        aria-pressed={filter() === f.key}
+                        onClick={(e) => {
+                          setFilter(f.key);
+                          // Phones: the bigger chips scroll sideways; keep the picked one fully in view.
+                          e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+                        }}
+                        class="flex min-h-12 shrink-0 items-center rounded-pill border px-4 text-base font-medium transition-colors duration-150 sm:px-5 lg:min-h-[52px] lg:px-6 lg:text-lg"
+                        classList={{
+                          "border-white bg-white text-[#7650ff]": filter() === f.key,
+                          "border-white/40 bg-white/15 text-white lg:hover:bg-white/25": filter() !== f.key,
+                        }}
+                      >
+                        {f.label} ({byFilter(f.key).length})
+                      </button>
+                    )}
                   </For>
                 </div>
+
+                <Show
+                  when={sections().length > 0}
+                  fallback={
+                    <div class="rounded-card bg-white p-6">
+                      <EmptyState size="compact" icon={TagIcon} title={FILTERS.find((f) => f.key === filter())!.empty} description="คูปองใหม่จะขึ้นที่หน้านี้ แวะมาดูอีกครั้งนะ" />
+                    </div>
+                  }
+                >
+                  <div class="flex flex-col gap-10">
+                    <For each={sections()}>
+                      {(section) => {
+                        const key = `group:${section.tag}`;
+                        const left = () => collectable(section.coupons).length;
+                        const mine = () => section.coupons.some((c) => !c.audienceBlock);
+                        return (
+                          <section class="flex flex-col gap-2" aria-labelledby={`coupon-group-${section.tag}`}>
+                            {/* Group title + its own collect button (a guest signs in first; another group's has none, its tickets say "เฉพาะ ..."). */}
+                            {/* Header row, 8px above its tickets; groups 40px apart. The text button keeps its 44px tap area without adding height (-my-2). */}
+                            <div class="flex items-center justify-between gap-3">
+                              <h2 id={`coupon-group-${section.tag}`} class="text-lg font-semibold text-white sm:text-xl">
+                                {section.title}
+                              </h2>
+                              {/* Text, not a button: white, underlined, 44px tap area. */}
+                              <Show when={!auth.isAuthenticated()}>
+                                <button type="button" class={GROUP_COLLECT_TEXT} onClick={() => signInToCollect(key)}>
+                                  เก็บทั้งหมด
+                                </button>
+                              </Show>
+                              <Show when={auth.isAuthenticated() && mine()}>
+                                <Show when={left() > 0} fallback={<span class="shrink-0 text-base text-white/80">เก็บครบแล้ว</span>}>
+                                  <button type="button" class={GROUP_COLLECT_TEXT} disabled={busy() === key} onClick={() => collectMany(section.coupons, key)}>
+                                    {busy() === key ? "กำลังเก็บ" : `เก็บทั้งหมด (${left()})`}
+                                  </button>
+                                </Show>
+                              </Show>
+                            </div>
+                            {/* 1 column on phones, 2 across from md (the wider desktop ticket from lg). */}
+                            <div class="grid grid-cols-1 gap-x-4 gap-y-6 md:grid-cols-2">
+                              <For each={section.coupons}>{(coupon) => <Ticket coupon={couponTicket(coupon)} />}</For>
+                            </div>
+                          </section>
+                        );
+                      }}
+                    </For>
+                  </div>
+                </Show>
               </Show>
 
-              <Button variant="white" class="w-full !px-8 !py-2 !text-lg !font-medium !leading-[normal] sm:!text-xl sm:!leading-[normal]" onClick={() => (auth.isAuthenticated() ? collectAll() : signInToCollect("all"))}>
-                เก็บคูปองทั้งหมด
-              </Button>
+              {/* Signed in: how many are left to collect (none left = done); a guest signs in first. */}
+              <Show
+                when={auth.isAuthenticated()}
+                fallback={
+                  <Button variant="white" class="w-full !px-8 !py-2 !text-lg !font-medium !leading-[normal] sm:!text-xl sm:!leading-[normal]" onClick={() => signInToCollect("all")}>
+                    เข้าสู่ระบบเพื่อเก็บทั้งหมด
+                  </Button>
+                }
+              >
+                <Button
+                  variant="white"
+                  class="w-full !px-8 !py-2 !text-lg !font-medium !leading-[normal] sm:!text-xl sm:!leading-[normal]"
+                  loading={busy() === "all"}
+                  disabled={collectable(bulkList()).length === 0}
+                  onClick={() => collectMany(bulkList(), "all")}
+                >
+                  {collectable(bulkList()).length > 0 ? `เก็บคูปองทั้งหมด (${collectable(bulkList()).length})` : "เก็บคูปองครบแล้ว"}
+                </Button>
+              </Show>
+              <Show when={!props.page}>
+                <A href="/coupons" class="mx-auto flex min-h-11 items-center gap-1 text-base font-medium text-white underline-offset-4 lg:hover:underline">
+                  ดูคูปองทั้งหมด
+                  <ChevronIcon direction="right" class="size-6" />
+                </A>
+              </Show>
             </Show>
             {props.after}
           </div>

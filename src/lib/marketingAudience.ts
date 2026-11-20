@@ -17,7 +17,7 @@ export const GUEST_SHOPPER: Shopper = { signedIn: false, hasPaidOrder: false };
 export const AUDIENCE_KIND_META: Record<AudienceKind, { label: string; hint: string }> = {
   all: { label: "ทั้งหมด", hint: "ลูกค้าทุกคน" },
   new: { label: "ลูกค้าใหม่", hint: "ยังไม่เคยมีคำสั่งซื้อที่ชำระแล้ว รวมผู้ที่ยังไม่เป็นสมาชิก" },
-  returning: { label: "ลูกค้าเก่า", hint: "เคยซื้อแล้ว" },
+  returning: { label: "ลูกค้าที่เคยสั่งซื้อ", hint: "เคยสั่งซื้อและชำระเงินแล้ว" },
   tiers: { label: "เฉพาะระดับ Charmiss Club", hint: "สมาชิกที่เข้าสู่ระบบและอยู่ในระดับที่เลือก" },
 };
 
@@ -42,11 +42,11 @@ export function matchesAudience(audience: Audience | undefined, shopper: Shopper
   return shopper.signedIn && !!shopper.tier && !!audience.tiers?.includes(shopper.tier);
 }
 
-/** "ทุกคน" / "ลูกค้าใหม่" / "ลูกค้าเก่า" / "สมาชิก Radiance, Icon": the list column and summaries. */
+/** "ทุกคน" / "ลูกค้าใหม่" / "ลูกค้าที่เคยสั่งซื้อ" / "สมาชิก Radiance, Icon": the list column and summaries. */
 export function formatAudience(audience: Audience | undefined): string {
   if (!audience || audience.kind === "all") return "ทุกคน";
   if (audience.kind === "new") return "ลูกค้าใหม่";
-  if (audience.kind === "returning") return "ลูกค้าเก่า";
+  if (audience.kind === "returning") return "ลูกค้าที่เคยสั่งซื้อ";
   const tiers = orderedTiers(audience.tiers);
   return tiers.length > 0 ? `สมาชิก ${tiers.map(tierName).join(", ")}` : "ยังไม่ได้เลือกระดับ";
 }
@@ -56,16 +56,42 @@ export const EVERYONE_COUPON_BADGE = "สำหรับทุกคน";
 
 /**
  * Every coupon ticket's กลุ่มลูกค้า badge: "สำหรับทุกคน" / "สำหรับลูกค้าใหม่" /
- * "สำหรับลูกค้าเก่า" / "สำหรับสมาชิก Radiance, Icon" ("สมาชิก Charmiss Club"
+ * "สำหรับลูกค้าที่เคยสั่งซื้อ" / "สำหรับสมาชิก Radiance, Icon" ("สมาชิก Charmiss Club"
  * when every tier is picked).
  */
 export function couponAudienceBadge(audience: Audience | undefined): string {
   if (!audience || audience.kind === "all") return EVERYONE_COUPON_BADGE;
   if (audience.kind === "new") return "สำหรับลูกค้าใหม่";
-  if (audience.kind === "returning") return "สำหรับลูกค้าเก่า";
+  if (audience.kind === "returning") return "สำหรับลูกค้าที่เคยสั่งซื้อ";
   const tiers = orderedTiers(audience.tiers);
   if (tiers.length === 0) return EVERYONE_COUPON_BADGE;
   return tiers.length === TIERS.length ? "สำหรับสมาชิก Charmiss Club" : `สำหรับสมาชิก ${tiers.map(tierName).join(", ")}`;
+}
+
+/** The ticket's small tag on its left part: "ทุกคน" / "ลูกค้าใหม่" / "เคยสั่งซื้อ" / "สมาชิก" (tiers in the conditions). */
+export function couponAudienceTag(audience: Audience | undefined): string {
+  if (!audience || audience.kind === "all") return "ทุกคน";
+  if (audience.kind === "new") return "ลูกค้าใหม่";
+  if (audience.kind === "returning") return "เคยสั่งซื้อ";
+  return orderedTiers(audience.tiers).length > 0 ? "สมาชิก" : "ทุกคน";
+}
+
+/**
+ * Who else a coupon is for, for the grey pill a shopper outside its group sees (under "เฉพาะ"):
+ * "ลูกค้าใหม่" / "ผู้เคยสั่งซื้อ" / "สมาชิก Icon" / "Radiance ขึ้นไป" / "สมาชิกบางระดับ".
+ */
+export function couponAudienceOnly(audience: Audience | undefined): string | undefined {
+  if (!audience || audience.kind === "all") return undefined;
+  if (audience.kind === "new") return "ลูกค้าใหม่";
+  if (audience.kind === "returning") return "ผู้เคยสั่งซื้อ";
+  const tiers = orderedTiers(audience.tiers);
+  if (tiers.length === 0 || tiers.length === TIERS.length) return "สมาชิก";
+  if (tiers.length === 1) return `สมาชิก ${tierName(tiers[0])}`;
+  // A run up to the top tier reads as "from X up".
+  const ladder = TIERS.map((t) => t.id);
+  const from = ladder.indexOf(tiers[0]);
+  const isTopRun = tiers.every((id, i) => ladder.indexOf(id) === from + i) && tiers[tiers.length - 1] === ladder[ladder.length - 1];
+  return isTopRun ? `${tierName(tiers[0])} ขึ้นไป` : "สมาชิกบางระดับ";
 }
 
 /** Why a typed coupon code is refused for this shopper, or undefined when they're in its audience. */

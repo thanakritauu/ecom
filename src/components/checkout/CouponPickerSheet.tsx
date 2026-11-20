@@ -6,6 +6,10 @@ import {
   couponStackBlocked,
   couponUsageBlock,
   canAddCoupon,
+  couponStamp,
+  couponShippingBlock,
+  shippingCouponAmount,
+  isShippingCoupon,
   isCouponActive,
   isCouponExpired,
   MAX_COUPONS_PER_ORDER,
@@ -22,6 +26,7 @@ import { EmptyState } from "../shared/EmptyState";
 import { TagIcon } from "../shared/icons";
 import { TextField } from "../shared/TextField";
 import { pushToast } from "~/lib/toast";
+import type { ExternalCodeResult } from "~/lib/externalCodes";
 
 /**
  * Checkout coupon picker — the shared modal frame (`SheetModal`, same as the
@@ -48,6 +53,8 @@ export function CouponPickerSheet(props: {
   lines: ResolvedCartLine[];
   /** How many of this shopper's own (non-cancelled) orders used the code; 0 for a guest. */
   usedByShopper?: (code: string) => number;
+  /** This order's shipping fee before any คูปองส่งฟรี (0 = already free, so a คูปองส่งฟรี does nothing). */
+  shippingFee?: number;
   /** The coupons in use (up to 2 when they stack). */
   applied: Coupon[];
   onApply: (coupon: Coupon) => void;
@@ -56,15 +63,20 @@ export function CouponPickerSheet(props: {
   collectedCodes?: Set<string>;
   /** Collected coupons past their dates: listed last under "เก็บแล้ว" as หมดอายุแล้ว (never usable). */
   expiredCollected?: Coupon[];
-  /** Using a coupon also collects it. */
+  /** Using a coupon also collects it (never a โค้ดจากภายนอก). */
   onCollect?: (code: string) => void;
+  /** A typed code that isn't one of ours: asks the other system (`externalCodes.ts`). Unset = not found. */
+  checkExternalCode?: (code: string) => Promise<ExternalCodeResult>;
 }) {
   // Every listed coupon inside its dates (any กลุ่มลูกค้า: another group's is shown under "ทั้งหมด", not usable).
   const listed = () => props.coupons.filter((c) => isCouponActive(c));
+  // A โค้ดจากภายนอก in use: a ticket under "ใช้ได้" only (never listed otherwise, so taking it off drops its ticket).
+  const externalApplied = () => props.applied.filter((c) => c.external);
   const blockOf = (coupon: Coupon) =>
     (isCouponExpired(coupon) ? `คูปองนี้${coupon.expiresLabel.replace("หมดอายุ", "หมดอายุเมื่อ")}` : undefined) ??
     coupon.audienceBlock ??
-    couponUsageBlock(coupon, props.usedByShopper?.(coupon.code) ?? 0);
+    couponUsageBlock(coupon, props.usedByShopper?.(coupon.code) ?? 0) ??
+    couponShippingBlock(coupon, props.shippingFee);
   /** Can go on this order right now: this shopper's group, uses left, and the cart meets its conditions. */
   const canUse = (coupon: Coupon) => !blockOf(coupon) && !couponCartBlock(coupon, props.lines);
 
@@ -74,7 +86,7 @@ export function CouponPickerSheet(props: {
   const isApplied = (c: Coupon) => props.applied.some((a) => a.code === c.code);
   const appliedFirst = (list: Coupon[]) => [...list.filter(isApplied), ...list.filter((c) => !isApplied(c))];
   const tabLists: Record<Tab, () => Coupon[]> = {
-    usable: () => appliedFirst(listed().filter((c) => canUse(c) || isApplied(c))),
+    usable: () => [...externalApplied(), ...appliedFirst(listed().filter((c) => canUse(c) || isApplied(c)))],
     collected: () => appliedFirst([...listed().filter((c) => props.collectedCodes?.has(c.code) || isApplied(c)), ...(props.expiredCollected ?? [])]),
     all: () => appliedFirst(listed()),
   };
@@ -84,6 +96,13 @@ export function CouponPickerSheet(props: {
     { key: "all", label: "ทั้งหมด", empty: "ยังไม่มีคูปองในตอนนี้" },
   ];
   const [tab, setTab] = createSignal<Tab>("usable");
+  const sections = () => {
+    const list = tabLists[tab()]();
+    const shipping = { title: "คูปองส่งฟรี", list: list.filter(isShippingCoupon) };
+    const discount = { title: "คูปองส่วนลด", list: list.filter((c) => !isShippingCoupon(c)) };
+    // A โค้ดจากภายนอก in use goes alone, so its section leads and the code is the first ticket.
+    return (props.applied.some((c) => c.external) ? [discount, shipping] : [shipping, discount]).filter((s) => s.list.length > 0);
+  };
   createEffect(on(() => props.open, (open) => open && setTab(tabLists.usable().length > 0 ? "usable" : "all")));
   // Ticking reorders the list (the coupon in use leads it): each moved ticket slides from where it was to its new
   // place (FLIP, ~0.3s), so a swapped-in coupon is seen rising to the top and the replaced one dropping back.
@@ -106,12 +125,16 @@ export function CouponPickerSheet(props: {
   const apply = (coupon: Coupon, via: "code" | "pick") => {
     const replaces = props.applied.length > 0 && !canAddCoupon(props.applied, coupon);
     withSlide(() => props.onApply(coupon), coupon.code);
-    props.onCollect?.(coupon.code);
+    if (!coupon.external) props.onCollect?.(coupon.code);
     if (via === "code") setCode("");
+    const shipping = isShippingCoupon(coupon);
+    const productTotal = props.lines.reduce((sum, l) => sum + l.lineTotal, 0);
     pushToast(
-      via === "code" ? `ใช้โค้ด ${coupon.code} แล้ว` : replaces ? "เปลี่ยนคูปองแล้ว" : "ใช้คูปองแล้ว",
+      via === "code" ? (replaces ? `ใช้โค้ด ${coupon.code} แทนคูปองเดิมแล้ว` : `ใช้โค้ด ${coupon.code} แล้ว`) : replaces ? (shipping ? "เปลี่ยนคูปองส่งฟรีแล้ว" : "เปลี่ยนคูปองแล้ว") : shipping ? "ใช้คูปองส่งฟรีแล้ว" : "ใช้คูปองแล้ว",
       "success",
-      `ลด ${formatTHB(couponDiscountAmount(coupon, couponEligibleSubtotal(coupon, props.lines)))} จากยอดสั่งซื้อนี้`,
+      shipping
+        ? `ลดค่าส่ง ${formatTHB(shippingCouponAmount(coupon, productTotal, props.shippingFee ?? 0))} จากยอดสั่งซื้อนี้`
+        : `ลด ${formatTHB(couponDiscountAmount(coupon, couponEligibleSubtotal(coupon, props.lines)))} จากยอดสั่งซื้อนี้`,
     );
   };
 
@@ -119,13 +142,26 @@ export function CouponPickerSheet(props: {
   const [code, setCode] = createSignal("");
   const [codeError, setCodeError] = createSignal<string>();
   const [codeTried, setCodeTried] = createSignal(false);
+  // Waiting on the other system for a โค้ดจากภายนอก.
+  const [codeChecking, setCodeChecking] = createSignal(false);
   createEffect(on(() => props.open, (open) => open && (setCode(""), setCodeError(undefined), setCodeTried(false))));
-  const applyCode = (e: SubmitEvent) => {
+  const applyCode = async (e: SubmitEvent) => {
     e.preventDefault();
+    if (codeChecking()) return;
     setCodeTried(true);
     const typed = code().trim().toUpperCase();
     if (!typed) return setCodeError("กรุณากรอกโค้ดส่วนลด");
-    const coupon = (props.codeCoupons ?? props.coupons).find((c) => c.code.toUpperCase() === typed);
+    if (props.applied.some((c) => c.code.toUpperCase() === typed)) return setCodeError("กำลังใช้โค้ดนี้อยู่แล้ว");
+    let coupon = (props.codeCoupons ?? props.coupons).find((c) => c.code.toUpperCase() === typed);
+    // Not one of ours: ask the other system (it says not found / not started / expired / sign in / used up itself).
+    if (!coupon && props.checkExternalCode) {
+      setCodeChecking(true);
+      const result = await props.checkExternalCode(typed).finally(() => setCodeChecking(false));
+      // The field changed or the popup closed while waiting: this answer is for a code no longer there.
+      if (!props.open || code().trim().toUpperCase() !== typed) return;
+      if (!result.ok) return setCodeError(result.reason);
+      coupon = result.coupon;
+    }
     if (!coupon) return setCodeError("ไม่พบโค้ดส่วนลดนี้ กรุณาตรวจสอบอีกครั้ง");
     if (isCouponNotStarted(coupon)) return setCodeError("โค้ดส่วนลดนี้ยังไม่เริ่มใช้งาน");
     if (!isCouponActive(coupon)) return setCodeError("โค้ดส่วนลดนี้หมดอายุแล้ว");
@@ -133,6 +169,8 @@ export function CouponPickerSheet(props: {
     const blocked = blockOf(coupon);
     if (blocked) return setCodeError(blocked);
     const cartBlocked = couponCartBlock(coupon, props.lines);
+    if (cartBlocked && isShippingCoupon(coupon))
+      return setCodeError(`โค้ดนี้ใช้ได้เมื่อซื้อครบ ฿${coupon.minSpend.toLocaleString("th-TH")} (${cartBlocked.replace(" เพื่อใช้คูปองส่งฟรีนี้", "")})`);
     if (cartBlocked && (isCouponScoped(coupon) || couponStackBlocked(coupon, props.lines))) return setCodeError(cartBlocked);
     const eligible = couponEligibleSubtotal(coupon, props.lines);
     if (eligible < coupon.minSpend)
@@ -143,7 +181,16 @@ export function CouponPickerSheet(props: {
   // A round check on each ticket (ticked = in use): tap to use, tap the ticked one to stop using it.
   // One that can't be used has a grey ring; the reason is written under it.
   const action = (coupon: Coupon): CouponCardAction => {
-    if (isApplied(coupon)) return { label: "ยกเลิกการใช้คูปอง", variant: "outline", onClick: () => withSlide(() => props.onRemove(coupon.code)), check: { checked: true } };
+    if (isApplied(coupon))
+      return {
+        label: "ยกเลิกการใช้คูปอง",
+        variant: "outline",
+        onClick: () => {
+          withSlide(() => props.onRemove(coupon.code));
+          if (coupon.external) pushToast(`เอาโค้ด ${coupon.code} ออกแล้ว`, "success");
+        },
+        check: { checked: true },
+      };
     return { label: "ใช้คูปองนี้", variant: "primary", disabled: !canUse(coupon), onClick: () => apply(coupon, "pick"), check: { checked: false } };
   };
 
@@ -152,8 +199,8 @@ export function CouponPickerSheet(props: {
       open={props.open}
       onOpenChange={props.onOpenChange}
       height="auto"
-      title="คูปองส่วนลด"
-      description={`ใช้ร่วมกันได้สูงสุด ${MAX_COUPONS_PER_ORDER} คูปอง สำหรับคูปองที่ใช้ร่วมกับคูปองอื่นได้`}
+      title="เลือกคูปอง"
+      description={`ใช้คูปองส่งฟรีได้ 1 ใบ และคูปองส่วนลดสูงสุด ${MAX_COUPONS_PER_ORDER} ใบ (เมื่อใช้ร่วมกันได้)`}
       footer={
         <Button type="button" variant="primary" size="lg" class="w-full" onClick={() => props.onOpenChange(false)}>
           ตกลง
@@ -164,7 +211,7 @@ export function CouponPickerSheet(props: {
         <div class="flex items-start gap-2">
           <div class="min-w-0 flex-1">
             <TextField
-              label="กรอกโค้ดส่วนลด"
+              label="กรอกโค้ดคูปอง"
               placeholder="เช่น SAVE50"
               autocomplete="off"
               autocapitalize="characters"
@@ -180,14 +227,14 @@ export function CouponPickerSheet(props: {
             />
           </div>
           {/* Lined up with the input (label 20px + 6px gap), so a message under the input doesn't drag the button down. */}
-          <Button type="submit" variant="primary" class="mt-[26px] h-11 shrink-0 !px-5">
+          <Button type="submit" variant="primary" loading={codeChecking()} class="mt-[26px] h-11 shrink-0 !px-5">
             ใช้โค้ด
           </Button>
         </div>
       </form>
 
       <Show
-        when={listed().length > 0}
+        when={listed().length > 0 || externalApplied().length > 0}
         fallback={<EmptyState size="compact" icon={TagIcon} title="ยังไม่มีคูปองในตอนนี้" description="ถ้ามีโค้ดส่วนลด กรอกได้ที่ช่องด้านบน" />}
       >
         {/* Same underline tabs as Purchase History, each with its count. */}
@@ -215,44 +262,66 @@ export function CouponPickerSheet(props: {
           when={tabLists[tab()]().length > 0}
           fallback={<EmptyState size="compact" icon={TagIcon} title={TABS.find((t) => t.key === tab())!.empty} />}
         >
-        {/* gap-6 between tickets / gap-4 to a note: each ticket's artwork (with its shadow) is drawn ~10px above and ~14px below its box. */}
-        <ul class="flex flex-col gap-6 pt-1" aria-label={`คูปอง${TABS.find((t) => t.key === tab())!.label}`}>
-          <For each={tabLists[tab()]()}>
-            {(coupon) => {
-              const cartBlocked = () => couponCartBlock(coupon, props.lines);
-              const applied = () => isApplied(coupon);
-              // Usable, but it can't go with what's ticked: ticking it swaps them out.
-              const replaces = () => !applied() && canUse(coupon) && props.applied.length > 0 && !canAddCoupon(props.applied, coupon);
-              const blocked = () => blockOf(coupon);
-              return (
-                <li
-                  class="flex list-none flex-col gap-4"
-                  ref={(el) => {
-                    itemEls.set(coupon.code, el);
-                    onCleanup(() => itemEls.get(coupon.code) === el && itemEls.delete(coupon.code));
-                  }}
-                >
-                  {/* Can't be used: faded; expired: black and white instead (`CouponCard`'s own look). */}
-                  <div classList={{ "opacity-50": (!!cartBlocked() || !!blocked()) && !applied() && !isCouponExpired(coupon) }}>
-                    <CouponCard coupon={couponTicket(coupon)} action={action(coupon)} expired={isCouponExpired(coupon)} />
-                  </div>
-                  <Show when={applied()}>
-                    <p class="px-1 text-xs font-medium text-brand-pink">กำลังใช้คูปองนี้</p>
-                  </Show>
-                  <Show when={!applied() && blocked()}>
-                    <p class="px-1 text-xs text-ink-gray">{blocked()}</p>
-                  </Show>
-                  <Show when={!applied() && !blocked() && cartBlocked()}>
-                    <p class="px-1 text-xs text-ink-gray">{cartBlocked()}</p>
-                  </Show>
-                  <Show when={replaces()}>
-                    <p class="px-1 text-xs text-ink-gray">ใช้ร่วมกับคูปองที่เลือกอยู่ไม่ได้ เลือกแล้วจะใช้แทน</p>
-                  </Show>
-                </li>
-              );
-            }}
+        {/* Sections: คูปองส่งฟรี first (its own slot, one per order), then โค้ดส่วนลด; headings only when both have tickets.
+            gap-6 between tickets / gap-4 to a note: each ticket's artwork (with its shadow) is drawn ~10px above and ~14px below its box. */}
+        <div class="flex flex-col gap-5 pt-1">
+          <For each={sections()}>
+            {(section) => (
+              <section class="flex flex-col gap-3" aria-label={section.title}>
+                <Show when={sections().length > 1}>
+                  <h3 class="text-sm font-semibold text-ink">
+                    {section.title} ({section.list.length})
+                  </h3>
+                </Show>
+                <ul class="flex flex-col gap-6">
+                  <For each={section.list}>
+                    {(coupon) => {
+                      const cartBlocked = () => couponCartBlock(coupon, props.lines);
+                      const applied = () => isApplied(coupon);
+                      const stamp = () => (applied() ? undefined : couponStamp(coupon, props.usedByShopper?.(coupon.code) ?? 0));
+                      // Usable, but it can't go with what's ticked: ticking it swaps them out.
+                      const replaces = () => !applied() && canUse(coupon) && props.applied.length > 0 && !canAddCoupon(props.applied, coupon);
+                      const blocked = () => blockOf(coupon);
+                      return (
+                        <li
+                          class="flex list-none flex-col gap-4"
+                          ref={(el) => {
+                            itemEls.set(coupon.code, el);
+                            onCleanup(() => itemEls.get(coupon.code) === el && itemEls.delete(coupon.code));
+                          }}
+                        >
+                          {/* No use left (expired / every use gone / this shopper's uses gone): a stamp, no check, no reason line.
+                              Otherwise can't be used here: faded with the reason under it. */}
+                          <div classList={{ "opacity-50": (!!cartBlocked() || !!blocked()) && !applied() && !stamp() }}>
+                            <CouponCard coupon={couponTicket(coupon)} action={action(coupon)} stamp={stamp()} />
+                          </div>
+                          <Show when={applied()}>
+                            <p class="px-1 text-xs font-medium text-brand-pink">กำลังใช้คูปองนี้</p>
+                          </Show>
+                          <Show when={!applied() && !stamp() && blocked()}>
+                            <p class="px-1 text-xs text-ink-gray">{blocked()}</p>
+                          </Show>
+                          <Show when={!applied() && !blocked() && cartBlocked()}>
+                            <p class="px-1 text-xs text-ink-gray">{cartBlocked()}</p>
+                          </Show>
+                          <Show when={replaces()}>
+                            <p class="px-1 text-xs text-ink-gray">
+                              {props.applied.some((c) => c.external)
+                                ? "ใช้ร่วมกับโค้ดที่กรอกไม่ได้ เลือกแล้วจะใช้แทน"
+                                : isShippingCoupon(coupon)
+                                  ? "ใช้ได้ 1 คูปองส่งฟรีต่อคำสั่งซื้อ เลือกแล้วจะใช้แทนใบเดิม"
+                                  : "ใช้ร่วมกับคูปองที่เลือกอยู่ไม่ได้ เลือกแล้วจะใช้แทน"}
+                            </p>
+                          </Show>
+                        </li>
+                      );
+                    }}
+                  </For>
+                </ul>
+              </section>
+            )}
           </For>
-        </ul>
+        </div>
         </Show>
       </Show>
     </SheetModal>

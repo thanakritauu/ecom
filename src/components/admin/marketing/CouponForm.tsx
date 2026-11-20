@@ -1,6 +1,6 @@
 import { createMemo, createSignal, Show } from "solid-js";
 import { couponCombinable } from "~/lib/adminMarketing";
-import { couponAudienceBadge } from "~/lib/marketingAudience";
+import { couponAudienceBadge, couponAudienceTag } from "~/lib/marketingAudience";
 import { TextField } from "~/components/shared/TextField";
 import { AdminFloatingBar } from "~/components/admin/AdminFloatingBar";
 import { DraftPublishActions } from "~/components/admin/DraftPublishActions";
@@ -23,6 +23,7 @@ import {
 import {
   type CouponTool,
   COUPON_DISCOUNT_TYPE_META,
+  COUPON_KIND_META,
   isValidDateRange,
   formatMarketingDateShort,
   formatCouponAmount,
@@ -30,6 +31,7 @@ import {
   formatCouponMinSpend,
   type Coupon,
   type CouponDiscountType,
+  type CouponKind,
 } from "~/lib/adminMarketing";
 import { CouponCard, type Coupon as PreviewCoupon } from "~/components/shared/CouponCard";
 import { CouponDetailBody } from "~/components/shared/CouponDetailSheet";
@@ -48,6 +50,7 @@ const LABELS: Record<string, string> = {
   image: "รูปคูปอง",
   discount: "ส่วนลด",
   maxDiscount: "ลดสูงสุด",
+  shippingCap: "ลดค่าส่งสูงสุด",
   minSpend: "ยอดซื้อขั้นต่ำ",
   productScope: "ใช้ได้กับสินค้า",
   usageLimit: "จำกัดจำนวนครั้ง",
@@ -95,6 +98,11 @@ export function CouponForm(props: {
   const [audience, setAudience] = createSignal<AudienceDraft>(isNewCustomerTool ? { kind: "new", tiers: [] } : toAudienceDraft(props.initial?.audience));
   // A coupon's unset = every promo kind but not other coupons; saved as ticked, so "คูปอง" stays exactly as chosen.
   const [combinable, setCombinable] = createSignal(toCombinableDraft(couponCombinable(props.initial?.combinableWith)));
+  const [kind, setKind] = createSignal<CouponKind>(props.initial?.kind ?? "discount");
+  const isShipping = () => kind() === "shipping";
+  // คูปองส่งฟรี: the whole fee ("all"), or up to a cap ("cap").
+  const [shippingMode, setShippingMode] = createSignal<"all" | "cap">(props.initial?.shippingCap ? "cap" : "all");
+  const [shippingCap, setShippingCap] = createSignal(props.initial?.shippingCap ? String(props.initial.shippingCap) : "");
   const [discountType, setDiscountType] = createSignal<CouponDiscountType>(props.initial?.discountType ?? "baht");
   const [discount, setDiscount] = createSignal(props.initial ? String(props.initial.discount) : "");
   const [maxDiscount, setMaxDiscount] = createSignal(props.initial?.maxDiscount ? String(props.initial.maxDiscount) : "");
@@ -149,7 +157,12 @@ export function CouponForm(props: {
     else if (props.takenCodes.includes(c)) next.code = "โค้ดนี้ถูกใช้ไปแล้ว กรุณาตั้งโค้ดอื่น";
     const d = Number(discount());
     const isPercent = discountType() === "percent";
-    if (isPercent) {
+    if (isShipping()) {
+      if (shippingMode() === "cap") {
+        const cap = Number(shippingCap());
+        if (!shippingCap().trim() || !Number.isInteger(cap) || cap <= 0) next.shippingCap = "กรุณากรอกค่าส่งที่ลดสูงสุดเป็นจำนวนเต็มบาท";
+      }
+    } else if (isPercent) {
       if (!discount().trim() || !Number.isInteger(d) || d < 1 || d > 100) next.discount = "กรุณากรอกเปอร์เซ็นต์เป็นจำนวนเต็ม 1-100";
       if (maxDiscount().trim()) {
         const cap = Number(maxDiscount());
@@ -159,7 +172,7 @@ export function CouponForm(props: {
     if (minSpend().trim()) {
       const m = Number(minSpend());
       if (Number.isNaN(m) || m < 0) next.minSpend = "กรุณากรอกยอดซื้อขั้นต่ำที่ถูกต้อง";
-      else if (!isPercent && m > 0 && d > m) next.minSpend = "ยอดซื้อขั้นต่ำต้องไม่น้อยกว่าส่วนลด";
+      else if (!isShipping() && !isPercent && m > 0 && d > m) next.minSpend = "ยอดซื้อขั้นต่ำต้องไม่น้อยกว่าส่วนลด";
     }
     const total = Number(usageLimit());
     if (usageLimit().trim() && (!Number.isInteger(total) || total < 1)) next.usageLimit = "กรุณากรอกจำนวนครั้งเป็นจำนวนเต็มอย่างน้อย 1";
@@ -168,7 +181,7 @@ export function CouponForm(props: {
       if (!Number.isInteger(each) || each < 1) next.perCustomerLimit = "กรุณากรอกจำนวนครั้งเป็นจำนวนเต็มอย่างน้อย 1";
       else if (usageLimit().trim() && each > total) next.perCustomerLimit = "ต้องไม่มากกว่าจำนวนครั้งทั้งหมด";
     }
-    if (scopeMode() === "selected" && scopeRefs().length === 0) next.productScope = "กรุณาเลือกสินค้าอย่างน้อย 1 รายการ";
+    if (!isShipping() && scopeMode() === "selected" && scopeRefs().length === 0) next.productScope = "กรุณาเลือกสินค้าอย่างน้อย 1 รายการ";
     if (!startDate()) next.startDate = "กรุณาเลือกวันเริ่ม";
     if (!endDate()) next.endDate = "กรุณาเลือกวันสิ้นสุด";
     if (startDate() && endDate() && !dateRangeValid()) next.endDate = "วันสิ้นสุดต้องอยู่หลังวันเริ่ม";
@@ -184,6 +197,7 @@ export function CouponForm(props: {
       code: true,
       discount: !!discount().trim(),
       maxDiscount: true,
+      shippingCap: !!shippingCap().trim(),
       minSpend: true,
       usageLimit: true,
       perCustomerLimit: true,
@@ -195,14 +209,16 @@ export function CouponForm(props: {
 
   const values = (): CouponFormValues => ({
     code: code().trim().toUpperCase(),
-    discountType: discountType(),
-    discount: Number(discount()) || 0,
-    maxDiscount: discountType() === "percent" && Number(maxDiscount()) > 0 ? Number(maxDiscount()) : undefined,
+    kind: kind(),
+    shippingCap: isShipping() && shippingMode() === "cap" && Number(shippingCap()) > 0 ? Number(shippingCap()) : undefined,
+    discountType: isShipping() ? "baht" : discountType(),
+    discount: isShipping() ? 0 : Number(discount()) || 0,
+    maxDiscount: !isShipping() && discountType() === "percent" && Number(maxDiscount()) > 0 ? Number(maxDiscount()) : undefined,
     minSpend: Number(minSpend()) > 0 ? Number(minSpend()) : undefined,
     usageLimit: Number(usageLimit()) > 0 ? Number(usageLimit()) : undefined,
     perCustomerLimit: Number(perCustomerLimit()) > 0 ? Number(perCustomerLimit()) : undefined,
     // ทั้งร้าน = unset; a draft may keep "เฉพาะสินค้าที่เลือก" with nothing picked yet ([]).
-    productScope: scopeMode() === "selected" ? scopeRefs() : undefined,
+    productScope: !isShipping() && scopeMode() === "selected" ? scopeRefs() : undefined,
     image: image() || undefined,
     showOnHome: isCodeTool ? false : showOnHome(),
     showAtCheckout: isCodeTool ? false : showAtCheckout(),
@@ -226,8 +242,9 @@ export function CouponForm(props: {
       capLabel: formatCouponCap(v),
       image: v.image,
       minSpendLabel: formatCouponMinSpend(v),
-      audienceLabel: couponAudienceBadge(fromAudienceDraft(audience())),
-      expiryLabel: v.endDate ? `หมดอายุ ${formatMarketingDateShort(v.endDate)}` : "ยังไม่ได้ตั้งวันหมดอายุ",
+      kind: v.kind,
+      audienceTag: couponAudienceTag(fromAudienceDraft(audience())),
+      expiryNote: { text: v.endDate ? `ใช้ได้ถึง ${formatMarketingDateShort(v.endDate)}` : "ยังไม่ได้ตั้งวันหมดอายุ" },
     };
   });
 
@@ -325,7 +342,57 @@ export function CouponForm(props: {
 
         {/* 2) สิทธิประโยชน์ */}
         <Section title="สิทธิประโยชน์">
+          <div class="flex flex-col gap-1.5">
+            <span class="text-sm font-medium text-ink">ประเภทคูปอง</span>
+            <ChoiceRadio
+              name="coupon-kind"
+              value={kind()}
+              disabled={saving()}
+              onChange={(k) => {
+                setKind(k);
+                setErrors(({ discount: _d, maxDiscount: _m, shippingCap: _c, minSpend: _s, productScope: _p, ...rest }) => rest);
+              }}
+              options={(Object.keys(COUPON_KIND_META) as CouponKind[]).map((k) => ({ value: k, label: COUPON_KIND_META[k].label, hint: COUPON_KIND_META[k].hint }))}
+            />
+          </div>
+          <Show when={isShipping()}>
+            <div class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-ink">ส่วนลดค่าจัดส่ง</span>
+              <ChoiceRadio
+                name="coupon-shipping-mode"
+                value={shippingMode()}
+                disabled={saving()}
+                onChange={(m) => {
+                  setShippingMode(m);
+                  if (m === "all") fix("shippingCap");
+                }}
+                options={[
+                  { value: "all", label: "ส่งฟรีทั้งหมด", hint: "ไม่เสียค่าส่ง ทุกขนส่ง" },
+                  { value: "cap", label: "ลดค่าส่งสูงสุด", hint: "ลดค่าส่งไม่เกินยอดที่ตั้ง ส่วนที่เกินลูกค้าจ่ายเอง" },
+                ]}
+              />
+            </div>
+          </Show>
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Show when={isShipping() && shippingMode() === "cap"}>
+              <TextField
+                label="ลดค่าส่งสูงสุด (บาท)"
+                required
+                type="number"
+                min="1"
+                step="1"
+                value={shippingCap()}
+                data-field="shippingCap"
+                onInput={(e) => {
+                  setShippingCap(e.currentTarget.value);
+                  fix("shippingCap");
+                }}
+                error={errors().shippingCap}
+                disabled={saving()}
+                placeholder="เช่น 60"
+              />
+            </Show>
+            <Show when={!isShipping()}>
             <SelectField
               label="ประเภทส่วนลด"
               required
@@ -370,6 +437,7 @@ export function CouponForm(props: {
                 placeholder="ไม่จำกัด"
               />
             </Show>
+            </Show>
             <TextField
               label="ยอดซื้อขั้นต่ำ (บาท)"
               type="number"
@@ -387,14 +455,17 @@ export function CouponForm(props: {
             />
           </div>
           <p class="text-xs text-ink-gray">
-            {discountType() === "percent"
-              ? "ลดเป็นเปอร์เซ็นต์ของยอดสินค้า ปัดเศษลงเป็นบาท ไม่รวมค่าจัดส่ง เว้นลดสูงสุดว่างไว้ถ้าไม่จำกัด"
-              : "ลดจากยอดสินค้า ไม่รวมค่าจัดส่ง"}{" "}
+            {isShipping()
+              ? "ลดจากค่าจัดส่งของขนส่งที่ลูกค้าเลือก ใช้ได้ 1 ใบต่อคำสั่งซื้อ และใช้คู่กับคูปองส่วนลดได้เสมอ ยอดขั้นต่ำนับจากยอดสินค้า"
+              : discountType() === "percent"
+                ? "ลดเป็นเปอร์เซ็นต์ของยอดสินค้า ปัดเศษลงเป็นบาท ไม่รวมค่าจัดส่ง เว้นลดสูงสุดว่างไว้ถ้าไม่จำกัด"
+                : "ลดจากยอดสินค้า ไม่รวมค่าจัดส่ง"}{" "}
             เว้นยอดขั้นต่ำว่างไว้ถ้าไม่มีขั้นต่ำ
           </p>
         </Section>
 
         {/* 3) สินค้า */}
+        <Show when={!isShipping()}>
         <Section title="สินค้า">
           <div data-field="productScope" class="flex flex-col gap-3">
             <ChoiceRadio
@@ -423,6 +494,7 @@ export function CouponForm(props: {
             </Show>
           </div>
         </Section>
+        </Show>
 
         {/* 4) จำกัดการใช้ */}
         <Section title="จำกัดการใช้">
@@ -504,10 +576,19 @@ export function CouponForm(props: {
         </Section>
 
         {/* 6) การใช้ร่วมกับโปรอื่น */}
-        <Section title="การใช้ร่วมกับโปรอื่น" description="คูปองนี้ใช้ร่วมกับโปรประเภทไหนได้บ้างในคำสั่งซื้อเดียวกัน">
-          <CombinableField value={combinable()} onChange={setCombinable} disabled={saving()} />
-          <p class="text-xs text-ink-gray">ติ๊ก "คูปอง" เพื่อให้ใช้ร่วมกับคูปองอื่นที่ติ๊กไว้เหมือนกันได้ สูงสุด 2 คูปองต่อคำสั่งซื้อ</p>
-        </Section>
+        <Show
+          when={!isShipping()}
+          fallback={
+            <Section title="การใช้ร่วมกับโปรอื่น">
+              <p class="text-sm text-ink-gray">คูปองส่งฟรีใช้ร่วมกับโปรโมชั่นและคูปองส่วนลดได้เสมอ ถ้าคำสั่งซื้อได้ส่งฟรีจากโปรโมชั่นอยู่แล้ว คูปองนี้จะไม่ถูกใช้</p>
+            </Section>
+          }
+        >
+          <Section title="การใช้ร่วมกับโปรอื่น" description="คูปองนี้ใช้ร่วมกับโปรประเภทไหนได้บ้างในคำสั่งซื้อเดียวกัน">
+            <CombinableField value={combinable()} onChange={setCombinable} disabled={saving()} />
+            <p class="text-xs text-ink-gray">ติ๊ก "คูปอง" เพื่อให้ใช้ร่วมกับคูปองอื่นที่ติ๊กไว้เหมือนกันได้ สูงสุด 2 คูปองต่อคำสั่งซื้อ</p>
+          </Section>
+        </Show>
       </div>
 
       <Show when={submitError()}>

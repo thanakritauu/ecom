@@ -14,7 +14,7 @@ import { CouponTicketIcon } from "~/components/admin/icons";
 import { formatAdminCurrency } from "~/lib/adminDashboard";
 import {
   MARKETING_PHASE_META,
-  COUPON_DISCOUNT_TYPE_META,
+  formatCouponType,
   formatCouponDiscount,
   formatCouponLimit,
   formatCouponMinSpend,
@@ -197,7 +197,7 @@ export default function AdminCouponDetailPage() {
                 <Section title="ส่วนลด">
                   <p class="text-2xl font-bold text-ink">{formatCouponDiscount(c())}</p>
                   <dl class="flex flex-col gap-1.5 text-sm">
-                    <Row label="ประเภท" value={COUPON_DISCOUNT_TYPE_META[c().discountType].label} />
+                    <Row label="ประเภท" value={formatCouponType(c())} />
                     <Show when={c().discountType === "percent"}>
                       <Row label="ลดสูงสุด" value={c().maxDiscount ? formatAdminCurrency(c().maxDiscount!) : "ไม่จำกัด"} />
                     </Show>
@@ -217,7 +217,7 @@ export default function AdminCouponDetailPage() {
                   <dl class="flex flex-col gap-1.5 text-sm">
                     <Row label="เครื่องมือ" value={MARKETING_TOOL_META[couponTool(c())].label} />
                     <Row label="กลุ่มลูกค้า" value={formatAudience(c().audience)} />
-                    <Row label="ใช้ร่วมกับโปรอื่น" value={formatCouponCombinable(c().combinableWith)} />
+                    <Row label="ใช้ร่วมกับโปรอื่น" value={formatCouponCombinable(c().combinableWith, c().kind)} />
                     <Row label="เริ่ม" value={formatMarketingDateTime(c().startDate, c().startTime)} />
                     <Row label="สิ้นสุด" value={formatMarketingDateTime(c().endDate, c().endTime)} />
                   </dl>

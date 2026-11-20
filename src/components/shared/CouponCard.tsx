@@ -1,14 +1,14 @@
 import { createSignal, Show } from "solid-js";
 import { Button } from "./Button";
-import { CheckBadge } from "./icons";
+import { CheckBadge, TruckIcon } from "./icons";
 import { CouponDetailSheet } from "./CouponDetailSheet";
 import dashedLine from "~/assets/icons/coupon-dashed-line.svg";
 import percentIcon from "~/assets/icons/coupon-percent.svg";
-import type { Coupon as StoreCoupon } from "~/lib/cartSelectors";
+import type { Coupon as StoreCoupon, CouponStamp } from "~/lib/cartSelectors";
 
-/** Two half-height layers, each with one notch: top edge and bottom edge at x=100px, 8px radius. */
+/** Two half-height layers, each with one notch: top edge and bottom edge at the stub's edge (`--stub`: 76px on phones, 100px from sm), 8px radius. */
 const TICKET_MASK =
-  "radial-gradient(circle at 100px 0, transparent 8px, #000 8.5px) top / 100% 51% no-repeat, radial-gradient(circle at 100px 100%, transparent 8px, #000 8.5px) bottom / 100% 51% no-repeat";
+  "radial-gradient(circle at var(--stub) 0, transparent 8px, #000 8.5px) top / 100% 51% no-repeat, radial-gradient(circle at var(--stub) 100%, transparent 8px, #000 8.5px) bottom / 100% 51% no-repeat";
 
 export type Coupon = {
   id: string;
@@ -18,18 +18,47 @@ export type Coupon = {
   /** Admin's coupon thumbnail, shown in the stub instead of the % artwork. */
   image?: string;
   minSpendLabel: string;
-  /** กลุ่มลูกค้า badge above the amount ("สำหรับทุกคน" / "สำหรับลูกค้าใหม่"). */
-  audienceLabel?: string;
-  /** Not shown on the ticket: the expiry date lives only in the coupon's conditions modal (`CouponDetailSheet`). */
-  expiryLabel?: string;
+  /** กลุ่มลูกค้า tag on the stub's top corner ("ทุกคน" / "ลูกค้าใหม่" / "เคยสั่งซื้อ" / "สมาชิก", `couponAudienceTag`). */
+  audienceTag?: string;
+  /** The last line: "ใช้ได้ถึง 31 ธ.ค.", or red when close ("เหลือ 2 วัน" / "หมดอายุวันนี้"), or "หมดอายุ 31 ต.ค." once past. */
+  expiryNote?: { text: string; urgent?: boolean };
+  /** "shipping" = คูปองส่งฟรี (teal stub with a truck); default = โค้ดส่วนลด. */
+  kind?: "discount" | "shipping";
   /** The catalog coupon behind the ticket — when set, tapping the card opens its details & conditions. */
   source?: StoreCoupon;
 };
 
-/** The ticket for one storefront coupon: Home's section and Checkout's picker print the exact same three lines. */
+/** Days left at which the expiry line turns red. */
+const URGENT_DAYS = 3;
+
+/** The expiry line from the coupon's last valid moment (`expiresLabel` = "หมดอายุ 31 ต.ค."). */
+export function couponExpiryNote(c: Pick<StoreCoupon, "expiresAt" | "expiresLabel">, now = Date.now()): Coupon["expiryNote"] {
+  const left = Date.parse(c.expiresAt) - now;
+  if (Number.isNaN(left)) return undefined;
+  if (left < 0) return { text: c.expiresLabel };
+  const days = Math.ceil(left / 86_400_000);
+  if (days <= 1) return { text: "หมดอายุวันนี้", urgent: true };
+  if (days <= URGENT_DAYS) return { text: `เหลือ ${days} วัน`, urgent: true };
+  return { text: c.expiresLabel.replace("หมดอายุ", "ใช้ได้ถึง") };
+}
+
+/** The ticket for one storefront coupon: every coupon surface (Home, /coupons, the account, Checkout's picker) prints the same lines. */
 export function couponTicket(c: StoreCoupon): Coupon {
   const minSpendLabel = c.minSpend > 0 ? `ขั้นต่ำ ฿${c.minSpend.toLocaleString("th-TH")}` : "ไม่มีขั้นต่ำ";
-  return { id: c.code, amountLabel: c.amountLabel, capLabel: c.capLabel, image: c.image, minSpendLabel, audienceLabel: c.audienceLabel, expiryLabel: c.expiresLabel, source: c };
+  // โค้ดจากภายนอก: the ticket shows only its name ("โค้ด FREE50"), no tag, amount or minimum, and there's
+  // no detail sheet (no `source`): the other system owns its conditions.
+  if (c.external) return { id: c.code, amountLabel: `โค้ด ${c.code}`, minSpendLabel: "", kind: c.kind };
+  return {
+    id: c.code,
+    amountLabel: c.amountLabel,
+    capLabel: c.capLabel,
+    image: c.image,
+    minSpendLabel,
+    audienceTag: c.audienceTag,
+    expiryNote: couponExpiryNote(c),
+    kind: c.kind,
+    source: c,
+  };
 }
 
 /**
@@ -44,7 +73,19 @@ export function couponTicket(c: StoreCoupon): Coupon {
  * `check`: Checkout's picker, a round check instead of a button (ticked = the coupon in use); `label` is its
  * accessible name and the detail sheet's full-width button text.
  */
-export type CouponCardAction = { label: string; variant: "primary" | "outline"; disabled?: boolean; onClick: () => void; check?: { checked: boolean } };
+export type CouponCardAction = {
+  label: string;
+  variant: "primary" | "outline";
+  disabled?: boolean;
+  onClick: () => void;
+  check?: { checked: boolean };
+  /** For another กลุ่มลูกค้า: a grey two-line pill "เฉพาะ" + this ("ลูกค้าใหม่"), not a button. */
+  onlyFor?: string;
+};
+
+const STAMP_LABEL: Record<CouponStamp, string> = { expired: "หมดอายุ", soldout: "สิทธิ์หมดแล้ว", used: "ใช้แล้ว" };
+/** The detail sheet's (disabled) button for a coupon with no use left. */
+const STAMP_SHEET_LABEL: Record<CouponStamp, string> = { expired: "คูปองหมดอายุแล้ว", soldout: "สิทธิ์หมดแล้ว", used: "ใช้สิทธิ์ครบแล้ว" };
 
 export function CouponCard(props: {
   coupon: Coupon;
@@ -55,6 +96,12 @@ export function CouponCard(props: {
   display?: boolean;
   /** Past its dates: black and white, faded, like an out-of-stock product photo. */
   expired?: boolean;
+  /** Can't be taken any more: a round stamp replaces the button ("หมดอายุ" also turns the ticket black and white). */
+  stamp?: CouponStamp;
+  /** Collected: the button becomes "ใช้คูปอง" (outline) and runs this, e.g. to go shopping. */
+  onUse?: () => void;
+  /** Desktop 2-across grids (Home, /coupons): from `xl` another group's "เฉพาะ ..." pill is one line, the size of "ใช้คูปอง". */
+  wide?: boolean;
 }) {
   const [status, setStatus] = createSignal<"idle" | "loading" | "error">("idle");
 
@@ -74,25 +121,49 @@ export function CouponCard(props: {
   const ActionButton = (p: { full?: boolean }) => {
     // A disabled action ("ไม่ตรงเงื่อนไข") is a longer word: one size smaller on the ticket so the amount keeps its room.
     const cls = () =>
-      p.full ? "w-full" : props.action?.disabled ? "!min-h-0 shrink-0 !px-2.5 !py-2 !text-sm !leading-[normal]" : "!min-h-0 shrink-0 !px-4 !py-2 !text-base !leading-[normal]";
+      p.full ? "w-full" : props.action?.disabled ? "!min-h-0 shrink-0 !px-2.5 !py-2 !text-sm !leading-[normal]" : "!min-h-0 shrink-0 !px-3 !py-2 !text-base !leading-[normal] [@container_(min-width:410px)]:!px-4";
     return (
       <Show
         when={props.action}
         fallback={
-          <Button
-            variant={props.collected ? "outline" : "primary"}
-            class={cls()}
-            loading={status() === "loading"}
-            disabled={props.collected}
-            onClick={collect}
+          <Show
+            when={props.collected && props.onUse}
+            fallback={
+              <Button variant={props.collected ? "outline" : "primary"} class={cls()} loading={status() === "loading"} disabled={props.collected} onClick={collect}>
+                <Show when={!props.collected} fallback="เก็บแล้ว">
+                  {status() === "error" ? "ลองอีกครั้ง" : "เก็บ"}
+                </Show>
+              </Button>
+            }
           >
-            <Show when={!props.collected} fallback="เก็บแล้ว">
-              {status() === "error" ? "ลองอีกครั้ง" : "เก็บเลย"}
-            </Show>
-          </Button>
+            {/* Collected: one tap to go use it. */}
+            <Button
+              variant="outline"
+              class={cls()}
+              onClick={() => {
+                setDetailOpen(false);
+                props.onUse!();
+              }}
+            >
+              ใช้คูปอง
+            </Button>
+          </Show>
         }
       >
         {(action) => (
+          <Show
+            when={!(action().onlyFor && !p.full)}
+            fallback={
+              // Narrow ticket: a small two-line pill (no room for 16px beside the amount). A ticket 520px+ wide: one line
+              // "เฉพาะสมาชิก Icon", the same size, padding and 16px Medium text as the "ใช้คูปอง" button.
+              <span
+                class="flex max-w-[88px] shrink-0 flex-col items-center rounded-xl bg-surface-gray px-2.5 py-1.5 text-center text-xs font-medium leading-4 text-ink-gray [@container_(min-width:520px)]:max-w-none [@container_(min-width:520px)]:flex-row [@container_(min-width:520px)]:rounded-pill [@container_(min-width:520px)]:border [@container_(min-width:520px)]:border-surface-gray [@container_(min-width:520px)]:px-4 [@container_(min-width:520px)]:py-2 [@container_(min-width:520px)]:text-base [@container_(min-width:520px)]:leading-[normal] [@container_(min-width:520px)]:whitespace-nowrap"
+              >
+                <span>เฉพาะ</span>
+                <span>{action().onlyFor}</span>
+              </span>
+            }
+          >
           <Show
             when={action().check && !p.full}
             fallback={
@@ -133,6 +204,7 @@ export function CouponCard(props: {
               </Show>
             </button>
           </Show>
+          </Show>
         )}
       </Show>
     );
@@ -144,7 +216,13 @@ export function CouponCard(props: {
    * the collect/use button on top — so that button never opens the sheet.
    */
   return (
-    <div class="relative h-[104px] w-full" classList={{ "opacity-70 grayscale": props.expired }}>
+    <div
+      class="relative h-[104px] w-full [container-type:inline-size]"
+      classList={{ "opacity-70 grayscale": props.expired || props.stamp === "expired", "opacity-60": props.stamp === "soldout" || props.stamp === "used" }}
+    >
+      {/* Sizes follow the ticket's own width (container queries), not the screen: a narrow ticket (< 410px: phones, 2-across
+          tablet grids, the account page) gets a 76px stub and compact text; 410px+ the 100px stub; 520px+ the roomiest text. */}
+      <div class="absolute inset-0 [--stub:76px] [@container_(min-width:410px)]:[--stub:100px]">
       {/* Ticket outline drawn in CSS (was a 369px SVG stretched to fit, which bent the notches and corners at other
           widths): 16px corners, 8px notches centred on the dashed line at 100px, Figma's shadow (y 2, blur 12, 10%). */}
       <div aria-hidden="true" class="pointer-events-none absolute inset-0 [filter:drop-shadow(0_2px_12px_rgba(90,106,133,0.1))]">
@@ -159,43 +237,94 @@ export function CouponCard(props: {
           onClick={() => setDetailOpen(true)}
         />
       </Show>
-      {/* Stub: Admin's thumbnail (64px, centred in the 100px stub) or the % artwork. */}
+      {/* Stub: คูปองส่งฟรี = a green truck where the % artwork sits; คูปองส่วนลด = Admin's thumbnail (64px) or the % artwork.
+          A กลุ่มลูกค้า tag sits in its top corner, so the artwork moves 8px down. */}
       <Show
-        when={props.coupon.image}
-        fallback={<img src={percentIcon} alt="" aria-hidden="true" class="pointer-events-none absolute left-[31px] top-[20px] h-[63px] w-[43px]" />}
+        when={props.coupon.kind === "shipping"}
+        fallback={
+          <Show
+            when={props.coupon.image}
+            fallback={<img src={percentIcon} alt="" aria-hidden="true" class="pointer-events-none absolute left-[21px] h-[50px] w-[34px] [@container_(min-width:410px)]:left-[31px] [@container_(min-width:410px)]:h-[63px] [@container_(min-width:410px)]:w-[43px]" classList={{ "top-[27px] [@container_(min-width:410px)]:top-[20px]": !props.coupon.audienceTag, "top-[33px] [@container_(min-width:410px)]:top-[28px]": !!props.coupon.audienceTag }} />}
+          >
+            {(src) => <img src={src()} alt="" aria-hidden="true" class="pointer-events-none absolute left-[14px] size-12 rounded-xl object-cover [@container_(min-width:410px)]:left-[18px] [@container_(min-width:410px)]:size-16" classList={{ "top-[28px] [@container_(min-width:410px)]:top-[20px]": !props.coupon.audienceTag, "top-[34px] [@container_(min-width:410px)]:top-[28px]": !!props.coupon.audienceTag }} />}
+          </Show>
+        }
       >
-        {(src) => <img src={src()} alt="" aria-hidden="true" class="pointer-events-none absolute left-[18px] top-[20px] size-16 rounded-xl object-cover" />}
+        <span class="pointer-events-none absolute left-4 text-[#1FA98F] [@container_(min-width:410px)]:left-[24px]" classList={{ "top-[30px] [@container_(min-width:410px)]:top-[24px]": !props.coupon.audienceTag, "top-[36px] [@container_(min-width:410px)]:top-[32px]": !!props.coupon.audienceTag }}>
+          <TruckIcon class="size-11 [@container_(min-width:410px)]:size-14" />
+        </span>
       </Show>
-      <img src={dashedLine} alt="" aria-hidden="true" class="pointer-events-none absolute left-[99.5px] top-2 h-[88px] w-px" />
-      {/* With a group badge the content gets 12px top / bottom (not 16) so a capped coupon's four lines still fit the 104px ticket.
-          The badge spans the whole content width (above the amount and the button), so a long one isn't cut short on phones. */}
-      <div
-        class="pointer-events-none absolute inset-y-0 left-[100px] right-0 flex flex-col justify-center px-4"
-        classList={{ "py-4": !props.coupon.audienceLabel, "py-3": !!props.coupon.audienceLabel }}
-      >
-        {/* กลุ่มลูกค้า from Admin: same look as the product promo badges (soft red, 11px). */}
-        <Show when={props.coupon.audienceLabel}>
-          {(label) => (
-            <span class="mb-0.5 max-w-full self-start truncate rounded-pill bg-danger-soft px-1.5 text-[11px] font-normal leading-4 text-danger-strong">{label()}</span>
-          )}
-        </Show>
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex min-w-0 flex-col">
-            {/* A capped % coupon adds one line, so its amount line is 4px shorter to keep every line inside the 104px ticket. */}
-            <p class="whitespace-nowrap text-xl font-bold text-system-red" classList={{ "leading-7": !props.coupon.capLabel, "leading-6": !!props.coupon.capLabel }}>
+      {/* กลุ่มลูกค้า tag: red on every ticket. */}
+      <Show when={props.coupon.audienceTag}>
+        {(tag) => (
+          <span class="pointer-events-none absolute left-1.5 top-1.5 max-w-[88px] truncate rounded-md bg-system-red px-1.5 text-[11px] font-medium leading-4 text-white">
+            {tag()}
+          </span>
+        )}
+      </Show>
+      <img src={dashedLine} alt="" aria-hidden="true" class="pointer-events-none absolute left-[calc(var(--stub)-0.5px)] top-2 h-[88px] w-px" />
+      {/* Two lines on every surface and screen, never wrapped: (1) amount + the "สูงสุด" badge beside it, (2) minimum | expiry. */}
+      <div data-ticket-content class="pointer-events-none absolute inset-y-0 left-[var(--stub)] right-0 flex items-center justify-between gap-1.5 px-3 [@container_(min-width:410px)]:gap-2 [@container_(min-width:410px)]:px-4">
+        <div class="flex min-w-0 flex-col gap-1">
+          <div class="flex items-center gap-1 [@container_(min-width:410px)]:gap-1.5 [@container_(min-width:520px)]:gap-2">
+            <p
+              class="whitespace-nowrap text-[17px] font-bold leading-7 [@container_(min-width:410px)]:text-lg [@container_(min-width:520px)]:text-2xl [@container_(min-width:520px)]:leading-8"
+              classList={{ "text-system-red": props.coupon.kind !== "shipping", "text-[#137A67]": props.coupon.kind === "shipping" }}
+            >
               {props.coupon.amountLabel}
             </p>
             <Show when={props.coupon.capLabel}>
-              <p class="whitespace-nowrap text-xs font-medium leading-4 text-system-red">{props.coupon.capLabel}</p>
+              <p
+                class="whitespace-nowrap rounded-md px-1 py-0.5 text-[11px] font-medium leading-4 [@container_(min-width:520px)]:px-1.5 [@container_(min-width:520px)]:text-xs"
+                classList={{
+                  "bg-system-red/10 text-system-red": props.coupon.kind !== "shipping",
+                  "bg-[#1FA98F]/10 text-[#137A67]": props.coupon.kind === "shipping",
+                }}
+              >
+                {props.coupon.capLabel}
+              </p>
             </Show>
-            <p class="whitespace-nowrap text-sm font-medium leading-5 text-ink">{props.coupon.minSpendLabel}</p>
           </div>
-          <Show when={!props.display}>
-            <div class="pointer-events-auto shrink-0">
-              <ActionButton />
-            </div>
-          </Show>
+          {/* Empty for a โค้ดจากภายนอก (name only): hidden so the name sits centred. */}
+          <div class="flex items-center gap-1 empty:hidden [@container_(min-width:410px)]:gap-1.5 [@container_(min-width:520px)]:gap-2">
+            <Show when={props.coupon.minSpendLabel}>
+              <p class="whitespace-nowrap text-[11px] font-medium leading-4 text-ink [@container_(min-width:410px)]:text-xs [@container_(min-width:520px)]:text-sm [@container_(min-width:520px)]:leading-5">{props.coupon.minSpendLabel}</p>
+            </Show>
+            <Show when={props.coupon.expiryNote}>
+              {(note) => (
+                <>
+                  <span class="h-3 w-px shrink-0 bg-border" aria-hidden="true" />
+                  <p
+                    class="whitespace-nowrap text-[11px] leading-4 [@container_(min-width:410px)]:text-xs [@container_(min-width:520px)]:text-sm [@container_(min-width:520px)]:leading-5"
+                    classList={{ "text-system-red": !!note().urgent, "text-ink-gray": !note().urgent }}
+                  >
+                    {/* A narrow ticket says "ถึง 31 ธ.ค." so both items stay on one line. */}
+                    <Show when={note().text.startsWith("ใช้ได้ถึง ")} fallback={note().text}>
+                      <span class="hidden [@container_(min-width:410px)]:inline">ใช้ได้</span>ถึง {note().text.slice("ใช้ได้ถึง ".length)}
+                    </Show>
+                  </p>
+                </>
+              )}
+            </Show>
+          </div>
         </div>
+        <Show when={!props.display}>
+          <Show
+            when={props.stamp}
+            fallback={
+              <div class="pointer-events-auto shrink-0">
+                <ActionButton />
+              </div>
+            }
+          >
+            {(stamp) => (
+              <span class="flex size-16 shrink-0 -rotate-12 items-center justify-center rounded-pill border-2 border-ink-gray bg-white px-1 text-center text-xs font-semibold leading-4 text-ink-gray">
+                {STAMP_LABEL[stamp()]}
+              </span>
+            )}
+          </Show>
+        </Show>
+      </div>
       </div>
       <Show when={!props.display && props.coupon.source}>
         {(source) => (
@@ -203,8 +332,17 @@ export function CouponCard(props: {
             open={detailOpen()}
             onOpenChange={setDetailOpen}
             coupon={source()}
-            ticket={<CouponCard coupon={props.coupon} display />}
-            action={<ActionButton full />}
+            ticket={<CouponCard coupon={props.coupon} display wide={props.wide} stamp={props.stamp} expired={props.expired} />}
+            action={
+              // No use left (expired / every use gone / this shopper's uses gone): the sheet's button can't be pressed either.
+              <Show when={props.stamp ?? (props.expired ? "expired" : undefined)} fallback={<ActionButton full />}>
+                {(stamp) => (
+                  <Button variant="outline" class="w-full" disabled>
+                    {STAMP_SHEET_LABEL[stamp()]}
+                  </Button>
+                )}
+              </Show>
+            }
           />
         )}
       </Show>
