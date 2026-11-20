@@ -2,6 +2,7 @@ import { createSignal, Show } from "solid-js";
 import { Button } from "./Button";
 import { CheckBadge, TruckIcon } from "./icons";
 import { CouponDetailSheet } from "./CouponDetailSheet";
+import { Badge } from "./Badge";
 import dashedLine from "~/assets/icons/coupon-dashed-line.svg";
 import percentIcon from "~/assets/icons/coupon-percent.svg";
 import type { Coupon as StoreCoupon, CouponStamp } from "~/lib/cartSelectors";
@@ -251,16 +252,16 @@ export function CouponCard(props: {
           </Show>
         }
       >
-        <span class="pointer-events-none absolute left-[22px] text-[#1FA98F]" classList={{ "top-[24px]": !props.coupon.audienceTag, "top-[32px]": !!props.coupon.audienceTag }}>
+        <span class="pointer-events-none absolute left-[22px] text-success" classList={{ "top-[24px]": !props.coupon.audienceTag, "top-[32px]": !!props.coupon.audienceTag }}>
           <TruckIcon class="size-14" />
         </span>
       </Show>
-      {/* กลุ่มลูกค้า tag: red on every ticket. */}
+      {/* กลุ่มลูกค้า tag: the product card's "ลด %" badge (`Badge` red) on every ticket. */}
       <Show when={props.coupon.audienceTag}>
         {(tag) => (
-          <span class="pointer-events-none absolute left-1.5 top-1.5 max-w-[88px] truncate rounded-md bg-system-red px-1.5 text-[11px] font-medium leading-4 text-white">
-            {tag()}
-          </span>
+          <Badge tone="red" class="pointer-events-none absolute left-1.5 top-1.5 max-w-[88px]">
+            <span class="truncate">{tag()}</span>
+          </Badge>
         )}
       </Show>
       <img src={dashedLine} alt="" aria-hidden="true" class="pointer-events-none absolute left-[calc(var(--stub)-0.5px)] top-2 h-[88px] w-px" />
@@ -270,16 +271,16 @@ export function CouponCard(props: {
           <div class="flex items-center gap-1 [@container_(min-width:410px)]:gap-1.5 [@container_(min-width:520px)]:gap-2">
             <p
               class="whitespace-nowrap text-[17px] font-bold leading-7 [@container_(min-width:410px)]:text-lg [@container_(min-width:520px)]:text-2xl [@container_(min-width:520px)]:leading-8"
-              classList={{ "text-system-red": props.coupon.kind !== "shipping", "text-[#137A67]": props.coupon.kind === "shipping" }}
+              classList={{ "text-system-red": props.coupon.kind !== "shipping", "text-success": props.coupon.kind === "shipping" }}
             >
               {props.coupon.amountLabel}
             </p>
             <Show when={props.coupon.capLabel}>
               <p
-                class="whitespace-nowrap rounded-md px-1 py-0.5 text-[11px] font-medium leading-4 [@container_(min-width:520px)]:px-1.5 [@container_(min-width:520px)]:text-xs"
+                class="shrink-0 whitespace-nowrap rounded-pill px-1.5 py-0.5 text-xs font-bold"
                 classList={{
-                  "bg-system-red/10 text-system-red": props.coupon.kind !== "shipping",
-                  "bg-[#1FA98F]/10 text-[#137A67]": props.coupon.kind === "shipping",
+                  "bg-danger-soft text-danger-strong": props.coupon.kind !== "shipping",
+                  "bg-success-soft text-success": props.coupon.kind === "shipping",
                 }}
               >
                 {props.coupon.capLabel}
