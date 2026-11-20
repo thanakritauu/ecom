@@ -1,11 +1,13 @@
 import type { StatusTone } from "~/components/admin/StatusBadge";
 import type { TaxInvoiceBuyer, TaxInvoiceStatus } from "./taxInvoice";
-import type { Order, ShipmentStatus, TrackingEvent, TrackingStatus } from "./types";
+import type { Order, ProofOfDelivery, ShipmentStatus, TrackingEvent, TrackingStatus } from "./types";
+import podPhoto from "~/assets/images/pod/pod-photo.svg";
+import podSignature from "~/assets/images/pod/pod-signature.svg";
 import type { PaymentFailureReason } from "./payment";
 import { FAILURE_MESSAGES } from "./payment";
 import { allProducts } from "./products";
 import { formatAdminCurrency } from "./adminDashboard";
-import { applyPaymentDeadline, AUTO_CANCEL_REASON, getPaymentDeadline, MOCK_ORDERS as ACCOUNT_ORDERS, getPaymentStatus as getAccountPaymentStatus, ORDERS_MOCK_NOW_ISO } from "./accountData";
+import { applyPaymentDeadline, AUTO_CANCEL_REASON, getPaymentDeadline, MOCK_ORDERS as ACCOUNT_ORDERS, getPaymentStatus as getAccountPaymentStatus } from "./accountData";
 import { AVAILABLE_COUPONS, COIN_TO_BAHT_RATE, computeCoinsEarned, computeShippingFee, DELIVERY, GIFT_PROMOTION, PAYMENT_METHODS, type PaymentMethodId } from "./cartSelectors";
 import type { TierId } from "./membership";
 import { getShipmentStatus, SHIPMENT_STATUS_META } from "./orderTracking";
@@ -145,6 +147,8 @@ export type OrderShippingInfo = {
   trackingNumber?: string;
   events: TrackingEvent[];
   address: OrderAddress;
+  /** From the carrier's API with the delivered scan (`ProofOfDelivery`). */
+  proofOfDelivery?: ProofOfDelivery;
 };
 
 /** One-line display with the storefront's own แขวง/เขต (or ตำบล/อำเภอ) prefixing rules. */
@@ -197,10 +201,6 @@ export type AdminOrder = {
   taxInvoice?: TaxInvoiceBuyer;
   /** ISO time staff marked the tax invoice as emailed (Order Detail "บันทึกว่าส่งแล้ว"). */
   taxInvoiceSentAt?: string;
-  /** ISO — the customer pressed "ยืนยันรับสินค้า" on the website (no return after this). */
-  receivedConfirmedAt?: string;
-  /** ISO — when this order's คะแนน Charmiss Club were credited: on "ยืนยันรับสินค้า", else 7-15 days after delivery. */
-  pointsCreditedAt?: string;
   orderStatus: OrderStatus;
   paymentStatus: PaymentStatus;
   fulfillmentStatus: FulfillmentStatus;
@@ -496,6 +496,7 @@ function buildAdminSeedOrder(seed: OrderSeed): AdminOrder {
     trackingNumber: events.some((e) => e.status === "shipped") ? mockDhlTrackingNumber(seed.seq) : undefined,
     events,
     address: seed.address,
+    proofOfDelivery: seedProofOfDelivery(events, seed.address.recipientName),
   };
   const paymentStatus: PaymentStatus = isPaid ? "paid" : seed.orderStatus === "cancelled" ? "cancelled" : "pending";
   return {
@@ -522,19 +523,14 @@ function buildAdminSeedOrder(seed: OrderSeed): AdminOrder {
     orderStatus: seed.orderStatus,
     paymentStatus,
     fulfillmentStatus: deriveFulfillmentStatus(shipping),
-    pointsCreditedAt: seedPointsCreditedAt(events),
     cancellation: seed.cancellation && { by: seed.cancellation.by, reason: seed.cancellation.reason, at: addHours(seed.placedAt, seed.cancellation.afterHours) },
   };
 }
 
-/**
- * Seed orders nobody confirmed on the website: the loyalty system credited their คะแนน 7 days after delivery,
- * when that day has come by the mock "now"; a later one is still waiting.
- */
-function seedPointsCreditedAt(events: { status: string; timestamp: string }[]): string | undefined {
-  const delivered = events.find((e) => e.status === "delivered")?.timestamp;
-  const credited = delivered ? addHours(delivered, 7 * 24) : undefined;
-  return credited && Date.parse(credited) <= Date.parse(ORDERS_MOCK_NOW_ISO) ? credited : undefined;
+/** Mock: what DHL's API sends with a delivered scan (signed for by the recipient, with the courier's photo). */
+function seedProofOfDelivery(events: TrackingEvent[], recipientName: string): ProofOfDelivery | undefined {
+  const delivered = events.find((e) => e.status === "delivered");
+  return delivered ? { deliveredAt: delivered.timestamp, receivedBy: recipientName, method: "ผู้รับลงชื่อรับ", photoUrl: podPhoto, signatureUrl: podSignature } : undefined;
 }
 
 /** Admin-facing SKUs for the account orders' snapshot items (they were never added to the PDP catalog — see accountData.ts). */
@@ -592,6 +588,7 @@ function buildFromAccountOrder(order: Order): AdminOrder {
     trackingNumber: order.shipment.trackingNumber,
     events: order.shipment.events,
     address: shippingAddress,
+    proofOfDelivery: order.shipment.proofOfDelivery,
   };
   return {
     id: order.id,
@@ -613,8 +610,6 @@ function buildFromAccountOrder(order: Order): AdminOrder {
     orderStatus: order.status,
     paymentStatus: accountPayment,
     fulfillmentStatus: deriveFulfillmentStatus(shipping),
-    receivedConfirmedAt: order.receivedAt,
-    pointsCreditedAt: order.pointsCreditedAt,
     // The storefront's payment-deadline auto-cancel reads as a system cancel with the storefront's own reason.
     cancellation: order.cancelledAt ? (order.cancelReason ? { by: "system", reason: AUTO_CANCEL_REASON, at: order.cancelledAt } : { by: "admin", reason: "ลูกค้าแจ้งยกเลิกทาง LINE", at: order.cancelledAt }) : undefined,
   };
@@ -636,8 +631,8 @@ export function orderCoinMovements(order: AdminOrder, tier: TierId): { used: num
   const used = order.orderStatus === "cancelled" ? 0 : order.totals.coinsRedeemed;
   const earns = order.orderStatus !== "cancelled" && order.orderStatus !== "pending_payment";
   if (!earns) return { used, earned: 0 };
-  // Credited on "ยืนยันรับสินค้า" or after the waiting period (`pointsCreditedAt`); until then pending.
-  return { used, earned: computeCoinsEarned(order.totals.grandTotal - order.totals.shippingFee, tier), state: order.pointsCreditedAt ? "earned" : "pending" };
+  // Credited the moment it's ส่งสำเร็จ (the carrier's proof of delivery); until then pending.
+  return { used, earned: computeCoinsEarned(order.totals.grandTotal - order.totals.shippingFee, tier), state: order.orderStatus === "completed" ? "earned" : "pending" };
 }
 
 /** Coins a customer's seed orders add to their balance: delivered earnings minus redemptions (pending earnings aren't credited yet). */

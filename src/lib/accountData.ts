@@ -5,6 +5,8 @@ import { AVAILABLE_COUPONS, COIN_TO_BAHT_RATE, computeShippingFee, DELIVERY, GIF
 import orderItemLipTint from "~/assets/images/account/order-item-lip-tint.png";
 import orderItemFoundation from "~/assets/images/account/order-item-foundation.png";
 import orderItemBlush from "~/assets/images/account/order-item-blush.png";
+import podPhoto from "~/assets/images/pod/pod-photo.svg";
+import podSignature from "~/assets/images/pod/pod-signature.svg";
 
 /**
  * Mock signed-in shopper — this prototype has no auth backend, matching
@@ -158,6 +160,7 @@ function deliveredShipment(placedAt: string, trackingNumber: string, branch: str
       { status: "out_for_delivery", timestamp: bkk(placedAt, 47), description: "พนักงานกำลังนำส่งพัสดุ", location: branch },
       { status: "delivered", timestamp: bkk(placedAt, 52), description: `จัดส่งสำเร็จ ผู้รับ: ${recipient}`, location: "กรุงเทพมหานคร" },
     ],
+    proofOfDelivery: { deliveredAt: bkk(placedAt, 52), receivedBy: recipient, method: "ผู้รับลงชื่อรับ", photoUrl: podPhoto, signatureUrl: podSignature },
   };
 }
 
@@ -287,6 +290,8 @@ export const MOCK_ORDERS: Order[] = [
         { status: "out_for_delivery", timestamp: "2026-09-14T08:30:00+07:00", description: "พนักงานกำลังนำส่งพัสดุ", location: "DHL สาขาวัฒนา" },
         { status: "delivered", timestamp: "2026-09-14T13:12:00+07:00", description: "จัดส่งสำเร็จ ผู้รับ: Nutcha S.", location: "กรุงเทพมหานคร" },
       ],
+      // Mock: what DHL's API sends with the delivered scan; it's what made this order ส่งสำเร็จ (and credited its คะแนน).
+      proofOfDelivery: { deliveredAt: "2026-09-14T13:12:00+07:00", receivedBy: "Nutcha S.", method: "ผู้รับลงชื่อรับ", photoUrl: podPhoto, signatureUrl: podSignature },
     },
   },
   {
@@ -307,8 +312,8 @@ export const MOCK_ORDERS: Order[] = [
     shippingAddress: HOME,
     shipment: { carrier: "dhl", method: STANDARD, events: [{ status: "ordered", timestamp: "2026-09-11T11:03:00+07:00" }] },
   },
-  // More delivered orders for testing "ยืนยันรับสินค้า": three not confirmed yet (the button shows), one credited by
-  // the loyalty system after its waiting period (review open, no button), one credited and then returned (points taken back).
+  // More delivered orders (each with the carrier's proof of delivery): their คะแนน are credited; ORD-2026-1002 was
+  // returned afterwards, so its points are taken back.
   {
     id: "ORD-2026-1006",
     status: "completed",
@@ -334,24 +339,21 @@ export const MOCK_ORDERS: Order[] = [
     shipment: deliveredShipment("2026-09-19T09:40:00+07:00", "5093716640", "DHL สาขาวัฒนา", HOME.recipientName),
   },
   {
-    // Not confirmed: the loyalty system credited it 7 days after delivery.
     id: "ORD-2026-1003",
     status: "completed",
     placedAt: "2026-09-06T15:30:00+07:00",
     ...priced([foundation(), lipTint("01 Melody Pink")], "พร้อมเพย์"),
     shippingAddress: HOME,
     shipment: deliveredShipment("2026-09-06T15:30:00+07:00", "5093658217", "DHL สาขาวัฒนา", HOME.recipientName),
-    pointsCreditedAt: bkk("2026-09-06T15:30:00+07:00", 52 + 7 * 24),
   },
   {
-    // Credited after the waiting period, then returned through LINE: its points are taken back.
+    // Returned through LINE after delivery: its points are taken back.
     id: "ORD-2026-1002",
     status: "completed",
     placedAt: "2026-09-03T10:15:00+07:00",
     ...priced([lipTint("03 Cherry Coke")], "บัตรเครดิต / เดบิต"),
     shippingAddress: OFFICE,
     shipment: deliveredShipment("2026-09-03T10:15:00+07:00", "5093633051", "DHL สาขาสาทร", OFFICE.recipientName),
-    pointsCreditedAt: bkk("2026-09-03T10:15:00+07:00", 52 + 7 * 24),
     returnRequest: { itemIndexes: [0], reason: "สินค้าชำรุดหรือเสียหาย", requestedAt: bkk("2026-09-03T10:15:00+07:00", 52 + 9 * 24) },
   },
 ];

@@ -13,7 +13,7 @@ import { useAdminCustomers } from "~/lib/adminCustomerStore";
  * shared `computeCoinsEarned` on the amount paid for merchandise × the
  * customer's tier multiplier (their current Customer record).
  */
-export function OrderTotalsBreakdown(props: { order: Pick<AdminOrder, "totals" | "orderStatus" | "customerId" | "receivedConfirmedAt" | "pointsCreditedAt">; showCoinsEarned?: boolean }) {
+export function OrderTotalsBreakdown(props: { order: Pick<AdminOrder, "totals" | "orderStatus" | "customerId">; showCoinsEarned?: boolean }) {
   const customers = useAdminCustomers();
   const t = () => props.order.totals;
   const coinsEarned = () => computeCoinsEarned(t().grandTotal - t().shippingFee, customers.getById(props.order.customerId)?.tier ?? "glow");
@@ -35,15 +35,7 @@ export function OrderTotalsBreakdown(props: { order: Pick<AdminOrder, "totals" |
       </div>
       <Show when={showCoins()}>
         <div class="flex items-center justify-between gap-3">
-          <span class="text-ink-gray">
-            {props.order.pointsCreditedAt
-              ? props.order.receivedConfirmedAt
-                ? "คะแนนที่ลูกค้าได้รับ (ยืนยันรับสินค้าแล้ว)"
-                : "คะแนนที่ลูกค้าได้รับ"
-              : props.order.orderStatus === "completed"
-                ? "คะแนนที่จะได้รับเมื่อลูกค้ายืนยันรับสินค้า หรือภายใน 7-15 วันทำการ"
-                : "คะแนนที่จะได้รับเมื่อส่งสำเร็จ"}
-          </span>
+          <span class="text-ink-gray">{props.order.orderStatus === "completed" ? "คะแนนที่ลูกค้าได้รับ" : "คะแนนที่จะได้รับเมื่อส่งสำเร็จ"}</span>
           <span class="font-semibold text-success">+{coinsEarned().toLocaleString("th-TH")} คะแนน</span>
         </div>
       </Show>

@@ -1,9 +1,9 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { A } from "@solidjs/router";
 import { clientOnly } from "@solidjs/start";
 import type { Order, OrderItem } from "~/lib/types";
 import { CARRIERS } from "~/lib/carriers";
-import { canConfirmReceived, canReviewOrder, getOrderRating, isOrderReviewed } from "~/lib/orderHistory";
+import { canReviewOrder, getOrderRating, isOrderReviewed } from "~/lib/orderHistory";
 import { getPaymentDeadline } from "~/lib/accountData";
 import { formatEventTime, formatOrderDate, getOrderDisplayStatus } from "~/lib/orderTracking";
 import { formatTHB } from "../shared/PriceDisplay";
@@ -12,7 +12,6 @@ import { ReviewStars } from "./OrderMeta";
 
 // Same Kobalte Dialog SSR/hydration workaround as ProductCard's QuickAddSheet.
 const OrderReviewDialog = clientOnly(() => import("./OrderReviewDialog").then((m) => ({ default: m.OrderReviewDialog })));
-const ConfirmReceivedDialog = clientOnly(() => import("./ConfirmReceivedDialog").then((m) => ({ default: m.ConfirmReceivedDialog })));
 
 const PILL = "relative z-10 flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-pill px-3 text-xs font-medium transition-colors duration-150";
 const PILL_PRIMARY = `${PILL} bg-brand-pink text-white lg:hover:bg-brand-pink/90`;
@@ -26,16 +25,7 @@ const MAX_ITEMS_SHOWN = 2;
  * (`getOrderDisplayStatus`). Whole detail — coins included — lives on
  * `/account/orders/:id`.
  */
-export function OrderCard(props: {
-  order: Order;
-  /** คะแนน this order earns (shown in "ยืนยันรับสินค้า"). */
-  points?: number;
-  /** "ยืนยันรับสินค้า": saves it and credits the points; unset = no button. */
-  onConfirmReceived?: (orderId: string) => Promise<Order>;
-  /** Just confirmed in this list: the review dialog opens on this (re-rendered) card; reviewing is optional. */
-  openReviewNow?: boolean;
-  onReviewOpened?: () => void;
-}) {
+export function OrderCard(props: { order: Order }) {
   const status = () => getOrderDisplayStatus(props.order);
   const itemCount = () => props.order.items.reduce((sum, item) => sum + item.qty, 0);
   // The status line's one action: pay → track → view details.
@@ -46,19 +36,9 @@ export function OrderCard(props: {
         ? { href: `${detailHref()}#tracking`, label: "ติดตามพัสดุ" }
         : { href: detailHref(), label: "ดูรายละเอียด" };
   const detailHref = () => `/account/orders/${props.order.id}`;
-  // Delivered orders: "ยืนยันรับสินค้า" (solid) leads until confirmed, then "รีวิว"; "ดูรายละเอียด" steps down to outline.
-  // Once reviewed, a "รีวิวแล้ว" chip with the stars given.
+  // Delivered orders: "รีวิว" (solid) leads, "ดูรายละเอียด" steps down to outline; once reviewed, a "รีวิวแล้ว" chip with the stars given.
   const reviewable = () => canReviewOrder(props.order);
-  const confirmable = () => !!props.onConfirmReceived && canConfirmReceived(props.order);
-  const paired = () => reviewable() || confirmable();
   const [reviewOpen, setReviewOpen] = createSignal(false);
-  const [confirmOpen, setConfirmOpen] = createSignal(false);
-  createEffect(() => {
-    if (props.openReviewNow && reviewable()) {
-      setReviewOpen(true);
-      props.onReviewOpened?.();
-    }
-  });
 
   return (
     <article class="relative flex w-full flex-col gap-3 rounded-2xl border border-surface-gray p-4 transition-colors duration-150 lg:hover:border-brand-pink/40">
@@ -99,7 +79,7 @@ export function OrderCard(props: {
       {/* The order's one status line — order status until DHL has it, then DHL's own status; tracking lives here too */}
       <div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-surface-gray/60 py-2 pl-3 pr-2 text-sm">
         {/* With the review + detail pair, a 200px basis wraps the pair to its own row on a phone instead of squeezing the status */}
-        <div class="flex min-h-8 min-w-0 flex-wrap items-center gap-x-3 gap-y-1" classList={{ "flex-[1_1_200px]": paired(), "flex-1": !paired() }}>
+        <div class="flex min-h-8 min-w-0 flex-wrap items-center gap-x-3 gap-y-1" classList={{ "flex-[1_1_200px]": reviewable(), "flex-1": !reviewable() }}>
           <span class="text-ink-gray">สถานะ:</span>
           <span class={`rounded-pill px-2 py-0.5 text-xs font-semibold ${status().badgeClass}`}>{status().label}</span>
           {/* Unpaid past this time → auto-cancelled (PAYMENT_WINDOW_HOURS) */}
@@ -117,7 +97,7 @@ export function OrderCard(props: {
           </Show>
         </div>
         <Show
-          when={paired()}
+          when={reviewable()}
           fallback={
             <A href={action().href} class={PILL_PRIMARY}>
               {action().label}
@@ -125,19 +105,12 @@ export function OrderCard(props: {
           }
         >
           <div class="ml-auto flex shrink-0 items-center gap-2">
-            <Show when={confirmable()}>
-              <button type="button" onClick={() => setConfirmOpen(true)} class={PILL_PRIMARY}>
-                ยืนยันรับสินค้า
-              </button>
-            </Show>
             <Show
-              when={!confirmable() && isOrderReviewed(props.order)}
+              when={isOrderReviewed(props.order)}
               fallback={
-                <Show when={!confirmable()}>
-                  <button type="button" onClick={() => setReviewOpen(true)} class={PILL_PRIMARY}>
-                    รีวิวสินค้า
-                  </button>
-                </Show>
+                <button type="button" onClick={() => setReviewOpen(true)} class={PILL_PRIMARY}>
+                  รีวิวสินค้า
+                </button>
               }
             >
               <span class="flex min-h-8 items-center gap-1 rounded-pill bg-success-soft px-3 text-xs font-medium text-success">
@@ -158,16 +131,6 @@ export function OrderCard(props: {
       </p>
       <Show when={reviewable()}>
         <OrderReviewDialog order={props.order} open={reviewOpen()} onOpenChange={setReviewOpen} />
-      </Show>
-      <Show when={props.onConfirmReceived && (confirmable() || confirmOpen())}>
-        <ConfirmReceivedDialog
-          order={props.order}
-          points={props.points ?? 0}
-          open={confirmOpen()}
-          onOpenChange={setConfirmOpen}
-          // The list re-renders this card with the confirmed order and opens its review (`openReviewNow`).
-          onConfirm={() => props.onConfirmReceived!(props.order.id)}
-        />
       </Show>
     </article>
   );

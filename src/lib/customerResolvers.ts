@@ -87,7 +87,7 @@ export function getCustomerCoinHistory(customer: Customer, orders: AdminOrder[])
         list.push({
           key: `${o.id}-earned`,
           date: o.createdAt,
-          label: m.state === "earned" ? (o.receivedConfirmedAt ? "ได้รับจากการยืนยันรับสินค้า" : "ได้รับจากคำสั่งซื้อ") : o.orderStatus === "completed" ? "รอยืนยันรับสินค้า" : "รอรับเมื่อได้รับสินค้า",
+          label: m.state === "earned" ? "ได้รับจากคำสั่งซื้อ" : "รอรับเมื่อจัดส่งสำเร็จ",
           orderId: o.id,
           orderNumber: o.orderNumber,
           coins: m.earned,

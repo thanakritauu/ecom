@@ -4,6 +4,7 @@ import { CARRIERS, getCarrierTrackingUrl } from "~/lib/carriers";
 import { buildTrackingTimeline, formatEventTime, type TimelineEntry } from "~/lib/orderTracking";
 import dhlLogo from "~/assets/icons/dhl-logo-circle.png";
 import { CheckBadge, CheckIcon, CopyIcon } from "../shared/icons";
+import { ProofOfDeliveryCard } from "../shared/ProofOfDeliveryCard";
 
 /**
  * Phase 05 — "ติดตามการจัดส่ง". Everything is shown on the Charmiss site:
@@ -13,7 +14,13 @@ import { CheckBadge, CheckIcon, CopyIcon } from "../shared/icons";
  * own tracking page. Reads only the normalized `Shipment` — the data source
  * (mock today, DHL API later) can change without touching this component.
  */
-export function OrderTrackingTimeline(props: { shipment: Shipment; /** Order title block shown at the top of the box (order number, date, status). */ header?: JSX.Element }) {
+export function OrderTrackingTimeline(props: {
+  shipment: Shipment;
+  /** Order title block shown at the top of the box (order number, date, status). */
+  header?: JSX.Element;
+  /** The carrier's proof of delivery under the carrier card (the customer's own order page; not the public lookup). */
+  showProof?: boolean;
+}) {
   const timeline = () => buildTrackingTimeline(props.shipment);
   const delivered = () => timeline().at(-1)?.state === "completed";
   // Reached steps only, newest first — what's happening now is always the top row.
@@ -89,6 +96,10 @@ export function OrderTrackingTimeline(props: { shipment: Shipment; /** Order tit
           )}
         </Show>
       </div>
+
+      <Show when={props.showProof && props.shipment.proofOfDelivery}>
+        {(proof) => <ProofOfDeliveryCard proof={proof()} carrierName={carrier().name} />}
+      </Show>
     </section>
   );
 }

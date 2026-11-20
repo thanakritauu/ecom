@@ -17,14 +17,13 @@ import { useAuth } from "~/lib/auth";
 import { getPaymentDeadline, getPaymentStatus, PAYMENT_STATUS_META } from "~/lib/accountData";
 import { computeCoinsEarned } from "~/lib/cartSelectors";
 import { formatAddress } from "~/lib/checkoutData";
-import { canConfirmReceived, canReviewOrder, createMockOrderRepository, createOrderHistory, getOrderRating, isOrderReviewed, orderPointsState } from "~/lib/orderHistory";
+import { canReviewOrder, createMockOrderRepository, createOrderHistory, getOrderRating, isOrderReviewed, orderPointsState } from "~/lib/orderHistory";
 import { resolveTier, yearlySpend, type TierId } from "~/lib/membership";
 import { formatEventTime, formatOrderDateTime } from "~/lib/orderTracking";
 import type { Order } from "~/lib/types";
 
 // Same Kobalte Dialog SSR/hydration workaround as ProductCard's QuickAddSheet.
 const OrderReviewDialog = clientOnly(() => import("~/components/account/OrderReviewDialog").then((m) => ({ default: m.OrderReviewDialog })));
-const ConfirmReceivedDialog = clientOnly(() => import("~/components/account/ConfirmReceivedDialog").then((m) => ({ default: m.ConfirmReceivedDialog })));
 
 /** Phase 05 — Order Detail (the "ดูรายละเอียด" target OrderCard already linked to). */
 export default function OrderDetailPage() {
@@ -33,12 +32,6 @@ export default function OrderDetailPage() {
   const history = createOrderHistory(() => createMockOrderRepository());
   const orderId = () => params.id ?? "";
   const order = () => history.getById(orderId());
-  // "ยืนยันรับสินค้า": the order's คะแนน go into the balance at once.
-  const confirmReceived = async () => {
-    const updated = await history.confirmReceived(orderId());
-    auth.creditPoints(history.pointsFor(updated));
-    return updated;
-  };
 
   return (
     <>
@@ -50,7 +43,7 @@ export default function OrderDetailPage() {
             <Show when={history.ready()} fallback={<div class="h-64 animate-pulse rounded-card bg-white" aria-hidden="true" />}>
               <Show when={order()} fallback={<OrderNotFound id={orderId()} />}>
                 {(o) => (
-                  <OrderDetail order={o()} tier={resolveTier(yearlySpend(history.orders())).current.id} onConfirmReceived={confirmReceived} />
+                  <OrderDetail order={o()} tier={resolveTier(yearlySpend(history.orders())).current.id} />
                 )}
               </Show>
             </Show>
@@ -66,12 +59,8 @@ function OrderDetail(props: {
   order: Order;
   /** The shopper's member tier — sets the coin multiplier. */
   tier: TierId;
-  /** "ยืนยันรับสินค้า": saves it and credits the order's คะแนน. */
-  onConfirmReceived: () => Promise<Order>;
 }) {
   const [reviewOpen, setReviewOpen] = createSignal(false);
-  const [confirmOpen, setConfirmOpen] = createSignal(false);
-  const points = () => computeCoinsEarned(props.order.total - props.order.payment.shippingFee, props.tier);
   const showTracking = () => !["pending_payment", "cancelled"].includes(props.order.status);
   const p = () => props.order.payment;
   const paymentMeta = () => PAYMENT_STATUS_META[getPaymentStatus(props.order)];
@@ -147,7 +136,7 @@ function OrderDetail(props: {
           No tracking yet (pending/cancelled): items + address | payment, side by side. */}
       <div class="grid gap-4 lg:items-start" classList={{ "lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]": showTracking() }}>
         <Show when={showTracking()}>
-          <OrderTrackingTimeline shipment={props.order.shipment} header={title} />
+          <OrderTrackingTimeline shipment={props.order.shipment} header={title} showProof />
         </Show>
 
         <div class="gap-4" classList={{ "flex flex-col": showTracking(), "grid lg:grid-cols-2 lg:items-start": !showTracking() }}>
@@ -190,14 +179,8 @@ function OrderDetail(props: {
               </div>
             </section>
 
-            {/* Delivered: "ยืนยันรับสินค้า" first, then review. The LINE note: cancelling / returns go through LINE Official, not self-serve. */}
+            {/* Review (delivered orders) + the LINE note — cancelling / returns go through LINE Official, not self-serve. */}
             <div class="flex flex-col gap-3 rounded-card bg-white p-4 shadow-card sm:p-6">
-              <Show when={canConfirmReceived(props.order)}>
-                {/* 16px sides (not lg's 32px) so the label stays on one line in this card on a 375px phone. */}
-                <Button type="button" variant="primary" size="lg" class="w-full !px-4" onClick={() => setConfirmOpen(true)}>
-                  ยืนยันรับสินค้าเพื่อรับ {points().toLocaleString("th-TH")} คะแนน
-                </Button>
-              </Show>
               <Show when={canReviewOrder(props.order)}>
                 <Show
                   when={isOrderReviewed(props.order)}
@@ -215,10 +198,6 @@ function OrderDetail(props: {
                   </div>
                 </Show>
               </Show>
-              {/* Under the review button: reviewing leads once the order is confirmed. */}
-              <Show when={props.order.receivedAt}>
-                {(at) => <p class="text-center text-sm text-ink-gray">ยืนยันรับสินค้าแล้วเมื่อ {formatOrderDateTime(at())} ไม่สามารถขอคืนสินค้าได้</p>}
-              </Show>
               <LineContactNote />
             </div>
 
@@ -231,17 +210,6 @@ function OrderDetail(props: {
 
       <Show when={canReviewOrder(props.order)}>
         <OrderReviewDialog order={props.order} open={reviewOpen()} onOpenChange={setReviewOpen} />
-      </Show>
-      <Show when={canConfirmReceived(props.order) || confirmOpen()}>
-        <ConfirmReceivedDialog
-          order={props.order}
-          points={points()}
-          open={confirmOpen()}
-          onOpenChange={setConfirmOpen}
-          onConfirm={props.onConfirmReceived}
-          // Reviewing comes next (optional).
-          onConfirmed={(o) => canReviewOrder(o) && !isOrderReviewed(o) && setReviewOpen(true)}
-        />
       </Show>
     </div>
   );
@@ -260,10 +228,8 @@ function OrderItemsBox(props: { order: Order; tier: TierId }) {
     switch (orderPointsState(props.order)) {
       case "earned":
         return { text: `ได้รับ +${n} คะแนนจากคำสั่งซื้อนี้` };
-      case "awaiting_confirm":
-        return { text: `รับ +${n} คะแนนทันทีเมื่อยืนยันรับสินค้า หรือภายใน 7-15 วันทำการหลังจัดส่งสำเร็จ` };
       case "awaiting_delivery":
-        return { text: `รับ +${n} คะแนนเมื่อได้รับสินค้า` };
+        return { text: `รับ +${n} คะแนนทันทีเมื่อจัดส่งสำเร็จ` };
       case "deducted":
         return { text: `หัก ${n} คะแนนจากการคืนสินค้า`, deducted: true };
       default:

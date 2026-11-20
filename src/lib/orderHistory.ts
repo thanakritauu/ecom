@@ -1,8 +1,6 @@
 import { createRoot, createSignal, onMount } from "solid-js";
 import { isServer } from "solid-js/web";
 import { applyPaymentDeadline, MOCK_ORDERS } from "./accountData";
-import { computeCoinsEarned } from "./cartSelectors";
-import { resolveTier, yearlySpend } from "./membership";
 import type { Order, OrderItem } from "./types";
 
 /**
@@ -21,13 +19,11 @@ export interface OrderRepository {
   list(): Promise<Order[]>;
   /** A pending-payment order paid later from the account ("ชำระเงิน" → `/account/orders/:id/pay`). */
   markPaid(orderId: string, paymentMethod: string): Promise<Order>;
-  /** "ยืนยันรับสินค้า" on a delivered order: received now, its คะแนน credited now (`canConfirmReceived`). */
-  confirmReceived(orderId: string): Promise<Order>;
 }
 
 type OrderOverlay = Record<
   string,
-  Pick<Order, "status" | "cancelledAt" | "returnRequest" | "receivedAt" | "pointsCreditedAt"> & {
+  Pick<Order, "status" | "cancelledAt" | "returnRequest"> & {
     /** ISO — set when a pending order is paid from the account. */
     paidAt?: string;
     paymentMethod?: string;
@@ -84,11 +80,6 @@ export function createMockOrderRepository(opts: { empty?: boolean } = {}): Order
     async markPaid(orderId, paymentMethod) {
       return patch(orderId, { status: "preparing", paidAt: new Date().toISOString(), paymentMethod });
     },
-    async confirmReceived(orderId) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      const now = new Date().toISOString();
-      return patch(orderId, { receivedAt: now, pointsCreditedAt: now });
-    },
   };
 }
 
@@ -112,14 +103,6 @@ export function createOrderHistory(resolveRepo: () => OrderRepository) {
     getById: (id: string) => orders().find((o) => o.id === id),
     markPaid: async (id: string, paymentMethod: string): Promise<void> => {
       replace(await getRepo().markPaid(id, paymentMethod));
-    },
-    /** คะแนน Charmiss Club this order earns: paid amount excl. shipping, times the member tier's multiplier (same as Checkout). */
-    pointsFor: (order: Order) => computeCoinsEarned(order.total - order.payment.shippingFee, resolveTier(yearlySpend(orders())).current.id),
-    /** "ยืนยันรับสินค้า": the caller adds the returned order's points to the balance (`auth.creditPoints`). */
-    confirmReceived: async (id: string): Promise<Order> => {
-      const updated = await getRepo().confirmReceived(id);
-      replace(updated);
-      return updated;
     },
   };
 }
@@ -155,22 +138,17 @@ export const orderItemKey = (item: OrderItem) => `${item.name}|${item.variantLab
 export const reviewableItems = (order: Order) => order.items.filter((item) => !item.isGift);
 
 /**
- * Where an order's คะแนน Charmiss Club stand: nothing (unpaid / cancelled), waiting for delivery, delivered and
- * waiting for "ยืนยันรับสินค้า" (or the loyalty system's 7-15 days), credited, or taken back by a return.
+ * Where an order's คะแนน Charmiss Club stand: nothing (unpaid / cancelled), waiting for delivery, credited the
+ * moment it's ส่งสำเร็จ (the carrier's proof of delivery), or taken back by a return.
  */
-export type OrderPointsState = "none" | "awaiting_delivery" | "awaiting_confirm" | "earned" | "deducted";
+export type OrderPointsState = "none" | "awaiting_delivery" | "earned" | "deducted";
 export function orderPointsState(order: Order): OrderPointsState {
   if (order.status === "cancelled" || order.status === "pending_payment") return "none";
-  if (order.returnRequest) return order.pointsCreditedAt ? "deducted" : "none";
-  if (order.pointsCreditedAt) return "earned";
-  return order.status === "completed" ? "awaiting_confirm" : "awaiting_delivery";
+  if (order.status !== "completed") return "awaiting_delivery";
+  return order.returnRequest ? "deducted" : "earned";
 }
 
-/** Delivered, not confirmed or credited yet, no return asked: "ยืนยันรับสินค้า" shows. */
-export const canConfirmReceived = (order: Order) => orderPointsState(order) === "awaiting_confirm";
-
-/** Reviews open once the order is confirmed received, or its คะแนน were credited after the waiting period. */
-export const canReviewOrder = (order: Order) => order.status === "completed" && !order.returnRequest && !!order.pointsCreditedAt && reviewableItems(order).length > 0;
+export const canReviewOrder = (order: Order) => order.status === "completed" && !order.returnRequest && reviewableItems(order).length > 0;
 
 export function getOrderReviews(orderId: string): Record<string, OrderItemReview> {
   loadReviews();

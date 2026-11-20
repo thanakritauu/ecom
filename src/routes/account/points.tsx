@@ -48,12 +48,10 @@ export default function AccountPointsPage() {
         list.push({ orderId: o.id, date: o.placedAt, label: "ใช้เป็นส่วนลด", coins: -Math.round(o.payment.coinDiscount / COIN_TO_BAHT_RATE), state: "used" });
       const points = computeCoinsEarned(o.total - o.payment.shippingFee, tier().id);
       const state = orderPointsState(o);
-      if (state === "earned" || state === "deducted")
-        list.push({ orderId: o.id, date: o.pointsCreditedAt ?? o.placedAt, label: o.receivedAt ? "ได้รับจากการยืนยันรับสินค้า" : "ได้รับจากคำสั่งซื้อ", coins: points, state: "earned" });
+      if (state === "earned" || state === "deducted") list.push({ orderId: o.id, date: o.placedAt, label: "ได้รับจากคำสั่งซื้อ", coins: points, state: "earned" });
       // A return takes the order's points back.
       if (state === "deducted") list.push({ orderId: o.id, date: o.returnRequest!.requestedAt, label: "หักคะแนนจากการคืนสินค้า", coins: -points, state: "deducted" });
-      if (state === "awaiting_confirm") list.push({ orderId: o.id, date: o.placedAt, label: "รอยืนยันรับสินค้า", coins: points, state: "pending" });
-      if (state === "awaiting_delivery") list.push({ orderId: o.id, date: o.placedAt, label: "รอรับเมื่อได้รับสินค้า", coins: points, state: "pending" });
+      if (state === "awaiting_delivery") list.push({ orderId: o.id, date: o.placedAt, label: "รอรับเมื่อจัดส่งสำเร็จ", coins: points, state: "pending" });
       return list;
     });
     // Pending coins aren't in the balance yet, so they don't count against the carry-over.
@@ -140,7 +138,7 @@ export default function AccountPointsPage() {
             ทุกการสั่งซื้อสินค้า 10 บาท (ไม่รวมค่าจัดส่ง) จะได้รับ 1 คะแนน และได้รับเพิ่มตามระดับสมาชิก ({TIERS.map((t) => `${t.shortName} x${t.coinMultiplier}`).join(", ")})
           </p>
           <p class="text-sm text-ink-gray">
-            กดยืนยันรับสินค้าในคำสั่งซื้อเพื่อรับคะแนนทันที หากไม่ได้กดยืนยัน คะแนนจะเข้าบัญชีภายใน 7-15 วันทำการหลังจัดส่งสำเร็จ เมื่อยืนยันรับสินค้าแล้วจะขอคืนสินค้าไม่ได้ และหากมีการคืนสินค้า คะแนนจากคำสั่งซื้อนั้นจะถูกหักออก
+            คะแนนจะเข้าบัญชีทันทีเมื่อจัดส่งสำเร็จ ตามหลักฐานการจัดส่งจากบริษัทขนส่ง หากมีการคืนสินค้า คะแนนจากคำสั่งซื้อนั้นจะถูกหักออก
           </p>
         </div>
       </AccountPanel>

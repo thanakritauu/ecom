@@ -156,6 +156,24 @@ export type Shipment = {
   /** Assigned once the parcel is handed to the carrier. */
   trackingNumber?: string;
   events: TrackingEvent[];
+  /** The carrier's proof the parcel reached the customer (its API sends it with the delivered scan). */
+  proofOfDelivery?: ProofOfDelivery;
+};
+
+/**
+ * Proof of delivery (POD) from the carrier's API: who took the parcel, when, how, and the courier's photo /
+ * the recipient's signature. Its arrival is what marks the order ส่งสำเร็จ, which credits its คะแนน.
+ */
+export type ProofOfDelivery = {
+  /** ISO 8601 — the hand-over. */
+  deliveredAt: string;
+  receivedBy: string;
+  /** How it was handed over, as the carrier words it ("ผู้รับลงชื่อรับ", "ฝากไว้กับนิติบุคคล"). */
+  method?: string;
+  /** Photo the courier took at the door. */
+  photoUrl?: string;
+  /** The recipient's signature. */
+  signatureUrl?: string;
 };
 
 /**
@@ -211,11 +229,4 @@ export type Order = {
   /** Why it was cancelled, when known — e.g. the payment-deadline auto-cancel (`applyPaymentDeadline`). */
   cancelReason?: string;
   returnRequest?: ReturnRequest;
-  /** ISO 8601 — the shopper pressed "ยืนยันรับสินค้า" (no return after this). */
-  receivedAt?: string;
-  /**
-   * ISO 8601 — when the order's คะแนน Charmiss Club were credited: at once on "ยืนยันรับสินค้า", else by the
-   * loyalty system 7-15 days after delivery. Set by that system; the UI only reads it (`orderPointsState`).
-   */
-  pointsCreditedAt?: string;
 };

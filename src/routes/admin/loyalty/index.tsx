@@ -24,8 +24,8 @@ export default function AdminLoyaltyPage() {
   const COIN_RULES: { label: string; value: string }[] = [
     { label: "การได้รับคะแนน", value: `ทุก ${formatAdminCurrency(bahtPerCoin)} ที่ชำระ ได้ 1 คะแนน ไม่รวมค่าจัดส่ง` },
     { label: "ตัวคูณตามระดับสมาชิก", value: multipliers },
-    { label: "คะแนนเข้าบัญชี", value: "ทันทีเมื่อลูกค้ากดยืนยันรับสินค้า หรือภายใน 7-15 วันทำการหลังจัดส่งสำเร็จ" },
-    { label: "การคืนสินค้า", value: "ยืนยันรับสินค้าแล้วคืนไม่ได้ หากคืนสินค้า คะแนนจากคำสั่งซื้อนั้นจะถูกหักออก" },
+    { label: "คะแนนเข้าบัญชี", value: "ทันทีเมื่อจัดส่งสำเร็จ ตามหลักฐานการจัดส่งจากบริษัทขนส่ง" },
+    { label: "การคืนสินค้า", value: "หากคืนสินค้า คะแนนจากคำสั่งซื้อนั้นจะถูกหักออก" },
     { label: "มูลค่าคะแนน", value: `${coinsPerBaht.toLocaleString("th-TH")} คะแนน เท่ากับ ${formatAdminCurrency(1)}` },
     { label: "ใช้คะแนนทีละ", value: `${COIN_REDEMPTION_STEP.toLocaleString("th-TH")} คะแนน` },
     { label: "ใช้ได้สูงสุดต่อคำสั่งซื้อ", value: `${MAX_COIN_REDEMPTION.toLocaleString("th-TH")} คะแนน หรือ ${formatAdminCurrency(MAX_COIN_REDEMPTION * COIN_TO_BAHT_RATE)}` },

@@ -1,4 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
+import { ProofOfDeliveryCard } from "~/components/shared/ProofOfDeliveryCard";
 import { TextField } from "~/components/shared/TextField";
 import { Button } from "~/components/shared/Button";
 import { ChevronDownIcon, PlusIcon } from "~/components/admin/icons";
@@ -178,6 +179,11 @@ export function OrderTrackingPanel(props: { order: AdminOrder }) {
       </div>
 
       <OrderTimeline order={o()} />
+
+      {/* The carrier's proof of delivery: its arrival is what made this order ส่งสำเร็จ and credited its คะแนน. */}
+      <Show when={o().shipping.proofOfDelivery}>
+        {(proof) => <ProofOfDeliveryCard proof={proof()} carrierName={o().shipping.courier} class="border-border" />}
+      </Show>
 
       <Show when={history().length > 0}>
         <div class="flex flex-col gap-2 border-t border-border pt-3">

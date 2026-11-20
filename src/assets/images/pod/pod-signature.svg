@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 200">
+  <rect width="480" height="200" fill="#ffffff"/>
+  <line x1="40" y1="150" x2="440" y2="150" stroke="#c4c9d2" stroke-width="2"/>
+  <path d="M70 128c18-46 34-70 46-62s-14 58-6 64 28-52 44-50 2 46 14 48 26-34 40-36 8 30 20 32 30-22 48-20 18 18 40 14 30-12 46-8" fill="none" stroke="#1e3146" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="40" y="180" font-family="sans-serif" font-size="13" fill="#8a93a3">ลายมือชื่อผู้รับ (ตัวอย่าง)</text>
+</svg>
