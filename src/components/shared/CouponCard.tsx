@@ -121,7 +121,7 @@ export function CouponCard(props: {
   const ActionButton = (p: { full?: boolean }) => {
     // A disabled action ("ไม่ตรงเงื่อนไข") is a longer word: one size smaller on the ticket so the amount keeps its room.
     const cls = () =>
-      p.full ? "w-full" : props.action?.disabled ? "!min-h-0 shrink-0 !px-2.5 !py-2 !text-sm !leading-[normal]" : "!min-h-0 shrink-0 !px-3 !py-2 !text-base !leading-[normal] [@container_(min-width:410px)]:!px-4";
+      p.full ? "w-full" : props.action?.disabled ? "!min-h-0 shrink-0 !px-2.5 !py-2 !text-sm !leading-[normal]" : "!min-h-0 shrink-0 !px-3 !py-2 !text-sm !leading-[normal] [@container_(min-width:410px)]:!px-4 [@container_(min-width:410px)]:!text-base";
     return (
       <Show
         when={props.action}
@@ -157,7 +157,7 @@ export function CouponCard(props: {
               // Narrow ticket: a small two-line pill (no room for 16px beside the amount). A ticket 520px+ wide: one line
               // "เฉพาะสมาชิก Icon", the same size, padding and 16px Medium text as the "ใช้คูปอง" button.
               <span
-                class="flex max-w-[88px] shrink-0 flex-col items-center rounded-xl bg-surface-gray px-2.5 py-1.5 text-center text-xs font-medium leading-4 text-ink-gray [@container_(min-width:520px)]:max-w-none [@container_(min-width:520px)]:flex-row [@container_(min-width:520px)]:rounded-pill [@container_(min-width:520px)]:border [@container_(min-width:520px)]:border-surface-gray [@container_(min-width:520px)]:px-4 [@container_(min-width:520px)]:py-2 [@container_(min-width:520px)]:text-base [@container_(min-width:520px)]:leading-[normal] [@container_(min-width:520px)]:whitespace-nowrap"
+                class="flex max-w-[88px] shrink-0 flex-col items-center rounded-xl bg-surface-gray px-1.5 py-1.5 text-center text-[11px] font-medium leading-4 text-ink-gray [@container_(min-width:410px)]:px-2.5 [@container_(min-width:410px)]:text-xs [@container_(min-width:520px)]:max-w-none [@container_(min-width:520px)]:flex-row [@container_(min-width:520px)]:rounded-pill [@container_(min-width:520px)]:border [@container_(min-width:520px)]:border-surface-gray [@container_(min-width:520px)]:px-4 [@container_(min-width:520px)]:py-2 [@container_(min-width:520px)]:text-base [@container_(min-width:520px)]:leading-[normal] [@container_(min-width:520px)]:whitespace-nowrap"
               >
                 <span>เฉพาะ</span>
                 <span>{action().onlyFor}</span>
@@ -286,7 +286,7 @@ export function CouponCard(props: {
             </Show>
           </div>
           {/* Empty for a โค้ดจากภายนอก (name only): hidden so the name sits centred. */}
-          <div class="flex items-center gap-1 empty:hidden [@container_(min-width:410px)]:gap-1.5 [@container_(min-width:520px)]:gap-2">
+          <div class="flex items-center gap-[3px] empty:hidden [@container_(min-width:410px)]:gap-1.5 [@container_(min-width:520px)]:gap-2">
             <Show when={props.coupon.minSpendLabel}>
               <p class="whitespace-nowrap text-[11px] font-medium leading-4 text-ink [@container_(min-width:410px)]:text-xs [@container_(min-width:520px)]:text-sm [@container_(min-width:520px)]:leading-5">{props.coupon.minSpendLabel}</p>
             </Show>
@@ -298,10 +298,8 @@ export function CouponCard(props: {
                     class="whitespace-nowrap text-[11px] leading-4 [@container_(min-width:410px)]:text-xs [@container_(min-width:520px)]:text-sm [@container_(min-width:520px)]:leading-5"
                     classList={{ "text-system-red": !!note().urgent, "text-ink-gray": !note().urgent }}
                   >
-                    {/* A narrow ticket says "ถึง 31 ธ.ค." so both items stay on one line. */}
-                    <Show when={note().text.startsWith("ใช้ได้ถึง ")} fallback={note().text}>
-                      <span class="hidden [@container_(min-width:410px)]:inline">ใช้ได้</span>ถึง {note().text.slice("ใช้ได้ถึง ".length)}
-                    </Show>
+                    {/* "ใช้ได้ถึง 31 ธ.ค." in full on every ticket width (never shortened to "ถึง"). */}
+                    {note().text}
                   </p>
                 </>
               )}
